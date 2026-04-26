@@ -280,3 +280,19 @@ Write-Host "  Log：     jtdt logs -f"
 Write-Host "  升級：    jtdt update    （需以系統管理員身分跑 PowerShell）"
 Write-Host "  解除：    jtdt uninstall （加 --purge 連同資料一起刪）"
 Write-Host ""
+
+# 自動開瀏覽器到介面（單機模式 user 體驗）
+try {
+    Start-Process 'http://127.0.0.1:8765/'
+    Ok "已自動開啟瀏覽器"
+} catch {
+    Warn "無法自動開啟瀏覽器，請手動前往 http://127.0.0.1:8765/"
+}
+
+# 不要讓 PowerShell 視窗自動關掉（user 看不到上面訊息）
+Write-Host ""
+Write-Host "==================================================" -ForegroundColor Cyan
+Write-Host "  按 Enter 鍵關閉此視窗"                             -ForegroundColor Cyan
+Write-Host "==================================================" -ForegroundColor Cyan
+try { Read-Host | Out-Null } catch { Start-Sleep -Seconds 30 }
+Write-Host ""
