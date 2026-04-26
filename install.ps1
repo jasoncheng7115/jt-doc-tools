@@ -1,9 +1,7 @@
-﻿# ==========================================================================
-# Jason Tools 文件工具箱 — 一鍵安裝 (Windows 10 / 11)
-#
-# 用法：以「系統管理員身分執行」開啟 PowerShell，貼上：
-#   iex (irm https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.ps1)
-# ==========================================================================
+﻿<#
+Jason Tools 文件工具箱 - One-line installer (Windows 10 / 11)
+Repo: https://github.com/jasoncheng7115/jt-doc-tools
+#>
 $ErrorActionPreference = 'Stop'
 $ProgressPreference    = 'SilentlyContinue'   # 加快 Invoke-WebRequest
 
