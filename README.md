@@ -126,7 +126,7 @@ winget install --id Git.Git -e --accept-package-agreements --accept-source-agree
 以<b>「以系統管理員身分執行」</b>開啟 PowerShell（右鍵 PowerShell 圖示 → 系統管理員），貼：
 
 ```powershell
-$u='https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.ps1'; $f="$env:TEMP\jtdt-install.ps1"; [Net.ServicePointManager]::SecurityProtocol='Tls12'; [IO.File]::WriteAllBytes($f,[byte[]](0xEF,0xBB,0xBF)+(New-Object Net.WebClient).DownloadData($u)); powershell -NoProfile -ExecutionPolicy Bypass -File $f; Read-Host '安裝結束，按 Enter 關閉'
+$u='https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.ps1'; $f="$env:TEMP\jtdt-install.ps1"; [Net.ServicePointManager]::SecurityProtocol='Tls12'; $d=(New-Object Net.WebClient).DownloadData($u); $b=New-Object byte[] ($d.Length+3); $b[0]=0xEF;$b[1]=0xBB;$b[2]=0xBF; [Array]::Copy($d,0,$b,3,$d.Length); [IO.File]::WriteAllBytes($f,$b); powershell -NoProfile -ExecutionPolicy Bypass -File $f; Read-Host '安裝結束，按 Enter 關閉'
 ```
 
 > **為什麼這麼長？** PS 5.1（Windows 內建版本）有三個雷：
