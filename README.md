@@ -126,8 +126,10 @@ winget install --id Git.Git -e --accept-package-agreements --accept-source-agree
 以<b>「以系統管理員身分執行」</b>開啟 PowerShell（右鍵 PowerShell 圖示 → 系統管理員），貼：
 
 ```powershell
-iwr -useb https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.ps1 | iex
+iex (irm https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.ps1)
 ```
+
+> 為什麼用 `iex (irm ...)` 而不是 `iwr | iex`？PowerShell 5.1（Windows 內建版本）的 `iwr -useb` 在某些情況回傳 `byte[]`，`iex` 會吐出「無法將 'System.Byte[]' 轉換為 'Command' 參數所需的 'System.String'」錯誤。`irm` (Invoke-RestMethod) 會自動以 UTF-8 解碼成字串，相容 PS 5.1 / 7。
 
 ---
 

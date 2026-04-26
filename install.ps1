@@ -2,10 +2,18 @@
 # Jason Tools 文件工具箱 — 一鍵安裝 (Windows 10 / 11)
 #
 # 用法：以「系統管理員身分執行」開啟 PowerShell，貼上：
-#   iwr -useb https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.ps1 | iex
+#   iex (irm https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.ps1)
 # ==========================================================================
 $ErrorActionPreference = 'Stop'
 $ProgressPreference    = 'SilentlyContinue'   # 加快 Invoke-WebRequest
+
+# Force UTF-8 in console so 中文 doesn't render as ?
+# (PS 5.1 預設 console codepage 是 cp950 / cp936，會吃掉非系統 codepage 的字元)
+try {
+    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+    $OutputEncoding = [System.Text.UTF8Encoding]::new()
+    chcp 65001 > $null 2>&1
+} catch { }
 
 $RepoUrl     = 'https://github.com/jasoncheng7115/jt-doc-tools'
 $RepoBranch  = 'main'
