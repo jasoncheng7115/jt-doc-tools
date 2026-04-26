@@ -20,14 +20,14 @@ $RepoBranch  = 'main'
 $ServiceName = 'jt-doc-tools'
 
 function Log  ($m) { Write-Host "==> $m"  -ForegroundColor Cyan }
-function Ok   ($m) { Write-Host " ✓  $m"  -ForegroundColor Green }
-function Warn ($m) { Write-Host " ⚠  $m"  -ForegroundColor Yellow }
+function Ok   ($m) { Write-Host "[OK] $m" -ForegroundColor Green }
+function Warn ($m) { Write-Host "[!]  $m" -ForegroundColor Yellow }
 function Die  ($m) {
-    Write-Host " ✗  $m"  -ForegroundColor Red
+    Write-Host "[X]  $m" -ForegroundColor Red
     Write-Host ""
-    Write-Host "安裝失敗，請按 Enter 關閉此視窗 ..." -ForegroundColor Red
+    Write-Host "Install failed. Press Enter to close ..." -ForegroundColor Red
     try { Read-Host | Out-Null } catch { Start-Sleep -Seconds 30 }
-    exit 1
+    throw $m
 }
 
 # --------------------------------------------------------------- 管理員檢查
