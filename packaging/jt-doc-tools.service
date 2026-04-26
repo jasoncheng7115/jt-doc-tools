@@ -1,0 +1,27 @@
+[Unit]
+Description=Jason Tools 文件工具箱
+Documentation=https://github.com/jasoncheng7115/jt-doc-tools
+After=network.target
+
+[Service]
+Type=simple
+User=jtdt
+WorkingDirectory=/opt/jt-doc-tools
+Environment=JTDT_DATA_DIR=/var/lib/jt-doc-tools/data
+Environment=JTDT_HOST=127.0.0.1
+Environment=JTDT_PORT=8765
+ExecStart=/opt/jt-doc-tools/.venv/bin/python -m app.main
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# 安全強化
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/jt-doc-tools
+
+[Install]
+WantedBy=multi-user.target

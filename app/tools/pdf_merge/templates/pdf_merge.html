@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}檔案合併 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('merge', size=22) }} 檔案合併</h1>
+<p class="muted">把多份 PDF 依「下方清單順序」合併為一份。可拖曳卡片調整順序、再次拖入會追加更多檔案、按 ❌ 移除單一檔。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">上傳 PDF（多檔）</h2>
+  {% with upload_id='pdfMergeUpload', accept='application/pdf', multiple=True, hint='可分次拖入累加；至少 2 份才能合併。<br>輸出順序 = 下方清單順序，拖曳卡片可調整。' %}
+    {% include "components/file_upload.html" %}
+  {% endwith %}
+  <div id="merge-list" class="merge-list" hidden></div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">執行</h2>
+  <button class="btn btn-primary" id="btn-submit">{{ icon('save') }}開始合併</button>
+  {% with progress_id='jp' %}{% include "components/job_progress.html" %}{% endwith %}
+</div>
+
+<style>
+.merge-list { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.merge-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; background: #fff;
+  border: 1px solid var(--border); border-radius: 8px;
+  cursor: grab; user-select: none;
+  transition: border-color .12s, box-shadow .12s, transform .05s;
+}
+.merge-card:hover { border-color: var(--primary); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+.merge-card.dragging { opacity: 0.4; cursor: grabbing; }
+.merge-card.drop-target { border-color: var(--primary); background: #eff6ff; }
+.merge-card .drag-handle { color: rgba(15,23,42,0.35); font-size: 18px; cursor: grab; }
+.merge-card .seq { font-weight: 700; color: var(--primary); min-width: 22px; text-align: right; }
+.merge-card .name { flex: 1; font-size: 13px; word-break: break-all; }
+.merge-card .size { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.merge-card .del-btn {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: #fff5f5; color: #b91c1c; border: 1px solid #fecaca;
+  cursor: pointer; font-size: 14px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.merge-card .del-btn:hover { background: #dc2626; color: #fff; border-color: #dc2626; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script src="/static/js/job_progress.js"></script>
+<script>
+let files = [];   // ordered list of File objects
+
+const fu = new FileUpload(document.getElementById('pdfMergeUpload'), (_first, fs) => {
+  // Append rather than replace, so users can drag in more files later.
+  // De-dupe by name+size to avoid double-adding when they re-drop the same file.
+  const incoming = Array.isArray(fs) ? fs : (fs ? [fs] : []);
+  for (const f of incoming) {
+    if (!files.some(x => x.name === f.name && x.size === f.size)) {
+      files.push(f);
+    }
+  }
+  render();
+});
+
+const progress = new JobProgress(document.getElementById('jp'), {
+  onReset: () => { fu.reset(); files = []; render(); }
+});
+
+function fmtSize(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(1) + ' MB';
+}
+function escapeHTML(s){return String(s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function render() {
+  const box = document.getElementById('merge-list');
+  if (!files.length) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  box.innerHTML = files.map((f, i) => `
+    <div class="merge-card" data-idx="${i}" draggable="true">
+      <span class="drag-handle" title="拖曳調整順序">⠿</span>
+      <span class="seq">${i + 1}.</span>
+      <span class="name">${escapeHTML(f.name)}</span>
+      <span class="size">${fmtSize(f.size)}</span>
+      <button type="button" class="del-btn" data-act="delete" title="移除">×</button>
+    </div>
+  `).join('');
+}
+
+const list = document.getElementById('merge-list');
+
+// Click ❌ to remove
+list.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-act=delete]');
+  if (!btn) return;
+  const idx = parseInt(btn.closest('.merge-card').dataset.idx);
+  files.splice(idx, 1);
+  render();
+});
+
+// Drag-reorder
+let dragIdx = null;
+list.addEventListener('dragstart', (e) => {
+  const card = e.target.closest('.merge-card');
+  if (!card) return;
+  dragIdx = parseInt(card.dataset.idx);
+  card.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+});
+list.addEventListener('dragend', () => {
+  document.querySelectorAll('.merge-card').forEach(c => c.classList.remove('dragging','drop-target'));
+  dragIdx = null;
+});
+list.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  const card = e.target.closest('.merge-card');
+  if (!card || dragIdx === null) return;
+  document.querySelectorAll('.merge-card').forEach(c => c.classList.remove('drop-target'));
+  card.classList.add('drop-target');
+});
+list.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const card = e.target.closest('.merge-card');
+  if (!card || dragIdx === null) return;
+  const dropIdx = parseInt(card.dataset.idx);
+  if (dropIdx === dragIdx) return;
+  const moved = files.splice(dragIdx, 1)[0];
+  files.splice(dropIdx, 0, moved);
+  dragIdx = null;
+  render();
+});
+
+document.getElementById('btn-submit').addEventListener('click', async () => {
+  if (files.length < 2) return alert('請上傳至少 2 個 PDF');
+  const fd = new FormData();
+  for (const f of files) fd.append('file', f);
+  const r = await fu.upload('/tools/pdf-merge/submit', fd, {processingLabel: '排隊合併中…'});
+  if (!r.ok) return alert('送出失敗：' + await r.text());
+  const j = await r.json();
+  progress.track(j.job_id);
+});
+</script>
+{% endblock %}

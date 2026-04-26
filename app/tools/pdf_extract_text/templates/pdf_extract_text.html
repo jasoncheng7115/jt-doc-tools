@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}擷取文字 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.et-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
+@media (max-width: 900px) { .et-grid { grid-template-columns: 1fr; } }
+.et-stat { display:flex; gap:16px; flex-wrap:wrap; font-size:13px; color:#475569; margin:8px 0 12px; }
+.et-stat b { color:#0f172a; }
+.et-preview {
+  background:#fff; border:1px solid var(--border); border-radius:6px;
+  padding:12px 14px; max-height: 60vh; overflow:auto;
+  font-size: 13px; line-height: 1.6; white-space: pre-wrap;
+}
+.et-download-group { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0; }
+.et-download-group a.btn { min-width: 120px; justify-content: center; }
+.et-download-group a.btn.disabled { opacity: 0.45; pointer-events: none; }
+.et-llm-row {
+  background:#fef3c7; border:1px solid #fcd34d; border-radius:8px;
+  padding:10px 12px; margin-top:12px; display:flex; gap:10px;
+  align-items:center; flex-wrap:wrap;
+}
+.et-llm-row .muted { font-size:12px; flex:1 1 260px; min-width:200px; }
+/* In-progress spinner — small variant for the status line, large variant
+   for the preview placeholder block. Both use currentColor + a CSS-only
+   ring animation, no JS dependency. */
+.et-spinner {
+  display:inline-block; width:12px; height:12px;
+  border:2px solid #cbd5e1; border-top-color:#4f46e5; border-radius:50%;
+  animation: et-spin 0.7s linear infinite; vertical-align:-2px; margin-right:4px;
+}
+.et-spinner-lg { width:28px; height:28px; border-width:3px; vertical-align:middle; margin:0 0 10px; }
+@keyframes et-spin { to { transform: rotate(360deg); } }
+.et-loading {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:32px 16px; color:#64748b; font-size:13px;
+}
+.et-error {
+  background:#fef2f2; border:1px solid #fecaca; color:#991b1b;
+  padding:10px 12px; border-radius:6px; font-size:13px; white-space:pre-wrap;
+}
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('paragraph', size=22) }} 擷取文字</h1>
+<p class="muted">從 PDF 把文字取出來，輸出成 TXT / Markdown / Word / ODT。會依字級推估標題層級；段落換行也會盡量還原成自然段落。可選擇交給 LLM 進一步重排被 PDF 版面切斷的句子。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">上傳 PDF</h2>
+  {% with upload_id='etUpload', accept='application/pdf', hint='單檔、PDF only。掃描檔需先 OCR 才能擷取。' %}
+    {% include "components/file_upload.html" %}
+  {% endwith %}
+</div>
+
+<div class="panel" id="result-panel" hidden>
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <h2 style="margin:0;">擷取結果</h2>
+    <span id="status" class="muted" style="font-size:13px;"></span>
+  </div>
+  <div class="et-stat" id="statBar"></div>
+
+  <div class="et-download-group" id="dlGroup"></div>
+
+  {% if llm_enabled %}
+  <div class="et-llm-row" id="llmRow" hidden>
+    <span>{{ icon('play', size=14) }}</span>
+    <span class="muted"><b>LLM 重排段落（附加功能）：</b>PDF 版面常常把句子在行尾斷掉。開啟後會把每個段落丟給 LLM 重新銜接，標題不動。</span>
+    <button class="btn" type="button" id="btnLlmReflow">{{ icon('refresh', size=14) }} 交給 LLM 重排</button>
+  </div>
+  {% endif %}
+  <div id="llmProgressBox" hidden style="margin-top:10px; background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px;">
+    <div style="display:flex; justify-content:space-between; font-size:12.5px; color:#475569; margin-bottom:6px;">
+      <span id="llmProgText">準備中…</span>
+      <span id="llmProgPct" style="font-family: ui-monospace, monospace;">0%</span>
+    </div>
+    <div style="height:8px; background:#e5e7eb; border-radius:999px; overflow:hidden;">
+      <div id="llmProgBar" style="width:0%; height:100%; background:linear-gradient(90deg,#60a5fa,#2563eb); transition: width 0.2s;"></div>
+    </div>
+    <div class="muted" style="font-size:11.5px; margin-top:6px;">每個段落大約需要幾秒到十幾秒，依模型與段落長度而定。</div>
+  </div>
+
+  <div style="display:flex; align-items:center; gap:10px; margin:16px 0 6px; flex-wrap:wrap;">
+    <h3 style="margin:0;">預覽（Markdown）</h3>
+    <div id="previewToggle" hidden style="display:flex; gap:0; border:1px solid var(--border); border-radius:6px; overflow:hidden; font-size:12px;">
+      <button type="button" class="pv-tab" data-view="original" style="padding:4px 10px; border:0; background:transparent; cursor:pointer;">原始</button>
+      <button type="button" class="pv-tab" data-view="reflowed" style="padding:4px 10px; border:0; background:#2563eb; color:#fff; cursor:pointer;">LLM 重排</button>
+    </div>
+    <span id="previewDiffHint" hidden class="muted" style="font-size:12px;"></span>
+  </div>
+  <div class="et-preview" id="preview"></div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let currentBatch = null;
+let originalPreview = '';
+let reflowedPreview = '';
+
+function _setPreviewView(view) {
+  $('preview').textContent = (view === 'original' ? originalPreview : reflowedPreview) || '(沒有內容)';
+  document.querySelectorAll('#previewToggle .pv-tab').forEach(b => {
+    const active = b.dataset.view === view;
+    b.style.background = active ? '#2563eb' : 'transparent';
+    b.style.color = active ? '#fff' : '#475569';
+  });
+}
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('#previewToggle .pv-tab');
+  if (t) _setPreviewView(t.dataset.view);
+});
+
+async function handleUpload(file) {
+  if (!file) return;
+  // Show a spinning indicator while the upload + extract round-trip runs
+  // (PDF parse + render takes a few seconds — silent UI looked broken).
+  $('status').innerHTML = '<span class="et-spinner"></span> 擷取中…';
+  // Also render an in-flow placeholder block in the preview area so the
+  // user sees activity without scrolling.
+  $('preview').innerHTML = '<div class="et-loading"><span class="et-spinner et-spinner-lg"></span><div>正在解析 PDF，請稍候…</div></div>';
+  $('result-panel').hidden = false;
+  $('dlGroup').innerHTML = '';
+  $('statBar').textContent = '';
+  if ($('llmRow')) $('llmRow').hidden = true;
+  $('previewToggle').hidden = true;
+  $('previewDiffHint').hidden = true;
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const r = await (etFu
+      ? etFu.upload('/tools/pdf-extract-text/extract', fd, {processingLabel: '伺服器解析中…'})
+      : fetch('/tools/pdf-extract-text/extract', {method:'POST', body: fd}));
+    if (!r.ok) {
+      const txt = await r.text();
+      $('status').textContent = '失敗';
+      $('preview').innerHTML = `<div class="et-error">擷取失敗：${escapeHtmlExt(txt)}</div>`;
+      return;
+    }
+    const d = await r.json();
+    currentBatch = d.batch_id;
+    $('status').textContent = '完成';
+    renderResult(d);
+  } catch (e) {
+    $('status').textContent = '錯誤';
+    $('preview').innerHTML = `<div class="et-error">${escapeHtmlExt(e.message)}</div>`;
+  }
+}
+function escapeHtmlExt(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderResult(d) {
+  $('statBar').innerHTML =
+    `<span><b>${d.page_count}</b> 頁</span>` +
+    `<span><b>${d.block_count}</b> 個段落</span>` +
+    `<span><b>${d.char_count.toLocaleString()}</b> 字</span>`;
+  const dlIcon = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>`;
+  const dl = (key, label) => {
+    const href = d.downloads[key];
+    const disabled = !href;
+    return `<a class="btn btn-primary ${disabled ? 'disabled' : ''}"
+              href="${href || '#'}" ${disabled ? 'aria-disabled="true"' : 'download'}>
+              ${dlIcon} ${label}</a>`;
+  };
+  $('dlGroup').innerHTML =
+    dl('txt',  '下載 TXT') +
+    dl('md',   '下載 Markdown') +
+    dl('docx', '下載 Word (.docx)') +
+    dl('odt',  '下載 ODT');
+  // Reset preview state for the new batch — original known, reflowed empty.
+  originalPreview = d.preview_md || '';
+  reflowedPreview = '';
+  $('preview').textContent = originalPreview || '(沒有內容)';
+  $('previewToggle').hidden = true;
+  $('previewDiffHint').hidden = true;
+  if ($('llmRow')) $('llmRow').hidden = false;
+}
+
+// LLM 重排相關 listener / progress 元素只有在 admin 啟用 LLM 時才存在；
+// 沒啟用就直接 skip 整段，避免 null pointer。
+if (document.getElementById('btnLlmReflow')) {
+document.getElementById('btnLlmReflow').addEventListener('click', async () => {
+  if (!currentBatch) return;
+  const btn = document.getElementById('btnLlmReflow');
+  const origLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '重排中…';
+  const box = $('llmProgressBox');
+  const bar = $('llmProgBar');
+  const pct = $('llmProgPct');
+  const msg = $('llmProgText');
+  box.hidden = false;
+  bar.style.width = '0%'; pct.textContent = '0%';
+  msg.textContent = '連線到 LLM…';
+
+  // Elapsed-time ticker: fires every second so the UI feels alive during
+  // the (often 10–30s) single-paragraph LLM call where no NDJSON event
+  // arrives until the HTTP call returns.
+  const t0 = Date.now();
+  let currentStatus = '連線到 LLM…';
+  const ticker = setInterval(() => {
+    const secs = Math.floor((Date.now() - t0) / 1000);
+    msg.textContent = `${currentStatus}（已耗時 ${secs}s）`;
+  }, 500);
+
+  try {
+    const resp = await fetch('/tools/pdf-extract-text/llm-reflow', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({batch_id: currentBatch}),
+    });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      currentStatus = '失敗：' + txt;
+      return;
+    }
+    currentStatus = '連線成功，等待第一段回應…';
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, {stream: true});
+      const lines = buf.split('\n');
+      buf = lines.pop();  // keep incomplete tail
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let ev;
+        try { ev = JSON.parse(line); } catch { continue; }
+        if (ev.type === 'start') {
+          currentStatus = ev.total === 0
+            ? '沒有需要重排的段落'
+            : `共 ${ev.total} 個段落需要重排，準備送出第 1 段…`;
+          if (ev.total === 0) bar.style.width = '100%';
+        } else if (ev.type === 'working') {
+          // Pre-call event — LLM is about to process this block
+          const p = ev.total ? Math.round((ev.done / ev.total) * 100) : 0;
+          bar.style.width = p + '%'; pct.textContent = p + '%';
+          currentStatus = `處理第 ${ev.done + 1} / ${ev.total} 段（p${ev.page} · ${ev.length} 字）：${ev.snippet}…`;
+        } else if (ev.type === 'progress') {
+          const p = Math.round((ev.done / ev.total) * 100);
+          bar.style.width = p + '%'; pct.textContent = p + '%';
+          let base = `已完成 ${ev.done} / ${ev.total} 段（成功 ${ev.ok}，跳過 ${ev.skipped}）`;
+          if (ev.last_error) base += ` · 上一段錯誤：${ev.last_error}`;
+          currentStatus = base;
+        } else if (ev.type === 'done') {
+          bar.style.width = '100%'; pct.textContent = '100%';
+          currentStatus = `完成：${ev.ok} 個段落已重排，${ev.skipped} 個維持原樣`;
+          reflowedPreview = ev.preview_md || '';
+          // Show toggle so user can compare; default view = the new (reflowed) one.
+          $('previewToggle').hidden = false;
+          _setPreviewView('reflowed');
+          // Diff hint: how many chars differ between original and reflowed
+          // (a quick rough indicator — 0 means LLM didn't actually change anything).
+          const a = originalPreview, b = reflowedPreview;
+          let diffChars = Math.abs(a.length - b.length);
+          if (a !== b && diffChars === 0) diffChars = 1;  // same length, different content
+          const hint = $('previewDiffHint');
+          hint.hidden = false;
+          if (diffChars === 0) {
+            hint.textContent = '（內容與原始相同 — LLM 未修改任何字元）';
+            hint.style.color = '#6b7280';
+          } else {
+            hint.textContent = `（共 ${diffChars} 字元差異，可切換比對）`;
+            hint.style.color = '#0f766e';
+          }
+          $('status').textContent = 'LLM 已重排';
+        } else if (ev.type === 'error') {
+          currentStatus = '失敗：' + (ev.message || '未知錯誤');
+        }
+      }
+    }
+  } catch (e) {
+    currentStatus = '錯誤：' + e.message;
+  } finally {
+    clearInterval(ticker);
+    const totalSecs = Math.floor((Date.now() - t0) / 1000);
+    msg.textContent = `${currentStatus}（總耗時 ${totalSecs}s）`;
+    btn.disabled = false;
+    btn.innerHTML = origLabel;
+  }
+});
+}  // end of `if (document.getElementById('btnLlmReflow'))`
+
+const uploadRoot = document.getElementById('etUpload');
+let etFu = null;
+if (uploadRoot) etFu = new FileUpload(uploadRoot, (file) => handleUpload(file));
+</script>
+{% endblock %}

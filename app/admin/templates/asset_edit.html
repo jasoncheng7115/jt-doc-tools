@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}編輯「{{ asset.name }}」 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('edit', size=22) }} 編輯資產</h1>
+<p class="muted">拖曳、調整尺寸、設定預設位置。儲存後會成為此資產在所有工具中使用的預設值。</p>
+
+<div class="panel">
+  <h2>基本資訊</h2>
+  <div class="form-row">
+    <label>名稱</label>
+    <input type="text" id="asset-name" class="field" value="{{ asset.name }}" />
+  </div>
+  <div class="form-row">
+    <label>類型</label>
+    <select id="asset-type" class="field" style="max-width:200px;">
+      <option value="stamp"     {% if asset.type == 'stamp' %}selected{% endif %}>印章 stamp</option>
+      <option value="signature" {% if asset.type == 'signature' %}selected{% endif %}>簽名 signature</option>
+      <option value="watermark" {% if asset.type == 'watermark' %}selected{% endif %}>浮水印 watermark</option>
+      <option value="logo"      {% if asset.type == 'logo' %}selected{% endif %}>Logo</option>
+    </select>
+    <span class="muted" style="font-size:12px;">類型決定這個資產出現在哪個工具的選單裡</span>
+  </div>
+</div>
+
+<details class="panel" style="margin-top:16px;">
+  <summary>裁剪圖片</summary>
+  <p class="muted" style="font-size:13px;">拖曳藍色框調整裁剪範圍；拖四角可縮放。確認後按「套用裁剪」。</p>
+  <div class="crop-wrap" id="cropWrap">
+    <img id="cropImg" src="/admin/assets/{{ asset.id }}/file?v={{ asset.updated_at|default(0) }}" alt="{{ asset.name }}" />
+    <div class="crop-sel" id="cropSel">
+      <span class="crop-handle nw"></span>
+      <span class="crop-handle ne"></span>
+      <span class="crop-handle sw"></span>
+      <span class="crop-handle se"></span>
+    </div>
+  </div>
+  <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+    <button class="btn btn-primary" id="btn-crop-apply" type="button">{{ icon('save') }}套用裁剪</button>
+    <button class="btn" id="btn-crop-reset" type="button">{{ icon('refresh') }}重設範圍</button>
+    <button class="btn" id="btn-crop-auto" type="button">{{ icon('crop') }}自動貼齊內容</button>
+    <button class="btn" id="btn-match-aspect" type="button" title="將預覽尺寸的長寬比調整為圖片原始比例">{{ icon('aspect-ratio') }}讓尺寸比例對齊圖片</button>
+  </div>
+</details>
+
+<div class="panel" style="margin-top:16px;" id="panel-position" {% if asset.type == 'watermark' %}hidden{% endif %}>
+  <h2>位置與預覽</h2>
+  {% set editor_id='assetEditor' %}
+  {% include "components/drag_position_editor.html" %}
+</div>
+
+<div class="panel" style="margin-top:16px;" id="panel-watermark" {% if asset.type != 'watermark' %}hidden{% endif %}>
+  <h2>浮水印預覽</h2>
+  <p class="muted" style="font-size:13px;">這個資產會以「平鋪」方式蓋滿整頁。下方參數是預覽用的預設值，正式套用時可在「PDF 浮水印」工具裡再微調。</p>
+  <div class="form-row">
+    <label>透明度</label>
+    <div class="field" style="display:flex; gap:10px; align-items:center;">
+      <input type="range" id="wm-opacity" min="5" max="100" value="25" style="flex:1; max-width:360px;" />
+      <span id="wm-opacity-label" style="width:48px; text-align:right; font-variant-numeric: tabular-nums;">25%</span>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>旋轉角度</label>
+    <div class="field" style="display:flex; gap:10px; align-items:center;">
+      <input type="range" id="wm-rotation" min="-180" max="180" value="30" style="flex:1; max-width:360px;" />
+      <input type="number" id="wm-rotation-num" min="-180" max="180" value="30" step="5" style="width:80px;" />
+      <span class="muted" style="font-size:12px;">度</span>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>圖片尺寸</label>
+    <div class="field" style="display:flex; gap:10px; align-items:center;">
+      <input type="range" id="wm-size" min="10" max="200" value="60" style="flex:1; max-width:360px;" />
+      <input type="number" id="wm-size-num" min="10" max="200" value="60" style="width:80px;" />
+      <span class="muted" style="font-size:12px;">mm（依圖片自動維持比例）</span>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>間距</label>
+    <div class="field" style="display:flex; gap:10px; align-items:center;">
+      <input type="range" id="wm-gap" min="0" max="200" value="30" style="flex:1; max-width:360px;" />
+      <input type="number" id="wm-gap-num" min="0" max="200" value="30" style="width:80px;" />
+      <span class="muted" style="font-size:12px;">mm</span>
+    </div>
+  </div>
+  <div style="margin-top:12px; background:#e5e7eb; border-radius:8px; padding:14px; display:flex; justify-content:center;">
+    <img id="wm-preview-img" alt="浮水印預覽"
+         style="max-width:100%; max-height:640px; box-shadow:0 4px 20px rgba(0,0,0,.15); background:#fff;" />
+  </div>
+  <p class="muted" id="wm-preview-status" style="font-size:12px; text-align:center; margin-top:6px;">產生預覽中…</p>
+</div>
+
+<style>
+.crop-wrap { position: relative; display: block; width: fit-content; max-width: 100%; background:
+  linear-gradient(45deg, #f0f0f0 25%, transparent 25%),
+  linear-gradient(-45deg, #f0f0f0 25%, transparent 25%),
+  linear-gradient(45deg, transparent 75%, #f0f0f0 75%),
+  linear-gradient(-45deg, transparent 75%, #f0f0f0 75%);
+  background-size: 16px 16px; background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+  border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+  user-select: none; -webkit-user-select: none; }
+.crop-wrap img { display: block; max-width: 720px; width: 100%; height: auto; pointer-events: none; }
+.crop-sel { position: absolute; border: 2px dashed #2563eb; background:
+  rgba(37,99,235,0.10); cursor: move; box-shadow: 0 0 0 9999px rgba(0,0,0,0.25); }
+.crop-handle { position: absolute; width: 14px; height: 14px; background: #2563eb;
+  border: 2px solid #fff; border-radius: 50%;
+  box-shadow: 0 0 0 1px #2563eb, 0 1px 4px rgba(0,0,0,0.3); z-index: 2; }
+/* Handles sit just inside the selection corners so they're always visible
+   even when the selection touches the wrap edge (overflow:hidden clips
+   anything outside the image). */
+.crop-handle.nw { left: 2px;  top: 2px;    cursor: nwse-resize; }
+.crop-handle.ne { right: 2px; top: 2px;    cursor: nesw-resize; }
+.crop-handle.sw { left: 2px;  bottom: 2px; cursor: nesw-resize; }
+.crop-handle.se { right: 2px; bottom: 2px; cursor: nwse-resize; }
+</style>
+
+<div style="margin-top:16px; display:flex; gap:8px;">
+  <button class="btn btn-primary" id="btn-save">{{ icon('save') }}儲存</button>
+  <a class="btn" href="/admin/assets">{{ icon('back') }}回清單</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/drag_position_editor.js"></script>
+<script>
+const assetId = "{{ asset.id }}";
+const preset = {
+  x_mm: {{ preset.x_mm }},
+  y_mm: {{ preset.y_mm }},
+  width_mm: {{ preset.width_mm }},
+  height_mm: {{ preset.height_mm }},
+  rotation_deg: {{ preset.rotation_deg|default(0) }},
+};
+const paper = { w: {{ preset.paper_w_mm }}, h: {{ preset.paper_h_mm }} };
+
+const editor = new DragPositionEditor({
+  root: document.getElementById('assetEditor'),
+  asset_url: `/admin/assets/${assetId}/file?v=${Date.now()}`,
+  paper_w_mm: paper.w,
+  paper_h_mm: paper.h,
+  value: preset,
+  lock_aspect: {{ 'true' if preset.lock_aspect else 'false' }},
+});
+
+// ---- Crop UI ----
+(function(){
+  const wrap = document.getElementById('cropWrap');
+  const img = document.getElementById('cropImg');
+  const sel = document.getElementById('cropSel');
+  if (!wrap || !img || !sel) return;
+
+  // Selection stored as fractions of the image box (0..1).
+  let rect = { x: 0, y: 0, w: 1, h: 1 };
+
+  function layout() {
+    // Position the selection over the image box. The image may not have
+    // loaded yet, in which case fall back to the wrapper's size.
+    const box = img.getBoundingClientRect();
+    const wBox = wrap.getBoundingClientRect();
+    const left = box.left - wBox.left + rect.x * box.width;
+    const top  = box.top  - wBox.top  + rect.y * box.height;
+    sel.style.left = left + 'px';
+    sel.style.top  = top  + 'px';
+    sel.style.width  = (rect.w * box.width)  + 'px';
+    sel.style.height = (rect.h * box.height) + 'px';
+  }
+  function clampRect() {
+    rect.x = Math.max(0, Math.min(0.99, rect.x));
+    rect.y = Math.max(0, Math.min(0.99, rect.y));
+    rect.w = Math.max(0.01, Math.min(1 - rect.x, rect.w));
+    rect.h = Math.max(0.01, Math.min(1 - rect.y, rect.h));
+  }
+  if (img.complete) layout();
+  else img.addEventListener('load', layout);
+  window.addEventListener('resize', layout);
+  // Re-run layout when the details toggles open — the image's bounding
+  // rect is zero while the panel is hidden.
+  const details = wrap.closest('details');
+  if (details) details.addEventListener('toggle', () => { if (details.open) layout(); });
+
+  function onPointerDown(e, mode) {
+    e.preventDefault();
+    const box = img.getBoundingClientRect();
+    // Starting client position and a snapshot of the current rect.
+    const px = e.clientX, py = e.clientY;
+    const r0 = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+    function onMove(ev) {
+      const dx = (ev.clientX - px) / box.width;
+      const dy = (ev.clientY - py) / box.height;
+      if (mode === 'move') {
+        rect.x = Math.max(0, Math.min(1 - r0.w, r0.x + dx));
+        rect.y = Math.max(0, Math.min(1 - r0.h, r0.y + dy));
+        rect.w = r0.w; rect.h = r0.h;
+      } else if (mode === 'nw') {
+        const nx = Math.max(0, Math.min(r0.x + r0.w - 0.01, r0.x + dx));
+        const ny = Math.max(0, Math.min(r0.y + r0.h - 0.01, r0.y + dy));
+        rect.x = nx; rect.y = ny;
+        rect.w = r0.x + r0.w - nx;
+        rect.h = r0.y + r0.h - ny;
+      } else if (mode === 'ne') {
+        const ny = Math.max(0, Math.min(r0.y + r0.h - 0.01, r0.y + dy));
+        rect.y = ny;
+        rect.w = Math.max(0.01, Math.min(1 - r0.x, r0.w + dx));
+        rect.h = r0.y + r0.h - ny;
+      } else if (mode === 'sw') {
+        const nx = Math.max(0, Math.min(r0.x + r0.w - 0.01, r0.x + dx));
+        rect.x = nx;
+        rect.w = r0.x + r0.w - nx;
+        rect.h = Math.max(0.01, Math.min(1 - r0.y, r0.h + dy));
+      } else if (mode === 'se') {
+        rect.w = Math.max(0.01, Math.min(1 - r0.x, r0.w + dx));
+        rect.h = Math.max(0.01, Math.min(1 - r0.y, r0.h + dy));
+      }
+      clampRect();
+      layout();
+    }
+    function onUp() {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+    }
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  }
+  sel.addEventListener('pointerdown', (e) => {
+    if (e.target.classList.contains('crop-handle')) return;
+    onPointerDown(e, 'move');
+  });
+  sel.querySelectorAll('.crop-handle').forEach(h => {
+    const mode = h.classList.contains('nw') ? 'nw'
+               : h.classList.contains('ne') ? 'ne'
+               : h.classList.contains('sw') ? 'sw' : 'se';
+    h.addEventListener('pointerdown', (e) => { e.stopPropagation(); onPointerDown(e, mode); });
+  });
+
+  document.getElementById('btn-crop-reset').addEventListener('click', () => {
+    rect = { x: 0.05, y: 0.05, w: 0.9, h: 0.9 };
+    layout();
+  });
+
+  // Auto-fit: scan non-transparent pixels via a canvas and snap the rect.
+  document.getElementById('btn-crop-auto').addEventListener('click', async () => {
+    try {
+      const tmp = new Image();
+      tmp.crossOrigin = 'anonymous';
+      tmp.src = img.src;
+      await new Promise((ok, err) => { tmp.onload = ok; tmp.onerror = err; });
+      const canvas = document.createElement('canvas');
+      canvas.width = tmp.naturalWidth; canvas.height = tmp.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(tmp, 0, 0);
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          const a = data[(y * canvas.width + x) * 4 + 3];
+          if (a > 8) {
+            if (x < minX) minX = x; if (y < minY) minY = y;
+            if (x > maxX) maxX = x; if (y > maxY) maxY = y;
+          }
+        }
+      }
+      if (maxX <= minX || maxY <= minY) { alert('找不到可見內容'); return; }
+      const pad = Math.max(2, Math.round(Math.min(canvas.width, canvas.height) / 200));
+      minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+      maxX = Math.min(canvas.width - 1, maxX + pad);
+      maxY = Math.min(canvas.height - 1, maxY + pad);
+      rect = {
+        x: minX / canvas.width, y: minY / canvas.height,
+        w: (maxX - minX + 1) / canvas.width,
+        h: (maxY - minY + 1) / canvas.height,
+      };
+      clampRect();
+      layout();
+    } catch (err) {
+      alert('自動貼齊失敗：' + err.message);
+    }
+  });
+
+  document.getElementById('btn-match-aspect').addEventListener('click', async () => {
+    const r = await fetch(`/admin/assets/${assetId}/match-aspect`, { method: 'POST' });
+    if (!r.ok) { alert('調整失敗'); return; }
+    const j = await r.json();
+    const p = j.asset && j.asset.preset;
+    if (p && editor) {
+      // Update the position editor in place — no reload, panel stays open.
+      editor.value.width_mm = p.width_mm;
+      editor.value.height_mm = p.height_mm;
+      editor.aspect = p.width_mm / p.height_mm || 1;
+      if (editor.$w) editor.$w.value = p.width_mm.toFixed(1);
+      if (editor.$h) editor.$h.value = p.height_mm.toFixed(1);
+      editor._clamp(); editor._render(); editor._emit();
+    }
+    if (window.toast) toast(`已校正比例為 ${p.width_mm}×${p.height_mm} mm`);
+  });
+
+  document.getElementById('btn-crop-apply').addEventListener('click', async () => {
+    clampRect();
+    if (!(await showConfirm('套用裁剪？這會覆寫原始檔。', { title: '套用裁剪', kind: 'warn' }))) return;
+    const r = await fetch(`/admin/assets/${assetId}/crop`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rect),
+    });
+    if (r.ok) { location.reload(); }
+    else { showAlert('裁剪失敗'); }
+  });
+})();
+
+// ---- Type toggle: switch panel between position editor and watermark preview ----
+const typeSel = document.getElementById('asset-type');
+const panelPos = document.getElementById('panel-position');
+const panelWm  = document.getElementById('panel-watermark');
+function applyTypePanels(){
+  const isWm = typeSel.value === 'watermark';
+  panelPos.hidden = isWm;
+  panelWm.hidden  = !isWm;
+  if (isWm) refreshWmPreview();
+}
+typeSel.addEventListener('change', applyTypePanels);
+
+// ---- Watermark live preview ----
+const wmOpacity   = document.getElementById('wm-opacity');
+const wmOpacityL  = document.getElementById('wm-opacity-label');
+const wmRot       = document.getElementById('wm-rotation');
+const wmRotNum    = document.getElementById('wm-rotation-num');
+const wmSize      = document.getElementById('wm-size');
+const wmSizeNum   = document.getElementById('wm-size-num');
+const wmGap       = document.getElementById('wm-gap');
+const wmGapNum    = document.getElementById('wm-gap-num');
+const wmImg       = document.getElementById('wm-preview-img');
+const wmStatus    = document.getElementById('wm-preview-status');
+// Seed initial values from saved preset where it makes sense.
+const initialSize = Math.round(Math.max(preset.width_mm || 0, preset.height_mm || 0)) || 60;
+wmSize.value = wmSizeNum.value = initialSize;
+wmRot.value  = wmRotNum.value  = Math.round(preset.rotation_deg || 0);
+
+[ [wmOpacity, () => { wmOpacityL.textContent = wmOpacity.value + '%'; }],
+  [wmRot, () => { wmRotNum.value = wmRot.value; }],
+  [wmRotNum, () => { wmRot.value = wmRotNum.value; }],
+  [wmSize, () => { wmSizeNum.value = wmSize.value; }],
+  [wmSizeNum, () => { wmSize.value = wmSizeNum.value; }],
+  [wmGap, () => { wmGapNum.value = wmGap.value; }],
+  [wmGapNum, () => { wmGap.value = wmGapNum.value; }],
+].forEach(([el, sync]) => el.addEventListener('input', () => { sync(); refreshWmPreview(); }));
+
+let wmDebounce = null, wmSeq = 0;
+function refreshWmPreview(){
+  clearTimeout(wmDebounce);
+  wmDebounce = setTimeout(() => {
+    const seq = ++wmSeq;
+    wmStatus.textContent = '產生預覽中…';
+    const params = new URLSearchParams({
+      opacity: ((parseFloat(wmOpacity.value) || 25) / 100).toFixed(2),
+      rotation: String(parseFloat(wmRot.value) || 0),
+      size: String(parseFloat(wmSize.value) || 60),
+      gap: String(parseFloat(wmGap.value) || 0),
+      v: String(Date.now()),
+    });
+    const url = `/admin/assets/${assetId}/watermark-preview?${params.toString()}`;
+    const tmp = new Image();
+    tmp.onload = () => {
+      if (seq !== wmSeq) return;
+      wmImg.src = tmp.src;
+      wmStatus.textContent = '預覽：A4 範例頁面';
+    };
+    tmp.onerror = () => { if (seq === wmSeq) wmStatus.textContent = '預覽產生失敗'; };
+    tmp.src = url;
+  }, 250);
+}
+applyTypePanels();
+
+document.getElementById('btn-save').addEventListener('click', async () => {
+  const isWm = typeSel.value === 'watermark';
+  let presetBody;
+  if (isWm) {
+    const sizeMm = parseFloat(wmSize.value) || 60;
+    presetBody = {
+      x_mm: 0, y_mm: 0,
+      width_mm: sizeMm, height_mm: sizeMm,
+      rotation_deg: parseFloat(wmRot.value) || 0,
+      paper_w_mm: 210, paper_h_mm: 297,
+      lock_aspect: true,
+    };
+  } else {
+    const v = editor.getValue();
+    presetBody = {
+      x_mm: v.x_mm, y_mm: v.y_mm,
+      width_mm: v.width_mm, height_mm: v.height_mm,
+      rotation_deg: v.rotation_deg,
+      paper_w_mm: v.paper_w_mm, paper_h_mm: v.paper_h_mm,
+      lock_aspect: v.lock_aspect,
+    };
+  }
+  const body = {
+    name: document.getElementById('asset-name').value.trim(),
+    type: typeSel.value,
+    preset: presetBody,
+  };
+  const r = await fetch(`/admin/assets/${assetId}/save`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (r.ok) {
+    if (window.showToast) window.showToast('已儲存', 'ok');
+    setTimeout(() => location.href = '/admin/assets', 400);
+  } else {
+    alert('儲存失敗');
+  }
+});
+</script>
+{% endblock %}

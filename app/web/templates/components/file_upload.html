@@ -1,0 +1,12 @@
+{# Usage: {% include "components/file_upload.html" with context %} after setting `upload_id` and `accept` #}
+<div class="file-upload" id="{{ upload_id|default('upload') }}" data-accept="{{ accept|default('application/pdf') }}">
+  <label class="drop-zone" for="{{ upload_id|default('upload') }}-input">
+    <div class="drop-zone-inner">
+      <div class="drop-zone-icon">📤</div>
+      <div class="drop-zone-text">拖曳檔案到此，或點選挑選</div>
+      <div class="drop-zone-hint">{{ hint|default('')|safe }}</div>
+      <div class="drop-zone-filename"></div>
+    </div>
+    <input type="file" id="{{ upload_id|default('upload') }}-input" {% if input_name %}name="{{ input_name }}"{% endif %} accept="{{ accept|default('application/pdf') }}" {% if multiple %}multiple{% endif %} />
+  </label>
+</div>

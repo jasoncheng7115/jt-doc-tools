@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>啟用認證 · {{ app_name }}</title>
+  <link rel="icon" type="image/png" href="/static/images/logo-on-light.png" />
+  <link rel="stylesheet" href="/static/css/platform.css" />
+  <style>
+    body { display:flex; align-items:center; justify-content:center;
+           min-height:100vh; margin:0; background:#0f172a;
+           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                        'Microsoft JhengHei', 'PingFang TC', sans-serif; }
+    .setup-card { background:#fff; border-radius:12px; padding:32px;
+                  width:100%; max-width:480px; box-shadow:0 12px 40px rgba(0,0,0,0.4); }
+    .setup-card h1 { margin:0 0 8px; font-size:20px; color:#111827; }
+    .setup-card .lead { color:#6b7280; font-size:13px; margin-bottom:18px; }
+    .setup-error { background:#fee2e2; color:#991b1b; padding:10px 12px;
+                   border-radius:6px; font-size:13px; margin-bottom:14px; }
+    .form-row { margin-bottom:14px; }
+    .form-row label { display:block; font-size:12px; color:#374151; margin-bottom:4px; font-weight:600; }
+    .form-row .hint { font-size:11px; color:#9ca3af; margin-top:3px; }
+    .form-row input[type=text], .form-row input[type=password] {
+        width:100%; box-sizing:border-box; padding:10px 12px;
+        border:1px solid #d1d5db; border-radius:6px; font:inherit; }
+    .form-row input:focus { outline:2px solid #3b82f6; outline-offset:-1px; border-color:transparent; }
+    .setup-btn { width:100%; padding:11px; background:#16a34a; color:#fff;
+                 border:none; border-radius:6px; font-weight:600; font-size:14px;
+                 cursor:pointer; }
+    .setup-btn:hover { background:#15803d; }
+    .warn-box { background:#fffbeb; border:1px solid #fde68a; padding:10px 12px;
+                border-radius:6px; font-size:12px; color:#92400e; margin-bottom:18px; }
+  </style>
+</head>
+<body>
+  <form class="setup-card" method="post" action="/setup-admin" autocomplete="off">
+    <h1>🔐 啟用認證</h1>
+    <p class="lead">啟用後，所有頁面都需要登入。請先建立第一個管理員帳號。</p>
+
+    <div class="warn-box">
+      ⚠ 請務必記住下面設定的密碼。沒有自助「忘記密碼」流程；密碼遺失時，
+      請以系統管理員身分在這台主機上跑：<br>
+      <code>sudo jtdt reset-password &lt;帳號&gt;</code>
+    </div>
+
+    {% if error %}
+    <div class="setup-error">{{ error }}</div>
+    {% endif %}
+
+    <div class="form-row">
+      <label for="username">管理員帳號</label>
+      <input type="text" id="username" name="username"
+             value="{{ username|default('jtdt-admin') }}"
+             pattern="[A-Za-z0-9._\-]+" maxlength="64" required autofocus />
+      <div class="hint">英數、點、底線、減號；最長 64 字元</div>
+    </div>
+
+    <div class="form-row">
+      <label for="display_name">顯示名稱（可選）</label>
+      <input type="text" id="display_name" name="display_name"
+             value="{{ display_name|default('') }}" maxlength="64" />
+      <div class="hint">介面右上角顯示用，留空就用帳號</div>
+    </div>
+
+    <div class="form-row">
+      <label for="password">密碼</label>
+      <input type="password" id="password" name="password"
+             minlength="8" maxlength="128" required />
+      <div class="hint">至少 8 字元；建議用 passphrase（一段好記不要太短的句子）</div>
+    </div>
+
+    <div class="form-row">
+      <label for="password_confirm">再輸入一次密碼</label>
+      <input type="password" id="password_confirm" name="password_confirm"
+             minlength="8" maxlength="128" required />
+    </div>
+
+    <button class="setup-btn" type="submit">啟用認證並建立管理員</button>
+  </form>
+</body>
+</html>

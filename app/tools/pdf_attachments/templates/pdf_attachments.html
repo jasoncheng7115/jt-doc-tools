@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}PDF 附件萃取 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.att-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+.att-table th { text-align:left; padding: 6px 10px; background:#f8fafc;
+  border-bottom:1px solid #e5e7eb; font-weight: 600; font-size: 12px; color:#475569; }
+.att-table td { padding: 6px 10px; border-bottom:1px solid #f1f5f9;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.att-table tr:hover td { background: #fafafa; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('paperclip', size=22) }} PDF 附件萃取</h1>
+<p class="muted">列出 PDF 中嵌入的檔案；可個別下載、打包下載、或移除所有附件產生乾淨副本。<b style="color:#b91c1c;">⚠ 附件可能含可執行檔；下載後請勿直接開啟，先掃毒。</b></p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳 PDF</h2>
+  {% with upload_id='attUp', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+</div>
+
+<div class="panel" id="resultPanel" hidden>
+  <h2 style="margin-top:0;">2. 附件清單</h2>
+  <div id="attInfo" class="muted" style="font-size:13px;"></div>
+  <table class="att-table" id="attTable" hidden>
+    <thead><tr>
+      <th style="width:30px;"><input type="checkbox" id="selAll" checked></th>
+      <th>檔名</th>
+      <th>大小</th>
+      <th>建立時間</th>
+      <th style="text-align:right;">單檔下載</th>
+    </tr></thead>
+    <tbody id="attBody"></tbody>
+  </table>
+  <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+    <button class="btn btn-primary" id="btnZip" hidden>{{ icon('download') }} 打包下載勾選項目</button>
+    <button class="btn" id="btnStrip" hidden>{{ icon('trash', size=14) }} 產生無附件副本</button>
+    <span id="status" class="muted" style="font-size:12.5px;"></span>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let uploadId = null;
+
+function fmt(n) {
+  if (!n) return '-';
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/1024/1024).toFixed(1) + ' MB';
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+const fu = new FileUpload($('attUp'), async (f) => {
+  if (!f) { $('resultPanel').hidden = true; return; }
+  $('resultPanel').hidden = false;
+  $('attInfo').textContent = '掃描中…';
+  $('attTable').hidden = true;
+  $('btnZip').hidden = true;
+  $('btnStrip').hidden = true;
+  const fd = new FormData(); fd.append('file', f);
+  const r = await fu.upload('/tools/pdf-attachments/scan', fd, {processingLabel: '掃描附件中…'});
+  if (!r.ok) { $('attInfo').innerHTML = '<span style="color:#b91c1c;">失敗：' + await r.text() + '</span>'; return; }
+  const d = await r.json();
+  uploadId = d.upload_id;
+  if (!d.attachments.length) {
+    $('attInfo').textContent = '此 PDF 沒有嵌入附件 ✓';
+    return;
+  }
+  $('attInfo').textContent = `共 ${d.attachments.length} 個嵌入附件。`;
+  $('attBody').innerHTML = d.attachments.map(a => `
+    <tr>
+      <td><input type="checkbox" class="att-chk" value="${esc(a.name)}" checked></td>
+      <td>${esc(a.name)}</td>
+      <td>${fmt(a.size)}</td>
+      <td style="color:#64748b;">${esc(a.creation || '-')}</td>
+      <td style="text-align:right;">
+        <a class="btn" href="/tools/pdf-attachments/file/${uploadId}/${encodeURIComponent(a.name)}"
+           download style="padding:3px 8px; font-size:11.5px;">下載</a>
+      </td>
+    </tr>`).join('');
+  $('attTable').hidden = false;
+  $('btnZip').hidden = false;
+  $('btnStrip').hidden = false;
+});
+
+$('selAll').addEventListener('change', (e) => {
+  document.querySelectorAll('.att-chk').forEach(c => c.checked = e.target.checked);
+});
+
+$('btnZip').addEventListener('click', async () => {
+  const names = Array.from(document.querySelectorAll('.att-chk:checked')).map(c => c.value);
+  if (!names.length) return alert('請至少勾選一個附件');
+  $('status').textContent = '打包中…';
+  const r = await fetch('/tools/pdf-attachments/zip', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({upload_id: uploadId, names}),
+  });
+  if (!r.ok) { $('status').textContent = '失敗'; return; }
+  const blob = await r.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'attachments.zip';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 500);
+  $('status').textContent = '下載完成';
+});
+
+$('btnStrip').addEventListener('click', async () => {
+  if (!(await showConfirm('產生一份移除所有附件的 PDF 副本？', { title: '移除附件' }))) return;
+  $('status').textContent = '處理中…';
+  const r = await fetch('/tools/pdf-attachments/strip', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({upload_id: uploadId}),
+  });
+  if (!r.ok) { $('status').textContent = '失敗：' + await r.text(); return; }
+  const d = await r.json();
+  $('status').textContent = `已移除 ${d.removed} 個附件`;
+  window.location.href = d.download_url;
+});
+</script>
+{% endblock %}

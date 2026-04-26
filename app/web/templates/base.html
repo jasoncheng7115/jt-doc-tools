@@ -1,0 +1,238 @@
+{% from "components/icons.html" import icon %}
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="icon" type="image/png" href="/static/images/logo-on-light.png" />
+  <link rel="apple-touch-icon" href="/static/images/logo-on-light.png" />
+  <link rel="stylesheet" href="/static/css/platform.css" />
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <button class="sidebar-toggle" type="button" id="sidebarToggle" aria-label="開關側邊選單">☰</button>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-block">
+        <a class="brand" href="/"><img class="brand-logo" src="/static/images/logo-on-dark.png" alt="" /><span class="brand-text">{{ app_name }}</span></a>
+        <div class="brand-version">v{{ version }}</div>
+      </div>
+      {% set _cur = current_user(request) %}
+      {% if _cur %}
+      <div class="user-bar" style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 8px; margin-bottom:8px; background:rgba(255,255,255,0.06); border-radius:6px; font-size:12.5px;">
+        <button type="button" id="userInfoBtn"
+                style="background:transparent; border:0; color:inherit; padding:0; font:inherit; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left;"
+                title="查看角色與權限">
+          {{ icon('user', size=14) }}
+          <b>{{ _cur.display_name or _cur.username }}</b>{% if _cur.source and _cur.source != 'off' %}<span style="opacity:0.7; font-weight:400; margin-left:2px;">@{{ _cur.source }}</span>{% endif %}
+        </button>
+        <form id="logoutForm" method="post" action="/logout" style="margin:0;">
+          <button class="btn btn-small" type="button" id="logoutBtn"
+                  style="padding:2px 8px; font-size:11px;"
+                  title="登出">{{ icon('back', size=11) }} 登出</button>
+        </form>
+        <script>
+          (function(){
+            var lbtn = document.getElementById('logoutBtn');
+            var form = document.getElementById('logoutForm');
+            if (lbtn && form) {
+              lbtn.addEventListener('click', async function(){
+                var ok = await window.showConfirm('未儲存的變更將遺失。', {
+                  title: '確定要登出？', okText: '登出', cancelText: '取消'
+                });
+                if (ok) form.submit();
+              });
+            }
+            var ibtn = document.getElementById('userInfoBtn');
+            if (!ibtn) return;
+            function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+              return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+            }); }
+            ibtn.addEventListener('click', async function(){
+              var info;
+              try {
+                var r = await fetch('/whoami', {headers:{'Accept':'application/json'}});
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                info = await r.json();
+              } catch (e) {
+                window.showAlert('無法載入帳號資訊：' + e.message);
+                return;
+              }
+              var rows = '';
+              rows += '<div style="margin:6px 0"><b>帳號：</b>' + esc(info.username) + '</div>';
+              rows += '<div style="margin:6px 0"><b>顯示名稱：</b>' + esc(info.display_name) + '</div>';
+              var src = {local:'本機', ldap:'LDAP', ad:'Active Directory', off:'單機模式（未啟用認證）'}[info.source] || esc(info.source||'');
+              rows += '<div style="margin:6px 0"><b>認證來源：</b>' + src + '</div>';
+              if (info.is_admin) {
+                rows += '<div style="margin:8px 0"><b>角色：</b><span style="background:#dc2626;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600">管理員</span></div>';
+              } else if (info.roles && info.roles.length) {
+                rows += '<div style="margin:8px 0"><b>角色：</b>';
+                info.roles.forEach(function(r){
+                  rows += ' <span style="background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:4px;display:inline-block">'
+                    + esc(r.display_name) + '</span>';
+                });
+                rows += '</div>';
+              } else {
+                rows += '<div style="margin:8px 0;color:#6b7280"><b>角色：</b>（無）</div>';
+              }
+              rows += '<div style="margin:10px 0"><b>可用工具</b>';
+              if (info.tools_all) {
+                rows += '：<span style="color:#059669;font-weight:600">全部工具（管理員）</span></div>';
+              } else if (info.tools && info.tools.length) {
+                rows += ' <span style="color:#6b7280;font-size:12px">(' + info.tools.length + ')</span>';
+                rows += '<ul style="margin:6px 0 0 0;padding-left:20px;max-height:240px;overflow:auto">';
+                info.tools.forEach(function(t){
+                  rows += '<li style="font-size:13px;padding:2px 0">' + esc(t.name)
+                    + ' <code style="color:#6b7280;font-size:11px">' + esc(t.id) + '</code></li>';
+                });
+                rows += '</ul></div>';
+              } else {
+                rows += '<div style="color:#dc2626;margin-top:4px;font-size:13px">您目前未被指派任何工具的使用權限，請聯絡管理員。</div></div>';
+              }
+              window.showAlert(rows, {title:'我的帳號', html:true, okText:'關閉'});
+            });
+          })();
+        </script>
+      </div>
+      {% endif %}
+      <input class="sidebar-search" id="sidebarSearch" type="search" placeholder="搜尋工具… (form fill, stamp…)" />
+    </div>
+    <div class="sidebar-scroll">
+      {% for g in nav_tool_groups(request) %}
+      <details class="sb-group" open>
+        <summary><span class="sb-group-icon">{{ icon('tool', size=15) }}</span>{{ g.title }}<span class="sb-count">{{ g.tools|length }}</span></summary>
+        <div class="sb-items">
+          {% for t in g.tools %}
+          <a class="sb-item" href="{{ t.url }}" data-name="{{ t.name }} {{ t.description }} {{ t.keywords }}">
+            <span class="sb-item-icon tile-color-{{ t.color|default(0) }}">{{ icon(t.icon or 'tool', size=18) }}</span>
+            <span class="sb-item-text">
+              <span class="sb-item-name">{{ t.name }}</span>
+              {% if t.description %}<span class="sb-item-desc">{{ t.description }}</span>{% endif %}
+            </span>
+          </a>
+          {% endfor %}
+        </div>
+      </details>
+      {% endfor %}
+      <details class="sb-group" open>
+        <summary><span class="sb-group-icon">{{ icon('gear', size=15) }}</span>設定<span class="sb-count">{{ nav_settings(request)|length }}</span></summary>
+        <div class="sb-items">
+          {% for s in nav_settings(request) %}
+          <a class="sb-item" href="{{ s.url }}" data-name="{{ s.name }} {{ s.description }} {{ s.keywords }}">
+            <span class="sb-item-icon">{{ icon(s.icon, size=18) }}</span>
+            <span class="sb-item-text">
+              <span class="sb-item-name">{{ s.name }}</span>
+              <span class="sb-item-desc">{{ s.description }}</span>
+            </span>
+          </a>
+          {% endfor %}
+        </div>
+      </details>
+    </div>
+    <div class="sidebar-scrollbar" id="sidebarScrollbar"></div>
+  </aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <main class="container with-sidebar">
+    {% block content %}{% endblock %}
+  </main>
+  <script src="/static/js/toast.js"></script>
+  <script src="/static/js/modal.js"></script>
+  <script>
+    (function(){
+      const btn = document.getElementById('sidebarToggle');
+      const sb = document.getElementById('sidebar');
+      const bd = document.getElementById('sidebarBackdrop');
+      function close(){ sb.classList.remove('open'); bd.classList.remove('show'); }
+      btn && btn.addEventListener('click', () => {
+        const open = sb.classList.toggle('open');
+        bd.classList.toggle('show', open);
+      });
+      bd && bd.addEventListener('click', close);
+      // Close on nav click (mobile)
+      sb && sb.querySelectorAll('a').forEach(a => a.addEventListener('click', close));
+      // Highlight active link + ensure it's visible (auto-scroll sidebar)
+      try {
+        const path = location.pathname;
+        let activeItem = null;
+        sb && sb.querySelectorAll('.sb-item').forEach(a => {
+          const href = a.getAttribute('href');
+          if (!href) return;
+          if (href === '/' ? path === '/' : path.startsWith(href.replace(/\/$/, ''))) {
+            a.classList.add('active');
+            activeItem = a;
+          }
+        });
+        if (activeItem) {
+          // Expand any collapsed <details> ancestors so the item is actually
+          // reachable, then scroll its containing row into view within the
+          // sidebar-scroll region (not the whole page).
+          let el = activeItem.parentElement;
+          while (el) {
+            if (el.tagName === 'DETAILS') el.open = true;
+            el = el.parentElement;
+          }
+          const scroller = sb.querySelector('.sidebar-scroll');
+          if (scroller) {
+            // Smooth-scroll so active item ends up roughly centered in view
+            const rItem = activeItem.getBoundingClientRect();
+            const rHost = scroller.getBoundingClientRect();
+            const targetTop = scroller.scrollTop + (rItem.top - rHost.top)
+                              - (rHost.height / 2 - rItem.height / 2);
+            scroller.scrollTo({
+              top: Math.max(0, targetTop),
+              behavior: 'instant' in window ? 'instant' : 'auto',
+            });
+          }
+        }
+      } catch(e) {}
+      // Sidebar search filter
+      const search = document.getElementById('sidebarSearch');
+      if (search) {
+        search.addEventListener('input', () => {
+          const q = search.value.trim().toLowerCase();
+          sb.querySelectorAll('.sb-group').forEach(g => {
+            const items = g.querySelectorAll('.sb-item');
+            let shown = 0;
+            items.forEach(it => {
+              const name = (it.dataset.name || '').toLowerCase();
+              const match = !q || name.includes(q);
+              it.style.display = match ? '' : 'none';
+              if (match) shown++;
+            });
+            g.style.display = (q && shown === 0) ? 'none' : '';
+            if (q) g.setAttribute('open', '');
+          });
+        });
+      }
+      // Floating custom scrollbar (painted on sidebar, overlays the active tile)
+      const scroller = sb && sb.querySelector('.sidebar-scroll');
+      const thumb = document.getElementById('sidebarScrollbar');
+      if (scroller && thumb) {
+        let hideTimer = null;
+        function updateThumb() {
+          const viewH = scroller.clientHeight;
+          const totalH = scroller.scrollHeight;
+          if (totalH <= viewH + 1) { thumb.style.display = 'none'; return; }
+          thumb.style.display = '';
+          const thumbH = Math.max(30, Math.round(viewH * viewH / totalH));
+          const maxTop = viewH - thumbH;
+          const scrollRatio = scroller.scrollTop / (totalH - viewH);
+          const top = Math.round(maxTop * scrollRatio);
+          thumb.style.height = thumbH + 'px';
+          thumb.style.top = (scroller.offsetTop + top) + 'px';
+        }
+        function flashScrolling() {
+          sb.classList.add('scrolling');
+          clearTimeout(hideTimer);
+          hideTimer = setTimeout(() => sb.classList.remove('scrolling'), 900);
+        }
+        scroller.addEventListener('scroll', () => { updateThumb(); flashScrolling(); });
+        window.addEventListener('resize', updateThumb);
+        updateThumb();
+      }
+    })();
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

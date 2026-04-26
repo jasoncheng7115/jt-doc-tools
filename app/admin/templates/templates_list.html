@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}表單範本 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('page', size=22) }} 表單範本</h1>
+<p class="muted">已儲存的 PDF 格式位置範本。上傳相同指紋（版型）的 PDF 時會自動套用，跳過自動偵測。儲存於 <code>data/form_templates.json</code>。</p>
+
+<div class="panel">
+  <h2>範本清單</h2>
+  {% if templates %}
+  <table class="tpl-table">
+    <thead>
+      <tr><th>名稱</th><th>欄位</th><th>勾選</th><th>頁數</th><th>指紋</th><th>更新時間</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for t in templates %}
+      <tr data-tid="{{ t.id }}">
+        <td><input type="text" class="tname" value="{{ t.name }}" /></td>
+        <td>{{ t.fields|length }}</td>
+        <td>{{ t.checkboxes|length }}</td>
+        <td>{{ t.page_count }}</td>
+        <td class="muted" title="{{ t.fingerprint }}"><code>{{ t.fingerprint[:12] }}…</code></td>
+        <td class="muted">{{ t.updated_at|int }}</td>
+        <td>
+          <button class="btn btn-small" data-act="rename" type="button">{{ icon('save') }}改名</button>
+          <button class="btn btn-small btn-danger" data-act="delete" type="button">{{ icon('trash') }}刪除</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">還沒有範本。到 <a href="/tools/pdf-fill/">PDF 表單自動填寫</a> 上傳 PDF 後按「儲存為範本」。</p>
+  {% endif %}
+</div>
+
+<style>
+  .tpl-table { width: 100%; border-collapse: collapse; }
+  .tpl-table th, .tpl-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; font-size: 13px; }
+  .tpl-table th { font-size: 12px; color: var(--muted); font-weight: 500; }
+  .tpl-table input.tname { padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; width: 100%; font: inherit; }
+  .tpl-table code { font-size: 11px; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const tr = btn.closest('tr');
+  const tid = tr.dataset.tid;
+  if (btn.dataset.act === 'delete') {
+    if (!confirm('確定刪除這個範本？')) return;
+    const r = await fetch(`/admin/templates/${tid}/delete`, { method: 'POST' });
+    if (r.ok) tr.remove();
+    else alert('刪除失敗');
+  } else if (btn.dataset.act === 'rename') {
+    const name = tr.querySelector('.tname').value.trim();
+    if (!name) return;
+    const r = await fetch(`/admin/templates/${tid}/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (r.ok) btn.textContent = '✓ 已儲存';
+  }
+});
+</script>
+{% endblock %}

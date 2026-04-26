@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>登入 · {{ app_name }}</title>
+  <link rel="icon" type="image/png" href="/static/images/logo-on-light.png" />
+  <link rel="stylesheet" href="/static/css/platform.css" />
+  <style>
+    body { display:flex; align-items:center; justify-content:center;
+           min-height:100vh; margin:0; background:#0f172a;
+           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                        'Microsoft JhengHei', 'PingFang TC', sans-serif; }
+    .login-card { background:#fff; border-radius:12px; padding:32px;
+                  width:100%; max-width:380px; box-shadow:0 12px 40px rgba(0,0,0,0.4); }
+    .login-brand { display:flex; align-items:center; gap:12px; margin-bottom:24px; }
+    .login-brand img { width:42px; height:42px; }
+    .login-brand h1 { margin:0; font-size:18px; color:#111827; }
+    .login-brand .ver { font-size:11px; color:#6b7280; }
+    .login-error { background:#fee2e2; color:#991b1b; padding:10px 12px;
+                   border-radius:6px; font-size:13px; margin-bottom:14px; }
+    .form-row { margin-bottom:14px; }
+    .form-row label { display:block; font-size:12px; color:#374151; margin-bottom:4px; font-weight:600; }
+    .form-row input[type=text], .form-row input[type=password] {
+        width:100%; box-sizing:border-box; padding:10px 12px;
+        border:1px solid #d1d5db; border-radius:6px; font:inherit; }
+    .form-row input:focus { outline:2px solid #3b82f6; outline-offset:-1px; border-color:transparent; }
+    .login-remember { display:flex; align-items:center; gap:6px;
+                      font-size:13px; color:#374151; margin-bottom:18px; }
+    .login-btn { width:100%; padding:11px; background:#2563eb; color:#fff;
+                 border:none; border-radius:6px; font-weight:600; font-size:14px;
+                 cursor:pointer; }
+    .login-btn:hover { background:#1d4ed8; }
+    .login-foot { text-align:center; margin-top:18px; font-size:11px; color:#9ca3af; }
+  </style>
+</head>
+<body>
+  <form class="login-card" method="post" action="/login" autocomplete="on">
+    <div class="login-brand">
+      <img src="/static/images/logo-on-light.png" alt="" />
+      <div>
+        <h1>{{ app_name }}</h1>
+        <div class="ver">v{{ version }}</div>
+      </div>
+    </div>
+
+    {% if error %}
+    <div class="login-error">{{ error }}</div>
+    {% endif %}
+
+    <input type="hidden" name="next" value="{{ next|default('/') }}" />
+
+    {% if realms and realms|length > 1 %}
+    <div class="form-row">
+      <label for="realm">認證領域</label>
+      <select id="realm" name="realm" style="width:100%; box-sizing:border-box;
+              padding:10px 12px; border:1px solid #d1d5db; border-radius:6px; font:inherit;">
+        {% for r in realms %}
+        <option value="{{ r.id }}" {% if r.id == default_realm %}selected{% endif %}>{{ r.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div class="form-row">
+      <label for="username">帳號</label>
+      <input type="text" id="username" name="username" autocomplete="username"
+             value="{{ username|default('') }}" required autofocus />
+    </div>
+    <div class="form-row">
+      <label for="password">密碼</label>
+      <input type="password" id="password" name="password"
+             autocomplete="current-password" required />
+    </div>
+    <label class="login-remember">
+      <input type="checkbox" name="remember" value="1" />
+      30 天內不用再登入
+    </label>
+    <button class="login-btn" type="submit">登入</button>
+
+    <div class="login-foot">{{ app_name }} · v{{ version }}</div>
+  </form>
+</body>
+</html>

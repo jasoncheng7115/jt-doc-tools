@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}PDF 密碼解除 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('unlock', size=22) }} PDF 密碼解除</h1>
+<p class="muted">輸入已知密碼後，把 PDF 的保護解除。<b style="color:#b91c1c;">此工具僅解除你自己擁有的加密 PDF；不提供密碼破解。</b></p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳加密 PDF</h2>
+  {% with upload_id='decUp', accept='application/pdf', multiple=True, hint='支援多檔批次；所有檔案套用同一個密碼。' %}{% include "components/file_upload.html" %}{% endwith %}
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">2. 密碼</h2>
+  <div class="form-row">
+    <label>密碼</label>
+    <input id="pw" type="password" class="field" placeholder="開啟密碼或擁有者密碼都可以" />
+  </div>
+  <p class="muted" style="font-size:12px;">如果 PDF 沒有開啟密碼但有權限限制（禁列印 / 禁複製），此處留空即可送出；工具會直接去掉權限限制。</p>
+</div>
+
+<div style="margin-top:12px;">
+  <button class="btn btn-primary" id="btn-submit">{{ icon('unlock', size=14) }} 解除並下載</button>
+</div>
+<div style="margin-top:10px;">
+  {% with progress_id='decJob' %}{% include "components/job_progress.html" %}{% endwith %}
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script src="/static/js/job_progress.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let files = [];
+const fu = new FileUpload($('decUp'), (_first, fs) => {
+  files = Array.isArray(fs) ? fs : (fs ? [fs] : []);
+});
+const jp = new JobProgress($('decJob'), { onReset: () => { fu.reset(); files = []; } });
+
+$('btn-submit').addEventListener('click', async () => {
+  if (!files.length) return alert('請上傳 PDF');
+  const fd = new FormData();
+  for (const f of files) fd.append('file', f);
+  fd.append('password', $('pw').value);
+  const r = await fu.upload('/tools/pdf-decrypt/submit', fd, {processingLabel: '排隊解密中…'});
+  if (!r.ok) return alert('失敗：' + await r.text());
+  const j = await r.json();
+  jp.track(j.job_id);
+});
+</script>
+{% endblock %}

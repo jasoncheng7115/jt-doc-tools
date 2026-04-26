@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}群組管理 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('building', size=22) }} 群組管理</h1>
+
+<details class="panel" {% if not groups %}open{% endif %}>
+  <summary><b>新增本機群組</b></summary>
+  <form id="newGroupForm" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-top:12px;">
+    <div><label>群組名稱<br><input class="field" name="name" required maxlength="64"></label></div>
+    <div style="flex:1; min-width:200px;"><label>說明<br><input class="field" name="description" maxlength="500" style="width:100%;"></label></div>
+    <button class="btn btn-primary" type="submit">{{ icon('plus', size=14) }} 建立</button>
+  </form>
+</details>
+
+<div class="panel">
+  <h2 style="margin-top:0;">群組清單（{{ groups|length }}）</h2>
+  <table class="grp-table">
+    <thead>
+      <tr><th>名稱</th><th>來源</th><th>說明</th><th>成員數</th><th>角色</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for g in groups %}
+      <tr data-gid="{{ g.id }}"
+          data-gname="{{ g.name }}"
+          data-source="{{ g.source }}"
+          data-roles="{{ g.roles|join(',') }}"
+          data-members="{{ g.member_ids|join(',') }}">
+        <td><b>{{ g.name }}</b></td>
+        <td><span class="src-badge src-{{ g.source }}">{{ g.source }}</span></td>
+        <td class="muted">{{ g.description }}</td>
+        <td>{{ g.member_count }}</td>
+        <td>
+          {% if g.roles %}
+            {% for rid in g.roles %}<span class="role-chip">{{ rid }}</span>{% endfor %}
+          {% else %}<span class="muted">(無)</span>{% endif %}
+        </td>
+        <td>
+          {% if g.source == 'local' %}
+          <button class="btn btn-small" data-act="members">{{ icon('user', size=12) }} 成員</button>
+          {% endif %}
+          <button class="btn btn-small" data-act="roles">{{ icon('shield', size=12) }} 角色</button>
+          {% if g.source == 'local' %}
+          <button class="btn btn-small btn-danger" data-act="delete">{{ icon('trash', size=12) }} 刪除</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- ===== Roles modal ===== -->
+<div id="rolesModal" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-card">
+    <h3 style="margin-top:0;">指派角色給群組 <code id="rmGroupName"></code></h3>
+    <div class="picker">
+      <div class="picker-toolbar">
+        <input class="field picker-search" type="search" id="rmSearch" placeholder="搜尋角色…">
+        <span class="picker-count" id="rmCount">0 / 0</span>
+        <button type="button" class="btn btn-small picker-clear" id="rmClear">清除</button>
+      </div>
+      <div class="picker-list" id="rmList"></div>
+    </div>
+    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+      <button class="btn" type="button" id="rmCancel">取消</button>
+      <button class="btn btn-primary" type="button" id="rmSave">{{ icon('save', size=14) }} 儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Members modal ===== -->
+<div id="membersModal" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-card">
+    <h3 style="margin-top:0;">編輯成員 <code id="mmGroupName"></code></h3>
+    <div class="picker">
+      <div class="picker-toolbar">
+        <input class="field picker-search" type="search" id="mmSearch" placeholder="搜尋使用者（帳號或顯示名稱）…">
+        <span class="picker-count" id="mmCount">0 / 0</span>
+        <button type="button" class="btn btn-small picker-clear" id="mmClear">清除</button>
+      </div>
+      <div class="picker-list" id="mmList"></div>
+    </div>
+    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+      <button class="btn" type="button" id="mmCancel">取消</button>
+      <button class="btn btn-primary" type="button" id="mmSave">{{ icon('save', size=14) }} 儲存</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .grp-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .grp-table th, .grp-table td { padding:6px 8px; border-bottom:1px solid #e5e7eb; text-align:left; }
+  .grp-table th { background:#f9fafb; font-size:12px; color:#6b7280; }
+
+  /* source + role chips (matches admin_users) */
+  .src-badge { display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; line-height:1.4; }
+  .src-local { background:#e5e7eb; color:#374151; }
+  .src-ldap  { background:#dbeafe; color:#1e40af; }
+  .src-ad    { background:#ede9fe; color:#5b21b6; }
+  .role-chip { display:inline-block; font-size:11.5px; padding:1px 7px; margin:1px 3px 1px 0;
+    background:#f1f5f9; color:#334155; border:1px solid #e2e8f0; border-radius:4px; }
+
+  /* modal (same shell as admin_users) */
+  #rolesModal[hidden], #membersModal[hidden] { display:none !important; }
+  #rolesModal, #membersModal {
+    position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center;
+  }
+  .modal-backdrop {
+    position:absolute; inset:0; background:rgba(15,23,42,0.55); backdrop-filter: blur(2px);
+  }
+  .modal-card {
+    position:relative; background:#fff; border-radius:8px; padding:20px 22px;
+    width:100%; max-width:600px; max-height:88vh; overflow:auto;
+    box-shadow:0 16px 48px rgba(0,0,0,0.35); z-index:1;
+  }
+
+  .picker { border:1px solid #e5e7eb; border-radius:6px; background:#fff; overflow:hidden; }
+  .picker-toolbar { display:flex; gap:6px; align-items:center; padding:6px;
+    border-bottom:1px solid #e5e7eb; background:#f9fafb; }
+  .picker-search { flex:1; min-width:0; padding:5px 8px; font-size:12.5px;
+    border:1px solid var(--border); border-radius:4px; }
+  .picker-count { font-size:11.5px; color:#6b7280; white-space:nowrap; }
+  .picker-clear { padding:3px 10px !important; font-size:11px !important; }
+  .picker-list { max-height:280px; overflow-y:auto; overflow-x:hidden; padding:4px;
+    display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:2px; }
+  .picker-item { display:flex; align-items:flex-start; gap:6px; padding:5px 8px; border-radius:4px;
+    cursor:pointer; font-weight:normal; font-size:12.5px; min-width:0; line-height:1.4; }
+  .picker-item:hover { background:#f3f4f6; }
+  .picker-item input { margin:2px 0 0; flex-shrink:0; }
+  .picker-item:has(input:checked) { background:#eef2ff; }
+  .picker-name { flex:1; min-width:0; word-break:break-word; overflow-wrap:anywhere; }
+  .picker-empty { padding:10px; text-align:center; color:#9ca3af; font-size:12px; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ALL_USERS = {{ all_users|tojson }};
+const ALL_ROLES = {{ all_roles|tojson }};
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function bindPicker(listId, searchId, countId, clearId) {
+  const list = document.getElementById(listId);
+  const search = document.getElementById(searchId);
+  const count = document.getElementById(countId);
+  const clear = document.getElementById(clearId);
+  function refresh() {
+    const all = list.querySelectorAll('.picker-item');
+    const sel = list.querySelectorAll('.picker-item input:checked').length;
+    count.textContent = `已選 ${sel} / ${all.length}`;
+  }
+  search.oninput = () => {
+    const q = (search.value || '').toLowerCase().trim();
+    list.querySelectorAll('.picker-item').forEach(el => {
+      el.hidden = q && !(el.dataset.name || '').toLowerCase().includes(q);
+    });
+  };
+  list.onchange = refresh;
+  clear.onclick = () => {
+    list.querySelectorAll('input:checked').forEach(c => c.checked = false);
+    refresh();
+  };
+  return refresh;
+}
+
+document.getElementById('newGroupForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const r = await fetch('/admin/groups/create', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name: fd.get('name'), description: fd.get('description')}),
+  });
+  if (r.ok) location.reload();
+  else showAlert('建立失敗：' + await r.text());
+});
+
+document.querySelectorAll('.modal-backdrop').forEach(b =>
+  b.addEventListener('click', () => b.parentElement.hidden = true));
+
+// ---------- roles modal ----------
+let currentGid = null;
+function openRoles(tr) {
+  currentGid = tr.dataset.gid;
+  document.getElementById('rmGroupName').textContent = tr.dataset.gname;
+  const have = new Set((tr.dataset.roles || '').split(',').filter(Boolean));
+  const list = document.getElementById('rmList');
+  list.innerHTML = ALL_ROLES.length
+    ? ALL_ROLES.map(r => {
+        const id = r.id, name = r.display_name || r.id;
+        return `<label class="picker-item" data-name="${escapeHtml(name)} ${escapeHtml(id)}" title="${escapeHtml(id)}">
+          <input type="checkbox" data-rid="${escapeHtml(id)}" ${have.has(id)?'checked':''}>
+          <span class="picker-name">${escapeHtml(name)}</span>
+        </label>`;
+      }).join('')
+    : '<div class="picker-empty">尚無角色</div>';
+  document.getElementById('rmSearch').value = '';
+  bindPicker('rmList', 'rmSearch', 'rmCount', 'rmClear')();
+  document.getElementById('rolesModal').hidden = false;
+}
+document.getElementById('rmCancel').onclick = () => document.getElementById('rolesModal').hidden = true;
+document.getElementById('rmSave').onclick = async () => {
+  const roles = Array.from(document.querySelectorAll('#rmList input:checked')).map(c => c.dataset.rid);
+  const r = await fetch(`/admin/groups/${currentGid}/update`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({roles}),
+  });
+  if (r.ok) location.reload();
+  else showAlert('儲存失敗：' + await r.text());
+};
+
+// ---------- members modal ----------
+function openMembers(tr) {
+  currentGid = tr.dataset.gid;
+  document.getElementById('mmGroupName').textContent = tr.dataset.gname;
+  const have = new Set((tr.dataset.members || '').split(',').filter(Boolean));
+  const list = document.getElementById('mmList');
+  list.innerHTML = ALL_USERS.length
+    ? ALL_USERS.map(u => {
+        const id = String(u.id);
+        const name = u.display_name || u.username;
+        const sub = u.username !== name ? ` <code style="font-size:10px;color:#9ca3af;">${escapeHtml(u.username)}</code>` : '';
+        const realm = u.source && u.source !== 'local' ? ` <span class="src-badge src-${escapeHtml(u.source)}" style="font-size:10px">${escapeHtml(u.source)}</span>` : '';
+        return `<label class="picker-item" data-name="${escapeHtml(name)} ${escapeHtml(u.username)}">
+          <input type="checkbox" data-uid="${id}" ${have.has(id)?'checked':''}>
+          <span class="picker-name">${escapeHtml(name)}${sub}${realm}</span>
+        </label>`;
+      }).join('')
+    : '<div class="picker-empty">尚無使用者</div>';
+  document.getElementById('mmSearch').value = '';
+  bindPicker('mmList', 'mmSearch', 'mmCount', 'mmClear')();
+  document.getElementById('membersModal').hidden = false;
+}
+document.getElementById('mmCancel').onclick = () => document.getElementById('membersModal').hidden = true;
+document.getElementById('mmSave').onclick = async () => {
+  const members = Array.from(document.querySelectorAll('#mmList input:checked')).map(c => parseInt(c.dataset.uid, 10));
+  const r = await fetch(`/admin/groups/${currentGid}/update`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({members}),
+  });
+  if (r.ok) location.reload();
+  else showAlert('儲存失敗：' + await r.text());
+};
+
+// ---------- row buttons dispatch ----------
+document.querySelectorAll('.grp-table button').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const tr = btn.closest('tr');
+    const act = btn.dataset.act;
+    if (act === 'delete') {
+      if (!(await showConfirm(`確定刪除群組「${tr.dataset.gname}」？此動作無法復原。`,
+            { title: '刪除群組', kind: 'danger', okText: '刪除' }))) return;
+      const r = await fetch(`/admin/groups/${tr.dataset.gid}/delete`, {method:'POST'});
+      if (r.ok) location.reload();
+      else showAlert('刪除失敗：' + await r.text());
+    } else if (act === 'roles') {
+      openRoles(tr);
+    } else if (act === 'members') {
+      openMembers(tr);
+    }
+  });
+});
+</script>
+{% endblock %}

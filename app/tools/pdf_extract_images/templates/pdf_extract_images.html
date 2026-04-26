@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}擷取圖片 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('image', size=22) }} 擷取圖片</h1>
+<p class="muted">把 PDF 中<b>嵌入的圖片</b>（照片、Logo、圖示等）擷取出來，可勾選想要的下載成 ZIP 或單張下載。<br>
+  <span class="muted" style="font-size:12px;">注意：這不是把 PDF 每一頁轉成圖片，那是「<a href="/tools/pdf-to-image/">文書轉圖片</a>」工具。</span>
+</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">上傳 PDF</h2>
+  {% with upload_id='upE', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+  <p class="muted" style="font-size:12px; margin-top:6px;">目前一次處理一份 PDF。上傳後會自動擷取所有嵌入圖片。</p>
+</div>
+
+<div class="panel" id="extract-panel" hidden>
+  <h2 style="margin-top:0;">擷取結果</h2>
+  <div class="form-row" style="margin-bottom:8px;">
+    <span style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+      <span class="muted" id="extract-info" style="font-size:13px;">—</span>
+      <span style="flex:1;"></span>
+      <button class="btn btn-small" type="button" id="btn-select-all">全選</button>
+      <button class="btn btn-small" type="button" id="btn-select-none">全不選</button>
+      <button class="btn btn-primary btn-small" type="button" id="btn-zip">{{ icon('download', size=14) }}下載勾選 (ZIP)</button>
+    </span>
+  </div>
+  <div class="img-grid" id="img-grid"></div>
+</div>
+
+<style>
+.page-grid, .img-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:14px; margin-top: 8px; }
+.page-card, .img-card {
+  position:relative; background:#fff; border:1px solid var(--border); border-radius:8px;
+  padding:8px; display:flex; flex-direction:column; align-items:center; gap:6px;
+}
+.page-thumb, .img-thumb {
+  width: 100%; aspect-ratio: 0.7071; background:#f8fafc;
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+  border:1px solid #e5e7eb; border-radius:4px;
+  cursor: zoom-in; position: relative;
+}
+.img-thumb { aspect-ratio: 1; background:
+  linear-gradient(45deg, #f0f0f0 25%, transparent 25%),
+  linear-gradient(-45deg, #f0f0f0 25%, transparent 25%),
+  linear-gradient(45deg, transparent 75%, #f0f0f0 75%),
+  linear-gradient(-45deg, transparent 75%, #f0f0f0 75%);
+  background-size: 12px 12px; background-position: 0 0, 0 6px, 6px -6px, -6px 0px;
+}
+.page-thumb img, .img-thumb img { max-width:100%; max-height:100%; pointer-events: none; }
+.page-num, .img-num { font-size:12px; font-weight:600; color:#475569; text-align:center; }
+/* Make corner buttons strongly contrast against any image / border colour
+   by using solid dark backgrounds + white icons. The earlier white-bg
+   buttons disappeared visually against the green "selected" halo. */
+.img-card .pick {
+  position:absolute; top:8px; left:8px; z-index:2;
+  width:28px; height:28px; border-radius:6px;
+  background:#fff; color:transparent; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  border:2px solid #475569;
+  box-shadow:0 2px 6px rgba(0,0,0,0.35);
+  user-select: none; font-weight: 800; font-size: 18px; line-height: 1;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.img-card.picked .pick {
+  background: #16a34a; border-color: #15803d; color:#fff;
+  box-shadow: 0 2px 8px rgba(22,163,74,0.5);
+}
+.img-card.picked { box-shadow: 0 0 0 3px rgba(16,163,74,0.55); }
+.img-card .dl-link {
+  position:absolute; top:8px; right:8px; z-index:2;
+  width:32px; height:28px; padding:0; border-radius:6px;
+  background:#0f172a; color:#fff; border:1px solid rgba(255,255,255,0.2);
+  display:flex; align-items:center; justify-content:center;
+  text-decoration:none;
+  box-shadow:0 2px 6px rgba(0,0,0,0.35);
+  transition: background 0.12s;
+}
+.img-card .dl-link:hover { background: var(--primary, #4f46e5); }
+.img-card .dl-link svg { width:15px; height:15px; }
+.page-lightbox {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.85); z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  cursor: zoom-out; padding: 20px;
+}
+.page-lightbox img { max-width: 95%; max-height: 95vh; box-shadow: 0 16px 48px rgba(0,0,0,0.5); border-radius: 4px; background: #fff; }
+.page-lightbox-close { position: absolute; top: 14px; right: 18px; color: #fff; font-size: 28px; background: none; border: none; cursor: pointer; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+let extractedBatch = null;
+let extractedItems = [];
+let picked = new Set();
+
+// Upload → auto-extract embedded images. The previous "page preview first,
+// then click 開始擷取 to extract" flow confused users into thinking the
+// tool was rendering pages-as-images (it wasn't, that's just the preview).
+// Better: skip the preview, directly extract on upload, show results.
+const fu = new FileUpload(document.getElementById('upE'), async (f) => {
+  if (!f) {
+    document.getElementById('extract-panel').hidden = true;
+    return;
+  }
+  document.getElementById('extract-panel').hidden = false;
+  document.getElementById('img-grid').innerHTML =
+    '<div class="ext-loading" style="grid-column:1/-1;"><span class="ext-spinner ext-spinner-lg"></span><div>正在擷取嵌入圖片，請稍候…</div></div>';
+  document.getElementById('extract-info').innerHTML = '<span class="ext-spinner"></span> 擷取中…';
+  const fd = new FormData(); fd.append('file', f);
+  const r = await fu.upload('/tools/pdf-extract-images/extract', fd, {processingLabel: '伺服器擷取圖片中…'});
+  if (!r.ok) {
+    document.getElementById('img-grid').innerHTML =
+      '<p class="muted" style="grid-column:1/-1;text-align:center;padding:24px;color:#dc2626;">擷取失敗：' +
+      escapeHtmlPx(await r.text()) + '</p>';
+    return;
+  }
+  const j = await r.json();
+  extractedBatch = j.batch_id;
+  extractedItems = j.items;
+  picked = new Set(extractedItems.map(it => it.id));   // default: all picked
+  renderExtracted();
+  if (window.showToast) window.showToast(`擷取完成，共 ${extractedItems.length} 張`, 'ok');
+});
+function escapeHtmlPx(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderExtracted() {
+  const grid = document.getElementById('img-grid');
+  const info = document.getElementById('extract-info');
+  info.textContent = `共 ${extractedItems.length} 張，已勾選 ${picked.size} 張`;
+  if (!extractedItems.length) {
+    grid.innerHTML = '<p class="muted" style="grid-column:1/-1;text-align:center;padding:24px;">這份 PDF 沒有嵌入圖片。</p>';
+    return;
+  }
+  grid.innerHTML = extractedItems.map(it => {
+    const isPicked = picked.has(it.id);
+    const sizeKB = (it.size / 1024).toFixed(1);
+    return `<label class="img-card ${isPicked ? 'picked' : ''}" data-id="${it.id}" title="點擊勾選">
+      <span class="pick" title="勾選 / 取消勾選">${isPicked ? '✓' : ''}</span>
+      <a class="dl-link" href="${it.url}" download="${it.id}" onclick="event.stopPropagation()" title="下載這張">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+      </a>
+      <div class="img-thumb" data-zoom-src="${it.url}">
+        <img src="${it.url}" alt="${it.id}" loading="lazy" />
+      </div>
+      <div class="img-num">原第 ${it.page} 頁 · ${sizeKB} KB · ${it.ext.toUpperCase()}</div>
+    </label>`;
+  }).join('');
+}
+
+document.getElementById('img-grid').addEventListener('click', (e) => {
+  const card = e.target.closest('.img-card');
+  if (!card) return;
+  // Clicking the download link should NOT toggle pick
+  if (e.target.closest('.dl-link')) return;
+  // Clicking the thumb opens lightbox
+  if (e.target.closest('.img-thumb')) {
+    const t = e.target.closest('.img-thumb');
+    const lb = document.createElement('div');
+    lb.className = 'page-lightbox';
+    lb.innerHTML = `<button class="page-lightbox-close" type="button">×</button>
+                    <img src="${t.dataset.zoomSrc}" alt="" />`;
+    lb.addEventListener('click', () => lb.remove());
+    document.body.appendChild(lb);
+    return;
+  }
+  // Otherwise toggle pick
+  const id = card.dataset.id;
+  if (picked.has(id)) picked.delete(id); else picked.add(id);
+  renderExtracted();
+});
+
+document.getElementById('btn-select-all').addEventListener('click', () => {
+  picked = new Set(extractedItems.map(it => it.id));
+  renderExtracted();
+});
+document.getElementById('btn-select-none').addEventListener('click', () => {
+  picked.clear();
+  renderExtracted();
+});
+
+document.getElementById('btn-zip').addEventListener('click', async () => {
+  if (!extractedBatch) return;
+  if (!picked.size) return alert('請先勾選至少一張圖片');
+  const r = await fetch('/tools/pdf-extract-images/zip-selected', {
+    method:'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ batch_id: extractedBatch, names: [...picked] }),
+  });
+  if (!r.ok) { alert('打包失敗'); return; }
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `images_${Date.now()}.zip`;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+});
+</script>
+{% endblock %}

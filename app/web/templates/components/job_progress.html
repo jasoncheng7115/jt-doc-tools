@@ -1,0 +1,13 @@
+{# Renders a progress panel driven by /api/jobs/{id} polling #}
+{% from "components/icons.html" import icon %}
+<div class="job-progress" id="{{ progress_id|default('jobprogress') }}" hidden>
+  <div class="job-row">
+    <div class="job-bar"><div class="job-bar-inner"></div></div>
+    <div class="job-status">準備中…</div>
+  </div>
+  <div class="job-actions">
+    <a class="btn btn-primary job-download" hidden>{{ icon('download') }}下載 PDF</a>
+    <a class="btn job-download-png" hidden>{{ icon('image') }}下載 PNG</a>
+    <button class="btn btn-secondary job-reset" type="button">{{ icon('refresh') }}處理新檔案</button>
+  </div>
+</div>

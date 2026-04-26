@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}PDF 差異比對 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.df-uploads { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 720px) { .df-uploads { grid-template-columns: 1fr; } }
+.df-upload-slot { }
+.df-upload-slot h3 { margin: 0 0 6px; font-size: 13px; color:#475569; }
+
+.df-summary { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px;
+  margin: 10px 0; }
+.df-summary .stat { background:#f8fafc; border:1px solid #e5e7eb;
+  border-radius:6px; padding: 6px 12px; }
+.df-summary .stat b { font-size: 16px; }
+.df-summary .add { color:#059669; }
+.df-summary .rem { color:#dc2626; }
+.df-summary .chg { color:#d97706; }
+
+.df-page { border:1px solid #e5e7eb; border-radius:8px; margin: 10px 0;
+  overflow: hidden; }
+.df-page-head { background:#f8fafc; padding: 6px 12px; font-weight: 600;
+  font-size: 13px; display:flex; justify-content:space-between; align-items:center; }
+.df-cols { display: grid; grid-template-columns: 1fr 1fr;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; line-height: 1.55; }
+.df-col { background:#fff; }
+.df-col.left { border-right: 1px solid #e5e7eb; }
+.df-col .ln { padding: 1px 12px; white-space: pre-wrap; min-height: 1.55em; }
+.df-col .ln.equal   { color:#475569; }
+.df-col .ln.delete  { background: #fee2e2; color:#991b1b; }
+.df-col .ln.insert  { background: #dcfce7; color:#166534; }
+.df-col .ln.replace { background: #fef3c7; color:#92400e; }
+.df-col .ln.blank   { background: repeating-linear-gradient(45deg,#fafafa,#fafafa 4px,#f0f0f0 4px,#f0f0f0 8px); min-height: 1.55em; }
+
+.df-meta table { width:100%; border-collapse: collapse; font-size: 13px; }
+.df-meta th, .df-meta td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9;
+  text-align: left; }
+.df-meta th { background:#f8fafc; font-size: 12px; color:#475569; }
+.df-meta td.old { color:#991b1b; }
+.df-meta td.new { color:#166534; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('diff', size=22) }} PDF 差異比對</h1>
+<p class="muted">上傳兩份 PDF，並排顯示文字差異。紅 = 被刪 / 綠 = 新增 / 黃 = 修改。同時顯示 metadata 差異。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳兩份 PDF</h2>
+  <div class="df-uploads">
+    <div class="df-upload-slot">
+      <h3>📄 舊版 (左)</h3>
+      {% with upload_id='dfA', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+    </div>
+    <div class="df-upload-slot">
+      <h3>📄 新版 (右)</h3>
+      {% with upload_id='dfB', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+    </div>
+  </div>
+  <div style="margin-top:12px;">
+    <button class="btn btn-primary" id="btnCompare">{{ icon('diff', size=14) }} 開始比對</button>
+    <span id="status" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
+  </div>
+</div>
+
+<div class="panel" id="resultPanel" hidden>
+  <h2 style="margin-top:0;">2. 比對結果</h2>
+  <div class="df-summary" id="sumBox"></div>
+  <div class="df-meta" id="metaBox" hidden>
+    <h3 style="margin:10px 0 4px; font-size:14px;">Metadata 差異</h3>
+    <table><thead><tr><th>欄位</th><th>舊版</th><th>新版</th></tr></thead>
+    <tbody id="metaBody"></tbody></table>
+  </div>
+  <h3 style="margin:16px 0 6px; font-size:14px;">文字差異（逐頁）</h3>
+  <div id="diffBox"></div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let fileA = null, fileB = null;
+
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+const fuA = new FileUpload($('dfA'), (f) => { fileA = f; });
+new FileUpload($('dfB'), (f) => { fileB = f; });
+
+$('btnCompare').addEventListener('click', async () => {
+  if (!fileA || !fileB) return alert('請上傳兩份 PDF');
+  $('status').textContent = '比對中…';
+  $('resultPanel').hidden = true;
+  const fd = new FormData();
+  fd.append('file_a', fileA); fd.append('file_b', fileB);
+  const r = await fuA.upload('/tools/pdf-diff/compare', fd, {processingLabel: '比對中…'});
+  if (!r.ok) { $('status').textContent = '失敗：' + await r.text(); return; }
+  const d = await r.json();
+  $('status').textContent = '完成';
+  renderResult(d);
+});
+
+function renderResult(d) {
+  $('sumBox').innerHTML = `
+    <div class="stat">舊版 <b>${d.page_count_a}</b> 頁</div>
+    <div class="stat">新版 <b>${d.page_count_b}</b> 頁</div>
+    <div class="stat add">新增行 <b>${d.totals.added}</b></div>
+    <div class="stat rem">刪除行 <b>${d.totals.removed}</b></div>
+    <div class="stat chg">修改行 <b>${d.totals.changed}</b></div>`;
+  const meta = d.metadata_diff || [];
+  if (meta.length) {
+    $('metaBox').hidden = false;
+    $('metaBody').innerHTML = meta.map(m => `
+      <tr><td>${esc(m.key)}</td>
+          <td class="old">${esc(m.old)}</td>
+          <td class="new">${esc(m.new)}</td></tr>`).join('');
+  } else {
+    $('metaBox').hidden = true;
+  }
+  $('diffBox').innerHTML = d.pages.map(p => {
+    const aLines = p.diff.a.map(r => `<div class="ln ${r.tag}">${esc(r.text || ' ')}</div>`).join('');
+    const bLines = p.diff.b.map(r => `<div class="ln ${r.tag}">${esc(r.text || ' ')}</div>`).join('');
+    const nChanges = p.diff.added + p.diff.removed + p.diff.changed;
+    return `<div class="df-page">
+      <div class="df-page-head">
+        <span>第 ${p.index} 頁 ${p.a_exists ? '' : '(新版才有)'} ${p.b_exists ? '' : '(舊版才有)'}</span>
+        <span class="muted" style="font-weight:normal; font-size:12px;">
+          <span class="add">+${p.diff.added}</span>　·
+          <span class="rem">-${p.diff.removed}</span>　·
+          <span class="chg">~${p.diff.changed}</span>
+          ${nChanges === 0 ? '　· 無差異' : ''}
+        </span>
+      </div>
+      <div class="df-cols">
+        <div class="df-col left">${aLines}</div>
+        <div class="df-col right">${bLines}</div>
+      </div>
+    </div>`;
+  }).join('');
+  $('resultPanel').hidden = false;
+}
+</script>
+{% endblock %}

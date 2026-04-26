@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}Log 轉發 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('gear', size=22) }} Log 轉發</h1>
+<p class="muted">把稽核記錄轉發到外部 log server (Splunk / Graylog / SIEM…)。
+支援 syslog / CEF / GELF 三種格式，多個 destination 可以同時啟用。
+失敗會 retry 3 次後放棄並寫入本地稽核（<code>audit_forward_failed</code>）。</p>
+
+<div class="panel">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h2 style="margin:0;">轉發目的地</h2>
+    <button class="btn btn-primary" id="addBtn" type="button">{{ icon('plus', size=14) }} 新增</button>
+  </div>
+
+  <table id="destTable" style="margin-top:14px;">
+    <thead>
+      <tr>
+        <th>啟用</th>
+        <th title="自訂識別名稱（多個 destination 時方便區分，例如 Splunk Prod / Graylog Backup）。留空會自動帶入 {format}://{host}:{port}。">名稱</th>
+        <th>格式</th><th>傳輸</th>
+        <th>Host <span style="color:#dc2626" title="必填">*</span></th>
+        <th>Port</th><th></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <p style="margin-top:14px;">
+    <button class="btn btn-primary" id="saveBtn" type="button">{{ icon('save', size=14) }} 儲存所有變更</button>
+    <span class="muted" id="status" style="margin-left:10px; font-size:12px;"></span>
+  </p>
+</div>
+
+<style>
+  #destTable { width:100%; border-collapse:collapse; font-size:13px; }
+  #destTable th, #destTable td { padding:6px 8px; border-bottom:1px solid #e5e7eb; }
+  #destTable th { background:#f9fafb; font-size:11px; color:#6b7280; text-align:left; }
+  #destTable input, #destTable select { padding:4px 6px; border:1px solid var(--border); border-radius:4px; font:inherit; }
+  #destTable input[type=checkbox] { transform: scale(1.2); }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const initial = {{ destinations|tojson }};
+
+function row(d) {
+  d = d || {id: '', name: '', format: 'syslog', transport: 'udp',
+            host: '', port: 514, enabled: true};
+  return `<tr>
+    <td><input type="checkbox" data-k="enabled" ${d.enabled ? 'checked' : ''}></td>
+    <td><input class="field" type="text" data-k="name" value="${esc(d.name||'')}" placeholder="(自動產生)" title="自訂識別名稱，留空會自動帶入 {format}://{host}:{port}"></td>
+    <td>
+      <select class="field" data-k="format">
+        <option value="syslog" ${d.format==='syslog'?'selected':''}>syslog (RFC 5424)</option>
+        <option value="cef"    ${d.format==='cef'   ?'selected':''}>CEF (ArcSight)</option>
+        <option value="gelf"   ${d.format==='gelf'  ?'selected':''}>GELF (Graylog)</option>
+      </select>
+    </td>
+    <td>
+      <select class="field" data-k="transport">
+        <option value="udp" ${d.transport==='udp'?'selected':''}>UDP</option>
+        <option value="tcp" ${d.transport==='tcp'?'selected':''}>TCP</option>
+      </select>
+    </td>
+    <td><input class="field" type="text" data-k="host" value="${esc(d.host||'')}" placeholder="logserver.example.com" required></td>
+    <td><input class="field" type="number" data-k="port" value="${d.port||514}" min="1" max="65535" style="width:80px;"></td>
+    <td>
+      <input type="hidden" data-k="id" value="${esc(d.id||'')}">
+      <button class="btn btn-small btn-danger" data-act="del" type="button">{{ icon('trash', size=11) }}</button>
+    </td>
+  </tr>`;
+}
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function render() {
+  document.querySelector('#destTable tbody').innerHTML =
+    initial.map(d => row(d)).join('');
+  document.querySelectorAll('[data-act="del"]').forEach(b => {
+    b.addEventListener('click', () => {
+      b.closest('tr').remove();
+    });
+  });
+}
+
+document.getElementById('addBtn').addEventListener('click', () => {
+  const tbody = document.querySelector('#destTable tbody');
+  const tr = document.createElement('tbody');
+  tr.innerHTML = row();
+  const newRow = tr.querySelector('tr');
+  tbody.appendChild(newRow);
+  newRow.querySelector('[data-act="del"]').addEventListener('click', () => newRow.remove());
+});
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  // Client-side check first — give the user instant feedback and focus the
+  // offending row's host field instead of relying on a small status string.
+  document.querySelectorAll('#destTable tbody tr').forEach(tr => {
+    const h = tr.querySelector('[data-k="host"]');
+    if (h) h.style.borderColor = '';
+  });
+  const rows = Array.from(document.querySelectorAll('#destTable tbody tr'));
+  for (const tr of rows) {
+    const h = tr.querySelector('[data-k="host"]');
+    if (h && !h.value.trim()) {
+      h.style.borderColor = '#dc2626';
+      h.focus();
+      await window.showAlert('Host 是必填欄位（例如 logserver.example.com 或 192.168.1.10）。', {title:'缺少 Host'});
+      return;
+    }
+  }
+  const dests = [];
+  for (const tr of rows) {
+    const d = {};
+    tr.querySelectorAll('[data-k]').forEach(el => {
+      const k = el.dataset.k;
+      if (el.type === 'checkbox') d[k] = el.checked;
+      else if (el.type === 'number') d[k] = parseInt(el.value, 10);
+      else d[k] = el.value;
+    });
+    dests.push(d);
+  }
+  const r = await fetch('/admin/log-forward/save', {
+    method: 'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({destinations: dests}),
+  });
+  if (r.ok) {
+    document.getElementById('status').textContent = '✓ 已儲存';
+    document.getElementById('status').style.color = '#16a34a';
+  } else {
+    let detail = '';
+    try { detail = (await r.json()).detail || ''; } catch(e) { detail = await r.text(); }
+    // Translate well-known backend errors to Chinese for clarity.
+    const tr = {
+      'host required': 'Host 為必填',
+      'port out of range': 'Port 必須介於 1 ~ 65535',
+      'port must be int': 'Port 必須是整數',
+    };
+    detail = tr[detail] || detail;
+    await window.showAlert('儲存失敗：' + detail, {title:'錯誤'});
+    document.getElementById('status').textContent = '✗ 儲存失敗';
+    document.getElementById('status').style.color = '#dc2626';
+  }
+});
+
+render();
+</script>
+{% endblock %}

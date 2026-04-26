@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}頁面整理 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('pages', size=22) }} 頁面整理</h1>
+<p class="muted">拖曳重新排序、點 ❌ 標記要刪除的頁面，按「輸出 PDF」就會依目前順序輸出。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">上傳 PDF</h2>
+  {% with upload_id='upPg', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+  <p class="muted" style="font-size:12px; margin-top:6px;">目前一次處理一份 PDF。</p>
+</div>
+
+<details class="panel" id="pages-panel" hidden open>
+  <summary>頁面預覽 <span class="muted" id="pages-info" style="font-weight:normal; font-size:12px; margin-left:8px;">—</span></summary>
+  <div class="page-toolbar">
+    <span class="muted" style="font-size:12px;">拖曳卡片可重新排序；點 ❌ 標記要刪除的頁面。</span>
+    <span style="flex:1;"></span>
+    <button class="btn btn-small" id="btn-reset" type="button">{{ icon('refresh', size=14) }}重設順序</button>
+    <button class="btn btn-small" id="btn-toggle-all" type="button">全部還原</button>
+  </div>
+  <div class="page-grid" id="page-grid"></div>
+  <div style="margin-top:12px;">
+    <button class="btn btn-primary" id="btn-submit">{{ icon('save') }}輸出 PDF</button>
+  </div>
+  <div style="margin-top:10px;">
+    {% with progress_id='jp' %}{% include "components/job_progress.html" %}{% endwith %}
+  </div>
+</details>
+
+<style>
+.page-toolbar { display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+.page-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:14px; }
+.page-card {
+  position:relative; background:#fff; border:1px solid var(--border); border-radius:8px;
+  padding:8px; display:flex; flex-direction:column; align-items:center; gap:6px;
+  cursor: grab; user-select: none;
+  transition: border-color .12s, box-shadow .12s, transform .05s;
+}
+.page-card:hover { border-color: var(--primary); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.page-card.dragging { opacity: 0.4; cursor: grabbing; }
+.page-card.drop-target { border-color: var(--primary); background:#eff6ff; }
+.page-card.deleted { opacity: 0.45; background:#fef2f2; border-color:#fecaca; }
+.page-card.deleted .page-thumb { filter: grayscale(1); }
+.page-thumb {
+  width: 100%; aspect-ratio: 0.7071; background:#f8fafc;
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+  border:1px solid #e5e7eb; border-radius:4px;
+  cursor: zoom-in; position: relative;
+}
+.page-thumb::after {
+  content: '🔍'; position: absolute; top: 4px; left: 4px;
+  background: rgba(15,23,42,0.55); color: #fff; font-size: 11px;
+  padding: 2px 5px; border-radius: 4px; opacity: 0; transition: opacity .12s;
+  pointer-events: none;
+}
+.page-card:hover .page-thumb::after { opacity: 1; }
+.page-thumb img { max-width:100%; max-height:100%; pointer-events: none; }
+.page-lightbox {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.85); z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  cursor: zoom-out; padding: 20px;
+}
+.page-lightbox img { max-width: 95%; max-height: 95vh; box-shadow: 0 16px 48px rgba(0,0,0,0.5); border-radius: 4px; background: #fff; }
+.page-lightbox-close { position: absolute; top: 14px; right: 18px; color: #fff; font-size: 28px; background: none; border: none; cursor: pointer; }
+.page-num { font-size:13px; font-weight:600; color:#475569; }
+.page-card .del-btn {
+  position:absolute; top:4px; right:4px; width:24px; height:24px; border-radius:50%;
+  background: rgba(220,38,38,0.92); color:#fff; border:none; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; font-size:14px; line-height:1;
+}
+.page-card .del-btn:hover { background:#dc2626; }
+.page-card .restore-btn {
+  position:absolute; top:4px; right:4px; padding:2px 8px; font-size:11px;
+  border-radius:10px; background: var(--success); color:#fff; border:none; cursor:pointer;
+}
+.drag-hint { position:absolute; left:6px; top:6px; color:rgba(15,23,42,0.35); font-size:14px; pointer-events:none; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script src="/static/js/job_progress.js"></script>
+<script>
+let uploadId = null;
+let filename = "";
+let pages = [];   // [{page, thumb, deleted}]
+
+const fu = new FileUpload(document.getElementById('upPg'), async (f) => {
+  if (!f) return;
+  filename = f.name;
+  const fd = new FormData(); fd.append('file', f);
+  document.getElementById('pages-panel').hidden = false;
+  document.getElementById('page-grid').innerHTML = '<p class="muted" style="grid-column:1/-1;text-align:center;padding:24px;">載入中…</p>';
+  const r = await fu.upload('/tools/pdf-pages/load', fd, {processingLabel: '載入頁面中…'});
+  if (!r.ok) { document.getElementById('page-grid').innerHTML = '<p class="muted">載入失敗</p>'; return; }
+  const j = await r.json();
+  uploadId = j.upload_id;
+  pages = j.pages.map(p => ({ ...p, deleted: false }));
+  render();
+});
+
+const jp = new JobProgress(document.getElementById('jp'), {
+  onReset: () => { fu.reset(); pages = []; uploadId = null; document.getElementById('pages-panel').hidden = true; }
+});
+
+function render() {
+  const grid = document.getElementById('page-grid');
+  const info = document.getElementById('pages-info');
+  const kept = pages.filter(p => !p.deleted).length;
+  info.textContent = `共 ${pages.length} 頁，將輸出 ${kept} 頁`;
+  grid.innerHTML = pages.map((p, idx) =>
+    `<div class="page-card ${p.deleted ? 'deleted' : ''}" data-idx="${idx}" draggable="true">
+       <span class="drag-hint">⠿</span>
+       <div class="page-thumb"><img src="${p.thumb}" alt="page ${p.page}" loading="lazy" /></div>
+       <div class="page-num">原第 ${p.page} 頁</div>
+       ${p.deleted
+         ? `<button type="button" class="restore-btn" data-act="restore">還原</button>`
+         : `<button type="button" class="del-btn" data-act="delete" title="標記為刪除">×</button>`}
+     </div>`
+  ).join('');
+}
+
+// Click to delete / restore
+document.getElementById('page-grid').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const card = btn.closest('.page-card');
+  const idx = parseInt(card.dataset.idx);
+  pages[idx].deleted = btn.dataset.act === 'delete';
+  render();
+});
+
+// Drag-reorder
+let dragIdx = null;
+document.getElementById('page-grid').addEventListener('dragstart', (e) => {
+  const card = e.target.closest('.page-card');
+  if (!card) return;
+  dragIdx = parseInt(card.dataset.idx);
+  card.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+});
+document.getElementById('page-grid').addEventListener('dragend', () => {
+  document.querySelectorAll('.page-card').forEach(c => c.classList.remove('dragging','drop-target'));
+  dragIdx = null;
+});
+document.getElementById('page-grid').addEventListener('dragover', (e) => {
+  e.preventDefault();
+  const card = e.target.closest('.page-card');
+  if (!card || dragIdx === null) return;
+  document.querySelectorAll('.page-card').forEach(c => c.classList.remove('drop-target'));
+  card.classList.add('drop-target');
+});
+document.getElementById('page-grid').addEventListener('drop', (e) => {
+  e.preventDefault();
+  const card = e.target.closest('.page-card');
+  if (!card || dragIdx === null) return;
+  const dropIdx = parseInt(card.dataset.idx);
+  if (dropIdx === dragIdx) return;
+  const moved = pages.splice(dragIdx, 1)[0];
+  pages.splice(dropIdx, 0, moved);
+  dragIdx = null;
+  render();
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  pages.sort((a, b) => a.page - b.page);
+  render();
+});
+document.getElementById('btn-toggle-all').addEventListener('click', () => {
+  pages.forEach(p => p.deleted = false);
+  render();
+});
+
+document.getElementById('btn-submit').addEventListener('click', async () => {
+  if (!uploadId) return alert('請先上傳 PDF');
+  const order = pages.filter(p => !p.deleted).map(p => p.page).join(',');
+  if (!order) return alert('結果頁數為 0');
+  const fd = new FormData();
+  fd.append('upload_id', uploadId);
+  fd.append('order', order);
+  fd.append('filename', filename);
+  const r = await fu.upload('/tools/pdf-pages/submit-from-upload', fd, {processingLabel: '排隊處理中…'});
+  if (!r.ok) return alert('送出失敗：' + await r.text());
+  const j = await r.json(); jp.track(j.job_id);
+});
+</script>
+{% endblock %}

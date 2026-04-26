@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}PDF 壓縮 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.cmp-analyze { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px; margin: 10px 0; }
+.cmp-stat {
+  background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px;
+  padding: 10px 12px;
+}
+.cmp-stat .lbl { font-size: 11.5px; color: #64748b; }
+.cmp-stat .val { font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 2px; }
+
+.cmp-presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px; margin-top: 10px; }
+.cmp-preset {
+  border: 1.5px solid #e5e7eb; border-radius: 10px;
+  padding: 14px; cursor: pointer; background: #fff;
+  transition: all 0.12s; display: flex; flex-direction: column; gap: 4px;
+}
+.cmp-preset:hover { border-color: #93c5fd; background: #eff6ff; }
+.cmp-preset.active { border-color: #2563eb; background: #dbeafe; }
+.cmp-preset .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.cmp-preset.p-gentle .dot { background: #10b981; }
+.cmp-preset.p-balanced .dot { background: #f59e0b; }
+.cmp-preset.p-aggressive .dot { background: #ef4444; }
+.cmp-preset.p-advanced .dot { background: #94a3b8; }
+.cmp-preset .title { font-weight: 600; font-size: 14px; color: #0f172a; }
+.cmp-preset .desc { font-size: 12px; color: #475569; line-height: 1.5; }
+.cmp-preset .est { font-size: 11.5px; color: #94a3b8; margin-top: 2px; }
+
+.cmp-adv {
+  background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px;
+  padding: 12px 14px; margin-top: 10px;
+}
+.cmp-adv .row { display: grid; grid-template-columns: 120px 1fr;
+  gap: 10px; align-items: center; margin: 8px 0; }
+.cmp-adv .row > label { font-size: 13px; color: #475569; font-weight: 500; }
+.cmp-adv .adv-toggle-grid { display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px 14px; }
+.cmp-adv .adv-toggle-grid label { font-size: 13px; color: #334155;
+  display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.cmp-adv input[type=range] { width: 100%; accent-color: #2563eb; }
+.cmp-adv .val-label { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; color: #0f172a; min-width: 70px; }
+
+.cmp-gs-row {
+  background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px;
+  padding: 10px 12px; margin-top: 10px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.cmp-gs-row .muted { font-size: 12px; color: #7c2d12; flex: 1; min-width: 200px; }
+
+.cmp-result {
+  background: #ecfdf5; border: 1px solid #86efac; border-radius: 10px;
+  padding: 14px 16px; margin-top: 12px;
+}
+.cmp-result h3 { margin: 0 0 8px; color: #064e3b; font-size: 15px; }
+.cmp-result .sizes { display: flex; align-items: center; gap: 14px;
+  font-size: 14px; flex-wrap: wrap; }
+.cmp-result .arrow { color: #065f46; font-size: 18px; }
+.cmp-result .saved { font-weight: 700; color: #059669; }
+.cmp-result .bar {
+  height: 10px; background: #d1fae5; border-radius: 999px;
+  overflow: hidden; margin-top: 8px;
+}
+.cmp-result .bar > div {
+  height: 100%; background: linear-gradient(90deg, #34d399, #059669);
+}
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('compress', size=22) }} PDF 壓縮</h1>
+<p class="muted">減少 PDF 檔案大小。支援無損 / 平衡 / 極限三種一鍵預設，或切到進階模式自訂圖片 DPI、JPEG 品質、字型子集化、移除註解／表單／書籤等。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳 PDF</h2>
+  {% with upload_id='cmpUpload', accept='application/pdf', hint='單檔、PDF only。上傳後會先顯示檔案資訊讓你參考再選壓縮模式。' %}
+    {% include "components/file_upload.html" %}
+  {% endwith %}
+  <div class="cmp-analyze" id="analyzeGrid" hidden></div>
+</div>
+
+<div class="panel" id="panel-options" hidden>
+  <h2 style="margin-top:0;">2. 選擇壓縮模式</h2>
+  <div class="cmp-presets" id="presets">
+    <div class="cmp-preset p-gentle" data-preset="gentle">
+      <div><span class="dot"></span><span class="title">無損壓縮</span></div>
+      <div class="desc">字型子集化、去除 metadata、deflate 壓縮；不動圖片。</div>
+      <div class="est">預期縮小：5–30%　｜　畫質：完全不變</div>
+    </div>
+    <div class="cmp-preset p-balanced active" data-preset="balanced">
+      <div><span class="dot"></span><span class="title">平衡壓縮（推薦）</span></div>
+      <div class="desc">圖片降到 150 DPI、JPEG 品質 80；字型子集化；保留註解 / 表單。</div>
+      <div class="est">預期縮小：40–70%　｜　畫質：列印 OK</div>
+    </div>
+    <div class="cmp-preset p-aggressive" data-preset="aggressive">
+      <div><span class="dot"></span><span class="title">極限壓縮</span></div>
+      <div class="desc">圖片降到 96 DPI、JPEG 品質 65；移除註解／表單／書籤。</div>
+      <div class="est">預期縮小：70–90%　｜　螢幕瀏覽專用</div>
+    </div>
+    <div class="cmp-preset p-advanced" data-preset="advanced">
+      <div><span class="dot"></span><span class="title">進階模式</span></div>
+      <div class="desc">自行調整每個參數。</div>
+      <div class="est">適合熟悉壓縮參數的使用者</div>
+    </div>
+  </div>
+
+  <div class="cmp-adv" id="advPanel" hidden>
+    <div class="row">
+      <label for="advDpi">圖片最大 DPI</label>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <input type="range" id="advDpi" min="0" max="300" step="24" value="150" />
+        <span class="val-label"><span id="advDpiVal">150</span> DPI</span>
+      </div>
+    </div>
+    <small class="muted" style="font-size:11.5px; margin-top:-6px; display:block; padding-left:130px;">0 = 不降取樣。150 DPI 對電子化文件通常夠清楚，72–96 足以螢幕瀏覽。</small>
+    <div class="row">
+      <label for="advJpeg">JPEG 品質</label>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <input type="range" id="advJpeg" min="30" max="95" step="5" value="80" />
+        <span class="val-label"><span id="advJpegVal">80</span> / 100</span>
+      </div>
+    </div>
+    <div class="row">
+      <label>其他選項</label>
+      <div class="adv-toggle-grid">
+        <label><input type="checkbox" id="advSubset" checked> 字型子集化</label>
+        <label><input type="checkbox" id="advMeta" checked> 移除 metadata</label>
+        <label><input type="checkbox" id="advAnnots"> 移除註解</label>
+        <label><input type="checkbox" id="advForms"> 移除表單欄位</label>
+        <label><input type="checkbox" id="advBookmarks"> 移除書籤 / 目錄</label>
+      </div>
+    </div>
+  </div>
+
+  {% if gs_available %}
+  <div class="cmp-gs-row">
+    <label style="display:inline-flex; align-items:center; gap:6px; font-weight:600; color:#7c2d12;">
+      <input type="checkbox" id="useGs" />
+      搭配 Ghostscript 強力壓縮
+    </label>
+    <select id="gsPreset" class="field" style="max-width: 160px;">
+      <option value="screen">/screen — 最小、72 DPI</option>
+      <option value="ebook" selected>/ebook — 平衡、150 DPI</option>
+      <option value="printer">/printer — 列印、300 DPI</option>
+      <option value="prepress">/prepress — 印前、300 DPI</option>
+    </select>
+    <span class="muted">Ghostscript 常比 PyMuPDF 再擠出 20–50%；若最終反而變大會自動保留 PyMuPDF 版本。</span>
+  </div>
+  {% else %}
+  <div class="cmp-gs-row" style="opacity:.7;">
+    <span class="muted">
+      本機未偵測到 Ghostscript — Mac <code>brew install ghostscript</code>，
+      Linux <code>apt install ghostscript</code>，
+      Windows 到 ghostscript.com 下載 gs 安裝。
+    </span>
+  </div>
+  {% endif %}
+
+  <div style="margin-top:12px;">
+    <button class="btn btn-primary" id="btnCompress">{{ icon('compress', size=14) }} 開始壓縮</button>
+  </div>
+  <div style="margin-top:10px;">
+    {% with progress_id='cmpJob' %}{% include "components/job_progress.html" %}{% endwith %}
+  </div>
+</div>
+
+<div class="cmp-result" id="resultPanel" hidden>
+  <h3>壓縮完成 🎉</h3>
+  <div class="sizes">
+    <span>原始 <b id="rOrig">—</b></span>
+    <span class="arrow">→</span>
+    <span>壓縮後 <b id="rNew">—</b></span>
+    <span class="saved">省下 <span id="rPct">—</span></span>
+  </div>
+  <div class="bar"><div id="rBar" style="width:0%;"></div></div>
+  <div style="margin-top:10px;">
+    <a class="btn btn-primary" id="rDownload" href="#">{{ icon('download') }} 下載壓縮後的 PDF</a>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script src="/static/js/job_progress.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let uploadId = null;
+let origSize = 0;
+
+function fmt(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n/1024).toFixed(1) + ' KB';
+  if (n < 1024 ** 3) return (n/1024/1024).toFixed(1) + ' MB';
+  return (n/1024/1024/1024).toFixed(2) + ' GB';
+}
+
+const fu = new FileUpload($('cmpUpload'), async (f) => {
+  if (!f) { $('panel-options').hidden = true; $('analyzeGrid').hidden = true; return; }
+  const fd = new FormData(); fd.append('file', f);
+  $('analyzeGrid').hidden = false;
+  $('analyzeGrid').innerHTML = '<div class="muted" style="grid-column:1/-1;">分析中…</div>';
+  const r = await fu.upload('/tools/pdf-compress/analyze', fd, {processingLabel: '分析 PDF 中…'});
+  if (!r.ok) { $('analyzeGrid').innerHTML = '<div class="muted">分析失敗：' + await r.text() + '</div>'; return; }
+  const d = await r.json();
+  uploadId = d.upload_id;
+  origSize = d.size;
+  $('analyzeGrid').innerHTML = `
+    <div class="cmp-stat"><div class="lbl">原始檔案大小</div><div class="val">${fmt(d.size)}</div></div>
+    <div class="cmp-stat"><div class="lbl">頁數</div><div class="val">${d.pages}</div></div>
+    <div class="cmp-stat"><div class="lbl">嵌入圖片</div><div class="val">${d.image_count}</div></div>
+    <div class="cmp-stat"><div class="lbl">嵌入字型</div><div class="val">${d.font_count}</div></div>
+    <div class="cmp-stat"><div class="lbl">註解</div><div class="val">${d.annot_count}</div></div>
+    <div class="cmp-stat"><div class="lbl">含表單</div><div class="val">${d.has_form ? '是' : '否'}</div></div>`;
+  $('panel-options').hidden = false;
+  $('resultPanel').hidden = true;
+});
+
+// Preset selection
+let currentPreset = 'balanced';
+document.querySelectorAll('.cmp-preset').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.cmp-preset').forEach(e => e.classList.remove('active'));
+    el.classList.add('active');
+    currentPreset = el.dataset.preset;
+    $('advPanel').hidden = currentPreset !== 'advanced';
+  });
+});
+
+// Advanced sliders
+$('advDpi').addEventListener('input', (e) => {
+  const v = parseInt(e.target.value);
+  $('advDpiVal').textContent = v === 0 ? '不降' : v;
+});
+$('advJpeg').addEventListener('input', (e) => { $('advJpegVal').textContent = e.target.value; });
+
+const jp = new JobProgress($('cmpJob'), {
+  onDone: (jobData) => {
+    const meta = jobData.meta || {};
+    const sm = meta.summary;
+    if (!sm) return;
+    $('rOrig').textContent = fmt(sm.orig_size);
+    $('rNew').textContent = fmt(sm.final_size);
+    $('rPct').textContent = sm.saved_pct + '%';
+    $('rBar').style.width = Math.min(100, Math.max(0, sm.saved_pct)) + '%';
+    $('rDownload').href = `/api/jobs/${jobData.id}/download`;
+    $('resultPanel').hidden = false;
+    $('resultPanel').scrollIntoView({behavior:'smooth', block:'end'});
+  },
+  onReset: () => { $('resultPanel').hidden = true; },
+});
+
+$('btnCompress').addEventListener('click', async () => {
+  if (!uploadId) return alert('請先上傳 PDF');
+  const payload = {
+    upload_id: uploadId,
+    preset: currentPreset,
+  };
+  if (currentPreset === 'advanced') {
+    Object.assign(payload, {
+      image_max_dpi: parseInt($('advDpi').value) || 0,
+      jpeg_quality: parseInt($('advJpeg').value) || 80,
+      subset_fonts: $('advSubset').checked,
+      strip_metadata: $('advMeta').checked,
+      strip_annotations: $('advAnnots').checked,
+      strip_forms: $('advForms').checked,
+      strip_bookmarks: $('advBookmarks').checked,
+    });
+  }
+  {% if gs_available %}
+  const useGs = $('useGs').checked;
+  if (useGs) {
+    payload.use_ghostscript = true;
+    payload.gs_preset = $('gsPreset').value;
+  }
+  {% endif %}
+  $('resultPanel').hidden = true;
+  const r = await fetch('/tools/pdf-compress/submit', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) return alert('送出失敗：' + await r.text());
+  const j = await r.json();
+  jp.track(j.job_id);
+});
+</script>
+{% endblock %}

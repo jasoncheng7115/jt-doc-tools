@@ -1,0 +1,592 @@
+:root {
+  --bg: #f5f6f8;
+  --card: #ffffff;
+  --border: #d9dde3;
+  --text: #23272e;
+  --muted: #6b7380;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --success: #16a34a;
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.04);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Left sidebar layout — vibrant indigo with per-item color accents. */
+.sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0; width: 268px;
+  background: linear-gradient(180deg, #7c6df0 0%, #5b4bd9 100%);
+  color: #f4f3ff;
+  display: flex; flex-direction: column;
+  padding: 0;
+  z-index: 50;
+  overflow: hidden; /* the scroll lives on .sidebar-scroll */
+  box-shadow: 4px 0 16px rgba(15, 23, 42, 0.18), 1px 0 0 rgba(0,0,0,0.08);
+}
+.sidebar-header {
+  flex: 0 0 auto;
+  padding: 16px 12px 12px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.05));
+  border-bottom: 1px solid rgba(255,255,255,0.18);
+}
+.sidebar-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 12px 0 8px 12px;
+  /* Hide native scrollbar — we render a custom floating one on the sidebar itself
+     so the active tile can kiss the right edge without being interrupted. */
+  scrollbar-width: none;
+}
+.sidebar-scroll::-webkit-scrollbar { width: 0; height: 0; background: transparent; }
+/* Floating custom scrollbar indicator, painted by JS on the sidebar (outside
+   the scroll container) so it visually sits on top of the active tile. */
+.sidebar-scrollbar {
+  position: absolute; right: 2px; top: 0;
+  width: 6px; border-radius: 3px;
+  background: rgba(148, 163, 184, 0.55);
+  opacity: 0; transition: opacity 0.2s;
+  pointer-events: none;
+  z-index: 60;
+}
+.sidebar:hover .sidebar-scrollbar,
+.sidebar.scrolling .sidebar-scrollbar { opacity: 1; }
+.sidebar .brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 4px;
+  color: #fff; text-decoration: none;
+}
+.sidebar .brand-mark {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: linear-gradient(135deg, #fff, #e9e8ff); color: #4338ca;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 13px; letter-spacing: 0.5px;
+  flex: 0 0 34px; box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+.sidebar .brand-logo { width: 38px; height: 38px; object-fit: contain; flex: 0 0 38px; }
+.sidebar .brand-text { font-weight: 700; font-size: 15.5px; line-height: 1.2; }
+/* The brand+version block is `inline-flex` so its width collapses to the
+   width of the brand row (logo + title); the version then right-aligns
+   within that width, so it never extends past the title text. */
+.sidebar .brand-block {
+  display: inline-flex; flex-direction: column; align-items: stretch;
+  margin-bottom: 12px; line-height: 1;
+}
+.sidebar .brand-version {
+  text-align: right; font-size: 11px; line-height: 1;
+  color: rgba(255,255,255,0.75); margin-top: -10px; padding-right: 4px;
+}
+
+.sidebar-search {
+  width: 100%; padding: 8px 12px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.28); background: rgba(255,255,255,0.14);
+  color: #fff; font-size: 13px; margin-bottom: 0; outline: none;
+}
+.sidebar-search::placeholder { color: rgba(255,255,255,0.7); }
+.sidebar-search:focus { background: rgba(255,255,255,0.22); border-color: rgba(255,255,255,0.6); }
+
+.sb-group { margin: 0 12px 8px 0; }
+.sb-group > summary {
+  list-style: none; cursor: pointer; user-select: none;
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; font-size: 14px; font-weight: 700;
+  color: #fff; letter-spacing: 0.04em; text-transform: uppercase;
+  border-radius: 8px;
+  background: rgba(15,15,40,0.35);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+}
+.sb-group > summary::-webkit-details-marker { display: none; }
+.sb-group > summary::after {
+  content: '▾'; margin-left: auto; font-size: 18px; line-height: 1;
+  transition: transform 0.15s; opacity: 0.9; padding: 0 2px;
+}
+.sb-group:not([open]) > summary::after { transform: rotate(-90deg); }
+.sb-group > summary:hover { background: rgba(15,15,40,0.5); }
+.sb-group > summary .sb-group-icon { display: inline-flex; opacity: 0.9; }
+.sb-count {
+  background: rgba(255,255,255,0.22); color: #fff;
+  font-size: 11px; padding: 1px 8px; border-radius: 10px;
+  font-weight: 600; line-height: 1.5;
+}
+.sb-items { display: flex; flex-direction: column; gap: 6px; padding: 6px 0 8px; }
+.sb-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 9px 10px; border-radius: 8px;
+  background: rgba(255,255,255,0.10); color: #fff;
+  text-decoration: none; transition: background 0.12s, transform 0.05s;
+  border: 1px solid rgba(255,255,255,0.10);
+}
+.sb-item:hover { background: rgba(255,255,255,0.20); border-color: rgba(255,255,255,0.22); }
+.sb-item:active { transform: translateY(1px); }
+/* Active item visually merges into the right content area: same bg colour
+   as the page (var(--bg)), no border/shadow, extended to the right edge
+   so it looks like a tab kissing the content. */
+.sb-item.active {
+  background: var(--bg); color: #1e1b4b;
+  border: none; box-shadow: none;
+  margin-right: -12px; /* hug the sidebar's right edge */
+  padding-right: 18px;
+  border-top-right-radius: 0; border-bottom-right-radius: 0;
+}
+.sb-item.active .sb-item-desc { color: rgba(15,23,42,0.6); }
+
+/* Per-item icon colors: rotate through a palette using nth-of-type so each
+   item in a group gets a distinct accent badge — adds the splash of colour
+   the screenshot's design uses. */
+.sb-item-icon {
+  flex: 0 0 30px; width: 30px; height: 30px; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff;
+}
+.sb-item-icon .ic { color: currentColor; }
+/* Sidebar sits on a purple gradient; add a subtle light ring around every
+   tile so indigo/violet palette entries still stand out from the bg. */
+.sb-item-icon {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+              0 1px 2px rgba(0, 0, 0, 0.15);
+}
+/* Fallback tile color for sidebar items without a tile-color-N class
+   (e.g. the 設定 section). */
+.sb-item-icon:not([class*="tile-color-"]) {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+}
+
+/* Shared colored-tile palette used by both the sidebar (.sb-item-icon) and
+   the home page (.tool-icon). Class applied server-side based on a stable
+   hash of each tool id + collision resolution, so every tool gets a
+   UNIQUE color and keeps that color in both places regardless of order.
+   Palette biased AWAY from indigo/violet so the sidebar (which sits on a
+   purple background) stays readable. */
+.tile-color-0  { background: linear-gradient(135deg, #f472b6, #db2777); }  /* pink    */
+.tile-color-1  { background: linear-gradient(135deg, #38bdf8, #0284c7); }  /* sky     */
+.tile-color-2  { background: linear-gradient(135deg, #34d399, #059669); }  /* emerald */
+.tile-color-3  { background: linear-gradient(135deg, #fbbf24, #d97706); }  /* amber   */
+.tile-color-4  { background: linear-gradient(135deg, #fb7185, #e11d48); }  /* rose    */
+.tile-color-5  { background: linear-gradient(135deg, #fb923c, #ea580c); }  /* orange  */
+.tile-color-6  { background: linear-gradient(135deg, #2dd4bf, #0d9488); }  /* teal    */
+.tile-color-7  { background: linear-gradient(135deg, #facc15, #ca8a04); }  /* yellow  */
+.tile-color-8  { background: linear-gradient(135deg, #a3e635, #65a30d); }  /* lime    */
+.tile-color-9  { background: linear-gradient(135deg, #fda4af, #be123c); }  /* soft rose */
+.tile-color-10 { background: linear-gradient(135deg, #22d3ee, #0891b2); }  /* cyan    */
+.tile-color-11 { background: linear-gradient(135deg, #84cc16, #4d7c0f); }  /* green   */
+.tile-color-12 { background: linear-gradient(135deg, #f97316, #c2410c); }  /* deep orange */
+.tile-color-13 { background: linear-gradient(135deg, #eab308, #854d0e); }  /* gold    */
+
+.sb-item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sb-item-name { font-size: 13.5px; font-weight: 600; line-height: 1.25; }
+.sb-item-desc { font-size: 11.5px; line-height: 1.4; opacity: 0.78; color: rgba(255,255,255,0.85); }
+
+.sidebar-footer {
+  margin-top: auto; padding-top: 10px; font-size: 11px;
+  color: rgba(255,255,255,0.55); text-align: center;
+}
+
+.sidebar-toggle {
+  display: none; position: fixed; top: 12px; left: 12px; z-index: 60;
+  width: 38px; height: 38px; border-radius: 8px; border: none;
+  background: var(--primary); color: #fff; font-size: 18px; cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+}
+.sidebar-backdrop {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 40;
+}
+.sidebar-backdrop.show { display: block; }
+
+.container.with-sidebar { max-width: none; margin-left: 268px; padding: 24px 24px 64px; }
+@media (max-width: 900px) {
+  .sidebar { transform: translateX(-100%); transition: transform 0.2s; width: 280px; box-shadow: 2px 0 18px rgba(0,0,0,0.25); }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-toggle { display: block; }
+  .container.with-sidebar { margin-left: 0; padding: 60px 16px 64px; }
+}
+
+.brand { font-weight: 700; text-decoration: none; color: var(--text); font-size: 16px; white-space: nowrap; }
+
+.container { max-width: 1180px; margin: 0 auto; padding: 24px 20px 64px; }
+
+h1 { font-size: 22px; margin: 4px 0 6px; display: flex; align-items: center; gap: 8px; }
+h1 .ic { color: var(--primary); flex-shrink: 0; }
+
+/* Big icon buttons used in place of radio groups (e.g. rotation angle,
+   split mode). Wrap each <input type=radio> in a <label.option-card>. */
+.option-cards { display: flex; flex-wrap: wrap; gap: 10px; }
+.option-card {
+  position: relative; display: flex; flex-direction: column; align-items: center;
+  gap: 6px; min-width: 130px; padding: 14px 16px;
+  background: #fff; border: 2px solid var(--border); border-radius: 10px;
+  cursor: pointer; user-select: none; text-align: center;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.06s;
+}
+.option-card:hover { border-color: #c4b5fd; }
+.option-card .opt-ic {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #475569;
+}
+.option-card .opt-label { font-size: 13.5px; font-weight: 600; color: #1e293b; }
+.option-card .opt-desc { font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+.option-card input[type=radio] { position: absolute; opacity: 0; pointer-events: none; }
+.option-card:has(input[type=radio]:checked) {
+  border-color: var(--primary); background: #eef2ff;
+  box-shadow: 0 4px 12px rgba(99,102,241,0.15);
+}
+.option-card:has(input[type=radio]:checked) .opt-ic { color: var(--primary); }
+.option-card:has(input[type=radio]:checked) .opt-label { color: var(--primary-dark); }
+h2 { font-size: 18px; margin: 20px 0 10px; }
+.muted { color: var(--muted); font-size: 14px; }
+
+.footer { text-align: center; color: var(--muted); font-size: 12px; padding: 16px; }
+
+/* Tool grid */
+.tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-top: 16px; }
+.tool-card {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 18px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  text-decoration: none; color: inherit; box-shadow: var(--shadow); transition: transform .1s, box-shadow .1s;
+}
+.tool-card:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.tool-icon { font-size: 28px; }
+.tool-name { font-weight: 600; font-size: 16px; }
+.tool-desc { color: var(--muted); font-size: 13px; min-height: 34px; }
+.tool-cat { font-size: 11px; color: var(--primary); background: #eef2ff; padding: 2px 6px; border-radius: 10px; align-self: flex-start; }
+
+.empty { color: var(--muted); padding: 40px; text-align: center; grid-column: 1 / -1; }
+
+/* Cards / forms */
+.panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); }
+.panel + .panel { margin-top: 16px; }
+/* Tinted header strip: any <h2> or <summary> that opens a .panel gets a
+   full-bleed bar so cards always have a clear title region. !important is
+   needed because legacy templates use inline style="margin-top:0;". */
+.panel > h2:first-child,
+.panel > summary:first-child,
+.panel > h2.panel-title,
+details.panel > summary {
+  margin: -18px -18px 14px -18px !important;
+  padding: 11px 18px;
+  background: linear-gradient(to bottom, #f5f7fa, #e8ecf2);
+  border-bottom: 1px solid #d0d7e0;
+  border-top-left-radius: var(--radius);
+  border-top-right-radius: var(--radius);
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel > h2:first-child::before,
+details.panel > summary::before {
+  content: '▶';
+  font-size: 18px;
+  color: #111;
+  transition: transform 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-weight: 700;
+  line-height: 1;
+  transform: rotate(90deg);
+}
+.panel.collapsed > h2:first-child::before,
+details.panel:not([open]) > summary::before {
+  transform: rotate(0deg);
+}
+/* Hide the native <details> marker — we draw our own arrow. */
+details.panel > summary { list-style: none; }
+details.panel > summary::-webkit-details-marker { display: none; }
+.panel.collapsed > *:not(h2:first-child) { display: none !important; }
+.panel.collapsed > h2:first-child { margin-bottom: -18px !important; border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius); border-bottom: none; }
+/* Native <details class="panel"> — remove trailing padding when closed so
+   the tinted summary fills the whole card cleanly (no blank strip below). */
+details.panel:not([open]) { padding-bottom: 0; }
+details.panel:not([open]) > summary { margin-bottom: 0 !important; border-bottom: none !important; border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius); }
+.row { display: flex; gap: 12px; flex-wrap: wrap; }
+.row > * { flex: 1 1 auto; }
+.form-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; flex-wrap: wrap; }
+.form-row label { width: 96px; color: var(--muted); font-size: 13px; white-space: nowrap; }
+.form-row .field { flex: 1 1 220px; min-width: 0; }
+@media (max-width: 640px) {
+  .form-row { align-items: flex-start; }
+  .form-row label { width: 100%; }
+}
+/* Base styling for any input/select/textarea carrying .field — works even
+   when the element is NOT inside .form-row (e.g. ad-hoc toolbars, modal
+   footers). .form-row rule below still wins via its flex:1. */
+input.field, select.field, textarea.field {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+  color: #0f172a;
+  box-sizing: border-box;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+input.field:hover, select.field:hover, textarea.field:hover {
+  border-color: #94a3b8;
+}
+input.field:focus, select.field:focus, textarea.field:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+}
+
+.form-row input[type=number], .form-row input[type=text],
+.form-row input[type=password], .form-row input[type=email],
+.form-row input[type=search], .form-row input[type=url],
+.form-row input[type=tel], .form-row select {
+  flex: 1; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px;
+}
+.form-row input[type=number]:focus, .form-row input[type=text]:focus,
+.form-row input[type=password]:focus, .form-row input[type=email]:focus,
+.form-row input[type=search]:focus, .form-row input[type=url]:focus,
+.form-row input[type=tel]:focus, .form-row select:focus {
+  outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
+}
+
+/* In the narrow drag-editor side panel, give labels a tiny bit more room and
+   cap input width so mm labels never wrap. */
+.dpe-panel .form-row label { width: 70px; }
+.dpe-panel .form-row input[type=number],
+.dpe-panel .form-row input[type=text],
+.dpe-panel .form-row select { flex: 0 1 auto; max-width: 140px; width: 140px; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 6px;
+  border: 1px solid var(--border); background: #fff; cursor: pointer; font-size: 14px; text-decoration: none; color: var(--text); line-height: 1;
+}
+.btn:disabled, .btn[disabled], .btn[aria-disabled="true"] {
+  opacity: 0.55; cursor: not-allowed; pointer-events: none;
+  filter: grayscale(0.25);
+}
+/* Respect the HTML `hidden` attribute for ALL elements, including those
+   our own rules later set to display: flex/inline-flex/grid (otherwise the
+   browser's default [hidden]{display:none} loses the cascade). */
+[hidden] { display: none !important; }
+
+/* ---- Custom modal (replaces window.alert / confirm / prompt) ---- */
+#modal-host { position: fixed; inset: 0; z-index: 9999; pointer-events: none; }
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.45);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: auto; opacity: 0; transition: opacity .15s;
+  padding: 16px;
+}
+.modal-overlay.show { opacity: 1; }
+.modal-overlay.closing { opacity: 0; }
+.modal-card {
+  background: #fff; border-radius: 12px; padding: 22px 24px 16px;
+  min-width: 320px; max-width: 520px; width: 100%;
+  box-shadow: 0 18px 50px rgba(15,23,42,0.32), 0 4px 8px rgba(15,23,42,0.12);
+  transform: translateY(8px) scale(0.98); transition: transform .15s, opacity .15s;
+  border-top: 4px solid var(--primary);
+}
+.modal-overlay.show .modal-card { transform: translateY(0) scale(1); }
+.modal-warn .modal-card,
+.modal-card.modal-warn { border-top-color: var(--warning); }
+.modal-card.modal-danger { border-top-color: var(--danger); }
+.modal-card.modal-info { border-top-color: var(--primary); }
+.modal-title { font-size: 16px; font-weight: 700; margin: 0 0 10px; color: #0f172a; }
+.modal-body { font-size: 14px; line-height: 1.6; color: #1e293b; word-wrap: break-word; }
+.modal-input {
+  width: 100%; margin-top: 12px; padding: 8px 10px; font-size: 14px;
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.modal-actions {
+  margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;
+}
+.modal-actions .btn { min-width: 76px; justify-content: center; }
+@media (max-width: 480px) {
+  .modal-card { min-width: 0; }
+}
+.btn .ic { flex: 0 0 auto; }
+.btn:hover { background: #f3f4f6; }
+.btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn-small { padding: 4px 10px; font-size: 12px; }
+.btn.saved-flash { background: #16a34a !important; border-color: #16a34a !important; color: #fff !important; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* Toast container (top-right) */
+#toast-host { position: fixed; top: 16px; right: 16px; z-index: 2000; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.toast { background: #1e293b; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 14px; opacity: 0; transform: translateX(20px); transition: opacity 0.2s, transform 0.2s; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2); }
+.toast.show { opacity: 1; transform: translateX(0); }
+.toast.ok { background: #16a34a; }
+.toast.err { background: #dc2626; }
+/* Buttons and selects inside panel headers: sit cleanly on the tinted strip. */
+.panel > h2:first-child .btn,
+.panel > summary:first-child .btn,
+details.panel > summary .btn {
+  background: #ffffff; border-color: #c5cdd7; color: #334155; box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+}
+.panel > h2:first-child .btn:hover,
+.panel > summary:first-child .btn:hover,
+details.panel > summary .btn:hover { background: #f8fafc; border-color: #94a3b8; }
+.panel > summary:first-child select,
+details.panel > summary select {
+  background: #ffffff; border: 1px solid #c5cdd7; border-radius: 6px; padding: 4px 8px; font-size: 13px; color: #334155;
+}
+
+/* File upload */
+.file-upload .drop-zone {
+  display: block; border: 2px dashed var(--border); border-radius: var(--radius);
+  padding: 28px; text-align: center; background: #fafbfc; cursor: pointer; transition: all .1s;
+}
+.file-upload .drop-zone:hover, .file-upload .drop-zone.dragover { border-color: var(--primary); background: #f0f6ff; }
+.file-upload input[type=file] { display: none; }
+.drop-zone-icon { font-size: 28px; }
+.drop-zone-text { margin-top: 6px; font-size: 14px; }
+.drop-zone-hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.drop-zone-filename { color: var(--primary); font-size: 13px; margin-top: 6px; }
+/* Auto-spinner: file_upload.js toggles `.uploading` while the page's
+   onFile() Promise is in flight. Shows a centered spinner overlay over
+   the drop-zone and dims interactive cues so the user can't accidentally
+   trigger another upload mid-processing. */
+/* Visual cue only — don't block pointer events. If a previous upload's
+   Promise never resolved (server hang, network blip), pointer-events:none
+   would lock the user out of drag/click forever. Better to allow the
+   user to retry; double-upload is recoverable. */
+.file-upload .drop-zone.uploading { position: relative; opacity: 0.85; }
+.file-upload .drop-zone.uploading::after {
+  content: ''; position: absolute; top: 14px; right: 14px;
+  width: 22px; height: 22px;
+  border: 3px solid #cbd5e1; border-top-color: var(--primary);
+  border-radius: 50%; animation: jtdt-spin 0.7s linear infinite;
+}
+.file-upload .drop-zone.uploading::before {
+  content: '上傳/處理中…'; position: absolute; top: 14px; right: 44px;
+  font-size: 12px; color: var(--primary); line-height: 22px; font-weight: 600;
+}
+@keyframes jtdt-spin { to { transform: rotate(360deg); } }
+
+/* Real upload-progress overlay (file_upload.js _setProgress). When the
+   page handler uses `fu.upload(url, fd)` instead of fetch(), this
+   sits at the bottom of the drop-zone showing label + progress bar +
+   percentage; switches to indeterminate stripes once upload hits 100%
+   and the server is processing. */
+.file-upload .drop-zone .fu-progress {
+  position: absolute; left: 14px; right: 14px; bottom: 12px;
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255,255,255,0.95);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 10px;
+}
+.file-upload .drop-zone .fu-progress[hidden] { display: none; }
+.file-upload .drop-zone .fu-progress-label {
+  font-size: 12px; color: #475569; flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.file-upload .drop-zone .fu-progress-bar {
+  flex: 0 0 140px; height: 8px; background: #e5e7eb;
+  border-radius: 4px; overflow: hidden;
+}
+.file-upload .drop-zone .fu-progress-fill {
+  height: 100%; width: 0%; background: linear-gradient(90deg, #60a5fa, #2563eb);
+  transition: width 0.15s;
+}
+.file-upload .drop-zone .fu-progress-fill.indeterminate {
+  background: linear-gradient(90deg, #a78bfa, #60a5fa, #a78bfa);
+  background-size: 200% 100%;
+  animation: jtdt-stripes 1.2s linear infinite;
+}
+.file-upload .drop-zone .fu-progress-pct {
+  font-family: ui-monospace, monospace; font-size: 12px; color: #475569;
+  min-width: 42px; text-align: right;
+}
+@keyframes jtdt-stripes {
+  0% { background-position: 0% 0%; }
+  100% { background-position: -200% 0%; }
+}
+
+/* Reusable in-flow spinners. Usage in any template:
+   <span class="jtdt-spinner"></span> 處理中…
+   <div class="jtdt-loading"><span class="jtdt-spinner jtdt-spinner-lg"></span>
+        <div>正在處理…</div></div>
+   Per-tool aliases (.et-spinner / .ext-spinner / etc.) re-use these styles
+   via `.classname { @extend }` ... CSS doesn't have @extend, so we just
+   alias by selector list below. */
+.jtdt-spinner, .et-spinner, .ext-spinner {
+  display: inline-block; width: 12px; height: 12px;
+  border: 2px solid #cbd5e1; border-top-color: var(--primary);
+  border-radius: 50%; animation: jtdt-spin 0.7s linear infinite;
+  vertical-align: -2px; margin-right: 4px;
+}
+.jtdt-spinner-lg, .et-spinner-lg, .ext-spinner-lg {
+  width: 28px; height: 28px; border-width: 3px;
+  vertical-align: middle; margin: 0 0 10px;
+}
+.jtdt-loading, .et-loading, .ext-loading {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 32px 16px; color: #64748b; font-size: 13px;
+}
+
+/* Job progress */
+.job-progress { margin-top: 16px; }
+.job-row { display: flex; gap: 12px; align-items: center; }
+.job-bar { flex: 1; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
+.job-bar-inner { height: 100%; width: 0%; background: var(--primary); transition: width .25s; }
+.job-status { color: var(--muted); font-size: 13px; min-width: 180px; }
+.job-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.job-status { font-size: 13px; color: var(--muted); min-width: 60px; white-space: nowrap; }
+
+/* Asset list */
+.asset-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.asset-item { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; display: flex; flex-direction: column; gap: 6px; box-shadow: var(--shadow); }
+.asset-item .thumb { height: 120px; background: #f8fafc url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><rect width='8' height='8' fill='%23eef2f7'/><rect x='8' y='8' width='8' height='8' fill='%23eef2f7'/></svg>"); border-radius: 6px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.asset-item .thumb img { max-width: 100%; max-height: 100%; cursor: zoom-in; }
+.lightbox { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.85); z-index: 1000; display: flex; align-items: center; justify-content: center; cursor: zoom-out; padding: 24px; }
+.lightbox[hidden] { display: none; }
+.lightbox-inner { max-width: 95vw; max-height: 95vh; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.lightbox-inner img { max-width: 95vw; max-height: 88vh; background: #f8fafc url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><rect width='8' height='8' fill='%23eef2f7'/><rect x='8' y='8' width='8' height='8' fill='%23eef2f7'/></svg>"); border-radius: 6px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); }
+.lightbox-caption { color: #fff; font-size: 14px; }
+.asset-item .name { font-weight: 600; font-size: 14px; }
+.asset-item .meta { color: var(--muted); font-size: 12px; }
+.asset-item .actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 6px; }
+.asset-item .actions .btn { width: 100%; padding: 4px 8px; font-size: 12px; justify-content: center; }
+.asset-item .actions .btn .ic { flex-shrink: 0; }
+.badge-default { background: var(--success); color: #fff; padding: 1px 6px; border-radius: 10px; font-size: 11px; }
+
+/* Drag position editor */
+.dpe-wrapper { display: grid; grid-template-columns: 1fr 300px; gap: 16px; }
+@media (max-width: 900px) { .dpe-wrapper { grid-template-columns: 1fr; } }
+.dpe-canvas-wrap {
+  position: relative; background: #e5e7eb; border-radius: var(--radius);
+  overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 480px; user-select: none;
+}
+.dpe-paper { position: relative; background: #fff; box-shadow: 0 4px 20px rgba(0,0,0,.15); }
+.dpe-paper img.dpe-bg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.dpe-asset { position: absolute; cursor: move; outline: 2px solid var(--primary); outline-offset: -2px; touch-action: none; }
+.dpe-asset img { width: 100%; height: 100%; pointer-events: none; display: block; }
+.dpe-handle { position: absolute; width: 12px; height: 12px; background: #fff; border: 2px solid var(--primary); border-radius: 3px; }
+.dpe-handle.nw { left: -8px; top: -8px; cursor: nwse-resize; }
+.dpe-handle.ne { right: -8px; top: -8px; cursor: nesw-resize; }
+.dpe-handle.sw { left: -8px; bottom: -8px; cursor: nesw-resize; }
+.dpe-handle.se { right: -8px; bottom: -8px; cursor: nwse-resize; }
+.dpe-guide { position: absolute; background: #f59e0b; pointer-events: none; }
+.dpe-guide.v { width: 1px; top: 0; bottom: 0; }
+.dpe-guide.h { height: 1px; left: 0; right: 0; }
+
+.dpe-panel { display: flex; flex-direction: column; gap: 10px; }
+.dpe-panel .presets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.dpe-panel .presets .btn { width: 100%; justify-content: flex-start; }
+.dpe-panel .rot-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 4px 0 12px; }
+.dpe-panel .rot-actions .btn { width: 100%; justify-content: flex-start; }
+.dpe-panel .bg-toggle { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.dpe-panel .bg-toggle .btn { width: 100%; justify-content: flex-start; }

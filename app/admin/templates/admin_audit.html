@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}稽核記錄 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('eye', size=22) }} 稽核記錄</h1>
+<p class="muted">所有登入、權限變更、工具呼叫等敏感操作都會記錄於此（async 寫入，不影響服務效能）。
+資料保存 90 天後自動清除（可在「檔案保留 / 清理」設定）。
+目前資料庫大小：<b>{{ '%.1f'|format(size_mb) }} MB</b>。</p>
+
+{% if size_warn %}
+<div class="panel" style="border-left:4px solid #dc2626;">
+  ⚠ 稽核資料庫超過 5 GB。建議：縮短保留天數 + 啟用外部 log 轉發（syslog / CEF / GELF）。
+</div>
+{% endif %}
+
+<form method="get" class="audit-filter">
+  <select class="field" name="q_user">
+    <option value="">所有使用者</option>
+    {% for u in distinct_users %}
+    <option value="{{ u }}" {% if u == q_user %}selected{% endif %}>{{ u }}</option>
+    {% endfor %}
+  </select>
+  <select class="field" name="q_event">
+    <option value="">所有事件類型</option>
+    {% for e in distinct_events %}
+    <option value="{{ e }}" {% if e == q_event %}selected{% endif %}>{{ e }}</option>
+    {% endfor %}
+  </select>
+  <input class="field" type="datetime-local" name="q_from" value="{{ q_from }}" placeholder="從">
+  <input class="field" type="datetime-local" name="q_to" value="{{ q_to }}" placeholder="到">
+  <button class="btn btn-primary" type="submit">{{ icon('search', size=14) }} 篩選</button>
+  <a class="btn" href="/admin/audit">{{ icon('back', size=14) }} 清除</a>
+  <span style="flex:1;"></span>
+  <a class="btn" href="/admin/audit/export.csv?q_user={{ q_user }}&q_event={{ q_event }}&q_from={{ q_from }}&q_to={{ q_to }}">
+    {{ icon('download', size=14) }} 匯出 CSV
+  </a>
+</form>
+
+<div class="panel">
+  <p class="muted" style="font-size:12.5px;">
+    共 <b>{{ total }}</b> 筆，第 {{ page }}/{{ pages }} 頁（每頁 {{ page_size }} 筆）
+  </p>
+  <table class="audit-table">
+    <colgroup>
+      <col style="width:160px;"><!-- 時間 -->
+      <col style="width:110px;"><!-- 使用者 -->
+      <col style="width:120px;"><!-- IP -->
+      <col style="width:140px;"><!-- 事件 -->
+      <col style="width:160px;"><!-- 目標 -->
+      <col><!-- 詳細：吃剩餘寬度 -->
+    </colgroup>
+    <thead>
+      <tr><th>時間</th><th>使用者</th><th>IP</th><th>事件</th><th>目標</th><th>詳細</th></tr>
+    </thead>
+    <tbody>
+      {% for e in events %}
+      <tr>
+        <td class="audit-time">
+          <span data-ts="{{ (e.ts*1000)|int }}">—</span>
+        </td>
+        <td>{{ e.username or '(匿名)' }}</td>
+        <td class="muted" style="font-size:11px;">{{ e.ip }}</td>
+        <td><code>{{ e.event_type }}</code></td>
+        <td>{{ e.target }}</td>
+        <td class="audit-detail">
+          <details>
+            <summary class="muted" style="font-size:11px;">JSON</summary>
+            <pre>{{ e.details_json }}</pre>
+          </details>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <script>
+    // Format every timestamp client-side as yyyy/MM/dd HH:mm:ss (24-hour,
+    // local timezone). Avoids the shifty zh-TW locale formatter that emits
+    // 上午/下午 + missing leading zeros.
+    (function () {
+      function pad(n) { return String(n).padStart(2, '0'); }
+      document.querySelectorAll('.audit-time span[data-ts]').forEach(function (el) {
+        const ts = parseInt(el.dataset.ts, 10);
+        if (!ts) { el.textContent = '—'; return; }
+        const d = new Date(ts);
+        el.textContent = d.getFullYear() + '/' + pad(d.getMonth()+1) + '/' + pad(d.getDate())
+                       + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+      });
+
+      // Pretty-print + lightly syntax-highlight every JSON detail block.
+      // Server emits compact `{"key": "val", ...}` to keep the row short;
+      // when the user expands <details> we re-render with indent so it's
+      // actually readable. Highlighting uses a small regex over the
+      // pretty-printed text to colourise keys / strings / numbers / bools.
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c =>
+          ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      }
+      function highlight(json) {
+        return escapeHtml(json).replace(
+          /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(\.\d*)?([eE][+-]?\d+)?)/g,
+          function (m) {
+            let cls = 'jt-num';
+            if (/^"/.test(m)) {
+              cls = /:$/.test(m) ? 'jt-key' : 'jt-str';
+            } else if (/true|false/.test(m)) {
+              cls = 'jt-bool';
+            } else if (/null/.test(m)) {
+              cls = 'jt-null';
+            }
+            return '<span class="' + cls + '">' + m + '</span>';
+          }
+        );
+      }
+      document.querySelectorAll('.audit-detail pre').forEach(function (pre) {
+        const raw = pre.textContent.trim();
+        if (!raw) return;
+        try {
+          const obj = JSON.parse(raw);
+          pre.innerHTML = highlight(JSON.stringify(obj, null, 2));
+        } catch (e) {
+          // not valid JSON — leave as-is
+        }
+      });
+    })();
+  </script>
+
+  {% if pages > 1 %}
+  <div class="pagination" style="margin-top:14px; display:flex; gap:6px;">
+    {% if page > 1 %}
+    <a class="btn btn-small" href="?page={{ page-1 }}&q_user={{ q_user }}&q_event={{ q_event }}&q_from={{ q_from }}&q_to={{ q_to }}">‹ 上一頁</a>
+    {% endif %}
+    <span style="line-height:28px;">{{ page }} / {{ pages }}</span>
+    {% if page < pages %}
+    <a class="btn btn-small" href="?page={{ page+1 }}&q_user={{ q_user }}&q_event={{ q_event }}&q_from={{ q_from }}&q_to={{ q_to }}">下一頁 ›</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<style>
+  .audit-filter { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center; }
+  .audit-filter input, .audit-filter select { padding:6px 8px; border:1px solid var(--border); border-radius:4px; font:inherit; }
+  .audit-table { width:100%; border-collapse:collapse; font-size:12.5px; table-layout:fixed; }
+  .audit-table th, .audit-table td { padding:5px 8px; border-bottom:1px solid #f3f4f6; vertical-align:top; word-break:break-word; }
+  .audit-table th { background:#f9fafb; font-size:11px; color:#6b7280; text-align:left; }
+  .audit-table .audit-time { font-size:11.5px; color:#475569; white-space:nowrap; font-family: ui-monospace, SFMono-Regular, monospace; }
+  /* Detail column: contain the JSON so it never blows the row width. The
+     <pre> wraps + scrolls vertically rather than pushing the row offscreen. */
+  .audit-table .audit-detail { max-width:0; }
+  .audit-table .audit-detail pre {
+    background:#0f172a; color:#e2e8f0; padding:8px 10px; border-radius:4px;
+    max-height:280px; overflow:auto;
+    font-size:11.5px; line-height:1.45; white-space:pre-wrap; word-break:break-all; margin:4px 0 0;
+    font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
+  }
+  .audit-table .audit-detail pre .jt-key  { color:#7dd3fc; }   /* light blue */
+  .audit-table .audit-detail pre .jt-str  { color:#86efac; }   /* light green */
+  .audit-table .audit-detail pre .jt-num  { color:#fcd34d; }   /* amber */
+  .audit-table .audit-detail pre .jt-bool { color:#f9a8d4; }   /* pink */
+  .audit-table .audit-detail pre .jt-null { color:#94a3b8; font-style: italic; }
+</style>
+{% endblock %}

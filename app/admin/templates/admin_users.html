@@ -1,0 +1,506 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}使用者管理 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('id-card', size=22) }} 使用者管理</h1>
+{% if not auth_on %}
+<div class="panel" style="border-left:4px solid #f59e0b;">
+  ⚠ 認證目前沒啟用。建立的使用者會被保留但要等
+  <a href="/admin/auth-settings">啟用認證</a> 後才有作用。
+</div>
+{% endif %}
+
+<details class="panel" {% if not users %}open{% endif %}>
+  <summary><b>新增使用者</b></summary>
+  <form id="newUserForm" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-top:12px;">
+    <div><label>帳號<br><input class="field" name="username" required pattern="[A-Za-z0-9._\-]+" maxlength="64"></label></div>
+    <div><label>顯示名稱<br><input class="field" name="display_name" maxlength="64"></label></div>
+    <div><label>密碼<br><input class="field" name="password" type="password" minlength="8" maxlength="128" required></label></div>
+    <div><label>初始角色
+      <br>
+      <select class="field" name="role" style="min-width:140px;">
+        {% for r in all_roles %}
+        <option value="{{ r.id }}" {% if r.id == 'default-user' %}selected{% endif %}>{{ r.display_name }}</option>
+        {% endfor %}
+      </select>
+    </label></div>
+    <button class="btn btn-primary" type="submit">{{ icon('plus', size=14) }} 建立</button>
+  </form>
+</details>
+
+<div class="panel">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+    <h2 style="margin:0;">使用者清單（共 <span id="userCount">{{ users|length }}</span> 人）</h2>
+    <span style="flex:1;"></span>
+    <div class="src-filter" id="srcFilter" role="group" aria-label="依來源篩選">
+      <button type="button" class="sf-btn active" data-src="">全部</button>
+      <button type="button" class="sf-btn" data-src="local"><span class="src-badge src-local">local</span></button>
+      <button type="button" class="sf-btn" data-src="ldap"><span class="src-badge src-ldap">ldap</span></button>
+      <button type="button" class="sf-btn" data-src="ad"><span class="src-badge src-ad">ad</span></button>
+    </div>
+    <input class="field" type="search" id="userSearch"
+           placeholder="搜尋帳號、顯示名稱、角色…" style="width:240px;">
+  </div>
+  <table class="user-table" id="userTable">
+    <thead>
+      <tr>
+        <th class="sortable" data-sort="text" data-col="0">帳號</th>
+        <th class="sortable" data-sort="text" data-col="1">顯示名稱</th>
+        <th class="sortable" data-sort="text" data-col="2">來源</th>
+        <th class="sortable" data-sort="text" data-col="3">狀態</th>
+        <th class="sortable" data-sort="text" data-col="4">角色</th>
+        <th class="sortable" data-sort="num"  data-col="5">最後登入</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr data-uid="{{ u.id }}">
+        <td>
+          <b>{{ u.username }}</b>
+          {% if u.is_admin_seed %}<span class="badge">SEED</span>{% endif %}
+        </td>
+        <td>{{ u.display_name }}</td>
+        <td data-sort-key="{{ u.source }}">
+          <span class="src-badge src-{{ u.source }}">{{ u.source }}</span>
+        </td>
+        <td data-sort-key="{{ '1' if u.enabled else '0' }}">
+          {% if u.enabled %}<span style="color:#16a34a;">● 啟用</span>
+          {% else %}<span style="color:#dc2626;">● 停用</span>{% endif %}
+        </td>
+        <td data-sort-key="{{ u.roles|join(',') }}">
+          {% if u.roles_display %}
+            {% for r in u.roles_display %}<span class="role-chip" title="{{ r.id }}">{{ r.display_name }}</span>{% endfor %}
+          {% else %}<span class="muted">(無)</span>{% endif %}
+        </td>
+        <td class="muted last-login" data-sort-key="{{ u.last_login_at|int if u.last_login_at else 0 }}"
+            data-ts="{{ u.last_login_at|int if u.last_login_at else 0 }}">
+          —
+        </td>
+        <td>
+          {% if u.is_admin_seed %}
+          <button class="btn btn-small" type="button" disabled
+                  title="內建管理員：權限固定為 admin，不可變更">{{ icon('lock', size=12) }} 內建</button>
+          <button class="btn btn-small" data-act="reset-pwd" data-username="{{ u.username }}">{{ icon('lock', size=12) }} 重設密碼</button>
+          {% else %}
+          <button class="btn btn-small" data-act="edit"
+                  data-username="{{ u.username }}"
+                  data-display="{{ u.display_name }}"
+                  data-enabled="{{ '1' if u.enabled else '0' }}"
+                  data-roles="{{ u.roles|join(',') }}">{{ icon('edit', size=12) }} 編輯</button>
+          <button class="btn btn-small" data-act="reset-pwd" data-username="{{ u.username }}">{{ icon('lock', size=12) }} 重設密碼</button>
+          <button class="btn btn-small btn-danger" data-act="delete" data-username="{{ u.username }}">{{ icon('trash', size=12) }} 刪除</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- ===== Edit-user modal ===== -->
+<div id="editUserModal" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-card">
+    <h3 style="margin-top:0;">編輯使用者 <code id="emUsername"></code></h3>
+    <div class="form-row">
+      <label>顯示名稱</label>
+      <input class="field" type="text" id="emDisplay" maxlength="64" style="width:100%; box-sizing:border-box;">
+    </div>
+    <div class="form-row">
+      <label class="field" style="font-weight:normal; display:inline-flex; align-items:center; gap:6px;">
+        <input type="checkbox" id="emEnabled"> 帳號啟用
+      </label>
+    </div>
+    <div class="form-row">
+      <label>角色（複選）</label>
+      <div class="picker">
+        <div class="picker-toolbar">
+          <input class="field picker-search" type="search" id="emRoleSearch" placeholder="搜尋角色…">
+          <span class="picker-count" id="emRoleCount">0 / 0</span>
+          <button type="button" class="btn btn-small picker-clear" id="emRoleClear">清除</button>
+        </div>
+        <div class="picker-list" id="emRoleGrid"></div>
+      </div>
+    </div>
+    <div class="form-row">
+      <label>群組（複選）</label>
+      <div class="picker">
+        <div class="picker-toolbar">
+          <input class="field picker-search" type="search" id="emGroupSearch" placeholder="搜尋群組…">
+          <span class="picker-count" id="emGroupCount">0 / 0</span>
+          <button type="button" class="btn btn-small picker-clear" id="emGroupClear">清除</button>
+        </div>
+        <div class="picker-list" id="emGroupGrid"></div>
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+      <button class="btn" type="button" id="emCancel">取消</button>
+      <button class="btn btn-primary" type="button" id="emSave">{{ icon('save', size=14) }} 儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Reset password modal ===== -->
+<div id="resetPwdModal" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-card" style="max-width:380px;">
+    <h3 style="margin-top:0;">重設密碼 <code id="rpUsername"></code></h3>
+    <div class="form-row">
+      <label>新密碼（至少 8 字元）</label>
+      <input class="field" type="password" id="rpPw" minlength="8" maxlength="128" style="width:100%; box-sizing:border-box;">
+    </div>
+    <div class="form-row">
+      <label>再輸入一次</label>
+      <input class="field" type="password" id="rpPw2" minlength="8" maxlength="128" style="width:100%; box-sizing:border-box;">
+    </div>
+    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+      <button class="btn" type="button" id="rpCancel">取消</button>
+      <button class="btn btn-primary" type="button" id="rpSave">{{ icon('lock', size=14) }} 重設</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .user-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .user-table th, .user-table td { padding:6px 8px; border-bottom:1px solid #e5e7eb; text-align:left; }
+  .user-table th { background:#f9fafb; font-size:12px; color:#6b7280; }
+  .user-table th.sortable { cursor:pointer; user-select:none; padding-right:18px; position:relative; }
+  .user-table th.sortable:hover { background:#f3f4f6; color:#374151; }
+  .user-table th.sortable::after {
+    content:'⇅'; position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    font-size:10px; color:#cbd5e1;
+  }
+  .user-table th.sort-asc::after  { content:'▲'; color:#4f46e5; font-size:9px; }
+  .user-table th.sort-desc::after { content:'▼'; color:#4f46e5; font-size:9px; }
+  .badge { background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:4px; font-size:10px; margin-left:6px; }
+  /* source badges: distinct color per realm so rows from different sources stand out */
+  .src-badge { display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px; line-height:1.4; }
+  .src-local { background:#e5e7eb; color:#374151; }
+  .src-ldap  { background:#dbeafe; color:#1e40af; }
+  .src-ad    { background:#ede9fe; color:#5b21b6; }
+  /* Role chips inside the user list — small pill, separate from src-badge */
+  .role-chip {
+    display:inline-block; font-size:11.5px; padding:1px 7px; margin:1px 3px 1px 0;
+    background:#f1f5f9; color:#334155; border:1px solid #e2e8f0; border-radius:4px;
+  }
+  /* Last-login: absolute on first line, relative dimmer on second */
+  .last-login { font-size:12px !important; line-height:1.35; }
+  .last-login .ll-rel { display:block; font-size:10.5px; color:#9ca3af; }
+  /* source filter pill-bar */
+  .src-filter { display:inline-flex; gap:0; border:1px solid var(--border); border-radius:6px; overflow:hidden; background:#fff; }
+  .src-filter .sf-btn {
+    background:transparent; border:0; padding:5px 12px; cursor:pointer; font-size:12px;
+    color:#475569; border-right:1px solid var(--border);
+  }
+  .src-filter .sf-btn:last-child { border-right:0; }
+  .src-filter .sf-btn:hover { background:#f3f4f6; }
+  .src-filter .sf-btn.active { background:#eef2ff; color:#3730a3; font-weight:600; }
+  .src-filter .sf-btn .src-badge { vertical-align:middle; }
+  /* modal */
+  #editUserModal[hidden], #resetPwdModal[hidden] { display:none !important; }
+  #editUserModal, #resetPwdModal {
+    position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center;
+  }
+  .modal-backdrop {
+    position:absolute; inset:0; background:rgba(15,23,42,0.55); backdrop-filter: blur(2px);
+  }
+  .modal-card {
+    position:relative; background:#fff; border-radius:8px; padding:20px 22px;
+    width:100%; max-width:600px; max-height:88vh; overflow:auto;
+    box-shadow:0 16px 48px rgba(0,0,0,0.35); z-index:1;
+  }
+  .modal-card .form-row { display:block; margin:0 0 12px 0; }
+  .modal-card .form-row > label { display:block; width:auto; font-size:12px; color:#374151; margin-bottom:4px; font-weight:600; white-space:normal; }
+  .modal-card .form-row .field { flex:none; width:100%; box-sizing:border-box; }
+  /* ----- multi-pick picker (roles / groups) ----- */
+  .picker {
+    border:1px solid #e5e7eb; border-radius:6px; background:#fff; overflow:hidden;
+  }
+  .picker-toolbar {
+    display:flex; gap:6px; align-items:center;
+    padding:6px; border-bottom:1px solid #e5e7eb; background:#f9fafb;
+  }
+  .picker-search { flex:1; min-width:0; padding:5px 8px; font-size:12.5px; }
+  .picker-count { font-size:11.5px; color:#6b7280; white-space:nowrap; }
+  .picker-clear { padding:3px 10px !important; font-size:11px !important; }
+  .picker-list {
+    max-height:200px; overflow-y:auto; overflow-x:hidden; padding:4px;
+    display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:2px;
+  }
+  .picker-item {
+    display:flex; align-items:flex-start; gap:6px;
+    padding:5px 8px; border-radius:4px; cursor:pointer;
+    font-weight:normal; font-size:12.5px; min-width:0; line-height:1.4;
+  }
+  .picker-item:hover { background:#f3f4f6; }
+  .picker-item input { margin:2px 0 0; flex-shrink:0; }
+  .picker-item:has(input:checked) { background:#eef2ff; }
+  /* Allow names to wrap onto a 2nd line rather than getting clipped — better
+     to use a tiny bit more vertical space than to hide the user's data. */
+  .picker-name { flex:1; min-width:0; word-break:break-word; overflow-wrap:anywhere; }
+  .picker-sub { font-size:10px; color:#9ca3af; background:transparent; padding:0; flex-shrink:0; }
+  .picker-empty { padding:10px; text-align:center; color:#9ca3af; font-size:12px; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ALL_ROLES  = {{ all_roles|tojson }};
+const ALL_GROUPS = {{ all_groups|tojson }};
+
+// ---------- format last-login timestamps ----------
+// Server emits raw unix seconds in data-ts; render absolute datetime on first
+// line and a relative "X 分鐘前" hint on the second.
+(function fmtTimestamps() {
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function fmtAbs(d) {
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  function fmtRel(secsAgo) {
+    if (secsAgo < 60)        return `${Math.max(1, Math.floor(secsAgo))} 秒前`;
+    if (secsAgo < 3600)      return `${Math.floor(secsAgo / 60)} 分鐘前`;
+    if (secsAgo < 86400)     return `${Math.floor(secsAgo / 3600)} 小時前`;
+    if (secsAgo < 30*86400)  return `${Math.floor(secsAgo / 86400)} 天前`;
+    if (secsAgo < 365*86400) return `${Math.floor(secsAgo / (30*86400))} 個月前`;
+    return `${Math.floor(secsAgo / (365*86400))} 年前`;
+  }
+  const now = Date.now() / 1000;
+  document.querySelectorAll('.last-login').forEach(td => {
+    const ts = parseInt(td.dataset.ts || '0', 10);
+    if (!ts) { td.textContent = '從未登入'; return; }
+    const d = new Date(ts * 1000);
+    td.innerHTML = `${fmtAbs(d)}<span class="ll-rel">${fmtRel(now - ts)}</span>`;
+  });
+})();
+
+document.getElementById('newUserForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = {
+    username: fd.get('username'),
+    display_name: fd.get('display_name'),
+    password: fd.get('password'),
+    roles: [fd.get('role')],
+  };
+  const r = await fetch('/admin/users/create', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if (r.ok) location.reload();
+  else showAlert('建立失敗：' + await r.text());
+});
+
+// ---------- search + source filter ----------
+const search = document.getElementById('userSearch');
+const tbody = document.querySelector('.user-table tbody');
+const rows = Array.from(tbody.querySelectorAll('tr'));
+let activeSrc = '';  // '' = all, otherwise 'local'/'ldap'/'ad'
+
+function applyFilter() {
+  const q = (search.value || '').toLowerCase().trim();
+  let visible = 0;
+  rows.forEach(tr => {
+    const text = tr.textContent.toLowerCase();
+    const src = (tr.cells[2].dataset.sortKey || '').toLowerCase();
+    const matchText = !q || text.includes(q);
+    const matchSrc = !activeSrc || src === activeSrc;
+    const match = matchText && matchSrc;
+    tr.hidden = !match;
+    if (match) visible++;
+  });
+  document.getElementById('userCount').textContent = visible;
+}
+search.addEventListener('input', applyFilter);
+
+document.querySelectorAll('#srcFilter .sf-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    activeSrc = b.dataset.src || '';
+    document.querySelectorAll('#srcFilter .sf-btn').forEach(x => x.classList.toggle('active', x === b));
+    applyFilter();
+  });
+});
+
+// ---------- column sort ----------
+// Click header → toggle asc/desc; reorder <tr>s in place. Reads either
+// data-sort-key on the <td> (preferred — preserves intent for HTML cells
+// like badges or status dots) or falls back to textContent.
+(function setupSort(){
+  const table = document.getElementById('userTable');
+  if (!table) return;
+  const headers = table.querySelectorAll('th.sortable');
+  headers.forEach(th => {
+    th.addEventListener('click', () => {
+      const col = parseInt(th.dataset.col, 10);
+      const type = th.dataset.sort || 'text';
+      const wasAsc = th.classList.contains('sort-asc');
+      const dir = wasAsc ? -1 : 1;  // toggle
+      headers.forEach(h => h.classList.remove('sort-asc','sort-desc'));
+      th.classList.add(dir === 1 ? 'sort-asc' : 'sort-desc');
+
+      const tb = table.tBodies[0];
+      const rows = Array.from(tb.querySelectorAll('tr'));
+      rows.sort((a, b) => {
+        const ca = a.cells[col], cb = b.cells[col];
+        let va = (ca.dataset.sortKey ?? ca.textContent ?? '').trim();
+        let vb = (cb.dataset.sortKey ?? cb.textContent ?? '').trim();
+        if (type === 'num') {
+          va = parseFloat(va) || 0; vb = parseFloat(vb) || 0;
+          return (va - vb) * dir;
+        }
+        return va.localeCompare(vb, 'zh-Hant') * dir;
+      });
+      rows.forEach(r => tb.appendChild(r));
+    });
+  });
+})();
+
+// ---------- modal helpers ----------
+function showModal(id) { document.getElementById(id).hidden = false; }
+function hideModal(id) { document.getElementById(id).hidden = true; }
+document.querySelectorAll('.modal-backdrop').forEach(b =>
+  b.addEventListener('click', () => b.parentElement.hidden = true));
+
+// ---------- edit user modal ----------
+let currentEditUid = null;
+
+function _renderPicker(listEl, items, dataAttr, checkedSet, emptyMsg) {
+  if (!items.length) {
+    listEl.innerHTML = `<div class="picker-empty">${emptyMsg}</div>`;
+    return;
+  }
+  listEl.innerHTML = items.map(it => {
+    const id = it.id;
+    const name = it.display_name || it.name || it.id;
+    // For roles the id is a meaningful slug ('admin', 'default-user') — show
+    // it as a hover tooltip so the visible row stays compact. For groups the
+    // id is just a DB pk integer — useless to the human, omit entirely.
+    const showIdTip = (dataAttr === 'role') && (String(id) !== name);
+    const titleAttr = showIdTip ? ` title="${escapeHtml(String(id))}"` : '';
+    return `<label class="picker-item" data-name="${escapeHtml(name)} ${escapeHtml(String(id))}"${titleAttr}>
+      <input type="checkbox" data-${dataAttr}="${escapeHtml(String(id))}" ${checkedSet.has(String(id))?'checked':''}>
+      <span class="picker-name">${escapeHtml(name)}</span>
+    </label>`;
+  }).join('');
+}
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function _bindPicker(listId, searchId, countId, clearId) {
+  const list = document.getElementById(listId);
+  const search = document.getElementById(searchId);
+  const count = document.getElementById(countId);
+  const clear = document.getElementById(clearId);
+  function refreshCount() {
+    const all = list.querySelectorAll('.picker-item');
+    const sel = list.querySelectorAll('.picker-item input:checked').length;
+    count.textContent = `已選 ${sel} / ${all.length}`;
+  }
+  function applySearch() {
+    const q = (search.value || '').toLowerCase().trim();
+    list.querySelectorAll('.picker-item').forEach(el => {
+      el.hidden = q && !(el.dataset.name || '').toLowerCase().includes(q);
+    });
+  }
+  search.oninput = applySearch;
+  list.onchange = refreshCount;
+  clear.onclick = () => {
+    list.querySelectorAll('input:checked').forEach(c => c.checked = false);
+    refreshCount();
+  };
+  return { refreshCount, applySearch };
+}
+
+function openEdit(btn) {
+  currentEditUid = btn.closest('tr').dataset.uid;
+  document.getElementById('emUsername').textContent = btn.dataset.username;
+  document.getElementById('emDisplay').value = btn.dataset.display || '';
+  document.getElementById('emEnabled').checked = btn.dataset.enabled === '1';
+
+  const haveRoles = new Set((btn.dataset.roles || '').split(',').filter(Boolean));
+  _renderPicker(document.getElementById('emRoleGrid'), ALL_ROLES, 'role',
+                haveRoles, '尚無角色定義');
+  document.getElementById('emRoleSearch').value = '';
+  const roleCtl = _bindPicker('emRoleGrid', 'emRoleSearch', 'emRoleCount', 'emRoleClear');
+  roleCtl.refreshCount();
+
+  // groups (we don't yet send current memberships; admin re-picks each time)
+  _renderPicker(document.getElementById('emGroupGrid'), ALL_GROUPS, 'group',
+                new Set(), '尚無群組');
+  document.getElementById('emGroupSearch').value = '';
+  const grpCtl = _bindPicker('emGroupGrid', 'emGroupSearch', 'emGroupCount', 'emGroupClear');
+  grpCtl.refreshCount();
+
+  showModal('editUserModal');
+}
+document.getElementById('emCancel').addEventListener('click', () => hideModal('editUserModal'));
+document.getElementById('emSave').addEventListener('click', async () => {
+  const body = {
+    display_name: document.getElementById('emDisplay').value,
+    enabled: document.getElementById('emEnabled').checked,
+    roles: Array.from(document.querySelectorAll('#emRoleGrid input:checked'))
+                .map(c => c.dataset.role),
+  };
+  // Only include groups when admin actually checked some (avoid wiping all
+  // memberships on every edit when admin didn't intend to touch groups).
+  const checkedGroups = Array.from(document.querySelectorAll('#emGroupGrid input:checked'))
+                              .map(c => parseInt(c.dataset.group, 10));
+  if (checkedGroups.length) body.groups = checkedGroups;
+  const r = await fetch(`/admin/users/${currentEditUid}/update`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if (r.ok) location.reload();
+  else showAlert('更新失敗：' + await r.text());
+});
+
+// ---------- reset password modal ----------
+let currentResetUid = null;
+function openReset(btn) {
+  currentResetUid = btn.closest('tr').dataset.uid;
+  document.getElementById('rpUsername').textContent = btn.dataset.username;
+  document.getElementById('rpPw').value = '';
+  document.getElementById('rpPw2').value = '';
+  showModal('resetPwdModal');
+  document.getElementById('rpPw').focus();
+}
+document.getElementById('rpCancel').addEventListener('click', () => hideModal('resetPwdModal'));
+document.getElementById('rpSave').addEventListener('click', async () => {
+  const p1 = document.getElementById('rpPw').value;
+  const p2 = document.getElementById('rpPw2').value;
+  if (p1 !== p2) { showAlert('兩次輸入不一致'); return; }
+  if (p1.length < 8) { showAlert('密碼至少 8 字元'); return; }
+  const r = await fetch(`/admin/users/${currentResetUid}/reset-password`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({password: p1}),
+  });
+  if (r.ok) {
+    hideModal('resetPwdModal');
+    showToast('密碼已重設，該使用者所有 session 已失效', 'ok');
+  } else {
+    showAlert('重設失敗：' + await r.text());
+  }
+});
+
+// ---------- row action dispatch ----------
+document.querySelectorAll('.user-table button').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const tr = btn.closest('tr');
+    const uid = tr.dataset.uid;
+    const act = btn.dataset.act;
+    if (act === 'delete') {
+      if (!(await showConfirm(`確定刪除使用者「${btn.dataset.username}」？所有 session 與權限指派一併移除。`,
+            { title: '刪除使用者', kind: 'danger', okText: '刪除' }))) return;
+      const r = await fetch(`/admin/users/${uid}/delete`, {method:'POST'});
+      if (r.ok) location.reload();
+      else showAlert('刪除失敗：' + await r.text());
+    } else if (act === 'reset-pwd') {
+      openReset(btn);
+    } else if (act === 'edit') {
+      openEdit(btn);
+    }
+  });
+});
+</script>
+{% endblock %}

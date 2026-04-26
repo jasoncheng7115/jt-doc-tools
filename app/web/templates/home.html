@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}工具首頁 · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="hero-logo">
+    <img src="/static/images/logo-on-light.png" alt="{{ app_name }}" />
+  </div>
+  <h1 class="hero-title">{{ app_name }}</h1>
+  <p class="hero-sub">整合式 PDF / Office 文件處理平台 — 表單填寫、用印簽名、浮水印、N-up、合併分拆、轉檔、文字 / 圖片擷取、敏感資料去識別化、加密 / 解密、Metadata 清除、隱藏內容掃描、差異比對、頁面編輯…可選 LDAP / AD 認證 + 角色權限 + 稽核 + Log 轉發。</p>
+  <div class="hero-pills">
+    <span class="hero-pill"><span class="dot dot-blue"></span> 全方位文件處理</span>
+    <span class="hero-pill"><span class="dot dot-green"></span> 帳號權限與稽核</span>
+    <span class="hero-pill"><span class="dot dot-amber"></span> 不上雲，資料留在內網</span>
+  </div>
+</section>
+
+{% for g in groups %}
+<section class="tool-group">
+  <h2 class="tool-group-title">
+    {{ g.title }} <span class="tool-count">{{ g.tools|length }}</span>
+  </h2>
+  <div class="tool-grid">
+    {% for t in g.tools %}
+    <a class="tool-card" href="/tools/{{ t.id }}/">
+      <div class="tool-icon tile-color-{{ t.color|default(0) }}">{{ icon(t.icon or 'tool', size=26) }}</div>
+      <div class="tool-name">{{ t.name }}</div>
+      <div class="tool-desc">{{ t.description }}</div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% else %}
+<div class="empty">目前沒有可用的工具模組。</div>
+{% endfor %}
+
+<style>
+.hero { text-align: center; padding: 40px 16px 28px; }
+.hero-logo {
+  display: inline-block;
+  /* Float continuously; the wiggle keyframes also schedule occasional
+     left-right tilts within the same loop so the logo feels alive. */
+  animation: hero-bob 9s ease-in-out infinite;
+  transform-origin: 50% 100%;
+}
+.hero-logo img {
+  width: 180px; height: 180px; object-fit: contain;
+  filter:
+    drop-shadow(0 14px 28px rgba(99,102,241,0.45))
+    drop-shadow(0 4px 8px rgba(99,102,241,0.25));
+}
+@keyframes hero-bob {
+  /* 0–40%: gentle vertical float (3 cycles compressed in this window). */
+  0%   { transform: translateY(0)    rotate(0)    scale(1);    }
+  10%  { transform: translateY(-12px) rotate(0)    scale(1.03); }
+  20%  { transform: translateY(0)    rotate(0)    scale(1);    }
+  30%  { transform: translateY(-12px) rotate(0)    scale(1.03); }
+  40%  { transform: translateY(0)    rotate(0)    scale(1);    }
+  /* 50–80%: occasional left-right wiggle. */
+  50%  { transform: translateY(-4px) rotate(-7deg) scale(1.02); }
+  60%  { transform: translateY(-4px) rotate(7deg)  scale(1.02); }
+  70%  { transform: translateY(-4px) rotate(-5deg) scale(1.02); }
+  80%  { transform: translateY(0)    rotate(0)    scale(1);    }
+  /* 80–100%: another small float to close the loop. */
+  90%  { transform: translateY(-10px) rotate(0)    scale(1.02); }
+  100% { transform: translateY(0)    rotate(0)    scale(1);    }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-logo { animation: none; }
+}
+.hero-title {
+  /* Override the global `h1 { display: flex; ... }` so the hero title
+     centers properly under the logo. */
+  display: block; text-align: center;
+  font-size: 38px; font-weight: 800; margin: 14px 0 8px; letter-spacing: 0.02em;
+  /* Vibrant purple → violet gradient, matches the reference screenshot. */
+  background: linear-gradient(135deg, #7c6df0 0%, #5b4bd9 60%, #4c3ad0 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.hero-sub { color: var(--muted); font-size: 14px; max-width: 620px; margin: 0 auto 20px; line-height: 1.65; }
+.hero-pills { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+.hero-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 20px; border-radius: 999px;
+  background: #fff; border: 1px solid rgba(99,102,241,0.18);
+  font-size: 13.5px; color: #1e293b; font-weight: 500;
+  box-shadow:
+    0 6px 14px rgba(99,102,241,0.12),
+    0 1px 2px rgba(15,23,42,0.06);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.hero-pill:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 10px 22px rgba(99,102,241,0.18),
+    0 2px 4px rgba(15,23,42,0.08);
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot-blue { background: #3b82f6; }
+.dot-green { background: #10b981; }
+.dot-amber { background: #f59e0b; }
+
+.tool-group { margin-top: 28px; }
+.tool-group-title { display: flex; align-items: center; gap: 10px; font-size: 18px; margin: 0 0 12px; color: #1e293b; }
+.tool-count { background: var(--primary); color: #fff; font-size: 11px; padding: 1px 9px; border-radius: 10px; font-weight: 700; }
+.tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.tool-card {
+  background: #fff; border: 1px solid var(--border); border-radius: 12px;
+  padding: 18px; text-decoration: none; color: var(--text);
+  transition: transform 0.08s, box-shadow 0.12s, border-color 0.12s;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.tool-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08); border-color: var(--primary); }
+.tool-icon {
+  width: 44px; height: 44px; border-radius: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff;
+}
+/* Color comes from shared .tile-color-N palette in platform.css so the
+   home tile matches the sidebar tile for the same tool id. */
+.tool-name { font-size: 15.5px; font-weight: 600; }
+.tool-desc { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+</style>
+{% endblock %}

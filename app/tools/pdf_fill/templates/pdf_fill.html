@@ -1,0 +1,1543 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}表單自動填寫 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1 style="margin:0; display:flex; align-items:center; gap:8px;">{{ icon('edit', size=22) }} 表單自動填寫</h1>
+<p class="muted">上傳○○資料表/匯款申請書（支援 PDF 及 Word/Excel/ODF，輸出為 PDF），自動偵測欄位並用公司基本資料填好。處理完成後上傳檔案會於數小時內自動刪除，不留存副本。</p>
+
+<details class="panel profile-panel" id="profilePanel">
+  <summary>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; width:100%;">
+      <div style="display:flex; gap:10px; align-items:center;">
+        <h2 style="margin:0;">公司資料</h2>
+        {% if companies|length > 1 %}
+        <select id="companySwitch" onclick="event.stopPropagation()">
+          {% for c in companies %}
+          <option value="{{ c.id }}" {% if c.id == selected_id %}selected{% endif %}>{{ c.name }}{% if c.is_active %} ★{% endif %}</option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <span class="muted">{{ profile.name }}</span>
+        {% endif %}
+      </div>
+      <a class="btn btn-small" href="/admin/profile?cid={{ selected_id }}" onclick="event.stopPropagation()">{{ icon('edit') }}編輯</a>
+    </div>
+  </summary>
+  <p class="muted" style="font-size:12px; margin:6px 0 8px;">這些欄位會被自動帶入偵測到的對應欄位。</p>
+  {% for sec in sections %}
+    {% set visible_rows = sec.rows|selectattr('value')|list %}
+    {% if visible_rows %}
+    <div class="profile-section">
+      <h3 class="profile-section-title">{{ sec.title }}</h3>
+      <dl class="profile-dl">
+        {% for row in visible_rows %}
+        <div class="dl-row">
+          <dt>{{ row.label }}</dt>
+          <dd>{{ row.value }}</dd>
+        </div>
+        {% endfor %}
+      </dl>
+    </div>
+    {% endif %}
+  {% endfor %}
+</details>
+
+<div class="panel">
+  <h2 style="margin-top:0;">上傳檔案</h2>
+  <form id="uploadForm">
+    {% with upload_id='pdfFileUpload', accept='.pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.ods,.ppt,.pptx,.odp,.txt,.csv', hint='支援 PDF 及 Word/Excel/PowerPoint/ODF；非 PDF 會先轉 PDF 再填。<br><strong>一次只處理一份檔案</strong>，若選了多份會自動取第一份。' %}
+      {% include "components/file_upload.html" %}
+    {% endwith %}
+    <div class="upload-actions">
+      <div class="upload-font">
+        <label for="fontSelect">字型</label>
+        <select id="fontSelect" name="font_id">
+          {% for f in fonts %}
+          <option value="{{ f.id }}">{{ f.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary btn-lg" type="submit" id="submitBtn">
+        <span class="btn-icon-slot">{{ icon('eye') }}</span>
+        <span class="btn-label">預覽填寫結果</span>
+      </button>
+    </div>
+    {% if llm_enabled %}
+    <div class="llm-toggle-row">
+      <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+        <input type="checkbox" id="useLlmReview">
+        啟用 LLM 校驗（會多花約 30-60 秒）
+      </label>
+      <span class="muted" style="font-size:11px;">
+        (附加功能；本地 / LAN LLM server 對填寫結果做品質檢查)
+      </span>
+    </div>
+    {% endif %}
+  </form>
+</div>
+
+<div class="panel" id="resultPanel" hidden>
+  <h2 style="margin-top:0;">預覽結果</h2>
+  <div id="reportBox"></div>
+  <div id="llmReviewBox" hidden style="margin-top:14px;"></div>
+  <details id="unmatchedBox" class="unmatched-box" hidden>
+    <summary style="cursor:pointer; user-select:none; margin:14px 0 6px; font-size:15px; font-weight:600;">
+      未對應的標籤（教系統認識）<span id="unmatchedCount" class="muted" style="font-weight:normal; font-size:12px; margin-left:6px;"></span>
+    </summary>
+    <p class="muted" style="font-size:12px;">下拉選對應的欄位後按「學起來」，下次遇到相同字串就會自動填。</p>
+    <div id="unmatchedList"></div>
+    <button class="btn btn-small" id="rerunBtn" type="button" style="margin-top:6px;" hidden>{{ icon('refresh') }}重新識別</button>
+  </details>
+  <div style="display:flex; gap:8px; margin:10px 0; align-items:center; flex-wrap:wrap;">
+    <a class="btn btn-primary" id="downloadBtn" href="#">{{ icon('download') }}下載填好的 PDF</a>
+    <button class="btn btn-small" id="regenBtn" type="button" hidden>{{ icon('refresh') }}套用新位置</button>
+    <span id="templateStatus" class="muted" style="font-size:13px;"></span>
+    <button class="btn btn-small" id="saveTplBtn" type="button" hidden>{{ icon('save') }}儲存為範本</button>
+  </div>
+  <div class="preview-note">
+    <strong>💡 兩種檢視模式：</strong>
+    <b>編輯模式</b> 顯示原始 PDF 加上藍色可拖動框，用來調整欄位位置（滑鼠滑到框上出現 <span style="color:#dc2626; font-weight:700;">×</span> 可刪除，<b>右鍵</b>新增/覆寫）。
+    <b>合成模式</b> 才是真正的填寫結果；調完位置請按「套用新位置」，切回合成模式就能看到實際效果。
+  </div>
+  <div class="preview-toolbar">
+    <div class="mode-switch" role="tablist">
+      <button class="mode-btn active" type="button" data-mode="edit">編輯模式</button>
+      <button class="mode-btn" type="button" data-mode="composite">合成模式</button>
+    </div>
+    <span style="flex:1;"></span>
+    <button class="btn btn-small" type="button" id="zoomOut">−</button>
+    <input type="range" id="zoomSlider" min="25" max="300" step="5" value="100" class="zoom-slider" />
+    <button class="btn btn-small" type="button" id="zoomIn">＋</button>
+    <span id="zoomLabel" class="muted" style="font-size:12px; min-width:48px; text-align:center; font-weight:600;">100%</span>
+    <button class="btn btn-small" type="button" id="zoomReset">重設</button>
+  </div>
+  <div class="preview-scroll">
+    <div class="preview-stack" id="previewStack"></div>
+  </div>
+</div>
+
+<style>
+  .profile-panel > summary::marker { content: ''; }
+  .profile-section { margin-top: 10px; }
+  .profile-section-title { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 4px; padding: 0 0 3px; border-bottom: 1px solid var(--border); }
+  .profile-dl { columns: 3 280px; column-gap: 24px; margin: 0; padding: 4px 0; }
+  .profile-dl .dl-row { break-inside: avoid; display: flex; gap: 10px; padding: 3px 0; font-size: 13px; line-height: 1.5; }
+  .profile-dl dt { color: var(--muted); flex: 0 0 108px; margin: 0; }
+  .profile-dl dd { color: #111; flex: 1; margin: 0; word-break: break-word; }
+  .upload-actions { display: flex; gap: 14px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+  .upload-font { display: flex; gap: 8px; align-items: center; flex: 1 1 260px; min-width: 0; }
+  .upload-font label { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .upload-font select { flex: 1; max-width: 360px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font: inherit; font-size: 14px; background: #fff; }
+  .btn.btn-lg { padding: 10px 22px; font-size: 15px; font-weight: 600; }
+  .preview-note { background: #fef3c7; border: 1px solid #fde68a; border-radius: 6px; padding: 10px 14px 10px 36px; text-indent: -22px; margin: 10px 0 6px; font-size: 13px; line-height: 1.7; color: #78350f; }
+  .preview-toolbar { display: flex; gap: 6px; align-items: center; margin: 6px 0; flex-wrap: wrap; }
+  /* Segmented control — light tray with a raised "pill" for the active item. */
+  .mode-switch { display: inline-flex; background: #eef1f5; border-radius: 8px; padding: 3px; gap: 2px; }
+  .mode-switch .mode-btn { border: none; border-radius: 6px; background: transparent; color: #475569; font-weight: 500; padding: 6px 14px; font-size: 13px; min-width: 96px; text-align: center; cursor: pointer; transition: color 0.12s, background 0.12s; }
+  .mode-switch .mode-btn:hover:not(.active) { color: #1e293b; background: rgba(255, 255, 255, 0.5); }
+  .mode-switch .mode-btn.active { background: #fff; color: #0f172a; font-weight: 600; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.04); cursor: default; }
+  .zoom-slider { -webkit-appearance: none; appearance: none; width: 180px; height: 18px; background: transparent; cursor: pointer; margin: 0 6px; padding: 0; }
+  .zoom-slider::-webkit-slider-runnable-track { height: 6px; background: #cbd5e1; border-radius: 3px; border: 1px solid #94a3b8; }
+  .zoom-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: #1e293b; cursor: grab; border: 2px solid #fff; box-shadow: 0 0 0 1px #1e293b, 0 1px 3px rgba(0,0,0,0.25); }
+  .zoom-slider::-moz-range-track { height: 6px; background: #cbd5e1; border-radius: 3px; border: 1px solid #94a3b8; }
+  .zoom-slider::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #1e293b; cursor: grab; border: 2px solid #fff; box-shadow: 0 0 0 1px #1e293b; }
+  .preview-stage.composite-mode .overlay-box { display: none; }
+  .preview-toolbar button { min-width: 32px; font-weight: 600; }
+  .preview-scroll { background: #e5e7eb; border-radius: 6px; padding: 8px; max-height: 80vh; overflow: auto; }
+  .preview-stack { display: flex; flex-direction: column; gap: 12px; transform-origin: top left; }
+  .preview-stage { position: relative; display: inline-block; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background: #fff; }
+  .preview-stage img { display: block; }
+  .page-label { position: absolute; top: 6px; left: 6px; background: rgba(15,23,42,0.75); color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; pointer-events: none; z-index: 20; }
+  .overlay-layer { position: absolute; inset: 0; pointer-events: none; }
+  .overlay-box { position: absolute; border: 1.5px dashed #2563eb; background: rgba(37, 99, 235, 0.08); cursor: grab; pointer-events: auto; display: flex; align-items: center; padding: 2px 4px; box-sizing: border-box; font-size: 11px; color: #1e40af; white-space: nowrap; user-select: none; }
+  .overlay-box > span { flex: 1; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .overlay-box.check { border-style: solid; border-color: #16a34a; background: rgba(22, 163, 74, 0.18); justify-content: center; color: #14532d; font-weight: 700; }
+  .overlay-box.dragging { cursor: grabbing; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.4); opacity: 0.95; z-index: 10; }
+  .overlay-box:hover { background: rgba(37, 99, 235, 0.18); z-index: 5; }
+  /* Two placements covering the same cell: alert the user with a striped
+     red border so they can delete or merge the duplicate. */
+  .overlay-box.overlap { border-color: #dc2626 !important; border-style: solid !important; background: repeating-linear-gradient(45deg, rgba(220, 38, 38, 0.14), rgba(220, 38, 38, 0.14) 6px, rgba(220, 38, 38, 0.05) 6px, rgba(220, 38, 38, 0.05) 12px) !important; color: #7f1d1d !important; }
+  .overlay-box.overlap::after { content: '⚠'; position: absolute; left: 2px; top: 2px; font-size: 14px; color: #dc2626; background: #fff; border-radius: 50%; width: 16px; height: 16px; line-height: 16px; text-align: center; border: 1.5px solid #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+  .live-tip { position: fixed; background: #1f2937; color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 12px; line-height: 1.5; max-width: 280px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); z-index: 3500; pointer-events: none; white-space: pre-line; }
+  .live-tip.warn { background: #b91c1c; }
+  .live-tip::after { content: ''; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid currentColor; color: inherit; }
+  /* Controls live INSIDE the box to avoid overlapping with neighbour boxes
+     when rows are close together; z-index bumps on hover so they stay
+     clickable above any adjacent boxes. */
+  .overlay-box:hover, .overlay-box.dragging, .overlay-box.resizing { z-index: 50; }
+  .overlay-box .del-btn { position: absolute; top: 1px; right: 1px; width: 18px; height: 18px; border-radius: 50%; background: #dc2626; color: #fff; border: 1.5px solid #fff; font-size: 13px; line-height: 14px; text-align: center; cursor: pointer; font-weight: 700; padding: 0; box-shadow: 0 1px 3px rgba(0,0,0,0.35); z-index: 52; opacity: 0; transition: opacity 0.1s; }
+  .overlay-box:hover .del-btn, .overlay-box.dragging .del-btn, .overlay-box.selected .del-btn { opacity: 1; }
+  /* Selected via click — keeps the highlight + del button visible so the
+     user can press Delete/Backspace to remove it. */
+  .overlay-box.selected { box-shadow: 0 0 0 2px #2563eb, 0 0 0 4px rgba(37,99,235,0.25); z-index: 51; }
+  .overlay-box.selected.check { box-shadow: 0 0 0 2px #16a34a, 0 0 0 4px rgba(22,163,74,0.25); }
+  .overlay-box .resize-handle { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; background: #2563eb; border: 1.5px solid #fff; border-radius: 2px; cursor: nwse-resize; box-shadow: 0 1px 3px rgba(0,0,0,0.35); z-index: 52; opacity: 0; transition: opacity 0.1s; }
+  .overlay-box.check .resize-handle { background: #16a34a; }
+  .overlay-box:hover .resize-handle, .overlay-box.dragging .resize-handle, .overlay-box.resizing .resize-handle { opacity: 1; }
+  .overlay-add-hint { position: absolute; background: #111827; color: #fff; padding: 3px 8px; border-radius: 3px; font-size: 11px; pointer-events: none; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+  .ctx-menu { position: fixed; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; box-shadow: 0 10px 24px rgba(15,23,42,0.25); z-index: 3000; min-width: 240px; max-height: 60vh; overflow-y: auto; padding: 4px 0; font-size: 13px; }
+  .ctx-menu-header { padding: 6px 12px; font-size: 11px; color: #64748b; border-bottom: 1px solid #e2e8f0; }
+  .ctx-menu-section { padding: 6px 12px 3px; font-size: 11px; font-weight: 600; color: #0f172a; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+  .ctx-menu-section:first-of-type { border-top: none; }
+  .ctx-menu-item { padding: 5px 12px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  .ctx-menu-item:hover { background: #eff6ff; }
+  .ctx-menu-item .k-label { font-weight: 500; }
+  .ctx-menu-item .k-val { color: #64748b; font-size: 11px; overflow: hidden; text-overflow: ellipsis; max-width: 180px; white-space: nowrap; }
+  .ctx-menu-item.empty .k-val { color: #cbd5e1; font-style: italic; }
+  .report-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .report-chip { padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+  .report-chip.ok { background: #ecfdf5; color: #065f46; }
+  .report-chip.miss { background: #fef3c7; color: #92400e; }
+
+  /* LLM 校驗結果面板 */
+  .llm-toggle-row { margin-top: 10px; padding: 8px 12px; background: #f8fafc;
+                    border: 1px dashed #cbd5e1; border-radius: 6px;
+                    display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .llm-skip   { padding: 8px 12px; background: #fef3c7; color: #92400e;
+                border-radius: 6px; font-size: 13px; }
+  /* Structured message card — used for LLM errors, info, and warnings. */
+  .msg-card {
+    display: flex; gap: 12px; padding: 12px 14px; border-radius: 8px;
+    border: 1px solid; margin: 6px 0; align-items: flex-start;
+  }
+  .msg-card .msg-icon { font-size: 22px; line-height: 1; flex-shrink: 0; }
+  .msg-card .msg-body { flex: 1; min-width: 0; }
+  .msg-card .msg-title { font-weight: 600; font-size: 14px; margin-bottom: 3px; }
+  .msg-card .msg-detail { font-size: 13px; line-height: 1.5; opacity: 0.9; }
+  .msg-card .msg-hint   { font-size: 12px; margin-top: 6px; padding: 6px 8px;
+                          background: rgba(255,255,255,0.6); border-radius: 4px;
+                          border-left: 3px solid currentColor; }
+  .msg-card.msg-error { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+  .msg-card.msg-warn  { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+  .msg-card.msg-info  { background: #eff6ff; color: #1e40af; border-color: #bfdbfe; }
+  .msg-card.msg-success { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+  .llm-clear  { padding: 8px 12px; background: #ecfdf5; color: #065f46;
+                border-radius: 6px; font-size: 13px; margin-top: 6px; }
+  .llm-review-details summary { cursor: pointer; font-size: 14px; padding: 4px 0; }
+  .llm-corrections { width: 100%; border-collapse: collapse; margin-top: 8px;
+                     font-size: 13px; }
+  .llm-corrections th, .llm-corrections td {
+                     padding: 5px 8px; text-align: left;
+                     border-bottom: 1px solid #e5e7eb; }
+  .llm-corrections th { background: #f1f5f9; font-weight: 600; }
+  .llm-corrections tr.accepted { background: #ecfdf5; }
+  .llm-corrections tr.pending  { color: #6b7280; }
+  .ctype-WRONG_PLACEMENT { color: #b91c1c; font-weight: 600; }
+  .ctype-MISSING         { color: #b45309; font-weight: 600; }
+  .ctype-EXTRA           { color: #6d28d9; font-weight: 600; }
+
+  /* 信心度顏色帶（LLM 校驗表格） */
+  .conf-strong { color: #dc2626; font-weight: 700; }   /* ≥ 0.7 — 紅，值得看 */
+  .conf-med    { color: #d97706; font-weight: 600; }   /* 0.4-0.7 — 橘 */
+  .conf-weak   { color: #9ca3af; }                     /* < 0.4 — 灰，參考 */
+  .llm-corrections tr.conf-strong td:first-child { border-left: 3px solid #dc2626; }
+  .llm-corrections tr.conf-med    td:first-child { border-left: 3px solid #d97706; }
+  .llm-corrections tr.conf-weak   { opacity: 0.7; }
+  .llm-corrections tr.accepted { background: #ecfdf5; }
+
+  /* LLM 校驗進度條 */
+  .llm-progress-wrap {
+    background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .llm-progress-title { font-size: 14px; font-weight: 600; color: #1e40af; margin-bottom: 8px; }
+  .llm-progress-bar {
+    height: 8px; background: #dbeafe; border-radius: 4px; overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .llm-progress-fill {
+    height: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa);
+    transition: width 0.3s; animation: llmShimmer 2s infinite;
+  }
+  @keyframes llmShimmer {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+  }
+  .llm-progress-msg { font-size: 13px; color: #1e3a8a; }
+  /* model 名稱徽章 */
+  .llm-model-tag {
+    display: inline-block; padding: 1px 8px; margin: 0 4px;
+    background: #1e40af; color: #fff; border-radius: 10px;
+    font-size: 11px; font-weight: 600; font-family: ui-monospace, monospace;
+    vertical-align: middle;
+  }
+  /* toggle disabled 時的樣式 */
+  .llm-toggle-row input[type=checkbox]:disabled + span,
+  .llm-toggle-row input[type=checkbox]:disabled { opacity: 0.5; cursor: not-allowed; }
+  .unmatched-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px dashed #eef2f7; font-size: 13px; }
+  .unmatched-text { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; min-width: 120px; }
+  .unmatched-select { flex: 1; padding: 4px; border: 1px solid var(--border); border-radius: 4px; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #submitBtn[disabled] { opacity: 0.7; cursor: not-allowed; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+const form = document.getElementById('uploadForm');
+const uploadRoot = document.getElementById('pdfFileUpload');
+const fileInput = uploadRoot.querySelector('input[type=file]');
+// Auto-submit when a file is dropped or picked, so the user doesn't have
+// to click "預覽填寫結果" separately. Use requestSubmit so the existing
+// `submit` handler runs (browser validation + the form's own logic).
+const pfFu = new FileUpload(uploadRoot, () => {
+  if (typeof form.requestSubmit === 'function') form.requestSubmit();
+  else form.dispatchEvent(new Event('submit', { cancelable: true }));
+});
+const resultPanel = document.getElementById('resultPanel');
+const reportBox = document.getElementById('reportBox');
+const downloadBtn = document.getElementById('downloadBtn');
+
+const companySwitch = document.getElementById('companySwitch');
+if (companySwitch) {
+  companySwitch.addEventListener('change', (e) => {
+    location.href = '/tools/pdf-fill/?cid=' + encodeURIComponent(e.target.value);
+  });
+}
+
+// If the URL includes ?refill=<history_id>, run a refill using that
+// history entry's original + the latest profile, then render the preview
+// exactly as if the user had uploaded. Gives the "重新填寫" button on the
+// history page a working round-trip into the editor.
+(async function maybeRefill() {
+  const url = new URL(location.href);
+  const refill = url.searchParams.get('refill');
+  if (!refill) return;
+  const cs = document.getElementById('companySwitch');
+  const cid = cs ? cs.value : '{{ selected_id }}';
+  try {
+    const res = await fetch(`/tools/pdf-fill/history/${encodeURIComponent(refill)}/refill`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company_id: cid,
+        font_id: document.getElementById('fontSelect').value,
+      }),
+    });
+    if (!res.ok) {
+      alert('重新填寫失敗：' + await res.text());
+      return;
+    }
+    const data = await res.json();
+    // Drop the query param so a reload doesn't refill again.
+    history.replaceState(null, '', '/tools/pdf-fill/');
+    renderReport(data.report);
+    renderUnmatched(data.report.unmatched_labels || [], data.profile_keys || []);
+    currentPlacements = data.placements || [];
+    currentPage = data.page || {width_pt: 595, height_pt: 842, dpi: 120};
+    currentPages = data.pages && data.pages.length ? data.pages : [{
+      index: 0, width_pt: currentPage.width_pt, height_pt: currentPage.height_pt,
+      preview_url: data.preview_url, raw_preview_url: data.raw_preview_url || data.preview_url,
+    }];
+    currentProfileKeys = data.profile_keys || [];
+    currentProfileValues = data.profile_values || {};
+    currentProfileSections = data.profile_sections || [];
+    currentUploadId = data.upload_id;
+    currentFileBaseName = (data.filename || '').replace(/\.[^.]+$/i, '');
+    downloadBtn.href = `/tools/pdf-fill/download/${data.upload_id}`;
+    downloadBtn.setAttribute('download', (data.filename || 'refill.pdf').replace(/\.[^.]+$/i, '') + '_filled.pdf');
+    renderTemplateStatus(data.report.applied_template, data.upload_id, data.filename || 'refill.pdf');
+    renderAllPages();
+    document.getElementById('resultPanel').hidden = false;
+    document.getElementById('resultPanel').scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    alert('重新填寫失敗：' + err.message);
+  }
+})();
+
+// Remember the collapse state across reloads
+const profilePanel = document.getElementById('profilePanel');
+if (profilePanel) {
+  const saved = localStorage.getItem('pdf-fill-profile-open');
+  profilePanel.open = saved === null ? true : saved === '1';
+  profilePanel.addEventListener('toggle', () => {
+    localStorage.setItem('pdf-fill-profile-open', profilePanel.open ? '1' : '0');
+  });
+}
+
+const submitBtn = document.getElementById('submitBtn');
+const btnIconSlot = submitBtn.querySelector('.btn-icon-slot');
+const btnLabel = submitBtn.querySelector('.btn-label');
+const btnIconOriginal = btnIconSlot.innerHTML;
+const btnLabelOriginal = btnLabel.textContent;
+
+function setBusy(busy, message) {
+  submitBtn.disabled = busy;
+  if (busy) {
+    btnIconSlot.innerHTML = '<span class="spinner"></span>';
+    btnLabel.textContent = message || '處理中…';
+  } else {
+    btnIconSlot.innerHTML = btnIconOriginal;
+    btnLabel.textContent = btnLabelOriginal;
+  }
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const file = fileInput.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('font_id', document.getElementById('fontSelect').value);
+  const cs = document.getElementById('companySwitch');
+  fd.append('company_id', cs ? cs.value : '{{ selected_id }}');
+  // LLM 校驗（附加功能；toggle 只在 admin 啟用後才存在）。
+  // /preview 本身不跑 LLM — 返回後若 toggle 開著再啟動非同步 job。
+  const llmToggle = document.getElementById('useLlmReview');
+  const llmOn = llmToggle && llmToggle.checked;
+
+  const isOffice = !/\.pdf$/i.test(file.name);
+  setBusy(true, isOffice ? '轉 PDF 中…' : '辨識欄位中…');
+
+  try {
+    const res = await pfFu.upload('/tools/pdf-fill/preview', fd, {processingLabel: isOffice ? '轉 PDF + 辨識欄位中…' : '辨識欄位中…'});
+    if (!res.ok) {
+      const t = await res.text();
+      alert('預覽失敗：' + t);
+      return;
+    }
+    const data = await res.json();
+    renderReport(data.report);
+    // LLM 校驗現改為非同步：送出 job，輪詢進度。
+    if (llmOn && data.upload_id) {
+      startAsyncLlmReview(data.upload_id);
+    } else {
+      renderLlmReview(null);
+    }
+    renderUnmatched(data.report.unmatched_labels || [], data.profile_keys || []);
+    downloadBtn.href = `/tools/pdf-fill/download/${data.upload_id}`;
+    downloadBtn.setAttribute('download', file.name.replace(/\.[^.]+$/i, '') + '_filled.pdf');
+    renderTemplateStatus(data.report.applied_template, data.upload_id, file.name);
+    currentPlacements = data.placements || [];
+    currentPage = data.page || {width_pt: 595, height_pt: 842, dpi: 120};
+    currentPages = data.pages && data.pages.length
+      ? data.pages
+      : [{
+          index: 0, width_pt: currentPage.width_pt, height_pt: currentPage.height_pt,
+          preview_url: data.preview_url, raw_preview_url: data.raw_preview_url || data.preview_url,
+        }];
+    currentProfileKeys = data.profile_keys || [];
+    currentProfileValues = data.profile_values || {};
+    currentProfileSections = data.profile_sections || [];
+    renderAllPages();
+    resultPanel.hidden = false;
+    resultPanel.scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    alert('預覽失敗：' + err.message);
+  } finally {
+    setBusy(false);
+  }
+});
+
+const previewStack = document.getElementById('previewStack');
+const regenBtn = document.getElementById('regenBtn');
+let currentPlacements = [];
+let currentPage = {width_pt: 595, height_pt: 842, dpi: 120};
+let currentPages = [];  // per-page info: {index, width_pt, height_pt, preview_url, raw_preview_url}
+let currentProfileKeys = [];
+let currentProfileValues = {};
+let currentProfileSections = [];
+let zoom = 1.0;
+let placementsDirty = false;
+let currentMode = 'edit';   // 'edit' | 'composite'
+let lastRawUrl = null;
+let lastCompositeUrl = null;
+
+function pxPerPt() { return (currentPage.dpi || 120) / 72; }
+
+function slotsOverlap(a, b) {
+  // Consider it an overlap if intersection area > 40% of the smaller box
+  const ix0 = Math.max(a[0], b[0]);
+  const iy0 = Math.max(a[1], b[1]);
+  const ix1 = Math.min(a[2], b[2]);
+  const iy1 = Math.min(a[3], b[3]);
+  if (ix1 <= ix0 || iy1 <= iy0) return false;
+  const inter = (ix1 - ix0) * (iy1 - iy0);
+  const areaA = Math.max(1, (a[2] - a[0]) * (a[3] - a[1]));
+  const areaB = Math.max(1, (b[2] - b[0]) * (b[3] - b[1]));
+  return inter / Math.min(areaA, areaB) > 0.4;
+}
+
+// Build one preview-stage per page with its overlay layer, then render all
+// placements onto their respective pages.
+function renderAllPages() {
+  previewStack.innerHTML = '';
+  const ratio = pxPerPt();
+  currentPages.forEach(pg => {
+    const stage = document.createElement('div');
+    stage.className = 'preview-stage';
+    stage.dataset.pageIdx = pg.index;
+    stage.style.width = (pg.width_pt * ratio) + 'px';
+    const img = document.createElement('img');
+    img.className = 'preview-img';
+    img.alt = `第 ${pg.index + 1} 頁`;
+    stage.appendChild(img);
+    const layer = document.createElement('div');
+    layer.className = 'overlay-layer';
+    layer.dataset.pageIdx = pg.index;
+    layer.style.position = 'absolute';
+    layer.style.inset = '0';
+    stage.appendChild(layer);
+    if (currentPages.length > 1) {
+      const lbl = document.createElement('div');
+      lbl.className = 'page-label';
+      lbl.textContent = `${pg.index + 1} / ${currentPages.length}`;
+      stage.appendChild(lbl);
+    }
+    previewStack.appendChild(stage);
+  });
+  applyMode(currentMode);  // sets img src per current mode
+  renderOverlay();
+}
+
+function renderOverlay() {
+  const ratio = pxPerPt();
+  // Clear + resize every overlay layer
+  previewStack.querySelectorAll('.overlay-layer').forEach(layer => {
+    layer.innerHTML = '';
+    const idx = parseInt(layer.dataset.pageIdx, 10);
+    const pg = currentPages.find(p => p.index === idx) || currentPage;
+    const w = (pg.width_pt || currentPage.width_pt) * ratio;
+    const h = (pg.height_pt || currentPage.height_pt) * ratio;
+    layer.style.width = w + 'px';
+    layer.style.height = h + 'px';
+    layer.closest('.preview-stage').style.width = w + 'px';
+  });
+  // Pre-compute which placements overlap with another — those get a warning style.
+  const overlapSet = new Set();
+  for (let i = 0; i < currentPlacements.length; i++) {
+    for (let j = i + 1; j < currentPlacements.length; j++) {
+      if (currentPlacements[i].page !== currentPlacements[j].page) continue;
+      if (slotsOverlap(currentPlacements[i].slot_pt, currentPlacements[j].slot_pt)) {
+        overlapSet.add(i);
+        overlapSet.add(j);
+      }
+    }
+  }
+  currentPlacements.forEach((pl, idx) => {
+    const pageIdx = pl.page || 0;
+    const layer = previewStack.querySelector(`.overlay-layer[data-page-idx="${pageIdx}"]`);
+    if (!layer) return;
+    const [x0, y0, x1, y1] = pl.slot_pt;
+    const box = document.createElement('div');
+    box.className = 'overlay-box' + (pl.kind === 'check' ? ' check' : '')
+                    + (overlapSet.has(idx) ? ' overlap' : '');
+    const label = document.createElement('span');
+    label.textContent = pl.kind === 'check' ? '✓' : pl.text;
+    label.style.flex = '1';
+    label.style.overflow = 'hidden';
+    label.style.textOverflow = 'ellipsis';
+    box.appendChild(label);
+    const del = document.createElement('button');
+    del.className = 'del-btn';
+    del.type = 'button';
+    del.textContent = '×';
+    del.title = '刪除此欄位';
+    del.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentPlacements.splice(idx, 1);
+      placementsDirty = true;
+      regenBtn.hidden = false;
+      renderOverlay();
+    });
+    box.appendChild(del);
+    const handle = document.createElement('div');
+    handle.className = 'resize-handle';
+    handle.title = '拖動改變大小';
+    attachResize(handle, box, idx);
+    box.appendChild(handle);
+    const warn = overlapSet.has(idx);
+    const labelTxt = `${pl.profile_key || ''} → ${pl.text}`;
+    box.dataset.tip = warn
+      ? `⚠ 與其他欄位重疊\n(${labelTxt})\n拖開其中一個或按右上角 × 刪除多餘的`
+      : labelTxt;
+    box.dataset.tipKind = warn ? 'warn' : '';
+    box.title = '';  // suppress native delayed tooltip in favour of live tip
+    box.style.left = (x0 * ratio) + 'px';
+    box.style.top = (y0 * ratio) + 'px';
+    box.style.width = ((x1 - x0) * ratio) + 'px';
+    box.style.height = ((y1 - y0) * ratio) + 'px';
+    box.dataset.idx = idx;
+    attachDrag(box);
+    layer.appendChild(box);
+  });
+  // Re-apply selection class after re-render (idx is positional and stable
+  // until the user changes the placement list).
+  if (selectedBoxIdx != null) {
+    const sel = document.querySelector(`.overlay-box[data-idx="${selectedBoxIdx}"]`);
+    if (sel) sel.classList.add('selected');
+  }
+}
+
+// ---- Click-to-select + Delete/Backspace to remove ----
+let selectedBoxIdx = null;
+function selectBox(idx) {
+  selectedBoxIdx = idx;
+  document.querySelectorAll('.overlay-box.selected').forEach(b => b.classList.remove('selected'));
+  if (idx == null) return;
+  const el = document.querySelector(`.overlay-box[data-idx="${idx}"]`);
+  if (el) el.classList.add('selected');
+}
+function deleteSelectedBox() {
+  if (selectedBoxIdx == null) return;
+  if (selectedBoxIdx < 0 || selectedBoxIdx >= currentPlacements.length) return;
+  currentPlacements.splice(selectedBoxIdx, 1);
+  selectedBoxIdx = null;
+  placementsDirty = true;
+  if (typeof regenBtn !== 'undefined') regenBtn.hidden = false;
+  renderOverlay();
+}
+document.addEventListener('click', (e) => {
+  const box = e.target.closest('.overlay-box');
+  if (box) {
+    // Don't intercept clicks on the × delete button or the resize handle.
+    if (e.target.closest('.del-btn') || e.target.closest('.resize-handle')) return;
+    selectBox(parseInt(box.dataset.idx));
+    e.stopPropagation();
+    return;
+  }
+  // Click outside any box — clear selection.
+  if (selectedBoxIdx != null && !e.target.closest('.overlay-box')) {
+    selectBox(null);
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (selectedBoxIdx == null) return;
+  // Don't steal Delete from inputs or contenteditable.
+  const t = document.activeElement;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    deleteSelectedBox();
+  } else if (e.key === 'Escape') {
+    selectBox(null);
+  }
+});
+
+// Double-click empty area: quick add at click point
+// Immediate custom tooltip (no 1-sec native delay) for overlay boxes —
+// especially useful for the red "overlap" state where the user needs to
+// understand quickly why the box is highlighted.
+let activeTip = null;
+function hideTip() { if (activeTip) { activeTip.remove(); activeTip = null; } }
+previewStack.addEventListener('mouseover', (e) => {
+  const box = e.target.closest('.overlay-box');
+  if (!box || !box.dataset.tip) return;
+  hideTip();
+  const tip = document.createElement('div');
+  tip.className = 'live-tip' + (box.dataset.tipKind ? ' ' + box.dataset.tipKind : '');
+  tip.textContent = box.dataset.tip;
+  document.body.appendChild(tip);
+  activeTip = tip;
+  const rect = box.getBoundingClientRect();
+  tip.style.left = Math.max(8, rect.left + rect.width / 2 - tip.offsetWidth / 2) + 'px';
+  const topPos = rect.top - tip.offsetHeight - 8;
+  tip.style.top = (topPos > 8 ? topPos : rect.bottom + 8) + 'px';
+});
+previewStack.addEventListener('mouseout', (e) => {
+  // Hide when moving to anything that's not an overlay-box (or moving out
+  // of the preview stack entirely). relatedTarget is null when leaving the
+  // window; also treat that as "hide".
+  const next = e.relatedTarget;
+  if (!next || !(next.closest && next.closest('.overlay-box'))) hideTip();
+});
+previewStack.addEventListener('mouseleave', hideTip);
+previewStack.addEventListener('scroll', hideTip, true);
+
+// Double-click on any overlay layer: add new placement on that page
+previewStack.addEventListener('dblclick', (e) => {
+  const layer = e.target.closest('.overlay-layer');
+  if (!layer) return;
+  const pageIdx = parseInt(layer.dataset.pageIdx, 10);
+  const [pt_x, pt_y] = eventToPdfPt(e, layer);
+  openContextMenu(e.clientX, e.clientY, pt_x, pt_y, null, pageIdx);
+});
+
+// Right-click: on a box → replace; on empty area (layer/image) → add new
+previewStack.addEventListener('contextmenu', (e) => {
+  const stage = e.target.closest('.preview-stage');
+  if (!stage) return;
+  e.preventDefault();
+  const pageIdx = parseInt(stage.dataset.pageIdx, 10);
+  const layer = stage.querySelector('.overlay-layer');
+  const [pt_x, pt_y] = eventToPdfPt(e, layer);
+  const box = e.target.closest('.overlay-box');
+  const replaceIdx = box ? parseInt(box.dataset.idx, 10) : null;
+  openContextMenu(e.clientX, e.clientY, pt_x, pt_y, replaceIdx, pageIdx);
+});
+
+function eventToPdfPt(e, layerOverride) {
+  const layer = layerOverride || previewStack.querySelector('.overlay-layer');
+  if (!layer) return [0, 0];
+  const rect = layer.getBoundingClientRect();
+  const px_x = (e.clientX - rect.left) / zoom;
+  const px_y = (e.clientY - rect.top) / zoom;
+  return [px_x / pxPerPt(), px_y / pxPerPt()];
+}
+
+let activeMenu = null;
+function closeContextMenu() {
+  if (activeMenu) { activeMenu.remove(); activeMenu = null; }
+}
+document.addEventListener('click', (e) => {
+  if (activeMenu && !e.target.closest('.ctx-menu')) closeContextMenu();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeContextMenu();
+});
+
+function openContextMenu(clientX, clientY, pt_x, pt_y, replaceIdx, pageIdx) {
+  if (pageIdx === undefined || pageIdx === null) pageIdx = 0;
+  closeContextMenu();
+  if (!currentProfileKeys.length) return;
+  const isReplace = replaceIdx !== null && replaceIdx !== undefined && currentPlacements[replaceIdx];
+  const menu = document.createElement('div');
+  menu.className = 'ctx-menu';
+  // Quick-insert ✓ at the clicked point (for forms where auto-detection
+  // missed a checkbox, or for per-form template overrides).
+  const checkHead = document.createElement('div');
+  checkHead.className = 'ctx-menu-section';
+  checkHead.textContent = isReplace ? '覆寫為：' : '快速插入';
+  menu.appendChild(checkHead);
+  const checkItem = document.createElement('div');
+  checkItem.className = 'ctx-menu-item';
+  checkItem.innerHTML = '<span class="k-label">✓ 勾選（checkmark）</span><span class="k-val">打勾框</span>';
+  checkItem.addEventListener('click', () => {
+    closeContextMenu();
+    if (isReplace) replaceWithCheck(replaceIdx);
+    else addCheckAt(pt_x, pt_y, pageIdx);
+  });
+  menu.appendChild(checkItem);
+
+  const header = document.createElement('div');
+  header.className = 'ctx-menu-header';
+  header.textContent = isReplace ? '或改用以下欄位：' : '選要插入的欄位：';
+  menu.appendChild(header);
+
+  const labelByKey = {};
+  currentProfileKeys.forEach(pk => { labelByKey[pk.key] = pk.label; });
+
+  const appendItem = (key) => {
+    const pk = labelByKey[key] ? {key, label: labelByKey[key]} : null;
+    if (!pk) return;
+    const val = (currentProfileValues[key] || '').trim();
+    const item = document.createElement('div');
+    item.className = 'ctx-menu-item' + (val ? '' : ' empty');
+    item.innerHTML = `<span class="k-label">${escapeHTML(pk.label)}</span><span class="k-val">${val ? escapeHTML(val) : '(空)'}</span>`;
+    item.addEventListener('click', () => {
+      closeContextMenu();
+      if (isReplace) replaceWithField(replaceIdx, pk.key, val);
+      else addPlacementAt(pk.key, val, pt_x, pt_y, pageIdx);
+    });
+    menu.appendChild(item);
+  };
+
+  const rendered = new Set();
+  if (currentProfileSections.length) {
+    currentProfileSections.forEach((sec, i) => {
+      const visibleKeys = (sec.keys || []).filter(k => labelByKey[k]);
+      if (!visibleKeys.length) return;
+      const sh = document.createElement('div');
+      sh.className = 'ctx-menu-section';
+      sh.textContent = sec.title;
+      menu.appendChild(sh);
+      visibleKeys.forEach(k => {
+        appendItem(k);
+        rendered.add(k);
+      });
+    });
+    // Catch-all for keys that weren't in any section
+    const leftover = currentProfileKeys.filter(pk => !rendered.has(pk.key));
+    if (leftover.length) {
+      const sh = document.createElement('div');
+      sh.className = 'ctx-menu-section';
+      sh.textContent = '其他';
+      menu.appendChild(sh);
+      leftover.forEach(pk => appendItem(pk.key));
+    }
+  } else {
+    currentProfileKeys.forEach(pk => appendItem(pk.key));
+  }
+
+  menu.style.left = clientX + 'px';
+  menu.style.top = clientY + 'px';
+  document.body.appendChild(menu);
+  activeMenu = menu;
+  const rect = menu.getBoundingClientRect();
+  if (rect.right > innerWidth - 8) menu.style.left = (innerWidth - rect.width - 8) + 'px';
+  if (rect.bottom > innerHeight - 8) menu.style.top = (innerHeight - rect.height - 8) + 'px';
+}
+
+function replaceWithField(idx, key, value) {
+  const pl = currentPlacements[idx];
+  if (!pl) return;
+  pl.kind = 'text';
+  pl.source_key = key;
+  pl.profile_key = key;
+  pl.text = value;
+  pl.option_text = '';
+  placementsDirty = true;
+  regenBtn.hidden = false;
+  renderOverlay();
+}
+
+function replaceWithCheck(idx) {
+  const pl = currentPlacements[idx];
+  if (!pl) return;
+  pl.kind = 'check';
+  pl.source_key = 'manual_check';
+  pl.profile_key = 'manual_check';
+  pl.text = '✓';
+  pl.option_text = '';
+  placementsDirty = true;
+  regenBtn.hidden = false;
+  renderOverlay();
+}
+
+function addCheckAt(pt_x, pt_y, pageIdx) {
+  const sz = 10;
+  currentPlacements.push({
+    profile_key: 'manual_check',
+    source_key: 'manual_check',
+    text: '✓',
+    slot_pt: [pt_x - sz / 2, pt_y - sz / 2, pt_x + sz / 2, pt_y + sz / 2],
+    kind: 'check',
+    page: pageIdx || 0,
+    base_font_size: 12.0,
+    option_text: '',
+  });
+  placementsDirty = true;
+  regenBtn.hidden = false;
+  renderOverlay();
+}
+
+function addPlacementAt(key, value, pt_x, pt_y, pageIdx) {
+  // Size the slot roughly to fit the value — CJK chars wider than ASCII.
+  // The PDF renderer still auto-shrinks/wraps if the slot ends up too small.
+  const cjkCount = (value.match(/[　-鿿＀-￯]/g) || []).length;
+  const asciiCount = value.length - cjkCount;
+  const approxWidth = Math.max(80, cjkCount * 12 + asciiCount * 6 + 8);
+  const maxW = Math.max(80, currentPage.width_pt - pt_x - 10);
+  const w = Math.min(approxWidth, maxW);
+  // Inherit font size and slot height from the nearest existing placement on
+  // the same row so the added value matches its neighbours visually.
+  let baseFont = 11.0;
+  let slotH = 18;
+  let nearestDy = 1e9;
+  for (const p of currentPlacements) {
+    if (p.kind !== 'text' || p.page !== 0) continue;
+    const cy = (p.slot_pt[1] + p.slot_pt[3]) / 2;
+    const dy = Math.abs(cy - pt_y);
+    if (dy < nearestDy) {
+      nearestDy = dy;
+      baseFont = p.base_font_size || baseFont;
+      slotH = p.slot_pt[3] - p.slot_pt[1];
+    }
+  }
+  const halfH = slotH / 2;
+  currentPlacements.push({
+    profile_key: key,
+    source_key: key,
+    text: value,
+    slot_pt: [pt_x, pt_y - halfH, pt_x + w, pt_y + halfH],
+    kind: 'text',
+    page: pageIdx || 0,
+    base_font_size: baseFont,
+    option_text: '',
+  });
+  placementsDirty = true;
+  regenBtn.hidden = false;
+  renderOverlay();
+}
+
+
+function attachResize(handle, box, idx) {
+  handle.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const pl = currentPlacements[idx];
+    const ratio = pxPerPt() * zoom;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const orig = pl.slot_pt.slice();
+    box.classList.add('resizing');
+    function onMove(ev) {
+      const dx_pt = (ev.clientX - startX) / ratio;
+      const dy_pt = (ev.clientY - startY) / ratio;
+      const newX1 = Math.max(orig[0] + 8, orig[2] + dx_pt);
+      const newY1 = Math.max(orig[1] + 6, orig[3] + dy_pt);
+      pl.slot_pt = [orig[0], orig[1], newX1, newY1];
+      const unscaled = pxPerPt();
+      box.style.width = ((newX1 - orig[0]) * unscaled) + 'px';
+      box.style.height = ((newY1 - orig[1]) * unscaled) + 'px';
+      placementsDirty = true;
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      box.classList.remove('resizing');
+      if (placementsDirty) regenBtn.hidden = false;
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+function attachDrag(box) {
+  box.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const idx = parseInt(box.dataset.idx, 10);
+    const pl = currentPlacements[idx];
+    const ratio = pxPerPt() * zoom;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const origSlot = pl.slot_pt.slice();
+    box.classList.add('dragging');
+    function onMove(ev) {
+      const dx_pt = (ev.clientX - startX) / ratio;
+      const dy_pt = (ev.clientY - startY) / ratio;
+      pl.slot_pt = [
+        origSlot[0] + dx_pt, origSlot[1] + dy_pt,
+        origSlot[2] + dx_pt, origSlot[3] + dy_pt,
+      ];
+      // Update box position in unscaled coords (the zoom transform handles display scaling)
+      const unscaled = pxPerPt();
+      box.style.left = (pl.slot_pt[0] * unscaled) + 'px';
+      box.style.top = (pl.slot_pt[1] * unscaled) + 'px';
+      placementsDirty = true;
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      box.classList.remove('dragging');
+      if (placementsDirty) regenBtn.hidden = false;
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+// Zoom controls
+const zoomSlider = document.getElementById('zoomSlider');
+function setZoom(z) {
+  zoom = Math.max(0.25, Math.min(3.0, z));
+  previewStack.style.transform = `scale(${zoom})`;
+  document.getElementById('zoomLabel').textContent = Math.round(zoom * 100) + '%';
+  if (zoomSlider) zoomSlider.value = Math.round(zoom * 100);
+}
+document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoom + 0.1));
+document.getElementById('zoomOut').addEventListener('click', () => setZoom(zoom - 0.1));
+document.getElementById('zoomReset').addEventListener('click', () => setZoom(1.0));
+zoomSlider.addEventListener('input', (e) => setZoom(parseInt(e.target.value, 10) / 100));
+
+// Intercept the download click: if there are uncommitted edits, run the
+// regenerate first so the user gets the version with their adjustments
+// instead of the pristine first-pass result. Encode the original filename
+// in the href as ?name=<orig>_filled.pdf so the browser uses it.
+async function regenIfDirty() {
+  if (!placementsDirty || !currentUploadId) return true;
+  const r = await fetch('/tools/pdf-fill/regenerate', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      upload_id: currentUploadId,
+      font_id: document.getElementById('fontSelect').value,
+      placements: currentPlacements,
+    }),
+  });
+  if (!r.ok) return false;
+  placementsDirty = false;
+  regenBtn.hidden = true;
+  return true;
+}
+downloadBtn.addEventListener('click', async (e) => {
+  if (!placementsDirty) return;          // pristine — let browser navigate
+  e.preventDefault();
+  downloadBtn.classList.add('saved-flash');
+  const original = downloadBtn.innerHTML;
+  downloadBtn.innerHTML = '<span class="spinner"></span>合成中…';
+  const ok = await regenIfDirty();
+  downloadBtn.innerHTML = original;
+  downloadBtn.classList.remove('saved-flash');
+  if (!ok) { showAlert('合成失敗，請再試一次'); return; }
+  // Trigger the download with the (now-current) href.
+  const href = downloadBtn.getAttribute('href');
+  const dlName = downloadBtn.getAttribute('download') || '';
+  const url = href + (href.includes('?') ? '&' : '?') + 'name=' + encodeURIComponent(dlName);
+  const a = document.createElement('a');
+  a.href = url; a.download = dlName;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => a.remove(), 800);
+});
+
+regenBtn.addEventListener('click', async () => {
+  if (!currentUploadId) return;
+  regenBtn.disabled = true;
+  regenBtn.innerHTML = '<span class="spinner"></span>重算中…';
+  const res = await fetch('/tools/pdf-fill/regenerate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      upload_id: currentUploadId,
+      font_id: document.getElementById('fontSelect').value,
+      placements: currentPlacements,
+    }),
+  });
+  regenBtn.disabled = false;
+  regenBtn.innerHTML = '🔄 套用新位置';
+  if (res.ok) {
+    const d = await res.json();
+    if (d.pages && d.pages.length) {
+      // keep dimensions from currentPages, update URLs from regen response
+      d.pages.forEach(p => {
+        const existing = currentPages.find(pp => pp.index === p.index);
+        if (existing) {
+          existing.preview_url = p.preview_url;
+          existing.raw_preview_url = p.raw_preview_url;
+        }
+      });
+    }
+    applyMode(currentMode);
+    placementsDirty = false;
+    regenBtn.hidden = true;
+    showToast('預覽已更新', 'ok');
+  } else {
+    showToast('更新失敗', 'err');
+  }
+});
+
+function applyMode(mode) {
+  currentMode = mode;
+  const t = Date.now();
+  previewStack.querySelectorAll('.preview-stage').forEach(stage => {
+    const idx = parseInt(stage.dataset.pageIdx, 10);
+    const pg = currentPages.find(p => p.index === idx);
+    if (!pg) return;
+    const img = stage.querySelector('img.preview-img');
+    const url = mode === 'composite' ? pg.preview_url : pg.raw_preview_url;
+    if (img && url) img.src = url + '?t=' + t;
+    stage.classList.toggle('composite-mode', mode === 'composite');
+  });
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+}
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    // If switching to composite while there are un-applied edits, trigger
+    // regenerate automatically so the user sees the actual filled result.
+    if (btn.dataset.mode === 'composite' && placementsDirty && currentUploadId) {
+      regenBtn.click();
+      // Wait briefly for regen to complete by polling disabled state
+      const waitFor = () => new Promise(r => {
+        const check = () => (!regenBtn.disabled ? r() : setTimeout(check, 100));
+        check();
+      });
+      await waitFor();
+    }
+    applyMode(btn.dataset.mode);
+  });
+});
+
+const templateStatus = document.getElementById('templateStatus');
+const saveTplBtn = document.getElementById('saveTplBtn');
+let currentUploadId = null;
+let currentFileBaseName = null;
+
+function renderTemplateStatus(applied, uploadId, fileName) {
+  currentUploadId = uploadId;
+  currentFileBaseName = (fileName || '').replace(/\.[^.]+$/i, '');
+  if (applied && applied.id) {
+    templateStatus.textContent = `📝 已套用範本：${applied.name}`;
+    templateStatus.style.color = 'var(--success, #047857)';
+    saveTplBtn.hidden = true;
+  } else {
+    templateStatus.textContent = '未對應到範本 · 儲存後之後同版型表單會自動套用';
+    templateStatus.style.color = '';
+    saveTplBtn.hidden = false;
+  }
+}
+
+saveTplBtn.addEventListener('click', async () => {
+  if (!currentUploadId) return;
+  const name = await showPrompt('範本名稱', { title: '儲存範本', defaultValue: currentFileBaseName || '新範本' });
+  if (!name) return;
+  saveTplBtn.disabled = true;
+  saveTplBtn.textContent = '儲存中…';
+  const cs = document.getElementById('companySwitch');
+  const res = await fetch('/tools/pdf-fill/save-template', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      upload_id: currentUploadId,
+      name,
+      company_id: cs ? cs.value : '{{ selected_id }}',
+      placements: currentPlacements,
+    }),
+  });
+  saveTplBtn.disabled = false;
+  if (res.ok) {
+    const d = await res.json();
+    templateStatus.textContent = `📝 已儲存為範本：${d.template.name}（${d.template.fields} 欄位 + ${d.template.checkboxes} 勾選）`;
+    templateStatus.style.color = 'var(--success, #047857)';
+    saveTplBtn.hidden = true;
+  } else {
+    saveTplBtn.textContent = '儲存為範本';
+    alert('儲存失敗');
+  }
+});
+
+function renderUnmatched(items, profileKeys) {
+  const box = document.getElementById('unmatchedBox');
+  const list = document.getElementById('unmatchedList');
+  const count = document.getElementById('unmatchedCount');
+  if (!items.length) { box.hidden = true; if (count) count.textContent = ''; return; }
+  box.hidden = false;
+  // Always collapse by default — users rarely need this list. Click the
+  // summary to expand when they want to teach the system new labels.
+  box.open = false;
+  if (count) count.textContent = `（${items.length} 項）`;
+  const options = ['<option value="">— 略過 —</option>'].concat(
+    profileKeys.map(pk => `<option value="${escapeHTML(pk.key)}">${escapeHTML(pk.label)} (${escapeHTML(pk.key)})</option>`)
+  ).join('');
+  list.innerHTML = items.map((it, i) =>
+    `<div class="unmatched-row" data-label="${escapeHTML(it.text)}">
+       <code class="unmatched-text">${escapeHTML(it.text)}</code>
+       <select class="unmatched-select">${options}</select>
+       <button class="btn btn-small learn-btn" type="button">學起來</button>
+     </div>`
+  ).join('');
+}
+
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.learn-btn');
+  if (btn) {
+    const row = btn.closest('.unmatched-row');
+    const sel = row.querySelector('.unmatched-select');
+    if (!sel.value) return;
+    const res = await fetch('/tools/pdf-fill/learn-synonym', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: sel.value, label: row.dataset.label }),
+    });
+    if (res.ok) {
+      row.style.opacity = 0.4;
+      btn.textContent = '✓ 已學會';
+      btn.disabled = true;
+      document.getElementById('rerunBtn').hidden = false;
+    }
+  }
+  if (e.target.id === 'rerunBtn') {
+    form.dispatchEvent(new Event('submit'));
+  }
+});
+
+/**
+ * Render a structured message card. Type: error | warn | info | success.
+ * Optional hint shows smart suggestion (e.g. for timeout errors).
+ */
+function msgCard({type = 'info', title, detail = '', hint = ''}) {
+  const icon = {error:'❌', warn:'⚠️', info:'ℹ️', success:'✅'}[type] || 'ℹ️';
+  return `<div class="msg-card msg-${type}">
+    <div class="msg-icon">${icon}</div>
+    <div class="msg-body">
+      <div class="msg-title">${escapeHTML(title)}</div>
+      ${detail ? `<div class="msg-detail">${escapeHTML(detail)}</div>` : ''}
+      ${hint ? `<div class="msg-hint">${hint}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+/**
+ * Interpret an error string and produce a friendly card with actionable hint.
+ */
+function llmErrorCard(raw) {
+  const s = String(raw || '').toLowerCase();
+  if (s.includes('timed out') || s.includes('readtimeout') || s.includes('timeout')) {
+    return msgCard({
+      type: 'error',
+      title: 'LLM 校驗逾時',
+      detail: `LLM 伺服器在規定時間內沒有回應完成。原始訊息：${raw}`,
+      hint: `建議：到 <a href="/admin/llm-settings">LLM 設定</a> 把「單次 Timeout」調到 <b>300 秒以上</b>（視覺模型冷啟動+推理常超過 120s）。也可換成較快的模型，或改用較小的圖片。`,
+    });
+  }
+  if (s.includes('connect') || s.includes('refused') || s.includes('unreachable')) {
+    return msgCard({
+      type: 'error',
+      title: 'LLM 伺服器連不上',
+      detail: `無法連線到 LLM 伺服器。原始訊息：${raw}`,
+      hint: `請確認 <a href="/admin/llm-settings">LLM 設定</a> 的 Base URL 正確且 server 有運行。可在該頁按「測試連線」驗證。`,
+    });
+  }
+  if (s.includes('no parseable json') || s.includes('valid json')) {
+    return msgCard({
+      type: 'warn',
+      title: 'LLM 回應無法解析為 JSON',
+      detail: `模型有回應但格式不是預期的 JSON。原始訊息：${raw}`,
+      hint: `可能是模型能力不足或 prompt 被誤解。試換一個視覺能力較強的模型（例：qwen3-vl:8b）。`,
+    });
+  }
+  if (s.includes('empty response')) {
+    return msgCard({
+      type: 'warn',
+      title: 'LLM 回應為空',
+      detail: `模型連線成功但沒有輸出任何內容。原始訊息：${raw}`,
+      hint: `可能模型正在冷啟動或被 load/unload。請稍等再試一次。`,
+    });
+  }
+  if (s.includes('llm 未啟用')) {
+    return msgCard({
+      type: 'info',
+      title: 'LLM 校驗未啟用',
+      detail: raw,
+      hint: `到 <a href="/admin/llm-settings">LLM 設定</a> 勾選「啟用 LLM 校驗」再儲存。`,
+    });
+  }
+  // Fallback
+  return msgCard({
+    type: 'error',
+    title: 'LLM 校驗失敗',
+    detail: raw,
+  });
+}
+
+async function startAsyncLlmReview(uploadId) {
+  const box = document.getElementById('llmReviewBox');
+  if (!box) return;
+  box.hidden = false;
+
+  // Disable the LLM toggle while a review is in flight (per user request)
+  // so it can't flip mid-job; re-enabled in the finally-equivalent below.
+  const llmToggle = document.getElementById('useLlmReview');
+  if (llmToggle) llmToggle.disabled = true;
+
+  // Immediate "starting" UI
+  let startedAt = Date.now();
+  let modelName = '';
+  const renderProgress = (progress, msg, subtitle = '') => {
+    const pct = Math.round((progress || 0) * 100);
+    const sec = ((Date.now() - startedAt) / 1000).toFixed(0);
+    const modelTag = modelName
+      ? `<span class="llm-model-tag">${escapeHTML(modelName)}</span>` : '';
+    box.innerHTML = `
+      <div class="llm-progress-wrap">
+        <div class="llm-progress-title">🤖 LLM 校驗中… ${modelTag}
+          <span class="muted" style="font-weight:normal; font-size:12px;">${sec}s</span>
+        </div>
+        <div class="llm-progress-bar"><div class="llm-progress-fill" style="width:${pct}%"></div></div>
+        <div class="llm-progress-msg">${escapeHTML(msg || '啟動中…')}</div>
+        ${subtitle ? `<div class="muted" style="font-size:11px;">${escapeHTML(subtitle)}</div>` : ''}
+      </div>
+    `;
+  };
+  renderProgress(0, '送出校驗任務…');
+
+  // 1. start the job
+  let jobId;
+  try {
+    const fd = new FormData();
+    fd.append('upload_id', uploadId);
+    const r = await fetch('/tools/pdf-fill/llm-review-start', {
+      method: 'POST', body: fd,
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      box.innerHTML = llmErrorCard(t);
+      if (llmToggle) llmToggle.disabled = false;
+      return;
+    }
+    const j = await r.json();
+    jobId = j.job_id;
+    modelName = j.model || '';
+  } catch (e) {
+    box.innerHTML = llmErrorCard(e.message);
+    if (llmToggle) llmToggle.disabled = false;
+    return;
+  }
+
+  // 2. poll job status every 1.5s
+  const pollInterval = 1500;
+  let stopped = false;
+  const stop = () => { stopped = true; };
+  // update elapsed counter every 500ms so seconds tick smoothly
+  const tickTimer = setInterval(() => {
+    if (stopped) { clearInterval(tickTimer); return; }
+    // Re-render current state to refresh elapsed; need last known state.
+    // We store last state as closures update below.
+    if (lastState) renderProgress(lastState.progress, lastState.message, lastState.subtitle);
+  }, 500);
+
+  let lastState = {progress: 0.05, message: '啟動中…', subtitle: ''};
+  while (!stopped) {
+    await new Promise(r => setTimeout(r, pollInterval));
+    let status;
+    try {
+      const r = await fetch(`/api/jobs/${jobId}`);
+      if (!r.ok) { continue; }
+      status = await r.json();
+    } catch (e) {
+      continue;
+    }
+    lastState = {
+      progress: status.progress || 0,
+      message: status.message || '處理中…',
+      subtitle: status.status === 'error' ? (status.error || '錯誤') : '',
+    };
+    renderProgress(lastState.progress, lastState.message, lastState.subtitle);
+
+    if (status.status === 'done' || status.status === 'error') {
+      clearInterval(tickTimer);
+      stop();
+      if (llmToggle) llmToggle.disabled = false;  // re-enable toggle
+      if (status.status === 'error') {
+        box.innerHTML = llmErrorCard(status.error || 'unknown error');
+        return;
+      }
+      // fetch final result JSON
+      try {
+        const rr = await fetch(`/tools/pdf-fill/llm-review-result/${jobId}`);
+        const data = await rr.json();
+        if (data.error) {
+          box.innerHTML = llmErrorCard(data.error);
+          return;
+        }
+        // Surface which model was used in the final panel too.
+        if (modelName) data._model = modelName;
+        renderLlmReview(data);
+      } catch (e) {
+        box.innerHTML = msgCard({
+          type: 'warn',
+          title: '抓取 LLM 結果失敗',
+          detail: e.message,
+          hint: '可能是 job 超過保留期限，請重新送出校驗。',
+        });
+      }
+      return;
+    }
+  }
+  clearInterval(tickTimer);
+  if (llmToggle) llmToggle.disabled = false;  // safety net
+}
+
+function renderLlmReview(rev) {
+  const box = document.getElementById('llmReviewBox');
+  if (!box) return;
+  if (!rev) { box.hidden = true; box.innerHTML = ''; return; }
+  if (rev.skipped) {
+    box.hidden = false;
+    box.innerHTML = msgCard({
+      type: 'info',
+      title: 'LLM 校驗被略過',
+      detail: rev.skipped,
+    });
+    return;
+  }
+  if (rev.errors && rev.errors.length) {
+    box.hidden = false;
+    // Show each error as its own card (they often have different remedies)
+    box.innerHTML = rev.errors.map(e => llmErrorCard(e)).join('');
+    return;
+  }
+  // Also surface per-round errors (e.g. a round timed out before another succeeded)
+  const roundErrors = (rev.rounds || []).filter(r => r.error).map(r => r.error);
+  const anyCorrections = (rev.rounds || []).some(r => (r.corrections || []).length > 0);
+  if (roundErrors.length && !anyCorrections) {
+    box.hidden = false;
+    box.innerHTML = roundErrors.map(e => llmErrorCard(e)).join('');
+    return;
+  }
+  box.hidden = false;
+  const allCorrections = (rev.rounds || []).flatMap(r => r.corrections || []);
+  const accepted = (rev.rounds || []).flatMap(r => r.accepted || []);
+  const learned = rev.learned || [];
+  const lastVerdict = (rev.rounds || [])[rev.rounds.length - 1]?.verdict || 'needs_correction';
+
+  // Sort corrections by confidence desc so the most certain ones show first
+  allCorrections.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+
+  const modelTag = rev._model
+    ? `<span class="llm-model-tag">${escapeHTML(rev._model)}</span>` : '';
+  let html = `<details open class="llm-review-details">
+    <summary><b>🤖 LLM 校驗結果</b> ${modelTag}
+      <span class="muted" style="font-weight:normal; font-size:12px; margin-left:6px;">
+        ${rev.rounds.length} 輪、共 ${rev.total_elapsed_s}s
+      </span>
+    </summary>`;
+  if (lastVerdict === 'all_clear' && !allCorrections.length) {
+    html += `<div class="llm-clear">✅ LLM 認為填寫結果正確，沒有發現問題。</div>`;
+  } else if (allCorrections.length === 0) {
+    html += `<div class="llm-clear">⚠ LLM 沒回報任何建議（模型可能漏掉了問題，可試其他模型或換 prompt）。</div>`;
+  } else {
+    const strong = allCorrections.filter(c => c.confidence >= 0.7).length;
+    const med    = allCorrections.filter(c => c.confidence >= 0.4 && c.confidence < 0.7).length;
+    const weak   = allCorrections.filter(c => c.confidence < 0.4).length;
+    html += `<div class="muted" style="font-size:12px; margin:6px 0;">
+      共 <b>${allCorrections.length}</b> 個建議
+      ${strong ? `· <span class="conf-strong">高信心 ${strong}</span>` : ''}
+      ${med ? `· <span class="conf-med">中信心 ${med}</span>` : ''}
+      ${weak ? `· <span class="conf-weak">低信心 ${weak}</span>` : ''}
+      ${accepted.length ? `· <b>${accepted.length}</b> 個被採納（連續 N 輪同錯）` : ''}
+    </div>`;
+    html += '<table class="llm-corrections"><thead><tr>'
+      + '<th>類型</th><th>欄位 label</th><th>目前值</th><th>LLM 實際讀到</th>'
+      + '<th>建議改去</th><th>信心</th><th>原因</th>'
+      + '</tr></thead><tbody>';
+    for (const c of allCorrections) {
+      const isAccepted = accepted.some(a => a.label === c.label && a.type === c.type);
+      const conf = c.confidence || 0;
+      let confClass = 'conf-weak';
+      if (conf >= 0.7) confClass = 'conf-strong';
+      else if (conf >= 0.4) confClass = 'conf-med';
+      const typeMap = {
+        WRONG_PLACEMENT: '位置錯',
+        WRONG_VALUE:     '值不符',
+        MISSING:         '漏填',
+        EXTRA:           '多填',
+      };
+      const actual = (c.actual_ocr === '' ? '（空）'
+        : c.actual_ocr != null ? c.actual_ocr : '—');
+      const suggested = c.suggested_label || '—';
+      html += `<tr class="${isAccepted ? 'accepted' : ''} ${confClass}">
+        <td><span class="ctype-${c.type}">${typeMap[c.type] || c.type}</span></td>
+        <td>${escapeHTML(c.label)}</td>
+        <td>${escapeHTML(c.current_value || '—')}</td>
+        <td>${escapeHTML(actual)}</td>
+        <td>${escapeHTML(suggested)}</td>
+        <td><span class="${confClass}">${(conf * 100).toFixed(0)}%</span></td>
+        <td>${escapeHTML(c.reason || '')}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    // Apply-corrections buttons — remove flagged placements, re-render.
+    const highConf = allCorrections.filter(c => c.confidence >= 0.7);
+    if (highConf.length || allCorrections.length) {
+      const moveCandidates = allCorrections.filter(c => c.suggested_slot_pt).length;
+      html += `<div class="llm-apply-bar" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">`;
+      if (highConf.length) {
+        html += `<button type="button" class="btn btn-primary" id="llmApplyHigh"
+          data-count="${highConf.length}">
+          套用高信心建議（清除 ${highConf.length} 格可疑值）
+        </button>`;
+      }
+      html += `<button type="button" class="btn" id="llmApplyAll"
+        data-count="${allCorrections.length}">
+        套用所有建議（清除 ${allCorrections.length} 格）
+      </button>`;
+      // Opt-in auto-move toggle (experimental). Default OFF because Q5
+      // suggestions are unreliable on complex forms with overlapping text.
+      html += `<label class="muted" style="font-size:12px; display:inline-flex; align-items:center; gap:4px;">
+        <input type="checkbox" id="llmTryMove" ${moveCandidates === 0 ? 'disabled' : ''}>
+        嘗試搬到建議位置（實驗，${moveCandidates} 個有目標）
+      </label>`;
+      html += `<span class="muted" style="font-size:12px;">
+        套用後會重新渲染 PDF，原版仍保留在 history
+      </span>`;
+      html += `</div>`;
+      // Stash corrections for the handler
+      window._llmCorrections = allCorrections;
+      window._llmHighConf = highConf;
+    }
+  }
+  if (learned.length) {
+    html += `<div style="margin-top:10px;"><b>💡 已自動學習</b>
+      <ul style="margin:4px 0; font-size:13px;">`;
+    for (const l of learned) {
+      html += `<li>${escapeHTML(l.detail)}</li>`;
+    }
+    html += '</ul></div>';
+  }
+  html += '</details>';
+  box.innerHTML = html;
+}
+
+async function applyLlmCorrections(corrections) {
+  if (!currentUploadId) { showToast('沒有 upload_id，請先重新上傳', 'err'); return; }
+  if (!corrections || !corrections.length) return;
+  const tryMove = !!document.getElementById('llmTryMove')?.checked;
+  const moveCount = tryMove ? corrections.filter(c => c.suggested_slot_pt).length : 0;
+  const actionDesc = tryMove
+    ? `將嘗試把 ${moveCount} 格搬到 LLM 建議位置，其餘 ${corrections.length - moveCount} 格直接清除。`
+    : `將從 PDF 中清除 ${corrections.length} 個被 LLM 標為可疑的填入值。`;
+  const ok = await showConfirm(
+    `${actionDesc}\n\n` +
+    `（不會刪除公司資料，僅取消這張 PDF 上的套用；原版 PDF 留在 history）\n\n` +
+    `確定要套用嗎？`,
+    { title: '套用 LLM 建議', kind: 'warn', okText: '套用', cancelText: '取消' }
+  );
+  if (!ok) return;
+  try {
+    const r = await fetch('/tools/pdf-fill/llm-review-apply', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        upload_id: currentUploadId,
+        font_id: document.getElementById('fontSelect')?.value || 'auto',
+        corrections: corrections.map(c => ({
+          label: c.label,
+          current_value: c.current_value,
+          slot_pt: c.slot_pt,                  // precise-match source
+          // Only pass target when user opted into auto-move (experimental).
+          // Without target, apply falls back to REMOVE only (safe default).
+          suggested_slot_pt: tryMove ? c.suggested_slot_pt : null,
+        })),
+      }),
+    });
+    if (!r.ok) { const t = await r.text(); showToast('套用失敗：' + t.slice(0,120), 'err'); return; }
+    const d = await r.json();
+    if (!d.removed && !d.moved) { showToast('沒有 placement 符合條件，未變動', 'warn'); return; }
+    // Swap in the new preview URLs (no inline cache-bust — applyMode adds one)
+    if (d.pages && d.pages.length) {
+      d.pages.forEach(p => {
+        const existing = currentPages.find(pp => pp.index === p.index);
+        if (existing) existing.preview_url = p.preview_url;
+      });
+    }
+    // Force composite view so the user immediately sees the cleaned-up result.
+    applyMode('composite');
+    const actionParts = [];
+    if (d.moved) actionParts.push(`搬 ${d.moved} 格`);
+    if (d.removed) actionParts.push(`清 ${d.removed} 格`);
+    const actionStr = actionParts.join('、');
+    showToast(`已${actionStr}，重跑 LLM 校驗中…`, 'ok');
+    // Auto-rerun review — after clearing, new issues often surface that
+    // were hidden by overlapping placements. Iterate until clean.
+    const bar = document.querySelector('.llm-apply-bar');
+    if (bar) bar.innerHTML = `<span class="muted">✓ 已${actionStr}，正在重跑 LLM 校驗以確認剩餘問題…</span>`;
+    startAsyncLlmReview(currentUploadId);
+  } catch (e) {
+    showToast('套用發生錯誤：' + e.message, 'err');
+  }
+}
+
+// Event delegation for the apply buttons (they're re-rendered per review)
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.id === 'llmApplyHigh') {
+    applyLlmCorrections(window._llmHighConf || []);
+  } else if (e.target && e.target.id === 'llmApplyAll') {
+    applyLlmCorrections(window._llmCorrections || []);
+  }
+});
+
+function renderReport(r) {
+  const matched = r.matched.map(m =>
+    `<span class="report-chip ok">${escapeHTML(m.label)}${m.count > 1 ? ' ×' + m.count : ''}</span>`
+  ).join('');
+  const missing = r.unfilled.map(m =>
+    `<span class="report-chip miss">${escapeHTML(m.label)} (公司資料尚未填)</span>`
+  ).join('');
+  reportBox.innerHTML = `
+    <p>偵測到 <b>${r.detected}</b> 個欄位，已填入 <b>${r.filled}</b> 個。</p>
+    ${matched ? `<div class="report-list">${matched}</div>` : ''}
+    ${missing ? `<p style="margin-top:10px;">以下偵測到了但公司資料是空的：</p><div class="report-list">${missing}</div>` : ''}
+  `;
+}
+
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+{% endblock %}

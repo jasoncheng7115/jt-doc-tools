@@ -1,0 +1,410 @@
+"""Endpoints for 文件去識別化 (doc-deident)."""
+from __future__ import annotations
+
+import io
+import logging
+import re
+import time as _t
+import uuid
+from pathlib import Path
+from typing import Optional
+
+import fitz
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse
+
+from ...config import settings
+from ...core import office_convert, pdf_preview
+from ...core.job_manager import job_manager
+from . import patterns as P
+
+logger = logging.getLogger("app.doc_deident")
+router = APIRouter()
+
+
+# ----------------------------------------------------------- plumbing
+
+def _work(upload_id: str) -> Path:
+    d = settings.temp_dir
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _src_path(upload_id: str) -> Path:
+    return settings.temp_dir / f"did_{upload_id}_src.pdf"
+
+
+def _out_path(upload_id: str) -> Path:
+    return settings.temp_dir / f"did_{upload_id}_out.pdf"
+
+
+# ------------------------------------------------------------- detection
+
+def _build_findings_for_page(page, selected_ids: set[str],
+                             custom_regexes: list[tuple[str, re.Pattern]]
+                             ) -> list[dict]:
+    """Return a list of {type, value, masked, bbox, text} for every
+    sensitive hit on this page. Each finding carries the PDF points bbox
+    used later for redaction / mask rendering."""
+    out: list[dict] = []
+    # Per line: concat span texts, remember per-char span mapping so we
+    # can map a regex match back to a bbox by union-ing span rects.
+    td = page.get_text("dict")
+    for block in td.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            spans = line.get("spans", []) or []
+            if not spans:
+                continue
+            text_parts: list[str] = []
+            span_map: list[int] = []  # span index for each char
+            for si, sp in enumerate(spans):
+                t = sp.get("text") or ""
+                text_parts.append(t)
+                span_map.extend([si] * len(t))
+            line_text = "".join(text_parts)
+            if not line_text.strip():
+                continue
+
+            def _emit(m, pat_label: str, pat_id: str, masked: str, grp: int = 0):
+                try:
+                    start, end = m.start(grp), m.end(grp)
+                    if start < 0:
+                        start, end = m.start(), m.end()
+                except Exception:
+                    start, end = m.start(), m.end()
+                if start >= len(span_map) or end == 0:
+                    return
+                first_si = span_map[start]
+                last_si = span_map[min(end - 1, len(span_map) - 1)]
+                # Compute union bbox over involved spans. For same-line
+                # matches this over-estimates width when the match is a
+                # substring of a span (span reports full rect), so we
+                # additionally clip horizontally by char-width estimate.
+                bx0 = min(spans[i]["bbox"][0] for i in range(first_si, last_si + 1))
+                by0 = min(spans[i]["bbox"][1] for i in range(first_si, last_si + 1))
+                bx1 = max(spans[i]["bbox"][2] for i in range(first_si, last_si + 1))
+                by1 = max(spans[i]["bbox"][3] for i in range(first_si, last_si + 1))
+                # Tighten horizontally when the match sits inside a single
+                # span and doesn't cover the whole span.
+                if first_si == last_si:
+                    sp = spans[first_si]
+                    full_text = sp.get("text") or ""
+                    if full_text:
+                        sp_x0, _, sp_x1, _ = sp["bbox"]
+                        cw = (sp_x1 - sp_x0) / max(1, len(full_text))
+                        # Offset within the span
+                        span_start_in_line = sum(len(spans[i].get("text") or "")
+                                                 for i in range(first_si))
+                        local_s = start - span_start_in_line
+                        local_e = end - span_start_in_line
+                        bx0 = sp_x0 + cw * max(0, local_s)
+                        bx1 = sp_x0 + cw * max(local_e, local_s + 1)
+                        by0 = sp["bbox"][1]
+                        by1 = sp["bbox"][3]
+                try:
+                    emit_value = m.group(grp)
+                except Exception:
+                    emit_value = m.group(0)
+                out.append({
+                    "type": pat_id,
+                    "type_label": pat_label,
+                    "value": emit_value,
+                    "masked": masked,
+                    "bbox": [bx0, by0, bx1, by1],
+                    "font_size": float(spans[first_si].get("size", 11) or 11),
+                    "color_int": int(spans[first_si].get("color", 0) or 0),
+                })
+
+            # Built-in patterns
+            for pat in P.CATALOG:
+                if pat.id not in selected_ids:
+                    continue
+                for m in pat.regex.finditer(line_text):
+                    try:
+                        val = m.group(pat.value_group) if pat.value_group else m.group(0)
+                    except Exception:
+                        val = m.group(0)
+                    if val is None:
+                        continue
+                    if not pat.validate(val):
+                        continue
+                    _emit(m, pat.label, pat.id, pat.mask(val), pat.value_group)
+            # Custom user-supplied regexes (no checksum, no mask — use
+            # "****" as default mask)
+            for label, rx in custom_regexes:
+                try:
+                    for m in rx.finditer(line_text):
+                        val = m.group(0)
+                        masked = "*" * max(1, len(val))
+                        _emit(m, label, f"custom:{label}", masked)
+                except Exception:
+                    continue
+    return out
+
+
+@router.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    templates = request.app.state.templates
+    # Group patterns for UI rendering; preserve CATALOG order inside each group.
+    grouped: dict[str, list[dict]] = {}
+    for p in P.CATALOG:
+        grouped.setdefault(p.group, []).append(
+            {"id": p.id, "label": p.label, "default_on": p.default_on, "icon": p.icon}
+        )
+    # Stable group order
+    preferred = ["個人身分", "聯絡方式", "金融資訊", "企業資料", "其他"]
+    pattern_groups = [
+        {"title": g, "entries": grouped[g]} for g in preferred if g in grouped
+    ] + [
+        {"title": g, "entries": items} for g, items in grouped.items() if g not in preferred
+    ]
+    return templates.TemplateResponse(
+        "doc_deident.html",
+        {"request": request, "pattern_groups": pattern_groups},
+    )
+
+
+@router.post("/detect")
+async def detect(
+    file: UploadFile = File(...),
+    types: str = Form(""),    # comma-separated pattern ids
+    custom: str = Form(""),   # optional: "label|regex\nlabel2|regex2"
+):
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "empty file")
+    orig_name = file.filename or "document"
+    ext = Path(orig_name).suffix.lower()
+
+    upload_id = uuid.uuid4().hex
+    pdf_path = _src_path(upload_id)
+    # If PDF upload, write direct; if office, convert via soffice.
+    if ext == ".pdf":
+        pdf_path.write_bytes(data)
+        source_type = "pdf"
+    elif office_convert.is_office_file(orig_name):
+        tmp = settings.temp_dir / f"did_{upload_id}_orig{ext}"
+        tmp.write_bytes(data)
+        try:
+            office_convert.convert_to_pdf(tmp, pdf_path, timeout=120.0)
+        except RuntimeError:
+            raise HTTPException(
+                500,
+                "找不到 Office 轉檔引擎（OxOffice / LibreOffice）。請到「轉檔設定」確認。",
+            )
+        except Exception as exc:
+            raise HTTPException(500, f"Office 轉 PDF 失敗：{exc}")
+        if not pdf_path.exists():
+            raise HTTPException(500, "轉檔未產生 PDF")
+        source_type = "office"
+    else:
+        raise HTTPException(400, f"不支援的檔案格式：{ext}")
+
+    # Stash original filename for the download step
+    try:
+        (settings.temp_dir / f"did_{upload_id}_name.txt").write_text(
+            Path(orig_name).stem + ".pdf", encoding="utf-8")
+    except Exception:
+        pass
+
+    selected_ids = set(t for t in (types or "").split(",") if t.strip())
+    if not selected_ids:
+        selected_ids = {p.id for p in P.CATALOG if p.default_on}
+
+    # Parse custom regex spec: one rule per line, "label|regex"
+    custom_regexes: list[tuple[str, re.Pattern]] = []
+    for line in (custom or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if "|" in line:
+            label, _, rx_str = line.partition("|")
+            label = label.strip() or "自訂"
+            rx_str = rx_str.strip()
+        else:
+            label = "自訂"
+            rx_str = line
+        try:
+            custom_regexes.append((label, re.compile(rx_str)))
+        except re.error as exc:
+            raise HTTPException(400, f"自訂 regex 無效：{rx_str} — {exc}")
+
+    findings_by_page: list[dict] = []
+    all_findings: list[dict] = []
+    with fitz.open(str(pdf_path)) as doc:
+        total_pages = doc.page_count
+        for pno in range(doc.page_count):
+            page = doc[pno]
+            page_findings = _build_findings_for_page(page, selected_ids,
+                                                    custom_regexes)
+            for f in page_findings:
+                f["page"] = pno + 1
+                f["id"] = len(all_findings)
+                all_findings.append(f)
+            findings_by_page.append({
+                "page": pno + 1,
+                "count": len(page_findings),
+            })
+
+    by_type: dict[str, int] = {}
+    for f in all_findings:
+        by_type[f["type_label"]] = by_type.get(f["type_label"], 0) + 1
+
+    return {
+        "upload_id": upload_id,
+        "filename": orig_name,
+        "source_type": source_type,
+        "pages": total_pages,
+        "findings": all_findings,
+        "by_type": by_type,
+        "by_page": findings_by_page,
+    }
+
+
+# ----------------------------------------------------------- processing
+
+@router.post("/process")
+async def process(request: Request):
+    body = await request.json()
+    upload_id = (body.get("upload_id") or "").strip()
+    if not upload_id:
+        raise HTTPException(400, "upload_id required")
+    pdf_path = _src_path(upload_id)
+    if not pdf_path.exists():
+        raise HTTPException(404, "upload expired")
+    mode = (body.get("mode") or "mask").strip()
+    if mode not in ("redact", "mask"):
+        raise HTTPException(400, "mode 必須是 redact 或 mask")
+    selections: list[dict] = body.get("selections") or []
+    if not isinstance(selections, list):
+        raise HTTPException(400, "selections 格式錯誤")
+
+    # Group selections by page for efficient pass
+    by_page: dict[int, list[dict]] = {}
+    for s in selections:
+        pno = int(s.get("page", 1)) - 1
+        if pno < 0:
+            continue
+        by_page.setdefault(pno, []).append(s)
+
+    out_path = _out_path(upload_id)
+    # Redaction mode paints a black bar; Masking mode leaves the redacted
+    # area transparent so the re-inserted masked text blends with the
+    # original page background (otherwise we get an ugly white rectangle
+    # floating on top of a coloured / image-backed page).
+    mode_fill = (0, 0, 0) if mode == "redact" else None
+    count_done = 0
+    doc = fitz.open(str(pdf_path))
+    try:
+        for pno, items in by_page.items():
+            if pno >= doc.page_count:
+                continue
+            page = doc[pno]
+            # Pass 1: redact (destroy) every selected region so the
+            # original sensitive text is truly removed.
+            for s in items:
+                bb = s.get("bbox") or []
+                if len(bb) != 4:
+                    continue
+                rect = fitz.Rect(*bb)
+                if mode_fill is None:
+                    page.add_redact_annot(rect)            # no fill → transparent
+                else:
+                    page.add_redact_annot(rect, fill=mode_fill)
+                count_done += 1
+            try:
+                page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+            except Exception:
+                page.apply_redactions()
+
+            # Pass 2 (mask mode only): re-insert the masked value at
+            # the same location, in the same font size / colour.
+            if mode == "mask":
+                for s in items:
+                    bb = s.get("bbox") or []
+                    if len(bb) != 4:
+                        continue
+                    masked = s.get("masked") or ""
+                    if not masked:
+                        continue
+                    font_size = float(s.get("font_size") or 11.0)
+                    color_int = int(s.get("color_int") or 0)
+                    r = ((color_int >> 16) & 0xff) / 255.0
+                    g = ((color_int >> 8) & 0xff) / 255.0
+                    b = (color_int & 0xff) / 255.0
+                    bx0, by0, bx1, by1 = bb
+                    base_y = by1 - font_size * 0.18
+                    has_cjk = any("一" <= c <= "鿿" for c in masked)
+                    # Use built-in CJK font for CJK content, Helvetica for ASCII.
+                    if has_cjk:
+                        try:
+                            page.insert_text(
+                                fitz.Point(bx0, base_y), masked,
+                                fontname="china-t", fontsize=font_size,
+                                color=(r, g, b),
+                            )
+                        except Exception:
+                            pass
+                    else:
+                        try:
+                            page.insert_text(
+                                fitz.Point(bx0, base_y), masked,
+                                fontname="helv", fontsize=font_size,
+                                color=(r, g, b),
+                            )
+                        except Exception:
+                            pass
+        doc.save(str(out_path), garbage=3, deflate=True)
+    finally:
+        doc.close()
+
+    # Render each page of the processed PDF to PNG thumbs so the UI can
+    # show a before-download preview.
+    pages_info: list[dict] = []
+    with fitz.open(str(out_path)) as d2:
+        for i in range(d2.page_count):
+            thumb = settings.temp_dir / f"did_{upload_id}_p{i+1}.png"
+            pdf_preview.render_page_png(out_path, thumb, i, dpi=120)
+            pages_info.append({
+                "page": i + 1,
+                "thumb_url": f"/tools/doc-deident/preview/{thumb.name}?t={int(_t.time())}",
+                "large_url": f"/tools/doc-deident/preview/{thumb.name}",
+            })
+
+    return {
+        "ok": True,
+        "processed": count_done,
+        "download_url": f"/tools/doc-deident/download/{upload_id}",
+        "pages": pages_info,
+    }
+
+
+@router.get("/preview/{filename}")
+async def preview(filename: str):
+    # Only allow our own did_ prefix, no path traversal
+    if not filename.startswith("did_") or ".." in filename or "/" in filename:
+        raise HTTPException(400, "invalid")
+    p = settings.temp_dir / filename
+    if not p.exists():
+        raise HTTPException(404)
+    return FileResponse(str(p), media_type="image/png",
+                        headers={"Cache-Control": "no-store"})
+
+
+@router.get("/download/{upload_id}")
+async def download(upload_id: str):
+    out = _out_path(upload_id)
+    if not out.exists():
+        raise HTTPException(404, "尚未處理或已過期")
+    orig_name = "deidentified.pdf"
+    try:
+        n = (settings.temp_dir / f"did_{upload_id}_name.txt").read_text(encoding="utf-8").strip()
+        if n:
+            stem = Path(n).stem
+            orig_name = f"{stem}_deidentified.pdf"
+    except Exception:
+        pass
+    return FileResponse(str(out), media_type="application/pdf",
+                        filename=orig_name)

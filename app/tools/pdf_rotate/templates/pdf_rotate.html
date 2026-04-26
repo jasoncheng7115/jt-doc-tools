@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}轉向 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('rotate-cw', size=22) }} 轉向</h1>
+<p class="muted">把 PDF 整份或指定頁面旋轉 90 / 180 / 270 度，或左右 / 上下鏡向翻面。上傳後會立即顯示縮圖預覽，即時顯示套用後的效果。</p>
+<div class="panel">
+  <h2 style="margin-top:0;">上傳 PDF（單/多檔）</h2>
+  {% with upload_id='upR', accept='application/pdf', multiple=True, hint='縮圖預覽僅顯示第一份檔案；其他檔會以相同設定批次處理。' %}{% include "components/file_upload.html" %}{% endwith %}
+</div>
+<div class="panel">
+  <h2 style="margin-top:0;">設定</h2>
+  <div class="form-row">
+    <label>套用方式</label>
+    <div class="field option-cards">
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('rotate-cw', size=28) }}</span>
+        <span class="opt-label">順時針 90°</span>
+        <input type="radio" name="mode" value="rotate-90" checked />
+      </label>
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('rotate-180', size=28) }}</span>
+        <span class="opt-label">180°</span>
+        <input type="radio" name="mode" value="rotate-180" />
+      </label>
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('rotate-ccw', size=28) }}</span>
+        <span class="opt-label">逆時針 90°</span>
+        <input type="radio" name="mode" value="rotate-270" />
+      </label>
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('flip-h', size=28) }}</span>
+        <span class="opt-label">左右鏡向</span>
+        <input type="radio" name="mode" value="flip-h" />
+      </label>
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('flip-v', size=28) }}</span>
+        <span class="opt-label">上下鏡向</span>
+        <input type="radio" name="mode" value="flip-v" />
+      </label>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>套用頁面</label>
+    <div class="field" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <select id="pages-mode" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:#fff;">
+        <option value="all" selected>所有頁</option>
+        <option value="custom">指定頁面…</option>
+      </select>
+      <input id="pages-custom" type="text" hidden style="flex:1 1 240px; min-width:200px; padding:6px 10px; border:1px solid var(--border); border-radius:6px;" placeholder="例：1,3-5,8-" />
+      <span id="pages-hint" class="muted" style="font-size:12px;" hidden>
+        逗號分隔；<code>3-5</code> = 第 3 到 5 頁；<code>8-</code> = 第 8 頁到最後。
+      </span>
+    </div>
+  </div>
+</div>
+
+<details class="panel" id="thumbs-panel" hidden open>
+  <summary>頁面預覽 <span class="muted" id="thumbs-info" style="font-weight:normal; font-size:12px; margin-left:8px;">—</span></summary>
+  <p class="muted" style="font-size:12px;">會被旋轉的頁面有紫色邊框與「↻ 將旋轉」徽章；縮圖即時跟著轉動。</p>
+  <div class="page-grid" id="thumb-grid"></div>
+</details>
+
+<div style="margin-top:12px;">
+  <button class="btn btn-primary" id="btn-submit">{{ icon('save') }}開始轉向</button>
+</div>
+<div style="margin-top:10px;">
+  {% with progress_id='jp' %}{% include "components/job_progress.html" %}{% endwith %}
+</div>
+
+<style>
+.page-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:14px; margin-top: 8px; }
+.page-card {
+  position:relative; background:#fff; border:1px solid var(--border); border-radius:8px;
+  padding:8px; display:flex; flex-direction:column; align-items:center; gap:6px;
+}
+.page-card.will-rotate { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(99,102,241,0.2); }
+.page-thumb {
+  width: 100%; aspect-ratio: 0.7071; background:#f8fafc;
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+  border:1px solid #e5e7eb; border-radius:4px;
+  cursor: zoom-in; position: relative;
+}
+.page-thumb img {
+  max-width:100%; max-height:100%; pointer-events: none;
+  transition: transform 0.25s ease;
+}
+.page-num { font-size:13px; font-weight:600; color:#475569; text-align:center; }
+.rotate-badge {
+  position:absolute; top:6px; right:6px;
+  background: var(--primary); color: #fff; font-size: 10px;
+  padding: 2px 7px; border-radius: 10px; font-weight: 600;
+  pointer-events: none;
+}
+.page-lightbox {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.85); z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  cursor: zoom-out; padding: 20px;
+}
+.page-lightbox img { max-width: 95%; max-height: 95vh; box-shadow: 0 16px 48px rgba(0,0,0,0.5); border-radius: 4px; background: #fff; transition: transform 0.25s; }
+.page-lightbox-close { position: absolute; top: 14px; right: 18px; color: #fff; font-size: 28px; background: none; border: none; cursor: pointer; }
+</style>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script src="/static/js/job_progress.js"></script>
+<script>
+let files = [];
+let uploadId = null;
+let pages = [];
+let pageCount = 0;
+
+const fu = new FileUpload(document.getElementById('upR'), async (_first, fs) => {
+  files = Array.isArray(fs) ? fs : (fs ? [fs] : []);
+  if (!files.length) {
+    document.getElementById('thumbs-panel').hidden = true;
+    pages = []; uploadId = null; return;
+  }
+  document.getElementById('thumbs-panel').hidden = false;
+  document.getElementById('thumb-grid').innerHTML =
+    '<p class="muted" style="grid-column:1/-1;text-align:center;padding:24px;">載入縮圖中…</p>';
+  const fd = new FormData(); fd.append('file', files[0]);
+  const r = await fu.upload('/tools/pdf-rotate/load', fd, {processingLabel: '載入頁面中…'});
+  if (!r.ok) {
+    document.getElementById('thumb-grid').innerHTML = '<p class="muted">載入失敗</p>';
+    return;
+  }
+  const j = await r.json();
+  pages = j.pages; pageCount = j.page_count; uploadId = j.upload_id;
+  renderThumbs();
+});
+
+const jp = new JobProgress(document.getElementById('jp'), {
+  onReset: () => { fu.reset(); files = []; pages = []; document.getElementById('thumbs-panel').hidden = true; }
+});
+
+const pmSel = document.getElementById('pages-mode');
+const pmInp = document.getElementById('pages-custom');
+const pmHint = document.getElementById('pages-hint');
+pmSel.addEventListener('change', () => {
+  const custom = pmSel.value === 'custom';
+  pmInp.hidden = !custom;
+  pmHint.hidden = !custom;
+  if (custom) pmInp.focus();
+  if (pages.length) refreshThumbStates();
+});
+pmInp.addEventListener('input', () => { if (pages.length) refreshThumbStates(); });
+document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => {
+  if (pages.length) refreshThumbStates();
+}));
+
+function getMode() {
+  const el = document.querySelector('input[name=mode]:checked');
+  return el ? el.value : 'rotate-90';
+}
+function modeTransform(mode) {
+  // CSS transform string used to preview the mode on the <img>.
+  switch (mode) {
+    case 'rotate-90':  return 'rotate(90deg)';
+    case 'rotate-180': return 'rotate(180deg)';
+    case 'rotate-270': return 'rotate(270deg)';
+    case 'flip-h':     return 'scaleX(-1)';
+    case 'flip-v':     return 'scaleY(-1)';
+    default:           return 'none';
+  }
+}
+function modeLabel(mode) {
+  return {
+    'rotate-90':  '↻ 90°',
+    'rotate-180': '↻ 180°',
+    'rotate-270': '↺ 90°',
+    'flip-h':     '⇆ 左右',
+    'flip-v':     '⇅ 上下',
+  }[mode] || mode;
+}
+function getPagesSpec() {
+  return pmSel.value === 'custom' ? (pmInp.value.trim() || 'all') : 'all';
+}
+
+function parsePages(spec, total) {
+  const out = new Set();
+  spec = (spec || '').trim();
+  if (!spec || spec.toLowerCase() === 'all') {
+    for (let i = 1; i <= total; i++) out.add(i);
+    return out;
+  }
+  for (const chunk of spec.split(/[,，;；\s]+/)) {
+    if (!chunk) continue;
+    const m = chunk.match(/^(\d+)?\s*-\s*(\d+)?$/);
+    if (m) {
+      const a = m[1] ? parseInt(m[1]) : 1;
+      const b = m[2] ? parseInt(m[2]) : total;
+      for (let v = Math.min(a, b); v <= Math.max(a, b); v++) {
+        if (v >= 1 && v <= total) out.add(v);
+      }
+    } else if (/^\d+$/.test(chunk)) {
+      const v = parseInt(chunk);
+      if (v >= 1 && v <= total) out.add(v);
+    }
+  }
+  return out;
+}
+
+function renderThumbs() {
+  const grid = document.getElementById('thumb-grid');
+  const info = document.getElementById('thumbs-info');
+  info.textContent = `共 ${pageCount} 頁`;
+  if (files.length > 1) info.textContent += `；批次共 ${files.length} 份檔案`;
+  grid.innerHTML = pages.map(p =>
+    `<div class="page-card" data-page="${p.page}">
+       <div class="page-thumb" data-zoom-src="${p.thumb}">
+         <img src="${p.thumb}" alt="page ${p.page}" loading="lazy" />
+       </div>
+       <div class="page-num">原第 ${p.page} 頁</div>
+     </div>`
+  ).join('');
+  refreshThumbStates();
+}
+
+function refreshThumbStates() {
+  const mode = getMode();
+  const target = parsePages(getPagesSpec(), pageCount);
+  const tf = modeTransform(mode);
+  document.querySelectorAll('.page-card').forEach(card => {
+    const page = parseInt(card.dataset.page);
+    const willApply = target.has(page);
+    card.classList.toggle('will-rotate', willApply);
+    const img = card.querySelector('.page-thumb img');
+    img.style.transform = willApply ? tf : 'none';
+    let badge = card.querySelector('.rotate-badge');
+    if (willApply) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'rotate-badge';
+        card.querySelector('.page-thumb').appendChild(badge);
+      }
+      badge.textContent = modeLabel(mode);
+    } else if (badge) {
+      badge.remove();
+    }
+  });
+}
+
+// Lightbox
+document.getElementById('thumb-grid').addEventListener('click', (e) => {
+  const t = e.target.closest('.page-thumb');
+  if (!t) return;
+  const card = t.closest('.page-card');
+  const willApply = card.classList.contains('will-rotate');
+  const tf = willApply ? modeTransform(getMode()) : 'none';
+  const big = t.dataset.zoomSrc + (t.dataset.zoomSrc.includes('?') ? '&' : '?') + 'large=1';
+  const lb = document.createElement('div');
+  lb.className = 'page-lightbox';
+  lb.innerHTML = `<button class="page-lightbox-close" type="button">×</button>
+                  <img src="${big}" alt="" style="transform:${tf};" />`;
+  lb.addEventListener('click', () => lb.remove());
+  document.body.appendChild(lb);
+});
+
+document.getElementById('btn-submit').addEventListener('click', async () => {
+  if(!files.length) return alert('請上傳 PDF');
+  const fd = new FormData();
+  for (const f of files) fd.append('file', f);
+  fd.append('mode', getMode());
+  fd.append('pages', getPagesSpec());
+  const r = await fu.upload('/tools/pdf-rotate/submit', fd, {processingLabel: '排隊轉向中…'});
+  if(!r.ok) return alert('送出失敗：' + await r.text());
+  const j = await r.json(); jp.track(j.job_id);
+});
+</script>
+{% endblock %}

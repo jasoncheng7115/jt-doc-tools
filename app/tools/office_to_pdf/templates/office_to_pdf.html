@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}文書轉 PDF · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('page', size=22) }} 文書轉 PDF</h1>
+<p class="muted">把 Word / Excel / PowerPoint / ODF（.doc .docx .xls .xlsx .ppt .pptx .odt .ods .odp .rtf .csv .txt）檔案批次轉成 PDF。
+若同一批裡夾帶 PDF 也會原樣帶過。需要 LibreOffice / OxOffice 已安裝。</p>
+<div class="panel">
+  <h2 style="margin-top:0;">上傳檔案（可多檔）</h2>
+  {% with upload_id='upO', accept=accept, multiple=True %}{% include "components/file_upload.html" %}{% endwith %}
+  <button class="btn btn-primary" id="btn-submit" style="margin-top:12px;">{{ icon('save') }}開始轉檔</button>
+  {% with progress_id='jp' %}{% include "components/job_progress.html" %}{% endwith %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script><script src="/static/js/job_progress.js"></script>
+<script>
+let files=[]; const fu = new FileUpload(document.getElementById('upO'),(_f,fs)=>{files=Array.isArray(fs)?fs:(fs?[fs]:[]);});
+const jp = new JobProgress(document.getElementById('jp'),{onReset:()=>{fu.reset();files=[];}});
+document.getElementById('btn-submit').addEventListener('click', async () => {
+  if(!files.length) return alert('請上傳檔案');
+  const fd = new FormData();
+  for (const f of files) fd.append('file', f);
+  const r = await fu.upload('/tools/office-to-pdf/submit', fd, {processingLabel: '排隊轉檔中…'});
+  if(!r.ok) return alert('送出失敗：'+ await r.text());
+  const j = await r.json(); jp.track(j.job_id);
+});
+</script>
+{% endblock %}

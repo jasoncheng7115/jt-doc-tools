@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}AES ZIP 加密 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.az-file-list { margin-top: 8px; font-size: 12.5px; color:#475569; }
+.az-file-list li { padding: 2px 0; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('archive', size=22) }} AES ZIP 加密</h1>
+<p class="muted">把多個檔案打包成密碼保護的 ZIP。採 WinZip AES-256 加密（不是過時的 ZipCrypto），跟 7-Zip / Keka / macOS Archive Utility 10.13+ / WinRAR 相容。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 選擇要打包的檔案</h2>
+  {% with upload_id='azUp', accept='*', multiple=True, hint='任意檔案格式，多檔會打包成同一個 ZIP。' %}{% include "components/file_upload.html" %}{% endwith %}
+  <ul class="az-file-list" id="fileList" hidden></ul>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">2. 密碼與設定</h2>
+  <div class="form-row">
+    <label>密碼</label>
+    <input id="pw" type="password" class="field" placeholder="解壓時要求的密碼" />
+  </div>
+  <div class="form-row">
+    <label>再次輸入</label>
+    <input id="pw2" type="password" class="field" placeholder="避免密碼打錯" />
+  </div>
+  <div class="form-row">
+    <label>ZIP 檔名</label>
+    <input id="zname" type="text" class="field" placeholder="留空則使用時間戳" style="max-width:320px;" />
+  </div>
+  <div class="form-row">
+    <label>壓縮方式</label>
+    <select id="comp" class="field" style="max-width:220px;">
+      <option value="deflate" selected>Deflate（一般，速度快）</option>
+      <option value="lzma">LZMA（壓縮率較高，較慢）</option>
+      <option value="store">不壓縮（適合已壓縮過的檔案）</option>
+    </select>
+  </div>
+</div>
+
+<div style="margin-top:12px;">
+  <button class="btn btn-primary" id="btnZip">{{ icon('lock', size=14) }} 加密並下載</button>
+  <span id="status" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let files = [];
+function fmt(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/1024/1024).toFixed(1) + ' MB';
+}
+const fu = new FileUpload($('azUp'), (_first, fs) => {
+  files = Array.isArray(fs) ? fs : (fs ? [fs] : []);
+  const list = $('fileList');
+  if (!files.length) { list.hidden = true; return; }
+  list.hidden = false;
+  list.innerHTML = files.map(f => `<li>• ${f.name} <span class="muted">(${fmt(f.size)})</span></li>`).join('');
+});
+
+$('btnZip').addEventListener('click', async () => {
+  if (!files.length) return alert('請先選擇檔案');
+  const pw = $('pw').value, pw2 = $('pw2').value;
+  if (!pw) return alert('請輸入密碼');
+  if (pw !== pw2) return alert('兩次密碼不一致');
+  $('status').textContent = '加密中…';
+  $('btnZip').disabled = true;
+  const fd = new FormData();
+  for (const f of files) fd.append('file', f);
+  fd.append('password', pw);
+  fd.append('zip_name', $('zname').value);
+  fd.append('compression', $('comp').value);
+  try {
+    const r = await fu.upload('/tools/aes-zip/submit', fd, {processingLabel: 'AES 加密中…'});
+    if (!r.ok) { $('status').textContent = '失敗：' + await r.text(); return; }
+    const blob = await r.blob();
+    // Extract filename from Content-Disposition
+    const cd = r.headers.get('content-disposition') || '';
+    const m = cd.match(/filename="([^"]+)"/);
+    const name = m ? m[1] : 'archive.zip';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 500);
+    $('status').textContent = `完成 — ${name}（${fmt(blob.size)}）`;
+  } catch (e) {
+    $('status').textContent = '錯誤：' + e.message;
+  } finally {
+    $('btnZip').disabled = false;
+  }
+});
+</script>
+{% endblock %}
