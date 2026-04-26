@@ -513,7 +513,7 @@
           <span class="install-warn-badge">⚠ 尚未完整測試</span>
         </div>
         <div class="install-cmd-wrap">
-          <pre><code id="cmd-win">iwr -useb https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.ps1 | iex</code></pre>
+          <pre><code id="cmd-win">$f="$env:TEMP\jtdt-install.ps1"; irm https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.ps1 -OutFile $f; powershell -NoProfile -ExecutionPolicy Bypass -File $f; Read-Host "`n按 Enter 關閉"</code></pre>
           <button type="button" class="copy-btn" data-target="cmd-win" aria-label="複製指令">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             <span class="copy-label">複製</span>
