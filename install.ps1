@@ -177,7 +177,10 @@ function Fetch-Code {
         return
     }
     if ((Test-Path $InstallDir) -and (Get-ChildItem $InstallDir -Force | Where-Object { $_.Name -ne 'bin' }) ) {
-        Die "$InstallDir 已存在但不是 git repo，請先備份/移除再重跑"
+        # 通常是上一次失敗的半成品。bin/ 留著（uv/nssm 已裝），其他清掉重來。
+        # 不動 $DataDir（在另一個路徑），所以使用者資料安全。
+        Warn "$InstallDir 已存在但不是 git repo（多半是上次失敗殘留），自動清理重來..."
+        Get-ChildItem $InstallDir -Force | Where-Object { $_.Name -ne 'bin' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     }
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     if (Get-Command git -ErrorAction SilentlyContinue) {
