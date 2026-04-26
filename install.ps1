@@ -1,8 +1,4 @@
-﻿<#
-Jason Tools 文件工具箱 - One-line installer (Windows 10 / 11)
-Repo: https://github.com/jasoncheng7115/jt-doc-tools
-#>
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $ProgressPreference    = 'SilentlyContinue'   # 加快 Invoke-WebRequest
 
 # Force UTF-8 in console so 中文 doesn't render as ?
