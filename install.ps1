@@ -198,10 +198,15 @@ function Fetch-Code {
 
 function Setup-Python {
     Log "建立獨立 Python 環境並安裝依賴 (uv sync) ..."
+    # 強制 uv 用自己 managed 的 Python，避開 Microsoft Store 的 python.exe stub
+    # (Store stub 不是真 Python，會跳開 Store 視窗，uv 跑會炸)
+    $env:UV_PYTHON_PREFERENCE = 'only-managed'
     Push-Location $InstallDir
     try {
-        & $UvExe sync --frozen 2>$null
-        if ($LASTEXITCODE -ne 0) { & $UvExe sync }
+        & $UvExe python install 3.12
+        if ($LASTEXITCODE -ne 0) { Die "uv python install 3.12 失敗" }
+        & $UvExe sync --frozen --python 3.12
+        if ($LASTEXITCODE -ne 0) { & $UvExe sync --python 3.12 }
         if ($LASTEXITCODE -ne 0) { Die "uv sync 失敗" }
     } finally { Pop-Location }
     if (-not (Test-Path (Join-Path $InstallDir '.venv\Scripts\python.exe'))) {
