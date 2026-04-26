@@ -6,13 +6,13 @@
 >
 > **不上雲，資料留在自己內網。** 可在 Linux 架站給內網多人使用，所有檔案處理只發生在你的伺服器，不外傳任何雲端。
 
-🌐 **完整介紹網站：** <https://jasoncheng7115.github.io/jt-doc-tools/>
+完整介紹網站：<https://jasoncheng7115.github.io/jt-doc-tools/>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 ---
 
-## ✨ 功能總覽
+## 功能總覽
 
 ### 填單與用印
 - **表單自動填寫**：上傳廠商資料表 / 申請書（PDF、Word、Excel、ODF），自動辨識欄位並填入公司基本資料
@@ -38,13 +38,13 @@
 ### 資安處理
 - **文件去識別化**：偵測身分證 / 手機 / Email / 統編 / 信用卡 / 銀行帳號 / 公司名稱 / 人名 …，一鍵編修（Redaction，不可還原）或資料遮罩（Masking，保留格式）
 - **PDF 密碼保護 / 解除**：AES-256 加密、權限控制
-- **AES 加密壓縮檔**：把多份檔案打包成密碼保護的 zip，可寄信附件
+- **AES 加密壓縮檔**：把多份檔案打包成密碼保護的 zip,可寄信附件
 - **Metadata 清除**：作者 / 標題 / XMP / 修訂歷史
 - **隱藏內容掃描**：JavaScript / 嵌入檔 / 隱藏文字 / 外部連結等風險，一鍵清除
 - **差異比對**：兩份 PDF 逐頁並排比對，文字差異標紅
 
 ### 多人 / 企業環境
-- **多領域認證**：本機帳號 / LDAP / Active Directory；PVE 風格 `username@realm`，同名帳號可在不同領域並存（如 `jason@local` + `jason@ldap`）
+- **多領域認證**：本機帳號 / LDAP / Active Directory；同名帳號可在不同領域並存（如 `jason@local` + `jason@ldap`），以 `username@realm` 區分
 - **角色與權限矩陣 (RBAC)**：6 個內建角色（管理員 / 一般使用者 / 文管 / 財務 / 業務 / 法務資安）+ 自訂角色；可指派工具使用權限到使用者 / 群組 / OU
 - **稽核記錄**：登入 / 操作 / 設定變更 / 工具呼叫（含上傳檔名）全部記下；async 寫入不影響服務效能；可篩選 / 匯出 CSV
 - **Log 轉發**：syslog (RFC 5424 UDP/TCP) / CEF (ArcSight) / GELF (Graylog)，多目的地並行；失敗 retry + 寫本地稽核
@@ -54,7 +54,7 @@
 
 ---
 
-## 🚀 快速安裝（一行指令）
+## 快速安裝（一行指令）
 
 > 三平台都需要**系統管理員權限**。安裝過程會：
 >
@@ -92,7 +92,7 @@ curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/in
 
 #### 必要工具
 
-macOS 內建 `curl`，**`git` 在第一次跑會自動觸發 Xcode Command Line Tools 安裝精靈**（會跳一個 GUI 視窗，按「安裝」即可，約 5-10 分鐘）。如果想預先裝：
+macOS 內建 `curl`，<b>`git` 在第一次跑會自動觸發 Xcode Command Line Tools 安裝精靈</b>（會跳一個 GUI 視窗，按「安裝」即可，約 5-10 分鐘）。如果想預先裝：
 
 ```bash
 xcode-select --install
@@ -111,7 +111,7 @@ curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/in
 
 #### 必要工具
 
-Windows 10 1803+ / 11 內建 `curl`，但 **`git` 不在預設清單**。建議先用 winget 補：
+Windows 10 1803+ / 11 內建 `curl`，但 <b>`git` 不在預設清單</b>。建議先用 winget 補：
 
 ```powershell
 winget install --id Git.Git -e --accept-package-agreements --accept-source-agreements
@@ -123,7 +123,7 @@ winget install --id Git.Git -e --accept-package-agreements --accept-source-agree
 
 #### 一行安裝
 
-以**「以系統管理員身分執行」**開啟 PowerShell（右鍵 PowerShell 圖示 → 系統管理員），貼：
+以<b>「以系統管理員身分執行」</b>開啟 PowerShell（右鍵 PowerShell 圖示 → 系統管理員），貼：
 
 ```powershell
 iwr -useb https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.ps1 | iex
@@ -135,7 +135,7 @@ iwr -useb https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/ins
 
 ---
 
-## 🛠 日常操作（`jtdt` 指令）
+## 日常操作（`jtdt` 指令）
 
 安裝完成後會在系統 PATH 加入 `jtdt`：
 
@@ -154,7 +154,7 @@ iwr -useb https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/ins
 
 ---
 
-## 📁 安裝位置
+## 安裝位置
 
 | OS | 程式 | 資料 | 服務 |
 |---|---|---|---|
@@ -164,7 +164,7 @@ iwr -useb https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/ins
 
 ---
 
-## 🌐 反向代理（HTTPS）
+## 反向代理（HTTPS）
 
 預設綁 `127.0.0.1:8765`，若要從外部用 HTTPS 存取，加上反向代理：
 
@@ -178,10 +178,10 @@ server {
     ssl_certificate     /etc/letsencrypt/live/docs.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/docs.example.com/privkey.pem;
 
-    # ⚠️ 必設：上傳大檔需要
+    # 必設：上傳大檔需要
     client_max_body_size 100M;
 
-    # ⚠️ 保險：未來 LLM 校驗會跑比較久
+    # 保險：未來 LLM 校驗會跑比較久
     proxy_read_timeout 300s;
 
     location / {
@@ -207,7 +207,7 @@ docs.example.com {
 }
 ```
 
-### ⚠️ 反代地雷
+### 反代地雷
 
 1. **`client_max_body_size 100M`**：上傳大檔必設
 2. **必須掛根路徑** `/`（不能 `/jtdt/`）— 所有頁面用絕對路徑
@@ -216,7 +216,7 @@ docs.example.com {
 
 ---
 
-## 🔧 系統需求
+## 系統需求
 
 | 項目 | 最低 | 建議 |
 |------|------|------|
@@ -227,7 +227,7 @@ docs.example.com {
 
 ---
 
-## 🔒 隱私 / 安全
+## 隱私 / 安全
 
 - **不上雲、資料留在自己內網**：所有檔案處理發生在你的伺服器上（單機或區網內 server），不上傳任何雲端服務
 - **資料目錄獨立**：在系統 `data/` 區，不會跟使用者個人檔案混在一起，也不會 roam（Windows）
@@ -237,7 +237,7 @@ docs.example.com {
 
 ---
 
-## 🧪 開發 / 進階
+## 開發 / 進階
 
 ```bash
 # Clone repo
@@ -256,7 +256,7 @@ JTDT_DEBUG=true uv run python -m app.main
 
 ---
 
-## 📜 授權
+## 授權
 
 Apache License 2.0 — 詳見 [LICENSE](LICENSE)。
 
@@ -264,7 +264,7 @@ Apache License 2.0 — 詳見 [LICENSE](LICENSE)。
 
 ---
 
-## 🌐 連結
+## 連結
 
 - **介紹網站**：<https://jasoncheng7115.github.io/jt-doc-tools/>
 - **GitHub Repo**：<https://github.com/jasoncheng7115/jt-doc-tools>
@@ -272,7 +272,7 @@ Apache License 2.0 — 詳見 [LICENSE](LICENSE)。
 
 ---
 
-## 👤 作者
+## 作者
 
 **Jason Cheng** (Jason Tools)
-✉️ jason@jason.tools
+jason@jason.tools
