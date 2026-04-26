@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}轉檔設定 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('gear', size=22) }} 轉檔設定</h1>
+<p class="muted">設定文書轉 PDF（OxOffice / LibreOffice）的執行檔尋找順序。系統會由上往下測試，第一個存在且可執行的就會被使用。</p>
+
+<div class="panel" style="background:#fef3c7; border-color:#fcd34d;">
+  <p style="margin:0; font-size:13px; color:#78350f;">
+    💡 <strong>推薦優先採用 OxOffice</strong>：由台灣 OSSII 維護的 LibreOffice 繁中本地化分支，
+    對 CJK 字型、CNS11643 字集、台灣版面慣例支援更完整。
+    下載：<a href="https://github.com/OSSII/OxOffice/releases" target="_blank" rel="noopener"
+       style="color:#1e40af; font-weight:600;">github.com/OSSII/OxOffice</a>
+  </p>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">目前使用</h2>
+  {% if active %}
+    <p style="font-family: ui-monospace, SFMono-Regular, monospace; font-size: 13px; word-break: break-all; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+      ✅ <strong>{{ active }}</strong>
+      {% if active_version %}<span class="version-chip">{{ active_version }}</span>{% endif %}
+    </p>
+  {% else %}
+    <p class="muted">⚠️ 找不到任何可用的 soffice / libreoffice，文書轉 PDF 將失敗。請新增正確路徑或安裝。</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">尋找順序</h2>
+  <p class="muted" style="font-size: 12px;">拖曳列首的「⠿」可調整順序。內建路徑無法刪除（仍可上下移動）；自訂路徑可新增、編輯、刪除。</p>
+  <ul id="path-list" class="path-list">
+    {% for p in paths %}
+    <li class="path-item" data-id="{{ p.id }}" data-builtin="{{ 'true' if p.builtin else 'false' }}">
+      <span class="drag-handle" title="拖曳調整順序">⠿</span>
+      <span class="badge {% if p.builtin %}badge-builtin{% else %}badge-custom{% endif %}">{% if p.builtin %}內建{% else %}自訂{% endif %}</span>
+      {% if p.builtin %}
+        <code class="p-text">{{ p.path }}</code>
+      {% else %}
+        <input type="text" class="p-input" value="{{ p.path }}" />
+      {% endif %}
+      {% if p.version %}<span class="version-chip" title="--version 輸出">{{ p.version }}</span>{% endif %}
+      <span class="status">{% if p.exists and p.executable %}✅{% elif p.exists %}⚠️ 不可執行{% else %}❌ 不存在{% endif %}</span>
+      {% if not p.builtin %}
+      <button class="btn btn-small btn-danger" type="button" data-act="remove">{{ icon('trash') }}</button>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  <div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+    <input type="text" id="new-path" placeholder="新增自訂路徑（例：D:\soffice\program\soffice.exe）" style="flex:1; padding:6px 10px; border:1px solid var(--border); border-radius:6px;" />
+    <button class="btn" type="button" id="btn-add">{{ icon('plus') }}新增</button>
+  </div>
+  <div style="margin-top:14px; display:flex; gap:8px;">
+    <button class="btn btn-primary" type="button" id="btn-save">{{ icon('save') }}儲存設定</button>
+    <a class="btn" href="/admin/conversion">{{ icon('refresh') }}重新整理</a>
+  </div>
+</div>
+
+<style>
+.path-list { list-style: none; padding: 0; margin: 0; }
+.path-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: #fff; margin-bottom: 6px; }
+.drag-handle { cursor: grab; color: var(--muted); font-size: 16px; user-select: none; }
+.path-item.dragging { opacity: 0.5; }
+.path-item.drag-over { background: #eff6ff; border-color: var(--primary); }
+.badge { font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; flex-shrink: 0; }
+.badge-builtin { background: #dbeafe; color: #1d4ed8; }
+.badge-custom { background: #fef3c7; color: #92400e; }
+.p-text { flex: 1; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 13px; word-break: break-all; }
+.p-input { flex: 1; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 13px; }
+.status { font-size: 12px; flex-shrink: 0; }
+.version-chip {
+  font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px;
+  padding: 2px 7px; border-radius: 10px; flex-shrink: 0;
+  background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0;
+  white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+}
+</style>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const list = document.getElementById('path-list');
+
+// drag-reorder
+let dragEl = null;
+list.addEventListener('dragstart', (e) => {
+  if (!e.target.closest('.path-item')) return;
+  dragEl = e.target.closest('.path-item');
+  dragEl.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+});
+list.addEventListener('dragend', () => {
+  if (dragEl) dragEl.classList.remove('dragging');
+  list.querySelectorAll('.path-item').forEach(el => el.classList.remove('drag-over'));
+  dragEl = null;
+});
+list.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  const target = e.target.closest('.path-item');
+  if (!target || target === dragEl) return;
+  list.querySelectorAll('.path-item').forEach(el => el.classList.remove('drag-over'));
+  target.classList.add('drag-over');
+});
+list.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const target = e.target.closest('.path-item');
+  if (!target || !dragEl || target === dragEl) return;
+  const rect = target.getBoundingClientRect();
+  const after = (e.clientY - rect.top) > rect.height / 2;
+  target.parentNode.insertBefore(dragEl, after ? target.nextSibling : target);
+  target.classList.remove('drag-over');
+});
+list.querySelectorAll('.path-item').forEach(item => item.setAttribute('draggable', 'true'));
+
+list.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-act=remove]');
+  if (btn) btn.closest('.path-item').remove();
+});
+
+document.getElementById('btn-add').addEventListener('click', () => {
+  const v = document.getElementById('new-path').value.trim();
+  if (!v) return;
+  const li = document.createElement('li');
+  li.className = 'path-item';
+  li.dataset.builtin = 'false';
+  li.setAttribute('draggable', 'true');
+  li.innerHTML = `<span class="drag-handle" title="拖曳調整順序">⠿</span>
+    <span class="badge badge-custom">自訂</span>
+    <input type="text" class="p-input" value="${v.replace(/[<>"']/g,'')}" />
+    <span class="status">（儲存後檢查）</span>
+    <button class="btn btn-small btn-danger" type="button" data-act="remove">🗑</button>`;
+  list.insertBefore(li, list.firstChild);
+  document.getElementById('new-path').value = '';
+});
+
+document.getElementById('btn-save').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-save');
+  const builtin_order = [];
+  const custom = [];
+  list.querySelectorAll('.path-item').forEach(item => {
+    if (item.dataset.builtin === 'true') {
+      builtin_order.push(item.dataset.id);
+    } else {
+      const input = item.querySelector('.p-input');
+      if (input && input.value.trim()) custom.push(input.value.trim());
+    }
+  });
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>儲存中…';
+  try {
+    const r = await fetch('/admin/conversion/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ builtin_order, custom })
+    });
+    if (!r.ok) throw new Error(await r.text());
+    // Visible success: green flash on the button + toast, then reload to
+    // pick up the re-probed version chips.
+    btn.classList.add('saved-flash');
+    btn.innerHTML = '✓ 已儲存';
+    if (window.showToast) window.showToast('設定已儲存，重新載入中…', 'ok');
+    setTimeout(() => location.reload(), 700);
+  } catch (e) {
+    btn.disabled = false; btn.innerHTML = original;
+    if (window.showToast) window.showToast('儲存失敗：' + e.message, 'err');
+    else alert('儲存失敗');
+  }
+});
+</script>
+{% endblock %}

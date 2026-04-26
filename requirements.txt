@@ -1,0 +1,11 @@
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+jinja2==3.1.4
+python-multipart==0.0.12
+pymupdf>=1.26.0
+pillow>=10.4.0
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+pdfplumber>=0.11.0
+python-docx>=1.0.0
+pyzipper>=0.3.6

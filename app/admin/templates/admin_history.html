@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}{{ title }} 歷史 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('page', size=22) }} {{ title }} 歷史記錄</h1>
+<p class="muted">所有透過 <a href="{{ tool_url }}">{{ title }}</a> 處理過的檔案都會留存於此（除非超過保留期限被自動清掉）。</p>
+
+<div class="kind-tabs" style="margin-bottom:14px;">
+  <a class="btn btn-small {% if kind=='fill' %}btn-primary{% endif %}" href="/admin/history/fill">表單填寫</a>
+  <a class="btn btn-small {% if kind=='stamp' %}btn-primary{% endif %}" href="/admin/history/stamp">用印簽名</a>
+  <a class="btn btn-small {% if kind=='watermark' %}btn-primary{% endif %}" href="/admin/history/watermark">浮水印</a>
+</div>
+
+<form method="get" style="margin-bottom:10px;">
+  <label>
+    使用者篩選：
+    <select class="field" name="q_user" onchange="this.form.submit()">
+      <option value="">所有人</option>
+      {% for u in users %}
+      <option value="{{ u }}" {% if u == q_user %}selected{% endif %}>{{ u }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+
+<div class="panel">
+  <p class="muted">共 <b>{{ entries|length }}</b> 筆</p>
+  <table class="hist-table">
+    <thead>
+      <tr><th style="width:140px;">時間</th><th>檔名</th><th>使用者</th><th>備註</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+      <tr data-hid="{{ e.id }}">
+        <td class="muted" style="font-size:11px;">
+          <script>document.currentScript.parentElement.textContent = new Date({{ (e.saved_at*1000)|int }}).toLocaleString('zh-TW');</script>
+        </td>
+        <td>{{ e.filename }}</td>
+        <td>{{ e.username or '(匿名)' }}</td>
+        <td class="muted" style="font-size:11px;">
+          {% if e.template_name %}範本：{{ e.template_name }}{% endif %}
+          {% if e.extra %}<details><summary>extra</summary><pre>{{ e.extra|tojson }}</pre></details>{% endif %}
+        </td>
+        <td style="white-space:nowrap;">
+          {% if e.has_original %}<a class="btn btn-small" href="/admin/history/{{ kind }}/{{ e.id }}/file/original">{{ icon('download', size=12) }} 原檔</a>{% endif %}
+          {% if e.has_filled %}<a class="btn btn-small btn-primary" href="/admin/history/{{ kind }}/{{ e.id }}/file/output">{{ icon('download', size=12) }} 結果</a>{% endif %}
+          <button class="btn btn-small btn-danger" data-act="del">{{ icon('trash', size=12) }} 刪除</button>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" style="text-align:center; padding:30px; color:#9ca3af;">尚無歷史記錄。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .hist-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .hist-table th, .hist-table td { padding:6px 8px; border-bottom:1px solid #f3f4f6; vertical-align:top; }
+  .hist-table th { background:#f9fafb; font-size:11px; color:#6b7280; text-align:left; }
+  .hist-table pre { background:#f9fafb; padding:4px; border-radius:3px; font-size:10px; max-width:300px; overflow:auto; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const KIND = "{{ kind }}";
+document.querySelectorAll('[data-act="del"]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const tr = btn.closest('tr');
+    const hid = tr.dataset.hid;
+    if (!(await showConfirm('確定刪除這筆？',
+          { title: '刪除', kind: 'danger' }))) return;
+    const r = await fetch(`/admin/history/${KIND}/${hid}/delete`, {method:'POST'});
+    if (r.ok) tr.remove();
+    else showAlert('刪除失敗：' + await r.text());
+  });
+});
+</script>
+{% endblock %}

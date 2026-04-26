@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}Metadata 清除 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.md-info { background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px;
+  padding: 12px 14px; margin-top: 10px; font-size: 13px; }
+.md-info dl { margin: 0; display: grid; grid-template-columns: 130px 1fr; gap: 4px 10px; }
+.md-info dt { color:#64748b; font-size: 12px; font-weight: 500; }
+.md-info dd { margin: 0; color:#0f172a; word-break: break-all; }
+.md-info .warn { color:#b45309; }
+.md-toggles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 6px 14px; margin-top: 8px; }
+.md-toggles label { display:inline-flex; align-items:center; gap:6px;
+  font-size: 13px; color:#334155; cursor: pointer; }
+.md-xmp { background:#fff; border:1px solid #e5e7eb; border-radius:6px;
+  padding: 8px 10px; margin-top: 8px; max-height: 200px; overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; color:#475569; white-space: pre-wrap; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('info', size=22) }} Metadata 清除</h1>
+<p class="muted">檢視 PDF 中的 metadata（作者 / 標題 / 建立軟體 / XMP 等），選擇要清除的項目後輸出無痕副本。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳 PDF</h2>
+  {% with upload_id='mdUp', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+  <div class="md-info" id="mdInfo" hidden></div>
+</div>
+
+<div class="panel" id="mdPanel" hidden>
+  <h2 style="margin-top:0;">2. 選擇要清除的項目</h2>
+  <div class="md-toggles">
+    <label><input type="checkbox" id="cInfo" checked> 基本 metadata（作者 / 標題 / 建立軟體 …）</label>
+    <label><input type="checkbox" id="cXmp" checked> XMP metadata（含修訂歷史）</label>
+    <label><input type="checkbox" id="cToc"> 書籤 / 目錄</label>
+    <label><input type="checkbox" id="cAnn"> 註解 / 標記</label>
+    <label><input type="checkbox" id="cFrm"> 表單欄位</label>
+  </div>
+  <div style="margin-top:12px;">
+    <button class="btn btn-primary" id="btnClean">{{ icon('trash', size=14) }} 清除並產生副本</button>
+    <span id="cleanStatus" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
+  </div>
+</div>
+
+<div class="panel" id="dlPanel" hidden style="background:#ecfdf5; border-color:#86efac;">
+  <h3 style="margin:0 0 8px; color:#064e3b;">完成</h3>
+  <div id="dlSummary" style="font-size:13px; color:#065f46; margin-bottom:10px;"></div>
+  <a class="btn btn-primary" id="dlLink" href="#">{{ icon('download') }} 下載清除後的 PDF</a>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let currentFile = null;
+let uploadId = null;
+
+function fmt(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/1024/1024).toFixed(1) + ' MB';
+}
+function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+const fu = new FileUpload($('mdUp'), async (f) => {
+  currentFile = f;
+  $('mdPanel').hidden = true;
+  $('dlPanel').hidden = true;
+  $('mdInfo').hidden = true;
+  if (!f) return;
+  const fd = new FormData(); fd.append('file', f);
+  const r = await fu.upload('/tools/pdf-metadata/analyze', fd, {processingLabel: '分析 metadata 中…'});
+  if (!r.ok) { $('mdInfo').hidden = false; $('mdInfo').innerHTML = '<span class="warn">分析失敗：' + await r.text() + '</span>'; return; }
+  const d = await r.json();
+  uploadId = d.upload_id;
+  const m = d.metadata || {};
+  const rows = [
+    ['標題',     m.title],
+    ['作者',     m.author],
+    ['主題',     m.subject],
+    ['關鍵字',   m.keywords],
+    ['建立軟體', m.creator],
+    ['產生軟體', m.producer],
+    ['建立時間', m.creationDate],
+    ['修改時間', m.modDate],
+  ];
+  let html = '<dl>';
+  for (const [k, v] of rows) {
+    html += `<dt>${k}</dt><dd>${v ? escapeHTML(String(v)) : '<span class="muted">(空)</span>'}</dd>`;
+  }
+  html += `<dt>檔案大小</dt><dd>${fmt(d.size)}</dd>`;
+  html += `<dt>頁數</dt><dd>${d.page_count}</dd>`;
+  html += `<dt>書籤 / 目錄</dt><dd>${d.has_toc ? '有' : '無'}</dd>`;
+  html += `<dt>註解</dt><dd>${d.annot_count} 個</dd>`;
+  html += `<dt>表單欄位</dt><dd>${d.form_field_count} 個</dd>`;
+  html += `<dt>嵌入檔案</dt><dd>${d.attach_count} 個</dd>`;
+  html += `<dt>XMP</dt><dd>${d.xmp_present ? '<span class="warn">有（含修訂歷史等）</span>' : '無'}</dd>`;
+  html += '</dl>';
+  if (d.xmp_preview) {
+    html += `<div class="muted" style="margin-top:10px; font-size:11.5px;">XMP 前 800 字元預覽：</div>`;
+    html += `<div class="md-xmp">${escapeHTML(d.xmp_preview)}</div>`;
+  }
+  $('mdInfo').innerHTML = html;
+  $('mdInfo').hidden = false;
+  $('mdPanel').hidden = false;
+});
+
+$('btnClean').addEventListener('click', async () => {
+  if (!uploadId) return;
+  $('cleanStatus').textContent = '清除中…';
+  const r = await fetch('/tools/pdf-metadata/clean', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      upload_id: uploadId,
+      clear_info: $('cInfo').checked,
+      clear_xmp: $('cXmp').checked,
+      clear_toc: $('cToc').checked,
+      clear_annots: $('cAnn').checked,
+      clear_forms: $('cFrm').checked,
+    }),
+  });
+  if (!r.ok) { $('cleanStatus').textContent = '失敗：' + await r.text(); return; }
+  const d = await r.json();
+  $('cleanStatus').textContent = '完成';
+  $('dlSummary').textContent = `清除後檔案大小：${fmt(d.size)}`;
+  $('dlLink').href = d.download_url;
+  $('dlPanel').hidden = false;
+  $('dlPanel').scrollIntoView({behavior:'smooth', block:'end'});
+});
+</script>
+{% endblock %}

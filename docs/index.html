@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台。22 個工具一站處理：表單填寫、用印簽名、浮水印、敏感資料去識別化、PDF 加密、隱藏內容掃描、差異比對等。可選 LDAP / AD 認證、角色權限、稽核、Log 轉發。不上雲，資料留在自己內網。">
+<title>Jason Tools 文件工具箱 — PDF / Office 整合式文件處理平台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ======== Top nav ======== -->
+<header class="topbar">
+  <div class="container topbar-inner">
+    <a class="brand" href="#top">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <div class="brand-name">Jason Tools 文件工具箱</div>
+        <div class="brand-sub">jt-doc-tools</div>
+      </div>
+    </a>
+    <nav class="topnav">
+      <a href="#why">為什麼自架</a>
+      <a href="#features">功能</a>
+      <a href="#screenshots">畫面</a>
+      <a href="#enterprise">企業版</a>
+      <a href="#install">安裝</a>
+      <a class="btn btn-outline" href="https://github.com/jasoncheng7115/jt-doc-tools" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.2 1.9 1.2 1.1 1.9 2.9 1.4 3.6 1 .1-.8.4-1.4.8-1.7-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2 0-.4-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>
+        GitHub
+      </a>
+    </nav>
+  </div>
+</header>
+
+<!-- ======== Hero ======== -->
+<section id="top" class="hero">
+  <div class="hero-bg"></div>
+  <div class="container hero-inner">
+    <div class="hero-eyebrow">開源 · 不上雲 · 跑在自己機房</div>
+    <h1 class="hero-title">
+      別再把公司文件丟到線上 PDF 工具<br>
+      <span class="hero-title-accent">22 個工具，自架、開源、可稽核</span>
+    </h1>
+    <p class="hero-lead">
+      表單自動填寫、用印與簽名、浮水印、敏感資料去識別化、PDF 加密、Metadata 清除、隱藏內容掃描、差異比對、頁面編輯…
+      可選 LDAP / AD 認證、角色權限、稽核、Log 轉發。<br>
+      <b>所有檔案處理只發生在你的伺服器，原始碼公開。</b>
+    </p>
+    <div class="hero-cta">
+      <a class="btn btn-primary btn-lg" href="#install">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+        一行指令安裝
+      </a>
+      <a class="btn btn-ghost btn-lg" href="https://github.com/jasoncheng7115/jt-doc-tools" target="_blank" rel="noopener">
+        在 GitHub 上看
+      </a>
+    </div>
+    <div class="hero-shot">
+      <img src="screenshots/index.png" alt="Jason Tools 文件工具箱主介面 — 22 個工具一覽" loading="lazy">
+    </div>
+  </div>
+</section>
+
+<!-- ======== Why self-host ======== -->
+<section id="why" class="section section-why">
+  <div class="container">
+    <div class="section-eyebrow">為什麼要自架？</div>
+    <h2 class="section-title">PDF 處理上傳到線上工具？資料就出去了。</h2>
+    <p class="section-lead">
+      網路上有很多「免費」的 PDF / 圖片 / Office 處理工具：表單填寫、用印、合併、壓縮、簽章、加密…<br>
+      點兩下很方便，但<b>你的檔案上傳到別人的伺服器</b>。合約、人事、財務、客戶資料、身分證、銀行帳號 — 真的放心？
+    </p>
+
+    <div class="why-grid">
+      <div class="why-col why-col-bad">
+        <div class="why-h">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          線上 PDF 工具的隱憂
+        </div>
+        <ul>
+          <li>檔案上傳到第三方伺服器，<b>無法確認何時真的被刪除</b></li>
+          <li>多數沒公開原始碼，<b>不知道伺服器端怎麼處理你的資料</b></li>
+          <li>免費版常常有<b>隱私政策變更</b>、<b>用你的檔案訓練 AI</b> 的條款</li>
+          <li>身分證 / 銀行帳號 / 客戶名單 / 合約上傳 = <b>個資法 / GDPR 風險</b></li>
+          <li>公司網路稽核看不到、SIEM 收不到，<b>合規無法追溯</b></li>
+          <li>跨國 / 跨機房傳輸觸發資料跨境疑慮</li>
+        </ul>
+      </div>
+
+      <div class="why-col why-col-good">
+        <div class="why-h">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          地端自架 + 開源 才能安心
+        </div>
+        <ul>
+          <li><b>檔案永遠不離開你的伺服器</b> — 沒有第三方 API、沒有 telemetry</li>
+          <li><b>原始碼公開</b>（Apache 2.0）— 想稽核什麼都看得到</li>
+          <li><b>稽核記錄寫在你的 SQLite</b>，可即時轉發到內部 SIEM (syslog / CEF / GELF)</li>
+          <li><b>角色與權限矩陣</b>：誰能用哪個工具，公司能控管</li>
+          <li><b>個資法 / GDPR 合規</b>：資料留在自己機房 / 內網</li>
+          <li><b>一行指令安裝</b>，跑在公司既有 Linux / macOS / Windows，省授權費</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== Features ======== -->
+<section id="features" class="section section-light">
+  <div class="container">
+    <div class="section-eyebrow">核心功能</div>
+    <h2 class="section-title">22 個工具，分 6 大類</h2>
+    <p class="section-lead">每個工具都有獨立頁面，左側 sidebar 一鍵切換。所有處理結果可下載 PDF 或圖片。</p>
+
+    <div class="feat-grid">
+      <article class="feat-card">
+        <div class="feat-ic feat-ic-1">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>
+        </div>
+        <h3>填單與用印</h3>
+        <ul class="feat-list">
+          <li><span class="fn">表單自動填寫</span><span class="fd">上傳廠商表單，自動辨識欄位填入公司資料</span></li>
+          <li><span class="fn">用印與簽名</span><span class="fd">套用印章 / 簽名 / Logo，支援批次與位置微調</span></li>
+          <li><span class="fn">浮水印</span><span class="fd">透明度、角度、平鋪填滿或指定位置</span></li>
+        </ul>
+      </article>
+
+      <article class="feat-card">
+        <div class="feat-ic feat-ic-2">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10-4-4L4 16z"/><path d="M14 6l4 4"/></svg>
+        </div>
+        <h3>檔案編輯</h3>
+        <ul class="feat-list">
+          <li><span class="fn">PDF 編輯器</span><span class="fd">疊加文字 / 圖片 / 形狀 / 白底遮罩 / 標註</span></li>
+          <li><span class="fn">PDF 壓縮</span><span class="fd">三段預設或進階自訂 DPI、字型子集化</span></li>
+          <li><span class="fn">多頁合併 (N-up)</span><span class="fd">2/4/6/8/9/16 頁合併到一張</span></li>
+          <li><span class="fn">檔案合併 / 分拆</span><span class="fd">基本 PDF 操作</span></li>
+          <li><span class="fn">轉向 / 頁面整理 / 頁碼</span><span class="fd">排版與編排調整</span></li>
+        </ul>
+      </article>
+
+      <article class="feat-card">
+        <div class="feat-ic feat-ic-3">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </div>
+        <h3>內容擷取</h3>
+        <ul class="feat-list">
+          <li><span class="fn">擷取文字</span><span class="fd">輸出 TXT / Markdown / Word / ODT，可選 LLM 重排段落</span></li>
+          <li><span class="fn">擷取圖片</span><span class="fd">嵌入圖片自動 dedupe，可勾選下載 ZIP</span></li>
+          <li><span class="fn">PDF 附件萃取</span><span class="fd">取出 PDF 嵌入的檔案 (EmbeddedFiles)</span></li>
+        </ul>
+      </article>
+
+      <article class="feat-card">
+        <div class="feat-ic feat-ic-4">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        </div>
+        <h3>格式轉換</h3>
+        <ul class="feat-list">
+          <li><span class="fn">文書轉 PDF</span><span class="fd">Word / Excel / PowerPoint / ODF 批次轉 PDF</span></li>
+          <li><span class="fn">文書轉圖片</span><span class="fd">每頁轉成 PNG，5 段 DPI 可選 (100 草稿 → 400 印刷)</span></li>
+        </ul>
+      </article>
+
+      <article class="feat-card">
+        <div class="feat-ic feat-ic-5">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h3>資安處理</h3>
+        <ul class="feat-list">
+          <li><span class="fn">文件去識別化</span><span class="fd">偵測身分證 / 手機 / Email / 統編 / 信用卡 / 帳號…，編修 (Redaction) 或資料遮罩 (Masking)</span></li>
+          <li><span class="fn">PDF 密碼保護 / 解除</span><span class="fd">AES-256 加密、權限控制</span></li>
+          <li><span class="fn">AES 加密壓縮檔</span><span class="fd">多份檔案打包成密碼保護的 zip</span></li>
+          <li><span class="fn">Metadata 清除 · 隱藏內容掃描 · 差異比對</span></li>
+        </ul>
+      </article>
+
+      <article class="feat-card feat-card-accent">
+        <div class="feat-ic feat-ic-6">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <h3>多人 / 企業</h3>
+        <ul class="feat-list">
+          <li><span class="fn">多領域認證</span><span class="fd">本機 / LDAP / AD，同名帳號可分屬不同領域 (<code>username@realm</code>)</span></li>
+          <li><span class="fn">角色與權限矩陣 (RBAC)</span><span class="fd">6 內建角色 + 自訂，支援使用者 / 群組 / OU</span></li>
+          <li><span class="fn">稽核記錄 + Log 轉發</span><span class="fd">syslog / CEF / GELF，可接 SIEM</span></li>
+          <li><span class="fn">API tokens · 字型管理 · 檔案保留</span><span class="fd">完整管理介面</span></li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ======== Screenshots showcase ======== -->
+<section id="screenshots" class="section section-dark">
+  <div class="container">
+    <div class="section-eyebrow eyebrow-light">實際畫面</div>
+    <h2 class="section-title section-title-light">所見即所得</h2>
+    <p class="section-lead section-lead-light">每個工具都是獨立頁面，左側 sidebar 隨時切換。下面是幾個主要工具的真實截圖。</p>
+
+    <div class="ss-grid">
+
+      <figure class="ss-row">
+        <div class="ss-text">
+          <div class="ss-num">01</div>
+          <h3>表單自動填寫</h3>
+          <p>上傳廠商資料表 / 申請書（PDF / Word / Excel / ODF），系統自動辨識欄位並用公司基本資料填好。一份 profile 對應一家公司，多公司切換無痛。</p>
+          <div class="ss-tags">
+            <span class="tag">PDF</span>
+            <span class="tag">Word</span>
+            <span class="tag">Excel</span>
+            <span class="tag">ODF</span>
+            <span class="tag">多公司</span>
+          </div>
+        </div>
+        <div class="ss-img">
+          <img src="screenshots/fill.png" alt="表單自動填寫 — 自動辨識欄位並填入公司資料" loading="lazy">
+        </div>
+      </figure>
+
+      <figure class="ss-row reverse">
+        <div class="ss-text">
+          <div class="ss-num">02</div>
+          <h3>用印與簽名</h3>
+          <p>拖曳定位印章 / 簽名 / Logo 圖片到 PDF，所見即所得。編輯模式即時拖曳、合成模式逐頁預覽（單頁切換 + 上下頁按鈕 + 鍵盤左右鍵）。支援批次處理。</p>
+          <div class="ss-tags">
+            <span class="tag">拖曳定位</span>
+            <span class="tag">逐頁預覽</span>
+            <span class="tag">批次</span>
+            <span class="tag">資產管理</span>
+          </div>
+        </div>
+        <div class="ss-img">
+          <img src="screenshots/stamp.png" alt="用印與簽名 — 拖曳定位印章 + 即時預覽" loading="lazy">
+        </div>
+      </figure>
+
+      <figure class="ss-row">
+        <div class="ss-text">
+          <div class="ss-num">03</div>
+          <h3>浮水印</h3>
+          <p>圖片或文字浮水印。透明度、角度、尺寸都可調，可平鋪填滿或定位到指定位置。直接寫進頁面 content stream，下游收到 PDF 也無法簡單移除。</p>
+          <div class="ss-tags">
+            <span class="tag">圖片浮水印</span>
+            <span class="tag">文字浮水印</span>
+            <span class="tag">平鋪</span>
+            <span class="tag">透明度</span>
+          </div>
+        </div>
+        <div class="ss-img">
+          <img src="screenshots/watermark.png" alt="浮水印 — 透明度、角度、平鋪" loading="lazy">
+        </div>
+      </figure>
+
+      <figure class="ss-row reverse">
+        <div class="ss-text">
+          <div class="ss-num">04</div>
+          <h3>文件去識別化</h3>
+          <p>自動偵測身分證 / 手機 / Email / 統編 / 信用卡 / 銀行帳號 / 公司名稱 / 人名等個資。支援兩種處理：<b>編修 (Redaction)</b> — 真正從 PDF 內容流移除，不可還原；<b>資料遮罩 (Masking)</b> — 保留格式但內容遮蔽，方便對外。</p>
+          <div class="ss-tags">
+            <span class="tag tag-danger">個資法</span>
+            <span class="tag">Redaction</span>
+            <span class="tag">Masking</span>
+            <span class="tag">8+ 類別</span>
+          </div>
+        </div>
+        <div class="ss-img">
+          <img src="screenshots/deident-1.png" alt="文件去識別化 — 偵測 8 類敏感資料" loading="lazy">
+        </div>
+      </figure>
+
+      <figure class="ss-row">
+        <div class="ss-text">
+          <div class="ss-num">05</div>
+          <h3>編修結果預覽</h3>
+          <p>逐筆勾選保留 / 去除，預覽編修後效果。輸出原始 PDF（不可還原版）或遮罩版（保留版面）。處理過程不離開伺服器。</p>
+          <div class="ss-tags">
+            <span class="tag">逐筆控制</span>
+            <span class="tag">預覽</span>
+            <span class="tag">不離本機</span>
+          </div>
+        </div>
+        <div class="ss-img">
+          <img src="screenshots/deident-2.png" alt="文件去識別化 — 處理結果預覽" loading="lazy">
+        </div>
+      </figure>
+
+      <figure class="ss-row reverse">
+        <div class="ss-text">
+          <div class="ss-num">06</div>
+          <h3>PDF 編輯器</h3>
+          <p>受 Scribus 啟發的 frame-based 編輯器：原 PDF 當背景，使用者疊加文字 / 圖片 / 形狀 / 白底遮罩 / 標註，或<b>直接刪除原 PDF 上的文字與圖片</b>。內建字型管理（標準 14 + 思源繁中 + 系統字型 + 自訂上傳）。</p>
+          <div class="ss-tags">
+            <span class="tag">疊加</span>
+            <span class="tag">刪除原內容</span>
+            <span class="tag">字型管理</span>
+          </div>
+        </div>
+        <div class="ss-img">
+          <img src="screenshots/pdf-editor.png" alt="PDF 編輯器 — 疊加 / 編輯 / 字型" loading="lazy">
+        </div>
+      </figure>
+
+      <figure class="ss-row">
+        <div class="ss-text">
+          <div class="ss-num">07</div>
+          <h3>文書轉圖片</h3>
+          <p>把 PDF 或 Office 文件每頁轉成 PNG 圖片。<b>5 段 DPI 可選</b>（100 草稿 → 400 印刷），上傳階段顯示真實 byte 進度，轉完逐頁顯示尺寸與檔案大小，下載 ZIP 預估總容量一眼明瞭。多頁自動打包。</p>
+          <div class="ss-tags">
+            <span class="tag">5 段 DPI</span>
+            <span class="tag">真實 % 進度</span>
+            <span class="tag">逐頁大小</span>
+            <span class="tag">ZIP 打包</span>
+          </div>
+        </div>
+        <div class="ss-img">
+          <img src="screenshots/pdf-to-image.png" alt="文書轉圖片 — DPI 選擇與多頁縮圖牆" loading="lazy">
+        </div>
+      </figure>
+
+      <figure class="ss-row reverse">
+        <div class="ss-text">
+          <div class="ss-num">08</div>
+          <h3>多領域帳號並存</h3>
+          <p>同名帳號可在不同認證來源並存 — 例如 <code>jason@local</code>（救援用）+ <code>jason@ldap</code>（日常登入），各自獨立的角色與權限。<b>來源 badge 顏色區分</b>（local 灰、ldap 藍、ad 紫），管理員一眼分辨。表格欄位可排序，搜尋、來源篩選一應俱全。</p>
+          <div class="ss-tags">
+            <span class="tag">同名分屬不同領域</span>
+            <span class="tag">來源 badge</span>
+            <span class="tag">排序 / 篩選</span>
+          </div>
+        </div>
+        <div class="ss-img">
+          <img src="screenshots/users-multi-realm.png" alt="使用者管理 — 同名 jason 在 local + ldap 兩個領域並存" loading="lazy">
+        </div>
+      </figure>
+
+      <figure class="ss-row">
+        <div class="ss-text">
+          <div class="ss-num">09</div>
+          <h3>權限矩陣 (RBAC)</h3>
+          <p>左側 subject 列表（搜尋 + 全部 / 使用者 / 群組 tab），右側即時編輯角色與工具權限。6 個內建角色（管理員 / 一般使用者 / 文管 / 財務 / 業務 / 法務資安）+ 自訂角色，支援指派到使用者 / 群組 / OU。</p>
+          <div class="ss-tags">
+            <span class="tag">RBAC</span>
+            <span class="tag">6 內建角色</span>
+            <span class="tag">使用者 / 群組 / OU</span>
+          </div>
+        </div>
+        <div class="ss-img">
+          <img src="screenshots/premissions.png" alt="權限矩陣 — RBAC 角色與工具權限" loading="lazy">
+        </div>
+      </figure>
+
+      <figure class="ss-row reverse">
+        <div class="ss-text">
+          <div class="ss-num">10</div>
+          <h3>字型管理</h3>
+          <p>三層字型來源一站管理：<b>標準 14 字型</b>（PDF 通用相容）+ <b>內建 CJK 字型</b>（思源黑體 / 宋體繁中）+ <b>系統字型</b>（runtime 掃描）+ <b>自訂上傳</b>（公司專用 .ttf / .otf）。預設字型可分別指定給 PDF 編輯器 / 表單填寫 / 浮水印各工具使用。</p>
+          <div class="ss-tags">
+            <span class="tag">標準 14</span>
+            <span class="tag">思源繁中</span>
+            <span class="tag">系統字型掃描</span>
+            <span class="tag">自訂上傳</span>
+          </div>
+        </div>
+        <div class="ss-img">
+          <img src="screenshots/fonts.png" alt="字型管理 — 標準 / 內建 / 系統 / 自訂上傳" loading="lazy">
+        </div>
+      </figure>
+
+    </div>
+  </div>
+</section>
+
+<!-- ======== Enterprise features ======== -->
+<section id="enterprise" class="section section-light">
+  <div class="container">
+    <div class="section-eyebrow">企業級功能</div>
+    <h2 class="section-title">不只是工具集，更是可控管的平台</h2>
+    <p class="section-lead">啟用認證後，全套企業環境必備能力一次到位。</p>
+
+    <div class="ent-grid">
+      <div class="ent-card">
+        <div class="ent-num">A</div>
+        <h3>多領域認證</h3>
+        <p>同時支援 <b>本機帳號</b> / <b>LDAP</b> / <b>Active Directory</b>。同名帳號可分屬不同領域並存 (<code>jason@local</code> + <code>jason@ldap</code>)，登入時於下拉選擇來源。LDAP 設定有「測試伺服器連線」+「測試帳號登入」按鈕，一鍵驗證設定是否正確。</p>
+      </div>
+
+      <div class="ent-card">
+        <div class="ent-num">B</div>
+        <h3>角色與權限</h3>
+        <p>6 個內建角色：<b>管理員</b>、<b>一般使用者</b>、<b>文管</b>、<b>財務</b>、<b>業務</b>、<b>法務資安</b>。可自訂新角色，指派工具使用權限到使用者 / 群組 / OU。in-memory cache 確保權限查詢不影響效能。</p>
+      </div>
+
+      <div class="ent-card">
+        <div class="ent-num">C</div>
+        <h3>稽核記錄</h3>
+        <p>登入 / 登出 / 失敗鎖定 / 權限變更 / 設定變更 / <b>工具呼叫含上傳檔名</b>，全部記下。async 寫入 SQLite (WAL) 不影響服務效能。可篩選 / 匯出 CSV，預設保留 90 天自動清理。</p>
+      </div>
+
+      <div class="ent-card">
+        <div class="ent-num">D</div>
+        <h3>Log 轉發</h3>
+        <p>支援三種格式：<b>syslog</b> (RFC 5424 UDP/TCP)、<b>CEF</b> (ArcSight)、<b>GELF</b> (Graylog)。多目的地並行，失敗 retry 3 次後降級為本地稽核事件。可接 Splunk / Graylog / ArcSight / SIEM 系統。</p>
+      </div>
+
+      <div class="ent-card">
+        <div class="ent-num">E</div>
+        <h3>上傳檔案記錄</h3>
+        <p>獨立的「上傳檔案記錄」設定頁，列出所有透過工具上傳的檔案 — 誰、什麼時候、用哪個工具、上傳什麼檔名、多大、HTTP 狀態。完整可追溯。</p>
+      </div>
+
+      <div class="ent-card">
+        <div class="ent-num">F</div>
+        <h3>檔案保留 / 清理</h3>
+        <p>表單填寫 / 用印簽名 / 浮水印歷史 / 暫存上傳 / Job 結果 / 稽核 各類獨立保留天數設定，排程清理（啟動 + 每 6 小時）。可設「永久保留」(-1)。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== Privacy ======== -->
+<section class="section section-privacy">
+  <div class="container privacy-inner">
+    <div class="privacy-icon">
+      <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+    </div>
+    <h2 class="section-title">不上雲，資料留在自己內網</h2>
+    <p class="privacy-lead">
+      所有檔案處理只發生在你的伺服器上。<br>
+      可在 Linux 架站給內網多人使用，或單機本地用，<b>不上傳任何雲端服務</b>。
+    </p>
+    <div class="privacy-points">
+      <div class="privacy-point">
+        <strong>不上雲</strong>
+        <span>檔案永遠不離開你的伺服器，沒有第三方 API、沒有外部分析、沒有 telemetry</span>
+      </div>
+      <div class="privacy-point">
+        <strong>資料目錄獨立</strong>
+        <span>所有資料在系統 <code>data/</code> 區，不跟使用者個人檔案混在一起，也不會 roam (Windows)</span>
+      </div>
+      <div class="privacy-point">
+        <strong>稽核可轉發</strong>
+        <span>啟用認證後敏感操作全記下，可即時送到內部 SIEM 做合規稽核</span>
+      </div>
+      <div class="privacy-point">
+        <strong>LLM 整合 (持續擴充中)</strong>
+        <span>段落重排、表單欄位輔助辨識等可選擇接入 LLM (Ollama / 本機模型)；預設關閉，相關功能持續擴充中</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== Install ======== -->
+<section id="install" class="section section-light">
+  <div class="container">
+    <div class="section-eyebrow">部署</div>
+    <h2 class="section-title">三平台一行指令安裝</h2>
+    <p class="section-lead">需系統管理員權限。安裝過程會自動偵測 / 補裝 OxOffice 或 LibreOffice，下載獨立 Python 環境，註冊系統服務，開機自動啟動。</p>
+
+    <div class="mode-band">
+      <div class="mode-band-card">
+        <div class="mode-band-h">🏠 單機模式（個人用）</div>
+        <div class="mode-band-d">安裝完直接用 — <b>預設不啟用認證</b>，所有人開瀏覽器到 <code>127.0.0.1:8765</code> 都能用。適合 1 人桌面工作流。</div>
+      </div>
+      <div class="mode-band-card">
+        <div class="mode-band-h">🏢 伺服器模式（多人 / 企業）</div>
+        <div class="mode-band-d">部署到 Linux server，到「認證設定」啟用<b>本機帳號 / LDAP / AD</b>，搭配角色與權限矩陣 + 稽核 + Log 轉發。內網多人共用，可控管。</div>
+      </div>
+    </div>
+
+    <div class="install-grid">
+      <div class="install-card">
+        <div class="install-os">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.6 0 12 0zm0 22c-5.5 0-10-4.5-10-10S6.5 2 12 2s10 4.5 10 10-4.5 10-10 10z"/></svg>
+          Linux
+          <span class="install-os-sub">Ubuntu / Debian / Fedora 等</span>
+        </div>
+        <div class="install-cmd-wrap">
+          <pre><code id="cmd-linux">curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.sh | sudo bash</code></pre>
+          <button type="button" class="copy-btn" data-target="cmd-linux" aria-label="複製指令">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span class="copy-label">複製</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="install-card">
+        <div class="install-os">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+          macOS
+          <span class="install-os-sub">12+（Apple Silicon）</span>
+        </div>
+        <div class="install-cmd-wrap">
+          <pre><code id="cmd-mac">curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.sh | sudo bash</code></pre>
+          <button type="button" class="copy-btn" data-target="cmd-mac" aria-label="複製指令">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span class="copy-label">複製</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="install-card install-card-warn">
+        <div class="install-os">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M0 3.45L9.75 2.1v9.45H0M10.95 1.95L24 0v11.55H10.95M0 12.6h9.75v9.45L0 20.7M10.95 12.6H24V24l-12.95-1.85"/></svg>
+          Windows
+          <span class="install-warn-badge">⚠ 尚未完整測試</span>
+        </div>
+        <div class="install-cmd-wrap">
+          <pre><code id="cmd-win">iwr -useb https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.ps1 | iex</code></pre>
+          <button type="button" class="copy-btn" data-target="cmd-win" aria-label="複製指令">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span class="copy-label">複製</span>
+          </button>
+        </div>
+        <div class="install-warn-note">10 / 11（以系統管理員身分執行 PowerShell）<br>Windows 平台目前驗證進度有限，遇到問題歡迎於 Issues 回報。</div>
+      </div>
+    </div>
+
+    <p class="install-after">安裝完成後，瀏覽器開 <code>http://127.0.0.1:8765/</code> 即可使用。</p>
+
+    <div class="install-meta">
+      <div>
+        <strong>系統需求</strong>
+        最低 Ubuntu 22.04 / macOS 12 / Windows 10 21H2，2 GB RAM，2 GB 硬碟。
+        <b>不需預裝 Python</b>（uv 自動下載獨立 3.12）。
+      </div>
+      <div>
+        <strong>升級 / 解除安裝</strong>
+        <code>sudo jtdt update</code>（自動備份 + 健康檢查）<br>
+        <code>sudo jtdt uninstall</code>（資料保留，加 <code>--purge</code> 一併刪）
+      </div>
+      <div>
+        <strong>反向代理</strong>
+        nginx / Caddy 範例見 GitHub README，三個常見地雷已標註。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== Footer ======== -->
+<footer class="footer">
+  <div class="container footer-inner">
+    <div class="footer-col">
+      <div class="footer-brand">Jason Tools 文件工具箱</div>
+      <p class="footer-tag">PDF / Office 整合式文件處理平台 — 不上雲，資料留在自己內網。</p>
+    </div>
+    <div class="footer-col">
+      <div class="footer-h">連結</div>
+      <a href="https://github.com/jasoncheng7115/jt-doc-tools" target="_blank" rel="noopener">GitHub Repo</a>
+      <a href="https://github.com/jasoncheng7115/jt-doc-tools/blob/main/github/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+      <a href="https://github.com/jasoncheng7115/jt-doc-tools/issues" target="_blank" rel="noopener">回報問題</a>
+    </div>
+    <div class="footer-col">
+      <div class="footer-h">作者</div>
+      <p>
+        <strong>Jason Cheng</strong> (Jason Tools)<br>
+        <a href="mailto:jason@jason.tools">jason@jason.tools</a>
+      </p>
+    </div>
+    <div class="footer-col">
+      <div class="footer-h">授權</div>
+      <p>Apache License 2.0</p>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="container">
+      © 2026 Jason Tools · Built with HTML & CSS, hosted on GitHub Pages
+    </div>
+  </div>
+</footer>
+
+<script>
+// Copy install command on click; brief "已複製" feedback.
+document.querySelectorAll('.copy-btn').forEach(function (btn) {
+  btn.addEventListener('click', async function () {
+    var target = document.getElementById(btn.dataset.target);
+    if (!target) return;
+    var text = target.textContent.trim();
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (e) {
+      // Fallback: legacy execCommand
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (_) {}
+      ta.remove();
+    }
+    var label = btn.querySelector('.copy-label');
+    var orig = label.textContent;
+    label.textContent = '已複製 ✓';
+    btn.classList.add('copied');
+    setTimeout(function () {
+      label.textContent = orig;
+      btn.classList.remove('copied');
+    }, 1500);
+  });
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,776 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from fastapi import FastAPI, File, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from jinja2 import ChoiceLoader, FileSystemLoader
+
+from .config import settings
+from .core.asset_manager import asset_manager
+from .core.job_manager import job_manager
+from .logging_setup import get_logger, setup_logging
+from .tool_registry import discover_tools, mount_tools
+
+VERSION = "1.1.47"
+
+setup_logging("DEBUG" if settings.debug else "INFO")
+logger = get_logger(__name__)
+
+app = FastAPI(title=settings.app_name, version=VERSION)
+
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR.parent / "static"
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+tools = discover_tools()
+
+# Build a template loader that can resolve:
+# - Platform templates (base.html, components/*)
+# - Admin templates
+# - Each tool's own templates/ folder
+loaders = [
+    FileSystemLoader(str(BASE_DIR / "web" / "templates")),
+    FileSystemLoader(str(BASE_DIR / "admin" / "templates")),
+]
+for t in tools:
+    if t.templates_dir:
+        loaders.append(FileSystemLoader(str(t.templates_dir)))
+
+templates = Jinja2Templates(directory=str(BASE_DIR / "web" / "templates"))
+templates.env.loader = ChoiceLoader(loaders)
+templates.env.globals["app_name"] = settings.app_name
+templates.env.globals["version"] = VERSION
+
+
+def _tpl_current_user(request) -> dict | None:
+    """Jinja global: safely return the logged-in user from request.state.
+    Returns None when auth is OFF (so templates can hide login UI)."""
+    return getattr(getattr(request, "state", None), "user", None)
+
+
+templates.env.globals["current_user"] = _tpl_current_user
+# Per-tool English keyword aliases — typed in the sidebar search to find a
+# tool by its English term (e.g. "stamp" → PDF 蓋章).
+_TOOL_ALIASES = {
+    "pdf-fill":           "form fill auto autofill 自動填寫 表單 廠商 申請書 vendor application 填寫",
+    "pdf-stamp":          "stamp seal chop sign signature logo 印章 蓋章 簽名 簽章 Logo",
+    "pdf-watermark":      "watermark mark draft confidential overlay tile 浮水印 機密 標記 防偽",
+    "pdf-merge":          "merge combine join concat append 合併 串接 結合",
+    "pdf-split":          "split extract divide separate cut 分拆 切割 拆分 分割",
+    "pdf-rotate":         "rotate orient orientation flip turn 轉向 旋轉 翻轉",
+    "pdf-pages":          "pages reorder rearrange remove delete drop manage 頁面 排序 重排 整理 刪除",
+    "pdf-pageno":         "page number numbering numbers footer header 頁碼 頁數 編號 注頁碼",
+    "office-to-pdf":      "convert convert-to-pdf office word excel powerpoint docx xlsx pptx odt ods odp 轉檔 轉成 文書 文件",
+    "pdf-extract-images": "extract images pictures jpg png assets 擷取 提取 圖片 影像 抽圖",
+    "pdf-to-image":       "convert image images png jpg jpeg raster rasterize export office word excel powerpoint docx xlsx pptx odt ods odp 文書轉圖片 轉圖 轉圖片 轉png 轉成圖片 影像 匯出圖片 Word 轉圖 Excel 轉圖 PPT 轉圖",
+    "pdf-editor":         "editor edit annotate annotation whiteout redact text textbox shape pencil draw highlight sticky note scribus 編輯 編輯器 標註 註記 塗黑 遮蓋 手繪 螢光筆 便箋 文字框 修圖",
+    "pdf-extract-text":   "extract text content txt markdown md docx word odt reflow paragraph ocr llm 擷取文字 取出文字 轉文字 轉 word 轉 markdown 段落重排 LLM 重排",
+    "pdf-compress":       "compress compression shrink reduce size optimize optimise slim jpeg dpi downsample ghostscript gs subset font 壓縮 縮小 瘦身 減肥 檔案小 降解析度 去重複 Ghostscript",
+    "doc-deident":        "deident deidentify de-identification redact redaction mask masking anonymize anonymise pii personal data privacy gdpr 個資 個人資料 去識別化 敏感資料 編修 不可逆遮蔽 資料遮罩 遮蔽 塗黑 脫敏 脫敏化 匿名 身分證 手機 Email 統編 信用卡 車牌 地址",
+    "pdf-encrypt":        "encrypt password protect lock aes permission restrict owner user 加密 密碼 保護 權限 禁列印 禁複製 禁編輯 AES",
+    "pdf-decrypt":        "decrypt unlock remove password 解鎖 解密 解除 密碼 移除密碼",
+    "pdf-metadata":       "metadata xmp author title strip clean remove producer creator 修訂歷史 去識別 metadata 清除 作者 標題 標籤 XMP",
+    "pdf-hidden-scan":    "hidden content javascript js embedded launch uri whitetext offpage scan remove 隱藏 掃描 JavaScript 嵌入檔 白字 頁面外 外部連結 啟動 風險 資安",
+    "pdf-attachments":    "attachment attachments embedded file extract pdf paperclip 附件 嵌入檔 萃取 取出 EmbeddedFiles",
+    "pdf-diff":           "diff compare comparison difference changes contract audit review 差異 比對 比較 合約審閱 變更 改版",
+    "aes-zip":            "zip aes encrypt archive password email attachment winzip 7zip keka archive utility 加密 壓縮檔 密碼保護 AES 寄信 附件 打包",
+    "pdf-nup":            "nup n-up multiple pages per sheet imposition 2up 4up 6up 8up tile tiled layout grid imposition 多頁合併 多合一 拼貼 省紙 N合一 2合1 4合1 講義 草稿 版面",
+}
+# Per-tool color class. Both home page and sidebar use the same palette
+# classes, so a given tool always shows the same colored tile regardless
+# of ordering. Palette has 14 slots (see .tile-color-N in platform.css);
+# we assign each tool its hashed preferred index, then walk forward to
+# resolve collisions so every tool ends up with a distinct color as long
+# as the tool count ≤ palette size.
+_TOOL_COLORS = 14
+
+def _preferred_color_index(tool_id: str) -> int:
+    h = 0
+    for c in tool_id:
+        h = (h * 131 + ord(c)) & 0xFFFFFFFF
+    return h % _TOOL_COLORS
+
+def _assign_unique_colors(ids: list[str]) -> dict[str, int]:
+    taken: set[int] = set()
+    out: dict[str, int] = {}
+    # Sort so assignment is deterministic across restarts and not
+    # dependent on tool-registry iteration order.
+    for tid in sorted(ids):
+        idx = _preferred_color_index(tid)
+        for _ in range(_TOOL_COLORS):
+            if idx not in taken:
+                break
+            idx = (idx + 1) % _TOOL_COLORS
+        taken.add(idx)
+        out[tid] = idx
+    return out
+
+_tool_color_map = _assign_unique_colors([t.metadata.id for t in tools])
+
+_nav_tool_items = [
+    {
+        "id": t.metadata.id,
+        "name": t.metadata.name,
+        "description": t.metadata.description,
+        "icon": t.metadata.icon,
+        "category": t.metadata.category or "其他",
+        "url": f"/tools/{t.metadata.id}/",
+        "keywords": _TOOL_ALIASES.get(t.metadata.id, ""),
+        "color": _tool_color_map.get(t.metadata.id, 0),
+    }
+    for t in tools
+]
+templates.env.globals["nav_tools"] = _nav_tool_items
+# Group sidebar tools by category, preserving first-seen order. Each entry:
+# {title: str, items: [...]}. Used by base.html to render one collapsible
+# group per category instead of a single big "工具" list.
+_grouped: dict[str, list] = {}
+for _item in _nav_tool_items:
+    _grouped.setdefault(_item["category"], []).append(_item)
+templates.env.globals["nav_tool_groups"] = [
+    # Use ``tools`` (not ``items``) — Jinja2 attribute access on a dict
+    # resolves ``g.items`` to the built-in dict.items method, breaking
+    # ``g.items|length``.
+    {"title": title, "tools": tools_in} for title, tools_in in _grouped.items()
+]
+templates.env.globals["nav_settings"] = [
+    {"icon": "image", "name": "資產管理", "description": "上傳/編輯印章、簽名、Logo",
+     "url": "/admin/assets",
+     "keywords": "asset assets stamp signature logo image upload 圖片 印章 簽名 浮水印"},
+    {"icon": "building", "name": "公司資料", "description": "管理多公司基本資料",
+     "url": "/admin/profile",
+     "keywords": "company profile vendor info 廠商 公司"},
+    {"icon": "book", "name": "同義詞", "description": "PDF 標籤對應字典",
+     "url": "/admin/synonyms",
+     "keywords": "synonym synonyms alias dictionary label mapping 字典 同義 詞"},
+    {"icon": "page", "name": "表單範本", "description": "已記住的表單版型",
+     "url": "/admin/templates",
+     "keywords": "template form layout 表單 範本 樣板"},
+    {"icon": "gear", "name": "轉檔設定", "description": "LibreOffice / OxOffice 路徑與順序",
+     "url": "/admin/conversion",
+     "keywords": "conversion office libreoffice oxoffice path 轉檔 路徑"},
+    {"icon": "gear", "name": "LLM 設定", "description": "視覺 LLM 校驗（附加功能，預設關閉）",
+     "url": "/admin/llm-settings",
+     "keywords": "llm ai ollama qwen vision review 校驗 模型 大語言模型"},
+    {"icon": "gear", "name": "API Token", "description": "對外呼叫 /api/* 的認證 token",
+     "url": "/admin/api-tokens",
+     "keywords": "api token bearer auth authentication 認證 令牌"},
+    {"icon": "text", "name": "字型管理", "description": "PDF 編輯器可用字型（系統 + 開源 CJK + 內建）",
+     "url": "/admin/fonts",
+     "keywords": "font fonts cjk chinese 字型 字體 中文字型 台灣字型 noto"},
+    # ---- v1.1.0 auth / perm / audit pages ----
+    # 認證設定 always visible — that's where admin enables auth in the first place.
+    {"icon": "lock", "name": "認證設定", "description": "啟用本機 / LDAP / AD 認證",
+     "url": "/admin/auth-settings",
+     "keywords": "auth authentication ldap ad active directory login 認證 登入"},
+    # `requires_auth=True` items are filtered out from the sidebar nav when
+    # auth is off (see _nav_settings_visible). The endpoints still exist;
+    # admin can hit them directly via URL — but in the off state they're
+    # functionally meaningless (no users / sessions to manage).
+    {"icon": "id-card", "name": "使用者管理", "description": "建立 / 編輯 / 停用使用者",
+     "url": "/admin/users", "requires_auth": True,
+     "keywords": "user users account 使用者 帳號 帳戶"},
+    {"icon": "building", "name": "群組管理", "description": "本機群組與成員",
+     "url": "/admin/groups", "requires_auth": True,
+     "keywords": "group groups team 群組 團隊"},
+    {"icon": "shield", "name": "角色管理", "description": "工具權限角色定義",
+     "url": "/admin/roles", "requires_auth": True,
+     "keywords": "role roles rbac permission 角色 權限"},
+    {"icon": "gear", "name": "權限矩陣", "description": "使用者 / 群組 × 工具 對應",
+     "url": "/admin/permissions", "requires_auth": True,
+     "keywords": "permission permissions matrix grant 權限 矩陣"},
+    {"icon": "eye", "name": "稽核記錄", "description": "登入 / 操作 / 設定變更追蹤",
+     "url": "/admin/audit", "requires_auth": True,
+     "keywords": "audit log activity history 稽核 記錄 記錄 操作 軌跡"},
+    {"icon": "upload", "name": "上傳檔案記錄", "description": "誰上傳了什麼檔案到哪個工具",
+     "url": "/admin/uploads", "requires_auth": True,
+     "keywords": "uploads files history audit 上傳 檔案 記錄 歷史"},
+    {"icon": "gear", "name": "Log 轉發", "description": "將稽核轉發到外部 syslog / CEF / GELF",
+     "url": "/admin/log-forward", "requires_auth": True,
+     "keywords": "syslog cef gelf forward log siem splunk graylog 轉發"},
+    {"icon": "archive", "name": "檔案保留 / 清理", "description": "歷史檔案保留天數與自動清理",
+     "url": "/admin/retention",
+     "keywords": "retention cleanup history sweep gc gdpr 保留 清理 歷史"},
+    # History pages are admin-only and only meaningful when auth is on
+    # (per spec: when auth off the pages don't appear at all).
+    {"icon": "page", "name": "表單填寫歷史", "description": "已填表的歷史記錄",
+     "url": "/admin/history/fill", "requires_auth": True,
+     "keywords": "history fill 歷史 表單"},
+    {"icon": "page", "name": "用印簽名歷史", "description": "蓋章 / 簽名 的歷史記錄",
+     "url": "/admin/history/stamp", "requires_auth": True,
+     "keywords": "history stamp 歷史 用印 簽名"},
+    {"icon": "page", "name": "浮水印歷史", "description": "浮水印的歷史記錄",
+     "url": "/admin/history/watermark", "requires_auth": True,
+     "keywords": "history watermark 歷史 浮水印"},
+]
+
+
+# Stash the master list so the filter callable can read it without
+# self-referencing the override below.
+_NAV_SETTINGS_ALL = list(templates.env.globals["nav_settings"])
+_NAV_TOOL_GROUPS_ALL = list(templates.env.globals["nav_tool_groups"])
+
+
+def _nav_settings_visible(request=None):
+    """Filter nav_settings based on auth state and viewer's role.
+
+    - Auth OFF (單機模式): show only items without requires_auth (the
+      multi-user pages are meaningless without accounts).
+    - Auth ON, viewer is non-admin: hide everything (all admin pages
+      enforce admin role on the backend; surfacing them in the nav
+      just produces 403s and confusion).
+    - Auth ON, viewer is admin: show everything.
+    """
+    from .core import auth_settings as _as, permissions as _perm
+    enabled = _as.is_enabled()
+    if not enabled:
+        return [item for item in _NAV_SETTINGS_ALL
+                if not item.get("requires_auth")]
+    user = getattr(getattr(request, "state", None), "user", None) if request else None
+    if not user or not _perm.is_admin(user.get("user_id", 0)):
+        return []
+    return list(_NAV_SETTINGS_ALL)
+
+
+def _nav_tool_groups_visible(request=None):
+    """Filter sidebar tool groups by the viewer's permissions.
+
+    Auth OFF → everything. Auth ON → only tools the user is allowed to
+    use (matches the backend gate so users don't see tiles that 403)."""
+    from .core import auth_settings as _as, permissions as _perm
+    if not _as.is_enabled():
+        return _NAV_TOOL_GROUPS_ALL
+    user = getattr(getattr(request, "state", None), "user", None) if request else None
+    if not user:
+        return []
+    et = _perm.effective_tools(user.get("user_id", 0))
+    if et == "ALL":
+        return _NAV_TOOL_GROUPS_ALL
+    out = []
+    for g in _NAV_TOOL_GROUPS_ALL:
+        kept = [t for t in g["tools"] if t["id"] in et]
+        if kept:
+            out.append({"title": g["title"], "tools": kept})
+    return out
+
+
+# Override the static globals with callables that re-evaluate per request.
+templates.env.globals["nav_settings"] = _nav_settings_visible
+templates.env.globals["nav_tool_groups"] = _nav_tool_groups_visible
+
+# Make templates, asset manager, job manager available to routers via app state
+app.state.templates = templates
+app.state.asset_manager = asset_manager
+app.state.job_manager = job_manager
+
+# Auth routes (login / logout / setup-admin) — always public
+from .web.auth_routes import build_router as _build_auth_router  # noqa: E402
+
+app.include_router(_build_auth_router(templates))
+
+# Platform routes
+from .web.router import build_router as _build_web_router  # noqa: E402
+
+app.include_router(_build_web_router(templates, tools, settings.app_name, VERSION))
+
+# Admin routes
+from .admin.router import build_router as _build_admin_router  # noqa: E402
+
+_admin = _build_admin_router(templates)
+
+# Auth-related admin routes (auth-settings, users, groups, roles, permissions)
+from .admin.auth_router import build_auth_router as _build_admin_auth_router  # noqa: E402
+
+_admin.include_router(_build_admin_auth_router(templates))
+app.include_router(_admin, prefix="/admin", tags=["admin"])
+
+# Tool routes
+mount_tools(app, tools)
+
+
+# ---- Auth gate middleware ----
+# When auth backend != 'off', every non-public request must carry a valid
+# session cookie. Public paths (always reachable):
+#   - /login, /logout, /setup-admin (auth UI itself)
+#   - /static/*, /favicon.ico, /healthz (assets + health probe)
+#   - /api/* (handled by the token gate below — has its own auth model)
+# Unauthenticated browser request to a UI page → 302 /login?next=<path>.
+# Unauthenticated direct hit to a JSON endpoint → 401 JSON (don't redirect
+# an XHR to a login HTML page; that would just look like garbage).
+from fastapi import Request  # noqa: E402
+from fastapi.responses import JSONResponse as _JSONResponse  # noqa: E402
+from urllib.parse import quote as _qstr  # noqa: E402
+
+_PUBLIC_PREFIXES = ("/static/", "/login", "/logout", "/setup-admin",
+                    "/healthz", "/favicon", "/api/")
+_PUBLIC_EXACT = {"/login", "/logout", "/setup-admin", "/healthz", "/favicon.ico"}
+
+
+def _looks_like_xhr(request: Request) -> bool:
+    """Heuristic: XHR / fetch from a script vs. a top-level browser nav."""
+    accept = (request.headers.get("Accept") or "").lower()
+    xrw = (request.headers.get("X-Requested-With") or "").lower()
+    if "application/json" in accept and "text/html" not in accept:
+        return True
+    if xrw == "xmlhttprequest":
+        return True
+    return False
+
+
+@app.middleware("http")
+async def _capture_upload_filename(request: Request, call_next):
+    """Sniff multipart bodies for `filename="..."` so audit / log forwarding
+    can record what file was uploaded — without each tool having to add
+    `request.state.upload_filename = file.filename` manually.
+
+    Trade-off: we read the full body into memory (then replay it via
+    `_receive` for FastAPI's normal parsing). The handler was going to do
+    `await file.read()` anyway so net memory cost is just the raw bytes
+    held twice for ~one tick. Skip if content-length > 500 MB to avoid
+    surprising RAM growth on absurd uploads."""
+    ctype = (request.headers.get("content-type") or "").lower()
+    if (request.method in ("POST", "PUT")
+            and ctype.startswith("multipart/form-data")
+            and request.url.path.startswith("/tools/")):
+        clen_str = request.headers.get("content-length") or "0"
+        try:
+            clen = int(clen_str)
+        except ValueError:
+            clen = 0
+        if 0 < clen < 500 * 1024 * 1024:
+            body = await request.body()
+            # Scan first 16 KB for filename(s); plenty of room for the
+            # multipart preamble without choking on huge bodies.
+            import re as _re
+            names = _re.findall(rb'filename\*?=(?:UTF-8\'\')?"?([^";\r\n]*)"?', body[:16384])
+            if names:
+                try:
+                    decoded = [n.decode("utf-8", errors="replace") for n in names if n]
+                    if decoded:
+                        request.state.upload_filename = decoded[0]
+                        if len(decoded) > 1:
+                            request.state.upload_filenames = decoded
+                            request.state.upload_count = len(decoded)
+                except Exception:
+                    pass
+
+            async def receive():
+                return {"type": "http.request", "body": body, "more_body": False}
+
+            # Replay the body for the rest of the middleware chain + handler.
+            request._receive = receive
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def _auth_gate(request: Request, call_next):
+    from .core import auth_settings, sessions, permissions
+    if not auth_settings.is_enabled():
+        return await call_next(request)
+    path = request.url.path
+    if path in _PUBLIC_EXACT or any(path.startswith(p) for p in _PUBLIC_PREFIXES):
+        return await call_next(request)
+    # Need a valid session
+    token = request.cookies.get(sessions.COOKIE_NAME, "")
+    user = sessions.lookup(token) if token else None
+    if not user:
+        if _looks_like_xhr(request):
+            return _JSONResponse({"error": "unauthorized",
+                                  "detail": "請先登入"}, status_code=401)
+        # Preserve where the user was trying to go.
+        next_q = "?next=" + _qstr(path + ("?" + request.url.query if request.url.query else ""))
+        return RedirectResponse("/login" + next_q, status_code=302)
+    # Stash user on request.state for downstream handlers (audit context, etc).
+    request.state.user = user
+
+    # Per-tool permission gating: any path under /tools/<tool_id>/... requires
+    # the user to have that tool granted (via roles or direct grant). admin
+    # role short-circuits to ALL.
+    tool_id = ""
+    if path.startswith("/tools/"):
+        rest = path[len("/tools/"):]
+        tool_id = rest.split("/", 1)[0] if rest else ""
+        if tool_id and not permissions.user_can_use_tool(user["user_id"], tool_id):
+            if _looks_like_xhr(request):
+                return _JSONResponse({"error": "forbidden",
+                                      "detail": "您沒有使用此工具的權限"},
+                                     status_code=403)
+            return _JSONResponse(
+                {"error": "forbidden",
+                 "detail": f"您沒有使用「{tool_id}」的權限，請聯絡管理員"},
+                status_code=403,
+            )
+
+    # Audit POST/PUT/DELETE actions on tools — done AFTER the handler runs
+    # so handlers can stash uploaded filenames on `request.state.upload_*`
+    # for us to pick up. Middleware can't peek into a multipart body without
+    # consuming/replaying the stream, so this opt-in handler-side annotation
+    # is the simplest reliable way to get the actual filename into audit.
+    response = await call_next(request)
+    if tool_id and request.method in ("POST", "PUT", "DELETE"):
+        from .core import audit_db as _ad
+        rest = path[len("/tools/"):]
+        action = rest.split("/", 2)[1] if "/" in rest else "(root)"
+        clen = request.headers.get("content-length") or "0"
+        ctype = (request.headers.get("content-type") or "").split(";", 1)[0]
+        details = {
+            "method": request.method,
+            "action": action,                    # extract / merge / save / …
+            "path": path,
+            "size_bytes": int(clen) if clen.isdigit() else 0,
+            "content_type": ctype,
+            "status": getattr(response, "status_code", 0),
+        }
+        # Optional handler-supplied details (filename, file count, etc.).
+        # Set in tool routes via:  request.state.upload_filename = file.filename
+        for k in ("upload_filename", "upload_filenames", "upload_count"):
+            v = getattr(request.state, k, None)
+            if v is not None:
+                # Trim the audit key prefix for readability in the JSON dump.
+                details[k.replace("upload_", "")] = v
+        _ad.log_event(
+            "tool_invoke",
+            username=user["username"],
+            ip=request.client.host if request.client else "",
+            target=tool_id,
+            details=details,
+        )
+
+    return response
+
+
+# ---- API token enforcement middleware ----
+# Gates /api/* endpoints (and, when enforce is ON, some /tools/*/submit).
+# When `enforce=false` (grace period), this does nothing and web UI works
+# as before; when enforce=true, requests missing / wrong Bearer token → 401.
+
+@app.middleware("http")
+async def _api_token_gate(request: Request, call_next):
+    from .core.api_tokens import api_tokens
+    path = request.url.path
+
+    # Only guard explicit API surfaces; never block UI pages, static files,
+    # or admin (admin is browser-based and has its own access control).
+    is_api = path.startswith("/api/")
+    if not is_api or not api_tokens.is_enforced():
+        return await call_next(request)
+
+    # Accept: Authorization: Bearer <token>  OR  ?token=<token>
+    auth = request.headers.get("Authorization") or ""
+    presented = None
+    if auth.lower().startswith("bearer "):
+        presented = auth.split(None, 1)[1].strip()
+    if not presented:
+        presented = request.query_params.get("token")
+
+    token_row = api_tokens.lookup(presented)
+    if token_row is None:
+        return _JSONResponse(
+            {"error": "unauthorized",
+             "detail": "需要有效的 API token（Authorization: Bearer ...）"},
+            status_code=401,
+        )
+    # When auth is on, attach the token's owning user to request.state.user
+    # so downstream perm checks (if any) are scoped to that user. Tokens
+    # without an owner are treated as having no permission when auth is on
+    # (admin must assign — fail closed).
+    from .core import auth_settings
+    if auth_settings.is_enabled():
+        owner_id = token_row.get("owner_user_id")
+        if not owner_id:
+            return _JSONResponse(
+                {"error": "forbidden",
+                 "detail": "API token 尚未指派持有者；請至 admin → API Token 設定"},
+                status_code=403,
+            )
+        from .core import auth_db
+        urow = auth_db.conn().execute(
+            "SELECT id, username, display_name, source, enabled FROM users WHERE id=?",
+            (owner_id,),
+        ).fetchone()
+        if not urow or not urow["enabled"]:
+            return _JSONResponse(
+                {"error": "forbidden",
+                 "detail": "Token 持有者帳號已停用或不存在"},
+                status_code=403,
+            )
+        request.state.user = {
+            "user_id": urow["id"], "username": urow["username"],
+            "display_name": urow["display_name"] or urow["username"],
+            "source": urow["source"],
+        }
+    return await call_next(request)
+
+
+# ---- Shared API: job status + result download ----
+@app.get("/api/jobs/{job_id}")
+async def api_job_status(job_id: str):
+    job = job_manager.get(job_id)
+    if not job:
+        return JSONResponse({"error": "job not found"}, status_code=404)
+    return job.to_public()
+
+
+@app.post("/api/convert-to-pdf")
+async def api_convert_to_pdf(file: UploadFile = File(...)):
+    """Convert one Office file to PDF, return the PDF bytes inline.
+
+    Used by the PDF-only tools' frontends to offer "auto-convert this Word
+    file to PDF first?" without each tool reimplementing the LibreOffice
+    plumbing.
+    """
+    from .core import office_convert
+    from .core.http_utils import content_disposition
+    from fastapi import File, UploadFile  # noqa: F401  (force import)
+    name = file.filename or "input"
+    out_name = Path(name).stem + ".pdf"
+    if name.lower().endswith(".pdf"):
+        # No-op: pass through.
+        data = await file.read()
+        return Response(content=data, media_type="application/pdf",
+                        headers={"Content-Disposition": content_disposition(out_name, "inline")})
+    if not office_convert.is_office_file(name):
+        return JSONResponse({"error": f"不支援的檔案格式：{name}"}, status_code=400)
+    data = await file.read()
+    if not data:
+        return JSONResponse({"error": "empty file"}, status_code=400)
+    import uuid as _uuid
+    src = settings.temp_dir / f"conv_{_uuid.uuid4().hex}_{Path(name).name}"
+    out = settings.temp_dir / (src.stem + ".pdf")
+    try:
+        src.write_bytes(data)
+        office_convert.convert_to_pdf(src, out)
+        pdf_bytes = out.read_bytes()
+    finally:
+        for fp in (src, out):
+            try: fp.unlink()
+            except OSError: pass
+    return Response(
+        content=pdf_bytes, media_type="application/pdf",
+        headers={"Content-Disposition": content_disposition(out_name, "inline")},
+    )
+
+
+@app.get("/api/jobs/{job_id}/download")
+async def api_job_download(job_id: str):
+    job = job_manager.get(job_id)
+    if not job or not job.result_path or not job.result_path.exists():
+        return JSONResponse({"error": "no result"}, status_code=404)
+    return FileResponse(
+        path=str(job.result_path),
+        filename=job.result_filename or job.result_path.name,
+        media_type="application/octet-stream",
+    )
+
+
+@app.post("/api/llm-review")
+async def api_llm_review(
+    file: UploadFile = File(...),
+    company_id: str = "",
+    max_rounds: int = 0,
+):
+    """Standalone LLM review API: detect+fill the PDF, then run LLM review.
+    Returns the review result + summary of placements. Useful for external
+    integrations / scripted workflows.
+
+    Failure modes (returned in body, HTTP 200 unless input invalid):
+    - LLM disabled                → {"error": "LLM 未啟用"}
+    - LLM connection / model fail → {"error": "...", "review": {...errors...}}
+    """
+    from .core.llm_settings import llm_settings
+    from .core.llm_review import review, filled_from_placements
+    from .core.profile_manager import profile_manager
+    from .tools.pdf_fill import service as fill_service
+    import uuid as _uuid
+
+    if not llm_settings.is_enabled():
+        return JSONResponse({"error": "LLM 未啟用，請至 /admin/llm-settings 啟用"}, status_code=400)
+
+    data = await file.read()
+    if not data:
+        return JSONResponse({"error": "empty file"}, status_code=400)
+
+    name = file.filename or "input.pdf"
+    if not name.lower().endswith(".pdf"):
+        return JSONResponse({"error": "只支援 PDF"}, status_code=400)
+
+    upload_id = _uuid.uuid4().hex
+    src = settings.temp_dir / f"llmrev_{upload_id}.pdf"
+    dst = settings.temp_dir / f"llmrev_{upload_id}_filled.pdf"
+    src.write_bytes(data)
+
+    # The whole fill + review pipeline is blocking (soffice + sync httpx);
+    # run it in a thread so the FastAPI event loop stays responsive for
+    # other users while a long LLM call is in flight.
+    import asyncio as _asyncio
+
+    def _run() -> dict:
+        profile = profile_manager.get(company_id or None)
+        report = fill_service.fill_pdf(src, dst, profile["fields"])
+        filled = filled_from_placements(report.placements, profile.get("labels"))
+        result = review(
+            src, filled, page_index=0,
+            max_rounds=max_rounds or None,
+            profile_keys=list(profile["fields"].keys()),
+        )
+        return {
+            "fill_report": {
+                "detected": report.detected_count,
+                "filled": report.filled_count,
+            },
+            "review": result.to_dict(),
+        }
+
+    try:
+        return await _asyncio.to_thread(_run)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse(
+            {"error": f"{type(e).__name__}: {e}"}, status_code=500)
+    finally:
+        for fp in (src, dst):
+            try: fp.unlink()
+            except OSError: pass
+
+
+@app.get("/api/jobs/{job_id}/download-png")
+async def api_job_download_png(job_id: str):
+    """Render the job's result PDF to PNG(s); zip when multi-page or batch.
+
+    Single-PDF + single-page → PNG. Multi-page PDF → ZIP of PNGs (page_001.png,
+    page_002.png …). If the result was already a ZIP of PDFs, all PDFs are
+    extracted and rendered to PNGs in the same ZIP.
+    """
+    import io
+    import shutil
+    import tempfile
+    import zipfile as _zip
+    import fitz
+
+    job = job_manager.get(job_id)
+    if not job or not job.result_path or not job.result_path.exists():
+        return JSONResponse({"error": "no result"}, status_code=404)
+    src = job.result_path
+    base_name = (job.result_filename or src.name)
+    tmp = Path(tempfile.mkdtemp(prefix="job_png_"))
+
+    pdfs: list[tuple[str, Path]] = []  # (label_stem, pdf_path)
+    if src.suffix.lower() == ".zip":
+        with _zip.ZipFile(src) as zf:
+            for info in zf.infolist():
+                if info.filename.lower().endswith(".pdf"):
+                    out = tmp / Path(info.filename).name
+                    out.write_bytes(zf.read(info))
+                    pdfs.append((Path(info.filename).stem, out))
+    else:
+        pdfs.append((Path(base_name).stem, src))
+
+    pngs: list[tuple[str, bytes]] = []
+    for stem, pdf in pdfs:
+        with fitz.open(str(pdf)) as doc:
+            for i in range(doc.page_count):
+                pix = doc[i].get_pixmap(dpi=150, alpha=False)
+                name = f"{stem}_p{i + 1:03d}.png" if doc.page_count > 1 or len(pdfs) > 1 else f"{stem}.png"
+                pngs.append((name, pix.tobytes("png")))
+
+    try:
+        if len(pngs) == 1:
+            name, data = pngs[0]
+            out = tmp / name
+            out.write_bytes(data)
+            return FileResponse(
+                path=str(out), filename=name,
+                media_type="image/png",
+                background=None,
+            )
+        zip_buf = io.BytesIO()
+        with _zip.ZipFile(zip_buf, "w", _zip.ZIP_DEFLATED) as zf:
+            for name, data in pngs:
+                zf.writestr(name, data)
+        zip_path = tmp / (Path(base_name).stem + ".png.zip")
+        zip_path.write_bytes(zip_buf.getvalue())
+        return FileResponse(
+            path=str(zip_path), filename=zip_path.name,
+            media_type="application/zip",
+        )
+    finally:
+        # Clean tmp later — FileResponse needs the file alive while streamed.
+        pass
+
+
+async def _sweep_temp_files_loop():
+    """Periodically delete files in temp_dir whose mtime is older than
+    ``temp_ttl_seconds``. Each user's upload is keyed by a UUID filename,
+    so this is safe across concurrent users — a file currently being
+    read stays valid even after unlink on POSIX. We skip files modified
+    within the TTL window to avoid deleting in-progress uploads."""
+    import asyncio
+    import time as _time
+    interval = max(60, int(settings.cleanup_interval_seconds))
+    ttl = max(300, int(settings.temp_ttl_seconds))
+    while True:
+        try:
+            cutoff = _time.time() - ttl
+            removed = 0
+            for p in settings.temp_dir.iterdir():
+                try:
+                    if not p.is_file():
+                        continue
+                    if p.stat().st_mtime < cutoff:
+                        p.unlink(missing_ok=True)
+                        removed += 1
+                except Exception:
+                    continue
+            if removed:
+                logger.info("temp sweep: removed %d stale file(s)", removed)
+        except Exception as e:  # pragma: no cover
+            logger.warning("temp sweep failed: %s", e)
+        await asyncio.sleep(interval)
+
+
+@app.on_event("startup")
+async def _startup():
+    import asyncio
+    logger.info("%s starting on %s:%s", settings.app_name, settings.host, settings.port)
+    logger.info("Loaded %d tool(s): %s", len(tools), [t.metadata.id for t in tools])
+    # Initialise auth + audit DBs (idempotent; applies pending migrations).
+    # We do this even when auth is disabled so that turning auth on later
+    # has the schema ready.
+    try:
+        from .core import auth_db, audit_db, audit_forward, auth_settings, roles
+        auth_db.init()
+        audit_db.init()
+        # Force-create the session secret on first boot so admin enabling
+        # auth later doesn't see a missing-secret race.
+        auth_settings.get_session_secret()
+        # Seed the 6 built-in roles (idempotent — won't overwrite admin's
+        # customisations from earlier runs).
+        roles.seed_builtin_roles()
+        # Start the audit-forward background worker (no-op when no
+        # destinations configured).
+        audit_forward.start_worker()
+        # Start retention sweeper (runs once now + every 6h).
+        from .core import retention as _retention
+        _retention.start_scheduler()
+    except Exception as exc:
+        logger.exception("auth/audit init failed: %s", exc)
+    # Background sweeper for ephemeral uploads
+    asyncio.create_task(_sweep_temp_files_loop())
+
+
+def run():
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host=settings.host,
+        port=settings.port,
+        reload=settings.debug,
+    )
+
+
+if __name__ == "__main__":
+    run()

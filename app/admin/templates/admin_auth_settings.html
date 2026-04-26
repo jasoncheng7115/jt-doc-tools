@@ -1,0 +1,552 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}認證設定 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('lock', size=22) }} 認證設定</h1>
+
+{% if not is_enabled %}
+<div class="panel" style="border-left:4px solid #f59e0b;">
+  <h2 style="margin-top:0;">⚠ 目前未啟用認證</h2>
+  <p>所有人都可以使用本系統。如果你打算給多人使用、或部署在內網，建議啟用認證。</p>
+  <p>啟用後會引導你建立第一個管理員帳號。</p>
+  <p>
+    <a class="btn btn-primary" href="/setup-admin">{{ icon('lock', size=14) }} 啟用認證</a>
+  </p>
+  <hr>
+  <p class="muted" style="font-size:12px;">
+    啟用後可選擇 backend：
+    <b>本機</b>（最簡單，所有帳號存在這台機器）、
+    <b>LDAP / AD</b>（接外部目錄；M3 完成後可切換）。
+  </p>
+</div>
+{% else %}
+<div class="panel">
+  <h2 style="margin-top:0;">✓ 認證已啟用</h2>
+  <table class="kv">
+    <tr><th>Backend</th><td><b>{{ settings.backend }}</b></td></tr>
+    <tr><th>Session 預設長度</th><td>{{ settings.session_max_age_days }} 天</td></tr>
+    <tr><th>「30 天免登入」長度</th><td>{{ settings.remember_max_age_days }} 天</td></tr>
+    <tr><th>失敗鎖定次數</th><td>{{ settings.lockout_threshold }} 次</td></tr>
+    <tr><th>鎖定時間</th><td>{{ settings.lockout_minutes }} 分</td></tr>
+  </table>
+  <p style="margin-top:18px;">
+    <button class="btn btn-danger" id="btnDisableAuth" type="button">{{ icon('unlock', size=14) }} 停用認證</button>
+  </p>
+  <p class="muted" style="font-size:12px;">
+    停用認證會立刻讓所有人都能存取系統（恢復預設）；現有使用者 / 角色 / 權限資料保留，下次再啟用會繼續用。
+    <b>所有現有 session 會立刻失效。</b>
+  </p>
+</div>
+
+{% endif %}
+
+<div class="panel">
+  <h2>認證 backend / LDAP 設定</h2>
+  <p class="muted" style="font-size:12.5px; margin-top:0;">
+    選擇驗證使用者的 backend。<b>切換會讓所有現有 session 立刻失效。</b>
+    啟用外部目錄後，登入頁的「認證領域」下拉仍會保留<b>本機</b>選項，jtdt-admin 等本機帳號不會被鎖外。
+  </p>
+
+  <form id="ldapForm" class="auth-form">
+
+    <!-- ===== Backend ===== -->
+    <fieldset class="auth-section">
+      <legend>{{ icon('gear', size=14) }} Backend 模式</legend>
+      <div class="backend-cards">
+        <label class="backend-card">
+          <input type="radio" name="backend" value="local" {% if settings.backend == 'local' %}checked{% endif %}>
+          <span class="bc-ic">{{ icon('user', size=22) }}</span>
+          <span class="bc-text">
+            <span class="bc-name">本機帳號</span>
+            <span class="bc-sub">Local</span>
+          </span>
+        </label>
+        <label class="backend-card">
+          <input type="radio" name="backend" value="ldap" {% if settings.backend == 'ldap' %}checked{% endif %}>
+          <span class="bc-ic">{{ icon('building', size=22) }}</span>
+          <span class="bc-text">
+            <span class="bc-name">LDAP</span>
+            <span class="bc-sub">OpenLDAP / UCS / FreeIPA</span>
+          </span>
+        </label>
+        <label class="backend-card">
+          <input type="radio" name="backend" value="ad" {% if settings.backend == 'ad' %}checked{% endif %}>
+          <span class="bc-ic">{{ icon('shield', size=22) }}</span>
+          <span class="bc-text">
+            <span class="bc-name">Active Directory</span>
+            <span class="bc-sub">Microsoft AD / Samba AD</span>
+          </span>
+        </label>
+      </div>
+    </fieldset>
+
+    <!-- ===== Connection ===== -->
+    <fieldset class="auth-section">
+      <legend>{{ icon('globe', size=14) }} 連線</legend>
+
+      <div class="auth-field">
+        <label class="af-label" for="af-server-url">伺服器 URL</label>
+        <input id="af-server-url" class="field" type="url" name="server_url"
+               value="{{ settings.ldap.server_url }}"
+               placeholder="ldaps://ad.example.com:636">
+        <div class="af-hint">建議使用 <code>ldaps://</code> + 驗證憑證。</div>
+      </div>
+
+      <div class="auth-field af-checks">
+        <label><input type="checkbox" name="use_tls" {% if settings.ldap.use_tls %}checked{% endif %}> 使用 TLS</label>
+        <label><input type="checkbox" name="verify_cert" {% if settings.ldap.verify_cert %}checked{% endif %}> 驗證伺服器憑證</label>
+      </div>
+
+      <div class="auth-field">
+        <label class="af-label" for="af-svc-dn">Service Account DN</label>
+        <input id="af-svc-dn" class="field" type="text" name="service_dn"
+               value="{{ settings.ldap.service_dn }}"
+               placeholder="CN=jtdt-svc,OU=Service Accounts,DC=example,DC=com">
+      </div>
+
+      <div class="auth-field" style="margin-bottom:0;">
+        <label class="af-label" for="af-svc-pw">Service Account 密碼</label>
+        <input id="af-svc-pw" class="field" type="password" name="service_password"
+               placeholder="{% if settings.ldap.service_password %}（已設定，留白不變更）{% else %}輸入密碼{% endif %}">
+      </div>
+    </fieldset>
+
+    <!-- ===== Search ===== -->
+    <fieldset class="auth-section">
+      <legend>{{ icon('search', size=14) }} 搜尋</legend>
+
+      <div class="auth-field">
+        <label class="af-label" for="af-base-dn">使用者搜尋 base DN</label>
+        <input id="af-base-dn" class="field" type="text" name="user_search_base"
+               value="{{ settings.ldap.user_search_base }}"
+               placeholder="dc=example,dc=com">
+        <div class="af-hint">必須是純 DN，<b>不能</b>含 <code>(</code> <code>)</code>。要限制群組請寫到下方 filter。</div>
+      </div>
+
+      <div class="auth-field" style="margin-bottom:0;">
+        <label class="af-label" for="af-filter">使用者搜尋 filter</label>
+        <input id="af-filter" class="field" type="text" name="user_search_filter"
+               value="{{ settings.ldap.user_search_filter }}"
+               placeholder="(sAMAccountName={username})">
+        <div class="af-hint"><code>{username}</code> 會被代入登入帳號。</div>
+        <details class="attr-hint af-details" data-hint="filter">
+        <summary>
+          <span class="hint-ad">📖 AD filter 範例與語法</span>
+          <span class="hint-ldap">📖 LDAP / UCS / FreeIPA filter 範例與語法</span>
+        </summary>
+        <div class="af-details-body">
+          <div style="margin-bottom:6px;">
+            <code>{username}</code> 會被換成登入帳號（系統自動 escape）。filter 比對到<b>剛好一筆</b> entry 才會做密碼 bind。
+          </div>
+          <table class="ldap-ex">
+            <tbody class="hint-ad">
+              <tr><th>最常用</th><td><code>(sAMAccountName={username})</code></td></tr>
+              <tr><th>UPN 登入</th><td><code>(userPrincipalName={username})</code></td></tr>
+              <tr><th>email 登入</th><td><code>(mail={username})</code></td></tr>
+              <tr><th>兩種都接受</th><td><code>(|(sAMAccountName={username})(userPrincipalName={username}))</code></td></tr>
+              <tr><th>排除 disabled</th><td><code>(&amp;(sAMAccountName={username})(!(userAccountControl:1.2.840.113556.1.4.803:=2)))</code></td></tr>
+              <tr><th>限定群組</th><td><code>(&amp;(sAMAccountName={username})(memberOf=CN=JTDT_Users,CN=Users,DC=example,DC=com))</code></td></tr>
+              <tr><th>限定群組（巢狀）</th><td><code>(&amp;(sAMAccountName={username})(memberOf:1.2.840.113556.1.4.1941:=CN=JTDT_Users,...))</code></td></tr>
+            </tbody>
+            <tbody class="hint-ldap">
+              <tr><th>最常用</th><td><code>(uid={username})</code></td></tr>
+              <tr><th>email 登入</th><td><code>(mail={username})</code></td></tr>
+              <tr><th>兩種都接受</th><td><code>(|(uid={username})(mail={username}))</code></td></tr>
+              <tr><th>限定 person</th><td><code>(&amp;(uid={username})(objectClass=inetOrgPerson))</code></td></tr>
+              <tr><th>限定群組（UCS）</th><td><code>(&amp;(uid={username})(memberOf=cn=JTDT_Users,cn=groups,dc=example,dc=com))</code></td></tr>
+              <tr><th>限定 posixGroup</th><td><code>(&amp;(uid={username})(gidNumber=5050))</code></td></tr>
+            </tbody>
+          </table>
+          <div style="margin-top:8px; padding-top:6px; border-top:1px dashed #e5e7eb;">
+            多條件：<code>&amp;</code> AND / <code>|</code> OR / <code>!</code> NOT，每條件都用 <code>(…)</code> 包。
+          </div>
+        </div>
+        </details>
+      </div>
+    </fieldset>
+
+    <!-- ===== Attributes ===== -->
+    <fieldset class="auth-section">
+      <legend>{{ icon('form', size=14) }} 屬性對應</legend>
+
+      <div class="auth-field af-attrs" style="margin-bottom:0;">
+        <div class="af-attr-cell">
+          <label class="af-label" for="af-attr-uname">username 屬性</label>
+          <input id="af-attr-uname" class="field" type="text" name="username_attr"
+                 value="{{ settings.ldap.username_attr }}">
+          <div class="af-hint attr-hint" data-hint="username">
+            <span class="hint-ad">AD：通常 <code>sAMAccountName</code></span>
+            <span class="hint-ldap">LDAP：通常 <code>uid</code></span>
+          </div>
+        </div>
+        <div class="af-attr-cell">
+          <label class="af-label" for="af-attr-dn">顯示名稱屬性</label>
+          <input id="af-attr-dn" class="field" type="text" name="displayname_attr"
+                 value="{{ settings.ldap.displayname_attr }}">
+          <div class="af-hint attr-hint" data-hint="displayname">
+            <span class="hint-ad">AD：<code>displayName</code></span>
+            <span class="hint-ldap">LDAP：<code>displayName</code> 或 <code>cn</code></span>
+          </div>
+        </div>
+        <div class="af-attr-cell">
+          <label class="af-label" for="af-attr-grp">群組屬性</label>
+          <input id="af-attr-grp" class="field" type="text" name="group_attr"
+                 value="{{ settings.ldap.group_attr }}" placeholder="memberOf">
+          <div class="af-hint attr-hint" data-hint="group">
+            <b><code>memberOf</code></b>（user 屬性，列出所屬群組）
+            <br>⚠ <b>不是 <code>member</code></b>（那是群組物件上的屬性）
+          </div>
+        </div>
+      </div>
+    </fieldset>
+
+    <p>
+      <button class="btn btn-primary" type="button" id="ldapSaveBtn">{{ icon('save', size=14) }} 儲存設定</button>
+      <span id="ldapStatus" class="muted" style="margin-left:10px; font-size:12px;"></span>
+    </p>
+  </form>
+
+  <hr style="margin:20px 0;">
+  <h3 style="margin:0 0 6px;">驗證測試</h3>
+  <p class="muted" style="font-size:12.5px; margin:0 0 12px;">
+    用上方表單目前的設定測試（不會自動儲存）。Service 密碼留空時走已儲存的密碼。
+  </p>
+
+  <div class="test-grid">
+    <!-- 1. 連線測試 -->
+    <section class="test-card">
+      <header>
+        <span class="test-ic">{{ icon('refresh', size=15) }}</span>
+        <h4>連線測試</h4>
+      </header>
+      <p class="muted">驗證伺服器 URL / TLS / Service Account bind。</p>
+      <div class="test-body">
+        <button class="btn btn-primary" type="button" id="ldapTestConnBtn">開始測試</button>
+        <div id="ldapTestConnStatus" class="test-status"></div>
+      </div>
+    </section>
+
+    <!-- 2. 帳號測試 -->
+    <section class="test-card">
+      <header>
+        <span class="test-ic">{{ icon('user', size=15) }}</span>
+        <h4>帳號測試</h4>
+      </header>
+      <p class="muted">用真實帳號驗證 filter / base DN / 密碼 bind；不寫 DB、不建 session。</p>
+      <div class="test-body">
+        <div class="test-row">
+          <label>測試帳號
+            <input class="field" type="text" id="ldapTestUser" placeholder="username" autocomplete="off">
+          </label>
+          <label>測試密碼
+            <input class="field" type="password" id="ldapTestPw" autocomplete="new-password">
+          </label>
+        </div>
+        <button class="btn btn-primary" type="button" id="ldapTestLoginBtn">測試登入</button>
+        <div id="ldapTestLoginStatus" class="test-status"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<style>
+  /* ===== Auth-settings form layout (self-contained, doesn't borrow .form-row) ===== */
+  .auth-form { max-width: 760px; }
+  .auth-form .auth-field { margin-bottom: 14px; }
+  .auth-form .af-label {
+    display:block; font-size:12px; font-weight:600; color:#374151; margin-bottom:4px;
+  }
+  .auth-form .af-hint { font-size:11.5px; color:var(--muted); margin-top:4px; line-height:1.5; }
+  .auth-form input.field[type=text],
+  .auth-form input.field[type=url],
+  .auth-form input.field[type=password] {
+    width:100%; box-sizing:border-box; padding:7px 10px; border:1px solid var(--border);
+    border-radius:5px; font:inherit; background:#fff;
+  }
+  .auth-form .af-checks { display:flex; gap:18px; flex-wrap:wrap; font-size:13px; }
+  .auth-form .af-checks label { display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
+  /* ----- Section card (fieldset/legend) ----- */
+  .auth-section {
+    border:1px solid #e5e7eb; border-radius:8px;
+    padding:16px 18px 14px; margin:0 0 18px;
+    background:#fff;
+  }
+  .auth-section > legend {
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:13px; font-weight:700; color:#1e293b;
+    padding:3px 10px; background:#eef2ff; border:1px solid #c7d2fe; border-radius:4px;
+    margin-left:4px;  /* nudge in from card edge */
+  }
+  .auth-section > legend svg.ic { color:#4f46e5; flex-shrink:0; }
+  .af-attrs {
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap:14px;
+  }
+  .af-details { margin-top:8px; }
+  .af-details summary {
+    cursor:pointer; user-select:none; padding:6px 10px; font-size:12px;
+    background:#f3f4f6; border:1px solid #e5e7eb; border-radius:5px; color:#475569;
+  }
+  .af-details summary:hover { background:#e5e7eb; }
+  .af-details[open] summary { border-bottom-left-radius:0; border-bottom-right-radius:0; }
+  .af-details-body {
+    background:#fafafa; border:1px solid #e5e7eb; border-top:0;
+    border-radius:0 0 5px 5px; padding:10px 12px; font-size:11.5px; line-height:1.7;
+  }
+
+  /* ----- Backend cards ----- */
+  .backend-cards {
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap:10px;
+  }
+  .backend-card {
+    display:flex; align-items:center; gap:12px; position:relative;
+    background:#fff; border:2px solid var(--border); border-radius:8px;
+    padding:12px 14px; cursor:pointer; user-select:none; min-width:0;
+    transition:border-color .12s, background .12s;
+  }
+  .backend-card:hover { border-color:#c4b5fd; }
+  .backend-card input[type=radio] { position:absolute; opacity:0; pointer-events:none; }
+  .backend-card .bc-ic { color:#64748b; flex-shrink:0; display:flex; }
+  .backend-card .bc-text { display:flex; flex-direction:column; line-height:1.25; min-width:0; }
+  .backend-card .bc-name { font-weight:600; font-size:13.5px; color:#1e293b; }
+  .backend-card .bc-sub { font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .backend-card:has(input:checked) {
+    border-color:var(--primary); background:#f5f3ff;
+  }
+  .backend-card:has(input:checked) .bc-ic { color:var(--primary); }
+  .backend-card:has(input:checked) .bc-name { color:var(--primary-dark); }
+
+  /* ----- Backend-aware hints ----- */
+  .attr-hint .hint-ad, .attr-hint .hint-ldap { display:none; }
+  body[data-ldap-backend="ldap"] .attr-hint .hint-ldap,
+  body[data-ldap-backend="ad"]   .attr-hint .hint-ad     { display:inline; }
+  body[data-ldap-backend="local"] .attr-hint .hint-ad,
+  body[data-ldap-backend="local"] .attr-hint .hint-ldap  { display:block; opacity:0.7; }
+  /* In tables: tbody version of the toggle. */
+  table.ldap-ex tbody.hint-ad,
+  table.ldap-ex tbody.hint-ldap { display:none; }
+  body[data-ldap-backend="ldap"] table.ldap-ex tbody.hint-ldap,
+  body[data-ldap-backend="ad"]   table.ldap-ex tbody.hint-ad   { display:table-row-group; }
+
+  /* ----- Filter examples table ----- */
+  table.ldap-ex { width:100%; border-collapse:collapse; font-size:11.5px; margin-top:4px; }
+  table.ldap-ex th { text-align:left; color:#475569; font-weight:600; padding:3px 10px 3px 0; white-space:nowrap; vertical-align:top; width:1%; }
+  table.ldap-ex td { padding:3px 0; word-break:break-all; }
+  table.ldap-ex code { background:#fff; border:1px solid #e5e7eb; padding:1px 5px; border-radius:3px; font-size:11px; }
+
+  /* ----- Test cards (連線測試 / 帳號測試) ----- */
+  .test-grid {
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap:14px;
+  }
+  .test-card {
+    background:#f9fafb; border:1px solid var(--border); border-radius:8px;
+    padding:14px 16px;
+  }
+  .test-card header { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .test-card .test-ic { color:#475569; display:flex; }
+  .test-card h4 { margin:0; font-size:14px; color:#1e293b; }
+  .test-card p.muted { font-size:12px; margin:0 0 12px; }
+  .test-card .test-body { display:flex; flex-direction:column; gap:8px; }
+  .test-card .test-row { display:flex; gap:10px; flex-wrap:wrap; }
+  .test-card .test-row label {
+    display:flex; flex-direction:column; gap:3px; font-size:12px; color:#475569; flex:1 1 140px; min-width:140px;
+  }
+  .test-card .test-row .field { width:100%; box-sizing:border-box; }
+  .test-card .btn { align-self:flex-start; }
+  .test-card .test-status { font-size:12.5px; min-height:1em; }
+</style>
+
+<style>
+  table.kv { width:auto; border-collapse:collapse; }
+  table.kv th { text-align:right; padding:4px 12px 4px 0; color:#6b7280; font-weight:normal; }
+  table.kv td { padding:4px 0; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const btn = document.getElementById('btnDisableAuth');
+if (btn) btn.addEventListener('click', async () => {
+  if (!(await showConfirm('確定停用認證？所有 session 會立刻失效。',
+        { title: '停用認證', kind: 'danger', okText: '確定停用' }))) return;
+  const r = await fetch('/admin/auth-settings/disable', {method:'POST'});
+  if (r.ok) location.reload();
+  else showAlert('停用失敗：' + await r.text());
+});
+
+const CURRENT_BACKEND = {{ settings.backend|tojson }};
+
+async function saveLdap() {
+  const form = document.getElementById('ldapForm');
+  const fd = new FormData(form);
+  const targetBackend = (fd.get('backend') || '').toLowerCase();
+  const ldap = {
+    server_url: fd.get('server_url'),
+    use_tls: fd.get('use_tls') === 'on',
+    verify_cert: fd.get('verify_cert') === 'on',
+    service_dn: fd.get('service_dn'),
+    user_search_base: fd.get('user_search_base'),
+    user_search_filter: fd.get('user_search_filter'),
+    username_attr: fd.get('username_attr'),
+    displayname_attr: fd.get('displayname_attr'),
+    group_attr: fd.get('group_attr'),
+  };
+  if (fd.get('service_password')) ldap.service_password = fd.get('service_password');
+
+  // Confirm only when actually changing the backend (cosmetic save inside
+  // the same backend doesn't kill sessions, so skip the prompt).
+  if (targetBackend && targetBackend !== CURRENT_BACKEND) {
+    const label = {local:'本機帳號', ldap:'LDAP', ad:'Active Directory'}[targetBackend] || targetBackend;
+    const ok = await showConfirm(
+      `要把 backend 從「${CURRENT_BACKEND}」切換為「${label}」嗎？\n\n所有現有 session 會立刻失效，所有人都需要重新登入。`,
+      { title: '切換認證 backend', kind: 'warn', okText: '儲存並切換' }
+    );
+    if (!ok) return;
+  }
+
+  const status = document.getElementById('ldapStatus');
+  status.textContent = '儲存中…';
+  status.style.color = '#475569';
+
+  const body = {ldap};
+  if (targetBackend) body.backend = targetBackend;
+  const r = await fetch('/admin/auth-settings/ldap-save', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if (r.ok) {
+    status.textContent = '✓ 已儲存';
+    status.style.color = '#16a34a';
+    if (targetBackend && targetBackend !== CURRENT_BACKEND) {
+      setTimeout(() => location.reload(), 800);
+    }
+  } else {
+    let detail = '';
+    try { detail = (await r.json()).detail || ''; } catch(e) { detail = await r.text(); }
+    status.textContent = '失敗：' + detail;
+    status.style.color = '#dc2626';
+  }
+}
+
+const sb = document.getElementById('ldapSaveBtn');
+if (sb) sb.addEventListener('click', saveLdap);
+
+// Backend-aware hint visibility — read the chosen radio and tag <body>
+// so the CSS rules toggle the right hint line.
+function _syncBackendHints() {
+  const sel = document.querySelector('input[name="backend"]:checked');
+  document.body.dataset.ldapBackend = (sel && sel.value) || 'local';
+}
+document.querySelectorAll('input[name="backend"]').forEach(r => {
+  r.addEventListener('change', _syncBackendHints);
+});
+_syncBackendHints();
+
+// ---- Test connection / Test login (use the live form values) ----
+function _formLdapPayload() {
+  const form = document.getElementById('ldapForm');
+  const fd = new FormData(form);
+  const ldap = {
+    server_url: fd.get('server_url'),
+    use_tls: fd.get('use_tls') === 'on',
+    verify_cert: fd.get('verify_cert') === 'on',
+    service_dn: fd.get('service_dn'),
+    user_search_base: fd.get('user_search_base'),
+    user_search_filter: fd.get('user_search_filter'),
+    username_attr: fd.get('username_attr'),
+    displayname_attr: fd.get('displayname_attr'),
+    group_attr: fd.get('group_attr'),
+  };
+  if (fd.get('service_password')) ldap.service_password = fd.get('service_password');
+  return {ldap};
+}
+
+const tcBtn = document.getElementById('ldapTestConnBtn');
+if (tcBtn) tcBtn.addEventListener('click', async () => {
+  const status = document.getElementById('ldapTestConnStatus');
+  status.textContent = '測試中…';
+  status.style.color = '#475569';
+  tcBtn.disabled = true;
+  try {
+    const r = await fetch('/admin/auth-settings/ldap-test-connection', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(_formLdapPayload()),
+    });
+    if (r.ok) {
+      const j = await r.json();
+      let msg = `✓ 連線成功（${j.elapsed_ms} ms）`;
+      if (j.who) msg += ` · whoami: ${j.who}`;
+      if (j.vendor) msg += ` · vendor: ${j.vendor}`;
+      status.textContent = msg;
+      status.style.color = '#16a34a';
+    } else {
+      let detail = '';
+      try { detail = (await r.json()).detail || ''; } catch(e) { detail = await r.text(); }
+      status.textContent = '✗ ' + detail;
+      status.style.color = '#dc2626';
+    }
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+    status.style.color = '#dc2626';
+  } finally {
+    tcBtn.disabled = false;
+  }
+});
+
+const tlBtn = document.getElementById('ldapTestLoginBtn');
+if (tlBtn) tlBtn.addEventListener('click', async () => {
+  const status = document.getElementById('ldapTestLoginStatus');
+  const u = document.getElementById('ldapTestUser').value.trim();
+  const p = document.getElementById('ldapTestPw').value;
+  if (!u || !p) {
+    status.textContent = '請輸入測試帳號與密碼';
+    status.style.color = '#dc2626';
+    return;
+  }
+  status.textContent = '測試中…';
+  status.style.color = '#475569';
+  tlBtn.disabled = true;
+  try {
+    const payload = _formLdapPayload();
+    payload.username = u;
+    payload.password = p;
+    const r = await fetch('/admin/auth-settings/ldap-test-login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (r.ok) {
+      const j = await r.json();
+      let html = `<div style="color:#16a34a;font-weight:600">✓ 登入成功（${j.elapsed_ms} ms）</div>`;
+      html += `<div style="margin-top:4px"><b>DN：</b><code style="font-size:11.5px">${escapeHtml(j.user_dn)}</code></div>`;
+      html += `<div><b>顯示名稱：</b>${escapeHtml(j.display_name || '(無)')}</div>`;
+      html += `<div><b>群組（${j.groups.length}）：</b>`;
+      if (j.groups.length === 0) {
+        html += '<span class="muted">(無)</span>';
+      } else {
+        html += '<ul style="margin:4px 0 0 18px;padding:0;font-size:11.5px;color:#334155;max-height:140px;overflow:auto;">';
+        j.groups.forEach(g => { html += `<li><code>${escapeHtml(g)}</code></li>`; });
+        html += '</ul>';
+      }
+      html += '</div>';
+      status.innerHTML = html;
+    } else {
+      let detail = '';
+      try { detail = (await r.json()).detail || ''; } catch(e) { detail = await r.text(); }
+      status.innerHTML = `<span style="color:#dc2626">✗ ${escapeHtml(detail)}</span>`;
+    }
+  } catch (e) {
+    status.innerHTML = `<span style="color:#dc2626">✗ ${escapeHtml(e.message)}</span>`;
+  } finally {
+    tlBtn.disabled = false;
+  }
+});
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+</script>
+{% endblock %}

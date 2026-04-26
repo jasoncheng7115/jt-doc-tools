@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}文書轉圖片 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.p2i-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px; margin-top: 12px; }
+.p2i-card { border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; background: #fff; }
+.p2i-card .p2i-thumb { display:block; background:#f3f4f6; cursor: zoom-in; }
+.p2i-card .p2i-thumb img { width: 100%; display: block; }
+.p2i-card .p2i-meta { padding: 8px 10px; font-size: 12px; color: #6b7280; display: flex;
+  justify-content: space-between; align-items: center; gap:8px; border-top: 1px solid #f3f4f6; }
+.p2i-card .p2i-dl {
+  color: #2563eb; text-decoration: none; display: inline-flex;
+  align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 6px;
+  transition: background 0.12s ease;
+}
+.p2i-card .p2i-dl:hover { background: #eff6ff; }
+.p2i-card .p2i-dl svg { width: 18px; height: 18px; }
+.p2i-status { margin: 10px 0; color: #475569; font-size: 13px; }
+.p2i-progress { display:flex; align-items:center; gap:10px; margin-top:8px; }
+.p2i-progress-bar { flex:1; height:8px; background:#e5e7eb; border-radius:4px; overflow:hidden; }
+.p2i-progress-fill { height:100%; background:linear-gradient(90deg,#60a5fa,#2563eb); width:0%; transition: width 0.15s; }
+.p2i-progress-pct { font-family: ui-monospace, monospace; font-size:12px; color:#475569; min-width:42px; text-align:right; }
+.p2i-dpi-row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+.p2i-dpi-row label { font-size:13px; display:flex; align-items:center; gap:5px; cursor:pointer; }
+.p2i-lightbox {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.85); z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  cursor: zoom-out; padding: 20px;
+}
+.p2i-lightbox img { max-width: 95%; max-height: 95vh;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.5); border-radius: 4px; background: #fff; }
+.p2i-lightbox-close {
+  position: absolute; top: 14px; right: 18px; color: #fff; font-size: 28px;
+  background: none; border: none; cursor: pointer;
+}
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('image', size=22) }} 文書轉圖片</h1>
+<p class="muted">把 PDF 或 Office 文件（Word / Excel / PowerPoint / ODF）每一頁轉成 PNG 圖片。非 PDF 會先自動轉成 PDF 再轉圖。單頁直接下載 PNG、多頁自動打包 ZIP。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 設定</h2>
+  <div class="form-row">
+    <label>解析度（DPI）</label>
+    <div class="field option-cards">
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('image', size=24) }}</span>
+        <span class="opt-label">100</span>
+        <span class="opt-desc">草稿 · 小檔</span>
+        <input type="radio" name="p2iDpi" value="100">
+      </label>
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('image', size=24) }}</span>
+        <span class="opt-label">150</span>
+        <span class="opt-desc">螢幕一般</span>
+        <input type="radio" name="p2iDpi" value="150">
+      </label>
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('image', size=24) }}</span>
+        <span class="opt-label">200</span>
+        <span class="opt-desc">螢幕高畫質 · 預設</span>
+        <input type="radio" name="p2iDpi" value="200" checked>
+      </label>
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('image', size=24) }}</span>
+        <span class="opt-label">300</span>
+        <span class="opt-desc">印刷</span>
+        <input type="radio" name="p2iDpi" value="300">
+      </label>
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('image', size=24) }}</span>
+        <span class="opt-label">400</span>
+        <span class="opt-desc">高 DPI · 檔最大</span>
+        <input type="radio" name="p2iDpi" value="400">
+      </label>
+    </div>
+  </div>
+  <div class="muted" style="font-size:11.5px; margin-top:6px;">DPI 越高每張圖檔越大、轉檔越慢。100 約幾十 KB / 頁，400 可能達 5 MB / 頁。</div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">2. 上傳檔案</h2>
+  {% with upload_id='p2iUpload', accept='application/pdf,.pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.ods,.ppt,.pptx,.odp,.txt,.csv', hint='支援 PDF、Word、Excel、PowerPoint、ODF；非 PDF 會先自動轉成 PDF。' %}{% include "components/file_upload.html" %}{% endwith %}
+  <div id="p2iProgress" class="p2i-progress" hidden>
+    <span id="p2iProgressLabel" style="font-size:12.5px; color:#475569;">準備中…</span>
+    <div class="p2i-progress-bar"><div class="p2i-progress-fill" id="p2iProgressFill"></div></div>
+    <span class="p2i-progress-pct" id="p2iProgressPct">0%</span>
+  </div>
+</div>
+
+<div class="panel" id="p2iResultPanel" hidden>
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <h2 style="margin:0;">預覽（<span id="p2iPageCount">0</span> 頁，總 <span id="p2iTotalSize">—</span>）</h2>
+    <a class="btn btn-primary" id="p2iBtnDownload" href="#">{{ icon('download') }} 下載</a>
+  </div>
+  <div class="p2i-status" id="p2iStatus"></div>
+  <div class="p2i-grid" id="p2iGrid"></div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+(function() {
+  const root = document.getElementById('p2iUpload');
+  if (!root) { console.error('[p2i] #p2iUpload not found'); return; }
+  if (typeof FileUpload !== 'function') { console.error('[p2i] FileUpload missing'); return; }
+
+  const statusEl = document.getElementById('p2iStatus');
+  const panelEl = document.getElementById('p2iResultPanel');
+  const gridEl = document.getElementById('p2iGrid');
+  const pageCountEl = document.getElementById('p2iPageCount');
+  const totalSizeEl = document.getElementById('p2iTotalSize');
+  const btnDownload = document.getElementById('p2iBtnDownload');
+  const progEl = document.getElementById('p2iProgress');
+  const progLabel = document.getElementById('p2iProgressLabel');
+  const progFill = document.getElementById('p2iProgressFill');
+  const progPct = document.getElementById('p2iProgressPct');
+
+  const dlIcon = '<svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>';
+
+  function fmtBytes(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+    if (n < 1024*1024*1024) return (n/1024/1024).toFixed(2) + ' MB';
+    return (n/1024/1024/1024).toFixed(2) + ' GB';
+  }
+
+  function setProgress(pct, label) {
+    progEl.hidden = false;
+    progFill.style.width = pct + '%';
+    progPct.textContent = pct + '%';
+    if (label) progLabel.textContent = label;
+  }
+  function setIndeterminate(label) {
+    progEl.hidden = false;
+    // Indeterminate: show animated bar at 100% width, dim color, pct = '—'
+    progFill.style.width = '100%';
+    progFill.style.background = 'linear-gradient(90deg,#a78bfa,#60a5fa,#a78bfa)';
+    progFill.style.backgroundSize = '200% 100%';
+    progFill.style.animation = 'p2i-stripes 1.2s linear infinite';
+    progPct.textContent = '—';
+    if (label) progLabel.textContent = label;
+  }
+  function hideProgress() {
+    progEl.hidden = true;
+    progFill.style.animation = '';
+    progFill.style.background = 'linear-gradient(90deg,#60a5fa,#2563eb)';
+    progFill.style.width = '0%';
+    progPct.textContent = '0%';
+  }
+
+  function getDpi() {
+    const sel = document.querySelector('input[name="p2iDpi"]:checked');
+    return sel ? parseInt(sel.value, 10) : 200;
+  }
+
+  async function handleUpload(file) {
+    if (!file) return;
+    panelEl.hidden = false;
+    gridEl.innerHTML = '';
+    statusEl.textContent = '';
+    btnDownload.style.display = 'none';
+    setProgress(0, '上傳中…');
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('dpi', String(getDpi()));
+    try {
+      const r = await window.uploadWithProgress(
+        '/tools/pdf-to-image/convert', fd,
+        function(loaded, total, pct) {
+          setProgress(pct, '上傳中… ' + fmtBytes(loaded) + ' / ' + fmtBytes(total));
+          if (pct >= 100) {
+            // Upload done, server is processing. Switch to indeterminate.
+            setIndeterminate('伺服器轉檔中…（' + fmtBytes(total) + '）');
+          }
+        }
+      );
+      if (!r.ok) {
+        statusEl.textContent = '失敗：' + await r.text();
+        hideProgress();
+        return;
+      }
+      const d = await r.json();
+      hideProgress();
+      pageCountEl.textContent = d.page_count;
+      totalSizeEl.textContent = fmtBytes(d.total_bytes || 0);
+      statusEl.textContent = '完成！' + d.page_count + ' 頁已轉為 PNG（' + d.dpi + ' DPI · 共 ' + fmtBytes(d.total_bytes || 0) + '）';
+      d.pages.forEach(function(p) {
+        const card = document.createElement('div');
+        card.className = 'p2i-card';
+        card.innerHTML =
+          '<a class="p2i-thumb" data-zoom-src="' + p.preview_url + '">' +
+            '<img src="' + p.preview_url + '" loading="lazy" />' +
+          '</a>' +
+          '<div class="p2i-meta">' +
+            '<span>第 ' + (p.index + 1) + ' 頁 · ' + p.width_px + '×' + p.height_px + ' · ' + fmtBytes(p.size_bytes || 0) + '</span>' +
+            '<a class="p2i-dl" href="' + p.preview_url + '" download="page_' + (p.index + 1) + '.png" title="下載此頁 PNG" aria-label="下載此頁 PNG">' + dlIcon + '</a>' +
+          '</div>';
+        gridEl.appendChild(card);
+      });
+      btnDownload.href = '/tools/pdf-to-image/download/' + d.upload_id;
+      btnDownload.style.display = '';
+      const total = fmtBytes(d.total_bytes || 0);
+      btnDownload.innerHTML = dlIcon + (d.page_count === 1
+        ? ' 下載 PNG（' + total + '）'
+        : ' 下載全部 ZIP（' + d.page_count + ' 頁 · 約 ' + total + '）');
+    } catch (e) {
+      statusEl.textContent = '錯誤：' + e.message;
+      hideProgress();
+    }
+  }
+
+  try {
+    new FileUpload(root, handleUpload);
+    console.log('[p2i] FileUpload bound OK');
+  } catch (e) {
+    console.error('[p2i] FileUpload bind failed:', e);
+  }
+
+  gridEl.addEventListener('click', function(e) {
+    if (e.target.closest('.p2i-dl')) return;
+    const t = e.target.closest('.p2i-thumb[data-zoom-src]');
+    if (!t) return;
+    e.preventDefault();
+    const lb = document.createElement('div');
+    lb.className = 'p2i-lightbox';
+    lb.innerHTML = '<button class="p2i-lightbox-close" type="button" aria-label="關閉">×</button>' +
+                   '<img src="' + t.dataset.zoomSrc + '" alt="" />';
+    lb.addEventListener('click', function() { lb.remove(); });
+    document.addEventListener('keydown', function esc(ev) {
+      if (ev.key === 'Escape') { lb.remove(); document.removeEventListener('keydown', esc); }
+    });
+    document.body.appendChild(lb);
+  });
+})();
+</script>
+<style>
+@keyframes p2i-stripes {
+  0% { background-position: 0% 0%; }
+  100% { background-position: -200% 0%; }
+}
+</style>
+{% endblock %}

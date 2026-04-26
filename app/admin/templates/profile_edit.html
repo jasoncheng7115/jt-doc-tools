@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}公司資料 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('building', size=22) }} 公司基本資料</h1>
+<p class="muted">支援多公司。目前作用中的公司會被「表單自動填寫」預設使用。</p>
+
+<div class="panel">
+  <h2>選擇公司</h2>
+  <div class="form-row">
+    <label>編輯公司</label>
+    <div class="field" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+      <select id="companySelect" style="flex:1 1 220px; min-width:160px; padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:#fff;">
+        {% for c in companies %}
+        <option value="{{ c.id }}" {% if c.id == edit_id %}selected{% endif %}>
+          {{ c.name }}{% if c.is_active %} ★ 作用中{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      {% if edit_id != active_id %}
+      <button class="btn btn-small" id="activateBtn" type="button">{{ icon('star') }}設為作用中</button>
+      {% endif %}
+      <button class="btn btn-small" id="newBtn" type="button">{{ icon('plus') }}新增公司</button>
+      <a class="btn btn-small" href="/admin/profile/{{ edit_id }}/export" download>{{ icon('download') }}匯出</a>
+      <button class="btn btn-small" id="importBtn" type="button">{{ icon('upload') }}匯入</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden />
+      {% if companies|length > 1 %}
+      <button class="btn btn-small btn-danger" id="deleteBtn" type="button">{{ icon('trash') }}刪除此公司</button>
+      {% endif %}
+    </div>
+  </div>
+  <div class="form-row" style="margin-top:10px;">
+    <label>公司顯示名稱</label>
+    <input class="field" id="companyName" type="text" value="{{ profile.name }}" />
+  </div>
+</div>
+
+<div class="panel">
+  <h2>欄位編輯</h2>
+  <div class="profile-toolbar">
+    <button class="btn btn-primary" id="saveBtn" type="button">{{ icon('save') }}儲存</button>
+    <span class="muted" id="status"></span>
+  </div>
+
+  {% for sec in sections %}
+  <section class="profile-section-edit" data-section="{{ sec.title }}">
+    <h3 class="profile-section-title">{{ sec.title }}</h3>
+    <div class="edit-list">
+      <div class="edit-row edit-head">
+        <span>key</span><span>顯示名稱</span><span>值</span><span></span>
+      </div>
+      {% for row in sec.rows %}
+      <div class="edit-row" data-key="{{ row.key }}">
+        <input class="k" type="text" value="{{ row.key }}" />
+        <input class="lbl" type="text" value="{{ row.label }}" placeholder="顯示名稱" />
+        <textarea class="v" rows="1">{{ row.value }}</textarea>
+        <button class="btn-icon btn-danger" data-act="del" type="button" title="刪除">{{ icon('trash') }}</button>
+      </div>
+      {% endfor %}
+      <div class="edit-add-row">
+        <button class="btn btn-small" data-act="add" type="button">{{ icon('plus') }}在此群組新增欄位</button>
+      </div>
+    </div>
+  </section>
+  {% endfor %}
+</div>
+
+<style>
+  .company-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .company-bar select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; }
+  .profile-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .profile-section-edit { margin-top: 18px; }
+  .profile-section-title { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .edit-list { display: flex; flex-direction: column; }
+  .edit-row { display: grid; grid-template-columns: 180px 200px 1fr 32px; gap: 8px; align-items: center; padding: 4px 0; border-bottom: 1px dashed #eef2f7; }
+  .edit-row.edit-head { color: var(--muted); font-size: 11px; padding: 2px 0; border-bottom: 1px solid var(--border); }
+  .edit-row.edit-head span { padding-left: 2px; }
+  @media (max-width: 900px) { .edit-row { grid-template-columns: 140px 160px 1fr 32px; } }
+  @media (max-width: 640px) { .edit-row { grid-template-columns: 1fr 32px; } .edit-row input.lbl, .edit-row textarea.v { grid-column: 1; } .edit-row.edit-head { display: none; } }
+  .edit-row input, .edit-row textarea { padding: 5px 7px; border: 1px solid var(--border); border-radius: 4px; font: inherit; box-sizing: border-box; width: 100%; }
+  .edit-row input.k { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); background: #f8fafc; }
+  .edit-row input.lbl { font-size: 13px; }
+  .edit-row textarea.v { resize: vertical; min-height: 28px; font-family: inherit; font-size: 13px; }
+  .edit-row .btn-icon { background: transparent; border: none; padding: 3px; color: #b91c1c; cursor: pointer; opacity: 0.4; }
+  .edit-row .btn-icon:hover { opacity: 1; }
+  .edit-add-row { padding: 8px 0 16px; }
+  .edit-add-row .btn { font-size: 12px; }
+  #status { font-size: 12px; }
+  #status.ok { color: var(--success); }
+  #status.err { color: #b91c1c; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const EDIT_ID = {{ edit_id|tojson }};
+const statusEl = document.getElementById('status');
+
+document.getElementById('companySelect').addEventListener('change', (e) => {
+  location.href = '/admin/profile?cid=' + encodeURIComponent(e.target.value);
+});
+
+const activateBtn = document.getElementById('activateBtn');
+if (activateBtn) {
+  activateBtn.addEventListener('click', async () => {
+    await fetch(`/admin/profile/${encodeURIComponent(EDIT_ID)}/activate`, { method: 'POST' });
+    location.reload();
+  });
+}
+
+const importBtn = document.getElementById('importBtn');
+const importFile = document.getElementById('importFile');
+importBtn.addEventListener('click', () => importFile.click());
+importFile.addEventListener('change', async () => {
+  const f = importFile.files && importFile.files[0];
+  if (!f) return;
+  const mode = (await showConfirm(
+    `匯入 "${f.name}"：\n\n按「覆蓋」= 覆蓋當前公司\n按「新增」= 以新公司形式匯入（保留當前）`,
+    { title: '匯入公司資料', okText: '覆蓋當前', cancelText: '新增為新公司' }
+  )) ? 'overwrite' : 'create';
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('mode', mode);
+  if (mode === 'overwrite') fd.append('target_cid', EDIT_ID);
+  const res = await fetch('/admin/profile/import', { method: 'POST', body: fd });
+  if (res.ok) {
+    const data = await res.json();
+    showToast('匯入成功', 'ok');
+    location.href = '/admin/profile?cid=' + encodeURIComponent(data.id);
+  } else {
+    const t = await res.text();
+    showToast('匯入失敗：' + t, 'err');
+  }
+  importFile.value = '';
+});
+
+document.getElementById('newBtn').addEventListener('click', async () => {
+  const name = await showPrompt('新公司顯示名稱', { title: '新增公司' });
+  if (!name) return;
+  const copy = (await showConfirm('要從目前這家公司複製欄位嗎？',
+    { title: '欄位來源', okText: '從目前公司複製', cancelText: '使用預設範本' })) ? EDIT_ID : null;
+  const res = await fetch('/admin/profile/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, copy_from: copy }),
+  });
+  const data = await res.json();
+  if (data.ok) location.href = '/admin/profile?cid=' + encodeURIComponent(data.id);
+});
+
+const deleteBtn = document.getElementById('deleteBtn');
+if (deleteBtn) {
+  deleteBtn.addEventListener('click', async () => {
+    if (!(await showConfirm('確定刪除這家公司的所有資料？', { title: '刪除公司', kind: 'danger' }))) return;
+    const res = await fetch(`/admin/profile/${encodeURIComponent(EDIT_ID)}/delete`, { method: 'POST' });
+    if (res.ok) location.href = '/admin/profile';
+    else showAlert('刪除失敗');
+  });
+}
+
+function makeRow(key = '', label = '', value = '') {
+  const div = document.createElement('div');
+  div.className = 'edit-row';
+  div.innerHTML = `
+    <input class="k" type="text" value="${esc(key)}" placeholder="key" />
+    <input class="lbl" type="text" value="${esc(label)}" placeholder="顯示名稱" />
+    <textarea class="v" rows="1">${esc(value)}</textarea>
+    <button class="btn-icon btn-danger" data-act="del" type="button" title="刪除">🗑</button>
+  `;
+  return div;
+}
+
+document.addEventListener('click', (e) => {
+  const delBtn = e.target.closest('button[data-act="del"]');
+  if (delBtn) { delBtn.closest('.edit-row').remove(); return; }
+  const addBtn = e.target.closest('button[data-act="add"]');
+  if (addBtn) {
+    const list = addBtn.closest('.edit-list');
+    const addRow = addBtn.closest('.edit-add-row');
+    list.insertBefore(makeRow(), addRow);
+    addRow.previousElementSibling.querySelector('.k').focus();
+  }
+});
+
+const saveBtn = document.getElementById('saveBtn');
+const saveBtnOriginalHTML = saveBtn.innerHTML;
+saveBtn.addEventListener('click', async () => {
+  const keys = [], labels = {}, values = {};
+  for (const row of document.querySelectorAll('.edit-row:not(.edit-head)')) {
+    const kEl = row.querySelector('.k');
+    if (!kEl) continue;
+    const k = kEl.value.trim();
+    if (!k) continue;
+    if (keys.includes(k)) {
+      statusEl.textContent = `key 重複：${k}`;
+      statusEl.className = 'err';
+      return;
+    }
+    keys.push(k);
+    labels[k] = row.querySelector('.lbl').value.trim() || k;
+    values[k] = row.querySelector('.v').value;
+  }
+  const name = document.getElementById('companyName').value.trim();
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="spinner"></span>儲存中…';
+  statusEl.textContent = '';
+  const res = await fetch('/admin/profile/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cid: EDIT_ID, name, keys, labels, values }),
+  });
+  if (res.ok) {
+    saveBtn.innerHTML = '✓ 已儲存';
+    saveBtn.classList.add('saved-flash');
+    showToast('公司資料已儲存', 'ok');
+    setTimeout(() => {
+      saveBtn.innerHTML = saveBtnOriginalHTML;
+      saveBtn.classList.remove('saved-flash');
+      saveBtn.disabled = false;
+    }, 1600);
+  } else {
+    saveBtn.innerHTML = saveBtnOriginalHTML;
+    saveBtn.disabled = false;
+    showToast('儲存失敗', 'err');
+  }
+});
+
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+</script>
+{% endblock %}

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jasontools.doctools</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/jt-doc-tools/.venv/bin/python</string>
+        <string>-m</string>
+        <string>app.main</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/usr/local/jt-doc-tools</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>JTDT_DATA_DIR</key>
+        <string>/Library/Application Support/jt-doc-tools/data</string>
+        <key>JTDT_HOST</key>
+        <string>127.0.0.1</string>
+        <key>JTDT_PORT</key>
+        <string>8765</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/var/log/jt-doc-tools.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/jt-doc-tools.err</string>
+</dict>
+</plist>

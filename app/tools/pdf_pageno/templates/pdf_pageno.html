@@ -1,0 +1,605 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}插入頁碼 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('hash', size=22) }} 插入頁碼</h1>
+<p class="muted">在每一頁印上頁碼；可選位置、字級、起始頁碼與顯示格式。上傳後會自動產生頁面縮圖預覽，並在縮圖上以紫色標記頁碼會出現的位置。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">上傳 PDF</h2>
+  {% with upload_id='upPN', accept='application/pdf', multiple=True %}{% include "components/file_upload.html" %}{% endwith %}
+  <p class="muted" style="font-size:12px; margin-top:6px;">支援多檔批次；縮圖預覽僅顯示第一份檔案。</p>
+</div>
+
+<div class="panel pn-settings">
+  <h2 style="margin-top:0;">設定</h2>
+
+  <div class="pn-card">
+    <div class="pn-card-head">
+      <span class="pn-card-title">頁碼範圍</span>
+      <span class="pn-card-sub">跳過封面、目次、封底不印頁碼</span>
+    </div>
+    <div class="pn-row">
+      <div class="pn-field">
+        <label for="fromPage">從第幾頁</label>
+        <input id="fromPage" class="field pn-num" type="number" value="1" min="1" step="1" />
+      </div>
+      <div class="pn-field">
+        <label for="toPage">到第幾頁</label>
+        <input id="toPage" class="field pn-num" type="number" value="0" min="0" step="1" />
+        <small class="muted">0 = 到最後一頁</small>
+      </div>
+      <div class="pn-field">
+        <label for="start">起始頁碼</label>
+        <input id="start" class="field pn-num" type="number" value="1" min="0" step="1" />
+      </div>
+    </div>
+  </div>
+
+  <div class="pn-card">
+    <div class="pn-card-head">
+      <span class="pn-card-title">位置</span>
+      <span class="pn-card-sub" id="posLabel">右下</span>
+    </div>
+    <div class="pn-poschooser" role="radiogroup" aria-label="頁碼位置">
+      <button type="button" class="pn-posbtn" data-pos="tl" title="左上"><span class="pn-posdot"></span></button>
+      <button type="button" class="pn-posbtn" data-pos="tc" title="中上"><span class="pn-posdot"></span></button>
+      <button type="button" class="pn-posbtn" data-pos="tr" title="右上"><span class="pn-posdot"></span></button>
+      <button type="button" class="pn-posbtn" data-pos="bl" title="左下"><span class="pn-posdot"></span></button>
+      <button type="button" class="pn-posbtn" data-pos="bc" title="中下"><span class="pn-posdot"></span></button>
+      <button type="button" class="pn-posbtn pn-posbtn-active" data-pos="br" title="右下"><span class="pn-posdot"></span></button>
+    </div>
+    <input id="position" type="hidden" value="br" />
+  </div>
+
+  <div class="pn-card">
+    <div class="pn-card-head">
+      <span class="pn-card-title">顯示格式</span>
+    </div>
+    <div class="pn-chips" role="group" aria-label="格式快選">
+      <button type="button" class="pn-chip" data-fmt="{n}">{n}</button>
+      <button type="button" class="pn-chip pn-chip-active" data-fmt="{n} / {N}">{n} / {N}</button>
+      <button type="button" class="pn-chip" data-fmt="- {n} -">- {n} -</button>
+      <button type="button" class="pn-chip" data-fmt="第 {n} 頁">第 {n} 頁</button>
+      <button type="button" class="pn-chip" data-fmt="第 {n} / {N} 頁">第 {n} / {N} 頁</button>
+      <button type="button" class="pn-chip" data-fmt="Page {n}">Page {n}</button>
+      <button type="button" class="pn-chip" data-fmt="Page {n} of {N}">Page {n} of {N}</button>
+    </div>
+    <input id="fmt" class="field pn-fmt-input" type="text" value="{n} / {N}" />
+    <small class="muted pn-fmt-hint"><code>{n}</code> = 當前頁碼　<code>{N}</code> = 會印頁碼的總頁數</small>
+  </div>
+
+  <div class="pn-card">
+    <div class="pn-card-head">
+      <span class="pn-card-title">樣式</span>
+    </div>
+
+    <div class="pn-slider-row">
+      <label for="size">字級</label>
+      <input id="size" type="range" min="6" max="48" step="0.5" value="11" />
+      <output class="pn-slider-val"><span id="sizeVal">11</span> pt</output>
+      <div class="pn-size-preview" id="sizePreview">12</div>
+    </div>
+
+    <div class="pn-slider-row">
+      <label for="margin">邊距</label>
+      <input id="margin" type="range" min="0" max="60" step="1" value="10" />
+      <output class="pn-slider-val"><span id="marginVal">10</span> mm</output>
+    </div>
+
+    <div class="pn-color-row">
+      <label>字體顏色</label>
+      <div class="pn-swatches" role="radiogroup" aria-label="常用顏色">
+        <button type="button" class="pn-swatch pn-swatch-active" data-color="#000000" style="background:#000000" title="黑"></button>
+        <button type="button" class="pn-swatch" data-color="#4b5563" style="background:#4b5563" title="深灰"></button>
+        <button type="button" class="pn-swatch" data-color="#9ca3af" style="background:#9ca3af" title="淺灰"></button>
+        <button type="button" class="pn-swatch" data-color="#dc2626" style="background:#dc2626" title="紅"></button>
+        <button type="button" class="pn-swatch" data-color="#2563eb" style="background:#2563eb" title="藍"></button>
+        <button type="button" class="pn-swatch" data-color="#059669" style="background:#059669" title="綠"></button>
+        <button type="button" class="pn-swatch" data-color="#b45309" style="background:#b45309" title="棕"></button>
+      </div>
+      <div class="pn-color-custom">
+        <input id="color" type="color" value="#000000" aria-label="自訂顏色" />
+        <input id="color-hex" type="text" value="#000000" aria-label="顏色色碼" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<details class="panel" id="thumbs-panel" hidden open>
+  <summary>頁面預覽 <span class="muted" id="thumbs-info" style="font-weight:normal; font-size:12px; margin-left:8px;">—</span></summary>
+  <p class="muted" style="font-size:12px;">縮圖直接顯示套用後的真實效果；改設定會即時重新渲染。點縮圖可放大檢視。</p>
+  <div class="page-grid" id="thumb-grid"></div>
+</details>
+
+<div style="margin-top:12px;">
+  <button class="btn btn-primary" id="btn-submit">{{ icon('save') }}插入頁碼</button>
+</div>
+<div style="margin-top:10px;">
+  {% with progress_id='jp' %}{% include "components/job_progress.html" %}{% endwith %}
+</div>
+
+<style>
+.pn-settings { padding-bottom: 16px; }
+.pn-settings > h2 { margin-bottom: 14px; }
+/* Base input styling to match the rest of the app (platform.css only
+   styles inputs inside .form-row; our new layout doesn't use that). */
+.pn-settings input[type="number"],
+.pn-settings input[type="text"],
+.pn-settings select {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+  color: #0f172a;
+  transition: border-color 0.12s, box-shadow 0.12s;
+  outline: none;
+  box-sizing: border-box;
+}
+.pn-settings input[type="number"]:hover,
+.pn-settings input[type="text"]:hover,
+.pn-settings select:hover { border-color: #94a3b8; }
+.pn-settings input[type="number"]:focus,
+.pn-settings input[type="text"]:focus,
+.pn-settings select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+.pn-settings .pn-card {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px 14px 14px;
+  margin-top: 10px;
+}
+.pn-settings .pn-card:first-of-type { margin-top: 0; }
+.pn-settings .pn-card-head {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-bottom: 10px;
+}
+.pn-settings .pn-card-title {
+  font-weight: 600; font-size: 13px; color: #0f172a;
+}
+.pn-settings .pn-card-sub { font-size: 12px; color: #94a3b8; }
+.pn-settings .pn-row {
+  display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-start;
+}
+.pn-settings .pn-field {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0;
+}
+.pn-settings .pn-field label {
+  font-size: 12px; color: #475569; font-weight: 500;
+}
+.pn-settings .pn-field .field { box-sizing: border-box; }
+.pn-settings .pn-field .pn-num { width: 110px; }
+.pn-settings .pn-field small { font-size: 11px; color: #94a3b8; }
+
+/* --- position picker (2×3 grid that looks like a page) --- */
+.pn-poschooser {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 56px);
+  gap: 6px;
+  max-width: 280px;
+  padding: 10px;
+  background: #fff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+}
+.pn-posbtn {
+  position: relative;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s, border-color 0.12s;
+}
+.pn-posbtn:hover { background: #eff6ff; border-color: #93c5fd; }
+.pn-posbtn .pn-posdot {
+  position: absolute; width: 10px; height: 10px;
+  background: #94a3b8; border-radius: 50%;
+  transition: background 0.12s, transform 0.12s;
+}
+.pn-posbtn[data-pos="tl"] .pn-posdot { top: 6px; left: 6px; }
+.pn-posbtn[data-pos="tc"] .pn-posdot { top: 6px; left: 50%; transform: translateX(-50%); }
+.pn-posbtn[data-pos="tr"] .pn-posdot { top: 6px; right: 6px; }
+.pn-posbtn[data-pos="bl"] .pn-posdot { bottom: 6px; left: 6px; }
+.pn-posbtn[data-pos="bc"] .pn-posdot { bottom: 6px; left: 50%; transform: translateX(-50%); }
+.pn-posbtn[data-pos="br"] .pn-posdot { bottom: 6px; right: 6px; }
+.pn-posbtn-active {
+  background: #eff6ff !important;
+  border-color: #2563eb !important;
+  border-style: solid !important;
+}
+.pn-posbtn-active .pn-posdot { background: #2563eb; width: 12px; height: 12px; }
+
+/* --- format chips --- */
+.pn-chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-bottom: 8px;
+}
+.pn-chip {
+  font-size: 12px;
+  padding: 5px 10px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.12s;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.pn-chip:hover { border-color: #93c5fd; background: #eff6ff; }
+.pn-chip-active {
+  background: #2563eb; border-color: #2563eb; color: #fff;
+}
+.pn-fmt-input { width: 100%; box-sizing: border-box; }
+.pn-fmt-hint { display: block; margin-top: 6px; }
+.pn-settings .pn-fmt-hint code {
+  background: #e2e8f0; color: #334155;
+  padding: 0 4px; border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+}
+
+/* --- slider rows (size / margin) --- */
+.pn-slider-row {
+  display: grid;
+  grid-template-columns: 70px 1fr auto auto;
+  gap: 10px; align-items: center;
+  padding: 4px 0;
+}
+.pn-slider-row label {
+  font-size: 12px; color: #475569; font-weight: 500;
+}
+.pn-slider-row input[type="range"] {
+  width: 100%; accent-color: #2563eb;
+}
+.pn-slider-val {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; color: #334155;
+  min-width: 54px; text-align: right;
+}
+.pn-size-preview {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 30px;
+  background: #fff; border: 1px solid #cbd5e1; border-radius: 4px;
+  font-weight: 600; color: #0f172a;
+  line-height: 1;
+}
+
+/* --- color row --- */
+.pn-color-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px dashed #e2e8f0;
+}
+.pn-color-row > label { font-size: 12px; color: #475569; font-weight: 500; }
+.pn-swatches { display: flex; gap: 6px; }
+.pn-swatch {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px #cbd5e1;
+  cursor: pointer; padding: 0;
+  transition: transform 0.1s;
+}
+.pn-swatch:hover { transform: scale(1.1); }
+.pn-swatch-active { box-shadow: 0 0 0 2px #2563eb; }
+.pn-color-custom { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+.pn-color-custom input[type="color"] {
+  width: 32px; height: 30px; padding: 0;
+  border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer;
+}
+.pn-color-custom input[type="text"] {
+  width: 88px; padding: 5px 8px;
+  border: 1px solid var(--border); border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+}
+.page-card.pn-skip { opacity: 0.45; }
+.page-card.pn-skip .page-num { color: #94a3b8; }
+.page-card .pn-badge {
+  position: absolute; top: 6px; left: 6px; z-index: 2;
+  background: #ef4444; color: #fff; font-size: 10px; font-weight: 600;
+  padding: 2px 6px; border-radius: 3px; letter-spacing: 0.02em;
+}
+.page-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:14px; margin-top: 8px; }
+.page-card {
+  position:relative; background:#fff; border:1px solid var(--border); border-radius:8px;
+  padding:8px; display:flex; flex-direction:column; align-items:center; gap:6px;
+}
+.page-thumb {
+  width: 100%; aspect-ratio: 0.7071; background:#f8fafc;
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+  border:1px solid #e5e7eb; border-radius:4px;
+  cursor: zoom-in; position: relative;
+}
+.page-thumb img { max-width:100%; max-height:100%; pointer-events: none; }
+.page-num { font-size:13px; font-weight:600; color:#475569; }
+/* (Position marker removed — thumbnails are now real renders showing
+   the page number baked in, not a CSS overlay.) */
+.page-lightbox {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.85); z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  cursor: zoom-out; padding: 20px;
+}
+.page-lightbox img { max-width: 95%; max-height: 95vh; box-shadow: 0 16px 48px rgba(0,0,0,0.5); border-radius: 4px; background: #fff; }
+.page-lightbox-close { position: absolute; top: 14px; right: 18px; color: #fff; font-size: 28px; background: none; border: none; cursor: pointer; }
+</style>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script src="/static/js/job_progress.js"></script>
+<script>
+let files = [];
+let uploadId = null;
+let pages = [];
+let pageCount = 0;
+let startNum = 1;
+
+const fu = new FileUpload(document.getElementById('upPN'), async (_first, fs) => {
+  files = Array.isArray(fs) ? fs : (fs ? [fs] : []);
+  if (!files.length) {
+    document.getElementById('thumbs-panel').hidden = true;
+    pages = []; uploadId = null; return;
+  }
+  document.getElementById('thumbs-panel').hidden = false;
+  document.getElementById('thumb-grid').innerHTML =
+    '<p class="muted" style="grid-column:1/-1;text-align:center;padding:24px;">載入縮圖中…</p>';
+  const fd = new FormData(); fd.append('file', files[0]);
+  const r = await fu.upload('/tools/pdf-pageno/load', fd, {processingLabel: '載入縮圖中…'});
+  if (!r.ok) {
+    document.getElementById('thumb-grid').innerHTML = '<p class="muted">載入失敗</p>';
+    return;
+  }
+  const j = await r.json();
+  pages = j.pages; pageCount = j.page_count; uploadId = j.upload_id;
+  renderThumbs();
+});
+
+const jp = new JobProgress(document.getElementById('jp'), {
+  onReset: () => { fu.reset(); files = []; pages = []; document.getElementById('thumbs-panel').hidden = true; }
+});
+
+function getFmt() { return document.getElementById('fmt').value || '{n}/{N}'; }
+function getPos() { return document.getElementById('position').value; }
+function getColor() { return document.getElementById('color').value || '#000000'; }
+function getSize() { return document.getElementById('size').value || '11'; }
+function getMargin() { return document.getElementById('margin').value || '10'; }
+function getStart() { return document.getElementById('start').value || '1'; }
+function getFromPage() { return parseInt(document.getElementById('fromPage').value) || 1; }
+function getToPageRaw() { return parseInt(document.getElementById('toPage').value) || 0; }
+function effectiveToPage() {
+  const t = getToPageRaw();
+  return (t && t > 0) ? t : pageCount;
+}
+
+function thumbUrl(page, settingsToken) {
+  // Use a token in the URL so each settings change forces a fresh fetch.
+  return `/tools/pdf-pageno/preview-thumb?_t=${settingsToken}&_p=${page}`;
+}
+
+let renderToken = 0;
+function renderThumbs() {
+  const grid = document.getElementById('thumb-grid');
+  const info = document.getElementById('thumbs-info');
+  startNum = parseInt(getStart()) || 1;
+  const fp = Math.max(1, getFromPage());
+  const tp = Math.min(pageCount, effectiveToPage());
+  const numbered = Math.max(0, tp - fp + 1);
+  info.textContent = `共 ${pageCount} 頁，會印 ${numbered} 個頁碼（第 ${fp}–${tp} 頁）`;
+  if (files.length > 1) info.textContent += `；批次共 ${files.length} 份檔案（縮圖只顯示第一份）`;
+  grid.innerHTML = pages.map(p => {
+    const skip = (p.page < fp || p.page > tp);
+    const badge = skip ? `<span class="pn-badge">不加頁碼</span>` : '';
+    return `<div class="page-card${skip ? ' pn-skip' : ''}">
+      <div class="page-thumb" data-page="${p.page}" data-zoom-src="${p.thumb}">
+        ${badge}
+        <img src="${p.thumb}" alt="page ${p.page}" loading="lazy" />
+      </div>
+      <div class="page-num">原第 ${p.page} 頁</div>
+    </div>`;
+  }).join('');
+  refreshPreviewThumbs();
+}
+
+function updateSkipBadges() {
+  if (!pages.length) return;
+  const fp = Math.max(1, getFromPage());
+  const tp = Math.min(pageCount, effectiveToPage());
+  const info = document.getElementById('thumbs-info');
+  const numbered = Math.max(0, tp - fp + 1);
+  info.textContent = `共 ${pageCount} 頁，會印 ${numbered} 個頁碼（第 ${fp}–${tp} 頁）`;
+  if (files.length > 1) info.textContent += `；批次共 ${files.length} 份檔案（縮圖只顯示第一份）`;
+  document.querySelectorAll('.page-card').forEach(card => {
+    const thumb = card.querySelector('.page-thumb');
+    if (!thumb) return;
+    const pg = parseInt(thumb.dataset.page);
+    const skip = (pg < fp || pg > tp);
+    card.classList.toggle('pn-skip', skip);
+    let badge = thumb.querySelector('.pn-badge');
+    if (skip && !badge) {
+      badge = document.createElement('span');
+      badge.className = 'pn-badge'; badge.textContent = '不加頁碼';
+      thumb.insertBefore(badge, thumb.firstChild);
+    } else if (!skip && badge) {
+      badge.remove();
+    }
+  });
+}
+function escapeHTML(s){return String(s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+let previewDebounce = null;
+function refreshPreviewThumbs() {
+  if (!uploadId) return;
+  clearTimeout(previewDebounce);
+  previewDebounce = setTimeout(async () => {
+    const myToken = ++renderToken;
+    const args = {
+      upload_id: uploadId, position: getPos(), fmt: getFmt(),
+      start: getStart(), font_size: getSize(),
+      margin_mm: getMargin(), color: getColor(),
+      from_page: getFromPage(), to_page: getToPageRaw(),
+    };
+    // Render in parallel but limit concurrency to 6 so we don't slam the
+    // server with every settings change.
+    const queue = pages.map(p => p.page);
+    const cards = document.querySelectorAll('.page-thumb[data-page]');
+    async function worker() {
+      while (queue.length) {
+        const page = queue.shift();
+        if (myToken !== renderToken) return;
+        const fd = new FormData();
+        for (const [k, v] of Object.entries(args)) fd.append(k, String(v));
+        fd.append('page', String(page));
+        try {
+          const r = await fetch('/tools/pdf-pageno/preview-thumb', { method: 'POST', body: fd });
+          if (!r.ok) continue;
+          const blob = await r.blob();
+          const url = URL.createObjectURL(blob);
+          const card = Array.from(cards).find(c => c.dataset.page === String(page));
+          if (card) {
+            const img = card.querySelector('img');
+            const old = img.src;
+            img.src = url;
+            card.dataset.zoomSrc = url;
+            // Revoke the old object URL once the new one's loaded.
+            img.addEventListener('load', () => {
+              if (old.startsWith('blob:')) URL.revokeObjectURL(old);
+            }, { once: true });
+          }
+        } catch (_e) { /* ignore */ }
+      }
+    }
+    await Promise.all([worker(), worker(), worker()]);
+  }, 300);
+}
+
+// Color picker <-> hex + swatches
+const colorEl = document.getElementById('color');
+const colorHexEl = document.getElementById('color-hex');
+const swatches = document.querySelectorAll('.pn-swatch');
+function syncSwatchActive(val) {
+  const norm = (val || '').toLowerCase();
+  let hit = false;
+  swatches.forEach(s => {
+    const m = s.dataset.color.toLowerCase() === norm;
+    s.classList.toggle('pn-swatch-active', m);
+    if (m) hit = true;
+  });
+  return hit;
+}
+colorEl.addEventListener('input', () => {
+  colorHexEl.value = colorEl.value;
+  syncSwatchActive(colorEl.value);
+  refreshPreviewThumbs();
+});
+colorHexEl.addEventListener('input', () => {
+  if (/^#[0-9a-fA-F]{6}$/.test(colorHexEl.value)) {
+    colorEl.value = colorHexEl.value;
+    syncSwatchActive(colorHexEl.value);
+    refreshPreviewThumbs();
+  }
+});
+swatches.forEach(s => s.addEventListener('click', () => {
+  const c = s.dataset.color;
+  colorEl.value = c; colorHexEl.value = c;
+  syncSwatchActive(c);
+  refreshPreviewThumbs();
+}));
+
+// Position visual picker
+const posInput = document.getElementById('position');
+const posLabel = document.getElementById('posLabel');
+const POS_NAMES = { tl:'左上', tc:'中上', tr:'右上', bl:'左下', bc:'中下', br:'右下' };
+document.querySelectorAll('.pn-posbtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.pn-posbtn').forEach(b => b.classList.remove('pn-posbtn-active'));
+    btn.classList.add('pn-posbtn-active');
+    posInput.value = btn.dataset.pos;
+    if (posLabel) posLabel.textContent = POS_NAMES[btn.dataset.pos] || '';
+    refreshPreviewThumbs();
+  });
+});
+
+// Format chips
+const fmtInput = document.getElementById('fmt');
+function syncFmtChips() {
+  const v = fmtInput.value;
+  document.querySelectorAll('.pn-chip').forEach(c => {
+    c.classList.toggle('pn-chip-active', c.dataset.fmt === v);
+  });
+}
+document.querySelectorAll('.pn-chip').forEach(c => {
+  c.addEventListener('click', () => {
+    fmtInput.value = c.dataset.fmt;
+    syncFmtChips();
+    refreshPreviewThumbs();
+  });
+});
+fmtInput.addEventListener('input', syncFmtChips);
+
+// Slider live value + preview
+const sizeEl = document.getElementById('size');
+const sizeValEl = document.getElementById('sizeVal');
+const sizePreview = document.getElementById('sizePreview');
+function refreshSizeUI() {
+  const v = parseFloat(sizeEl.value) || 11;
+  sizeValEl.textContent = v;
+  if (sizePreview) sizePreview.style.fontSize = v + 'pt';
+}
+sizeEl.addEventListener('input', refreshSizeUI);
+refreshSizeUI();
+
+const marginEl = document.getElementById('margin');
+const marginValEl = document.getElementById('marginVal');
+function refreshMarginUI() { marginValEl.textContent = parseInt(marginEl.value) || 0; }
+marginEl.addEventListener('input', refreshMarginUI);
+
+// Re-render preview thumbs whenever settings change.
+['position','fmt','start','size','margin'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', refreshPreviewThumbs);
+  el.addEventListener('change', refreshPreviewThumbs);
+});
+// Page-range inputs: update skip badges immediately, then re-render.
+['fromPage','toPage'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => { updateSkipBadges(); refreshPreviewThumbs(); });
+  el.addEventListener('change', () => { updateSkipBadges(); refreshPreviewThumbs(); });
+});
+
+// Lightbox: click thumb to enlarge.
+document.getElementById('thumb-grid').addEventListener('click', (e) => {
+  const t = e.target.closest('.page-thumb[data-zoom-src]');
+  if (!t) return;
+  const lb = document.createElement('div');
+  lb.className = 'page-lightbox';
+  // Add ?large=1 so the backend renders at higher dpi (regex-replacing the
+  // dpi value in-string was unreliable — upload_id can contain matching
+  // digits and silently break the URL).
+  const big = t.dataset.zoomSrc + (t.dataset.zoomSrc.includes('?') ? '&' : '?') + 'large=1';
+  lb.innerHTML = `<button class="page-lightbox-close" type="button">×</button>
+                  <img src="${big}" alt="" />`;
+  lb.addEventListener('click', () => lb.remove());
+  document.body.appendChild(lb);
+});
+
+document.getElementById('btn-submit').addEventListener('click', async () => {
+  if(!files.length) return alert('請上傳 PDF');
+  const fd = new FormData();
+  for (const f of files) fd.append('file', f);
+  fd.append('position', getPos());
+  fd.append('fmt', getFmt());
+  fd.append('start', getStart());
+  fd.append('font_size', getSize());
+  fd.append('margin_mm', getMargin());
+  fd.append('color', getColor());
+  fd.append('from_page', String(getFromPage()));
+  fd.append('to_page', String(getToPageRaw()));
+  const r = await fu.upload('/tools/pdf-pageno/submit', fd, {processingLabel: '排隊處理中…'});
+  if(!r.ok) return alert('送出失敗：'+ await r.text());
+  const j = await r.json(); jp.track(j.job_id);
+});
+</script>
+{% endblock %}

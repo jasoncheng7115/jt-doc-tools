@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}欄位同義詞 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('book', size=22) }} 欄位同義詞</h1>
+<p class="muted">一個 <code>key</code> 可以對應多個 <b>同義詞</b>（用逗號分隔）。PDF 中如果出現任一個同義詞，就會當成該 <code>key</code> 的欄位並填入公司資料。儲存於 <code>data/label_synonyms.json</code>。</p>
+
+<div class="panel">
+  <h2>同義詞對照表</h2>
+  <div class="profile-toolbar">
+    <button class="btn" id="addRow" type="button">{{ icon('plus') }}新增 key</button>
+    <button class="btn btn-primary" id="saveBtn" type="button">{{ icon('save') }}儲存</button>
+    <span style="flex:1;"></span>
+    <a class="btn" href="/admin/synonyms/export" download>{{ icon('download') }}匯出 JSON</a>
+    <button class="btn" id="importMergeBtn" type="button" title="保留現有同義詞，新檔案的 key 補上去；同 key 兩邊的同義詞做聯集">{{ icon('upload') }}匯入（合併）</button>
+    <button class="btn btn-danger" id="importReplaceBtn" type="button" title="清掉現有所有同義詞，只保留匯入檔內容（不可還原）">{{ icon('upload') }}匯入（取代）</button>
+    <input type="file" id="importFile" accept="application/json,.json" style="display:none">
+    <span class="muted" id="status"></span>
+  </div>
+  <table class="profile-table">
+    <thead>
+      <tr><th style="width:200px;">canonical key</th><th>同義詞（逗號分隔）</th><th style="width:60px;"></th></tr>
+    </thead>
+    <tbody id="rows">
+      {% for r in rows %}
+      <tr>
+        <td><input class="k" type="text" value="{{ r.key }}" /></td>
+        <td><textarea class="s" rows="1">{{ r.synonyms|join(', ') }}</textarea></td>
+        <td><button class="btn btn-small btn-danger" data-act="del" type="button">{{ icon('trash') }}</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .profile-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .profile-table { width: 100%; border-collapse: collapse; }
+  .profile-table th, .profile-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .profile-table th { text-align: left; font-size: 12px; color: var(--muted); }
+  .profile-table input, .profile-table textarea { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font: inherit; }
+  .profile-table textarea { resize: vertical; min-height: 32px; font-family: inherit; }
+  #status { font-size: 12px; }
+  #status.ok { color: var(--success); }
+  #status.err { color: #b91c1c; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const rowsEl = document.getElementById('rows');
+const statusEl = document.getElementById('status');
+
+function makeRow(key = '', syns = '') {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input class="k" type="text" value="${esc(key)}" /></td>
+    <td><textarea class="s" rows="1">${esc(syns)}</textarea></td>
+    <td><button class="btn btn-small btn-danger" data-act="del" type="button">🗑</button></td>
+  `;
+  return tr;
+}
+
+document.getElementById('addRow').addEventListener('click', () => {
+  rowsEl.appendChild(makeRow());
+  rowsEl.lastElementChild.querySelector('.k').focus();
+});
+
+rowsEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-act="del"]');
+  if (!btn) return;
+  btn.closest('tr').remove();
+});
+
+const saveBtn = document.getElementById('saveBtn');
+const saveBtnOriginalHTML = saveBtn.innerHTML;
+saveBtn.addEventListener('click', async () => {
+  const rows = [];
+  const seen = new Set();
+  for (const tr of rowsEl.querySelectorAll('tr')) {
+    const key = tr.querySelector('.k').value.trim();
+    if (!key) continue;
+    if (seen.has(key)) {
+      statusEl.textContent = `key 重複：${key}`;
+      statusEl.className = 'err';
+      return;
+    }
+    seen.add(key);
+    rows.push({ key, synonyms: tr.querySelector('.s').value });
+  }
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="spinner"></span>儲存中…';
+  statusEl.textContent = '';
+  const res = await fetch('/admin/synonyms/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows }),
+  });
+  if (res.ok) {
+    saveBtn.innerHTML = '✓ 已儲存';
+    saveBtn.classList.add('saved-flash');
+    showToast('同義詞已儲存', 'ok');
+    setTimeout(() => {
+      saveBtn.innerHTML = saveBtnOriginalHTML;
+      saveBtn.classList.remove('saved-flash');
+      saveBtn.disabled = false;
+    }, 1600);
+  } else {
+    saveBtn.innerHTML = saveBtnOriginalHTML;
+    saveBtn.disabled = false;
+    showToast('儲存失敗', 'err');
+  }
+});
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ---------- 匯入 ----------
+const importFile = document.getElementById('importFile');
+let pendingMode = 'merge';
+
+document.getElementById('importMergeBtn').addEventListener('click', () => {
+  pendingMode = 'merge';
+  importFile.value = '';
+  importFile.click();
+});
+
+document.getElementById('importReplaceBtn').addEventListener('click', async () => {
+  const ok = await showConfirm(
+    '「整個取代」會清掉現有所有同義詞，只保留匯入檔的內容。\n這個動作不可還原，確定要繼續？',
+    { title: '確認整個取代', kind: 'danger', okText: '我確定，繼續', cancelText: '取消' }
+  );
+  if (!ok) return;
+  pendingMode = 'replace';
+  importFile.value = '';
+  importFile.click();
+});
+
+importFile.addEventListener('change', async () => {
+  const f = importFile.files[0];
+  if (!f) return;
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('mode', pendingMode);
+  const res = await fetch('/admin/synonyms/import', { method: 'POST', body: fd });
+  importFile.value = '';
+  if (!res.ok) {
+    showToast('匯入失敗：' + (await res.text()), 'err');
+    return;
+  }
+  const j = await res.json();
+  const msg = j.mode === 'merge'
+    ? `合併完成：新增 ${j.added} 個 key、既有 key 聯集 ${j.overridden} 個`
+    : `已整個取代為 ${j.count} 個 key`;
+  showToast(msg, 'ok');
+  setTimeout(() => location.reload(), 900);
+});
+</script>
+{% endblock %}

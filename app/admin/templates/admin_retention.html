@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}檔案保留 / 清理 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('archive', size=22) }} 檔案保留 / 清理</h1>
+<p class="muted">設定每類資料保留多久，背景排程自動清理。
+保留天數填 <code>-1</code> 表示「永久保留」。</p>
+
+<div class="panel" style="border-left:4px solid #3b82f6; font-size:13px;">
+  <b>清理時機：</b>
+  <ul style="margin:6px 0 0 18px; padding:0; line-height:1.7;">
+    <li>服務啟動時跑一次（restart 後立刻補清）</li>
+    <li>服務跑著的時候，每 <b>6 小時</b>自動跑一次（daemon thread）</li>
+    <li>需要立刻清乾淨可按下方「立即清理一次」</li>
+    <li>服務停掉就不會清（這是預期行為——回想 launchd / systemd 沒拉起服務時什麼都不會跑）</li>
+    <li>修改保留天數後立即生效，下次排程依新值</li>
+  </ul>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">保留設定</h2>
+  <table class="ret-table">
+    <thead>
+      <tr><th>項目</th><th>目前佔用</th><th>最舊一筆</th><th>保留期</th></tr>
+    </thead>
+    <tbody>
+      {% set rows = [
+        ('fill_history', '表單填寫歷史', 'fill_history_days', 'days'),
+        ('stamp_history', '用印簽名歷史', 'stamp_history_days', 'days'),
+        ('watermark_history', '浮水印歷史', 'watermark_history_days', 'days'),
+        ('temp', '暫存上傳 / 工作檔', 'temp_hours', 'hours'),
+        ('jobs', 'Job 結果', 'jobs_hours', 'hours'),
+        ('audit', '稽核記錄', 'audit_days', 'days'),
+      ] %}
+      {% for stat_key, label, setting_key, unit in rows %}
+      <tr>
+        <td><b>{{ label }}</b></td>
+        <td class="muted">{{ '%.1f'|format(stats[stat_key].size_mb) }} MB</td>
+        <td class="muted">
+          {% if stats[stat_key].oldest_days %}
+            {{ '%.0f'|format(stats[stat_key].oldest_days) }} 天前
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          <input class="field" type="number" data-key="{{ setting_key }}"
+                 value="{{ settings[setting_key] }}" min="-1" max="36500"
+                 style="width:80px;"> {{ unit }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p style="margin-top:14px;">
+    <button class="btn btn-primary" id="saveBtn">{{ icon('save', size=14) }} 儲存設定</button>
+    <button class="btn" id="sweepNowBtn">{{ icon('refresh', size=14) }} 立即清理一次</button>
+    <span id="status" class="muted" style="font-size:12px; margin-left:10px;"></span>
+  </p>
+</div>
+
+<style>
+  .ret-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .ret-table th, .ret-table td { padding:6px 8px; border-bottom:1px solid #e5e7eb; }
+  .ret-table th { background:#f9fafb; font-size:11px; color:#6b7280; text-align:left; }
+</style>
+
+
+<style>
+  ul { color:#374151; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  const body = {};
+  document.querySelectorAll('[data-key]').forEach(el => {
+    body[el.dataset.key] = parseInt(el.value, 10);
+  });
+  const r = await fetch('/admin/retention/save', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  const status = document.getElementById('status');
+  if (r.ok) { status.textContent = '✓ 已儲存'; status.style.color = '#16a34a'; }
+  else { status.textContent = '失敗：' + await r.text(); status.style.color = '#dc2626'; }
+});
+
+document.getElementById('sweepNowBtn').addEventListener('click', async () => {
+  if (!(await showConfirm('立即清理符合過期條件的檔案？此操作不可復原。',
+        { title: '立即清理', okText: '確定清理' }))) return;
+  document.getElementById('sweepNowBtn').disabled = true;
+  const r = await fetch('/admin/retention/sweep-now', {method:'POST'});
+  document.getElementById('sweepNowBtn').disabled = false;
+  if (r.ok) {
+    const j = await r.json();
+    showToast(`清理完成：${JSON.stringify(j.report)}`, 'ok');
+    setTimeout(() => location.reload(), 1500);
+  } else {
+    showAlert('失敗：' + await r.text());
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,1850 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}PDF 編輯器 · {{ app_name }}{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js"></script>
+<style>
+.pe-wrap { display: flex; gap: 12px; height: calc(100vh - 220px); min-height: 500px; }
+.pe-toolbar { display: flex; flex-direction: column; gap: 4px; width: 60px; padding: 8px 4px;
+  align-items: center;   /* center the 40px buttons within the 60px toolbar */
+  background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; }
+.pe-toolbar button { padding: 6px; font-size: 0; background: #fff; border: 1px solid #e5e7eb;
+  border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; color: #374151; }
+.pe-toolbar button svg { width: 22px; height: 22px; }
+.pe-toolbar button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+.pe-toolbar button.active svg { stroke: #fff; }
+.pe-toolbar button[disabled] { opacity: 0.4; cursor: not-allowed; }
+.pe-toolbar button:hover:not(.active):not([disabled]) { background: #f3f4f6; }
+.pe-top .btn svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
+/* Custom instant tooltip for toolbar buttons — native title takes ~500ms */
+.pe-toolbar button { position: relative; }
+.pe-toolbar button[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute; left: calc(100% + 8px); top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  background: #1f2937; color: #fff;
+  padding: 5px 10px; border-radius: 5px;
+  font-size: 12px; font-weight: 500;
+  pointer-events: none;
+  z-index: 8000;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+.pe-toolbar button[data-tip]:hover::before {
+  content: "";
+  position: absolute; left: calc(100% + 2px); top: 50%;
+  transform: translateY(-50%);
+  width: 0; height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-right: 6px solid #1f2937;
+  pointer-events: none;
+  z-index: 8000;
+}
+.pe-canvas-wrap { flex: 1; overflow: auto; background: #e5e7eb; padding: 16px; border-radius: 6px; }
+.pe-zoom-stage { transform-origin: 0 0; }
+.pe-page { position: relative; margin: 0 auto 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); background: white; }
+.pe-page img.bg { display: block; user-select: none; pointer-events: none;
+  position: absolute; left: 0; top: 0; }
+.pe-page .canvas-container { position: absolute !important; left: 0; top: 0; }
+.pe-sidebar { width: 260px; padding: 14px; background: #f8fafc; border: 1px solid #e5e7eb;
+  border-radius: 8px; font-size: 13px; overflow: auto; }
+.pe-sidebar h3 { margin: 0 0 12px; font-size: 14px; color: #111827; font-weight: 700;
+  padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; }
+.pe-sidebar .row { margin-bottom: 10px; }
+.pe-sidebar label { display: block; color: #4b5563; margin-bottom: 3px; font-size: 11px;
+  font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.pe-sidebar input[type="text"], .pe-sidebar input[type="number"], .pe-sidebar input[type="color"],
+.pe-sidebar select {
+  width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 13px;
+  border: 1px solid #d1d5db; border-radius: 5px; background: #fff;
+  transition: border-color 0.12s, box-shadow 0.12s; }
+.pe-sidebar input:focus, .pe-sidebar select:focus {
+  outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+.pe-sidebar select { cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236b7280'%3E%3Cpath d='M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.24 4.5a.75.75 0 0 1-1.08 0l-4.24-4.5a.75.75 0 0 1 0-1.06z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center; background-size: 14px;
+  padding-right: 28px; appearance: none; -webkit-appearance: none; }
+.pe-sidebar .inline { display: flex; gap: 8px; align-items: center; }
+.pe-sidebar .inline input[type="color"] { width: 36px; padding: 0; height: 28px; cursor: pointer; }
+.pe-sidebar .muted { color: #9ca3af; font-size: 11px; }
+.pe-sidebar .chip-row { display: flex; gap: 0; margin-bottom: 10px; }
+.pe-sidebar .chip-row button { padding: 5px 12px; font-size: 13px; border: 1px solid #d1d5db;
+  background: #fff; cursor: pointer; flex: 1; transition: background 0.1s; }
+.pe-sidebar .chip-row button:first-child { border-radius: 5px 0 0 5px; }
+.pe-sidebar .chip-row button:last-child  { border-radius: 0 5px 5px 0; }
+.pe-sidebar .chip-row button + button { border-left: 0; }
+.pe-sidebar .chip-row button:hover:not(.on) { background: #f3f4f6; }
+.pe-sidebar .chip-row button.on { background: #2563eb; color: #fff; border-color: #2563eb; }
+.pe-top { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.pe-top .btn { padding: 6px 12px; font-size: 13px; }
+.pe-status { flex: 1; color: #6b7280; font-size: 12px; }
+.pe-zoom-ctl { display: flex; align-items: center; gap: 6px; }
+.pe-zoom-ctl input[type="range"] { width: 120px; }
+/* Keyboard-key shortcut hint — wrapped in a light framed strip */
+.pe-shortcuts {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 4px;
+  padding: 7px 12px; border: 1px solid #e2e8f0; border-radius: 6px;
+  background: linear-gradient(180deg, #f9fafb 0%, #f1f5f9 100%);
+  margin-bottom: 10px;
+}
+.pe-shortcuts .pe-shortcuts-label {
+  font-weight: 600; color: #475569; margin-right: 2px; font-size: 11px;
+}
+.pe-shortcuts kbd { display: inline-block; padding: 1px 6px; font-size: 11px;
+  font-family: -apple-system, 'SF Mono', ui-monospace, Consolas, monospace;
+  color: #374151; background: linear-gradient(180deg, #ffffff 0%, #e5e7eb 100%);
+  border: 1px solid #cbd5e1; border-bottom-width: 2px; border-radius: 4px;
+  box-shadow: inset 0 -1px 0 #fff, 0 1px 0 rgba(0,0,0,0.06);
+  min-width: 16px; text-align: center; vertical-align: 1px;
+  font-weight: 600; line-height: 14px; }
+.pe-shortcuts kbd.highlight { background: linear-gradient(180deg,#fef3c7 0%,#fde68a 100%);
+  border-color: #d97706; color: #92400e; }
+.pe-shortcuts .sep { color: #cbd5e1; }
+/* Full-screen overlay while re-rendering */
+#peLoading { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35);
+  z-index: 9500; display: none; align-items: center; justify-content: center; }
+#peLoading.show { display: flex; }
+#peLoading .box { background: white; padding: 20px 26px; border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 12px;
+  font-size: 14px; color: #1e293b; }
+#peLoading .spinner { width: 20px; height: 20px; border: 3px solid #e5e7eb;
+  border-top-color: #2563eb; border-radius: 50%; animation: peSpin 0.8s linear infinite; }
+@keyframes peSpin { to { transform: rotate(360deg); } }
+
+/* ---- Custom font picker ---- */
+.fp-wrap { position: relative; width: 100%; }
+.fp-trigger {
+  width: 100%; display:flex; justify-content:space-between; align-items:center;
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: #fff; cursor: pointer; font-size: 13px; color: #0f172a;
+  transition: border-color 0.12s, box-shadow 0.12s; text-align: left;
+  gap: 8px;
+}
+.fp-trigger:hover { border-color: #94a3b8; }
+.fp-trigger:focus { outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+.fp-cur { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fp-caret { color: #94a3b8; font-size: 11px; }
+.fp-pop {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+  background: #fff; border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(15,23,42,0.16);
+  z-index: 1400;
+  max-height: 360px; display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.fp-search-row {
+  padding: 8px; border-bottom: 1px solid #f1f5f9;
+}
+.fp-search {
+  width: 100%; box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid var(--border); border-radius: 6px;
+  font-size: 13px; outline: none;
+}
+.fp-search:focus { border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+.fp-list { overflow: auto; padding: 4px 0; }
+.fp-group {
+  padding: 8px 12px 4px; font-size: 11.5px; font-weight: 600;
+  color: #64748b; text-transform: none; letter-spacing: 0.02em;
+  position: sticky; top: 0; background: #fff;
+}
+.fp-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 12px; gap: 12px; cursor: pointer; font-size: 13px;
+  transition: background 0.08s;
+}
+.fp-item:hover { background: #eff6ff; }
+.fp-item-active { background: #dbeafe; }
+.fp-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1 1 auto; min-width: 0; }
+.fp-item-preview { flex: 0 0 auto; color: #475569; font-size: 14px; }
+.fp-empty { padding: 16px; text-align: center; color: #94a3b8; font-size: 13px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('edit', size=22) }} PDF 編輯器</h1>
+<p class="muted">
+  疊加文字 / 圖片 / 形狀 / 標註，或用「選既有」工具直接搬動、改內容、刪除原 PDF 上的物件。
+  <span style="color:#b45309; display:inline-flex; align-items:center; gap:4px; vertical-align:middle;">{{ icon('warn', size=13) }} 不會 reflow；字型為還原繪製，與原檔可能細微不同。</span>
+</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳 PDF</h2>
+  {% with upload_id='peUpload', accept='application/pdf', hint='單檔、PDF only。' %}
+    {% include "components/file_upload.html" %}
+  {% endwith %}
+</div>
+
+<div class="panel" id="editor-panel" hidden>
+  <div class="pe-top">
+    <button class="btn btn-primary" type="button" id="btnSave">{{ icon('save') }} 儲存並預覽</button>
+    <a class="btn" id="btnDownload" href="#" style="display:none;">{{ icon('download') }} 下載</a>
+    <span style="width:1px; height:20px; background:#e5e7eb; margin:0 4px;"></span>
+    <button class="btn" type="button" id="btnUndo" title="復原 (Cmd/Ctrl+Z)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h9a7 7 0 0 1 0 14h-2"/></svg>
+      復原
+    </button>
+    <button class="btn" type="button" id="btnRedo" title="重做 (Cmd/Ctrl+Shift+Z)" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9h-9a7 7 0 0 0 0 14h2"/></svg>
+      重做
+    </button>
+    <span style="width:1px; height:20px; background:#e5e7eb; margin:0 4px;"></span>
+    <label class="muted" style="display:inline-flex; align-items:center; gap:4px; font-size:12px; cursor:pointer;">
+      <input type="checkbox" id="peAutoSave" checked>
+      自動預覽（改動後 ~1 秒自動重算）
+    </label>
+    <button class="btn" type="button" id="btnGlobalFont" data-tip="把整份 PDF 的文字換成同一個字型"
+      style="padding: 4px 10px; display:inline-flex; align-items:center; gap:4px;">
+      {{ icon('text', size=14) }} 整份換字型
+    </button>
+    <span style="width:1px; height:20px; background:#e5e7eb; margin:0 4px;"></span>
+    <button class="btn" type="button" id="btnPrefs" data-tip="編輯器設定"
+      style="padding: 4px 8px; display:inline-flex; align-items:center; gap:4px; position:relative;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      設定
+    </button>
+    <span style="width:1px; height:20px; background:#e5e7eb; margin:0 4px;"></span>
+    <div class="pe-zoom-ctl">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px;"><circle cx="11" cy="11" r="7"/><path d="M16 16l5 5M8 11h6M11 8v6"/></svg>
+      <input type="range" id="zoomSlider" min="50" max="200" value="100" step="10">
+      <span class="muted" style="font-size:12px; min-width:3em;" id="zoomLabel">100%</span>
+      <button class="btn" type="button" id="btnFitPage" title="縮放到剛好顯示整頁"
+        style="padding: 2px 8px; display:inline-flex; align-items:center; gap:4px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px; height:13px;"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>
+        符合視窗
+      </button>
+    </div>
+    <span class="pe-status" id="peStatus"></span>
+  </div>
+  <div class="pe-shortcuts muted" style="font-size:11px;">
+    <span class="pe-shortcuts-label">快捷鍵</span>
+    <kbd>V</kbd> 選取<span class="sep">·</span>
+    <kbd class="highlight">S</kbd> 選既有<span class="sep">·</span>
+    <kbd>T</kbd> 文字<span class="sep">·</span>
+    <kbd>I</kbd> 圖片<span class="sep">·</span>
+    <kbd>W</kbd> 白底<span class="sep">·</span>
+    <kbd>R</kbd> 矩形<span class="sep">·</span>
+    <kbd>L</kbd> 線段<span class="sep">·</span>
+    <kbd>A</kbd> 箭頭<span class="sep">·</span>
+    <kbd>O</kbd> 橢圓<span class="sep">·</span>
+    <kbd>P</kbd> 手繪<span class="sep">·</span>
+    <kbd>H</kbd> 螢光筆<span class="sep">·</span>
+    <kbd>N</kbd> 便箋<span class="sep">·</span>
+    <kbd>Delete</kbd> 刪除
+  </div>
+  <div class="pe-wrap">
+    <div class="pe-toolbar">
+      <button type="button" id="toolSelect" class="active" data-tip="選取 (V)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3l15 8-6 2-2 6z"/></svg>
+      </button>
+      <button type="button" id="toolPick" data-tip="選既有 PDF 物件 (S)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>
+      </button>
+      <button type="button" id="toolText" data-tip="文字框 (T)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6h12M12 6v14M9 20h6"/></svg>
+      </button>
+      <button type="button" id="toolImage" data-tip="圖片 / 印章 / 簽名 (I)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M3 16l5-4 5 5 3-2 5 4"/></svg>
+      </button>
+      <button type="button" id="toolWhiteout" data-tip="白底遮罩 (W)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="4" y="8" width="16" height="8" rx="1" stroke-dasharray="3 2"/><path d="M6 12h12" stroke="#e5e7eb" stroke-width="5" stroke-linecap="round"/></svg>
+      </button>
+      <button type="button" id="toolRect" data-tip="矩形 (R)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="1"/></svg>
+      </button>
+      <button type="button" id="toolLine" data-tip="線段 (L)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20L20 4"/></svg>
+      </button>
+      <button type="button" id="toolArrow" data-tip="箭頭 (A)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M14 6l6 6-6 6"/></svg>
+      </button>
+      <button type="button" id="toolEllipse" data-tip="橢圓 (O)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="12" rx="8" ry="6"/></svg>
+      </button>
+      <button type="button" id="toolPencil" data-tip="手繪 (P)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l3-1 11-11-2-2L5 17l-1 3z"/><path d="M14 6l2 2"/></svg>
+      </button>
+      <button type="button" id="toolHighlight" data-tip="螢光筆 (H)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l4 4 10-10-4-4z"/><path d="M2 22h8"/><path d="M15 6l3 3"/></svg>
+      </button>
+      <button type="button" id="toolStickyNote" data-tip="便箋註解 (N)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h10l4 4v12H5z"/><path d="M15 4v4h4"/><path d="M8 12h6M8 16h4"/></svg>
+      </button>
+    </div>
+    <div class="pe-canvas-wrap" id="canvasWrap">
+      <div class="pe-zoom-stage" id="zoomStage"></div>
+    </div>
+    <div class="pe-sidebar" id="propsPanel">
+      <h3>屬性</h3>
+      <div class="muted">點選物件後在此編輯。</div>
+    </div>
+  </div>
+</div>
+
+<!-- Preferences popover -->
+<div id="peSettings" style="display:none; position:absolute; z-index:8500; background:white; border:1px solid #e5e7eb; border-radius:8px; padding:14px; box-shadow: 0 10px 30px rgba(0,0,0,0.12); min-width:260px;">
+  <h3 style="margin:0 0 10px; font-size:14px; font-weight:700; color:#111827;">編輯器設定</h3>
+  <div style="margin-bottom:10px;">
+    <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+      <input type="checkbox" id="prefShowGuides" checked>
+      顯示對齊輔助線
+    </label>
+  </div>
+  <div style="margin-bottom:10px;">
+    <label style="display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer;">
+      <input type="checkbox" id="prefSnap" checked>
+      拖曳時自動貼合其他物件
+    </label>
+  </div>
+  <div style="margin-bottom:10px;">
+    <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:3px;">貼合距離</label>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <input type="range" id="prefSnapDist" min="2" max="20" value="5" step="1" style="flex:1;">
+      <span id="prefSnapDistLabel" style="font-size:12px; min-width:3em;">5 px</span>
+    </div>
+  </div>
+  <div style="text-align:right; margin-top:10px;">
+    <button type="button" class="btn" id="prefsClose">關閉</button>
+  </div>
+</div>
+
+<!-- Full-screen loading overlay shown during save/re-render -->
+<div id="peLoading">
+  <div class="box"><div class="spinner"></div><span id="peLoadingText">重新渲染中…</span></div>
+</div>
+
+<!-- Global-font-replace modal -->
+<div id="fontPicker" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9000; align-items:center; justify-content:center;">
+  <div style="background:white; padding:20px; border-radius:8px; max-width:520px; min-width:420px;">
+    <h3 style="margin-top:0;">把整份 PDF 文字換成同一個字型</h3>
+    <p class="muted" style="font-size:12.5px; margin:4px 0 12px;">
+      這會把 PDF 裡每一頁、每一段文字都重繪成你選的字型（字級、顏色、粗體 / 斜體會保留）。
+      <b style="color:#b45309;">此動作不可 Undo；請先下載一份備份。</b>
+    </p>
+    <div class="row" style="margin:10px 0;">
+      <label style="font-size:13px; font-weight:500;">新字型</label>
+      <select id="gfFontSelect" style="width:100%; padding:8px; border:1px solid #d1d5db; border-radius:6px; margin-top:4px;">
+        <option value="pymupdf:default">載入字型清單中…</option>
+      </select>
+    </div>
+    <div id="gfStatus" class="muted" style="font-size:12px; margin-top:8px;"></div>
+    <div style="text-align:right; margin-top:16px;">
+      <button type="button" class="btn" id="gfCancel">取消</button>
+      <button type="button" class="btn btn-primary" id="gfGo">{{ icon('play', size=12) }} 執行換字型</button>
+    </div>
+  </div>
+</div>
+
+<!-- Asset picker modal -->
+<div id="assetPicker" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9000; align-items:center; justify-content:center;">
+  <div style="background:white; padding:20px; border-radius:8px; max-width:640px; max-height:80vh; overflow:auto; min-width:420px;">
+    <h3 style="margin-top:0;">選擇圖片 / 印章 / 簽名</h3>
+    <div style="display:flex; gap:6px; margin-bottom:10px; border-bottom:1px solid #e5e7eb;">
+      <button type="button" class="ap-tab ap-tab-active" data-tab="asset"
+              style="padding:8px 14px; border:none; background:none; border-bottom:2px solid #2563eb; font-weight:600; color:#2563eb; cursor:pointer;">從資產庫</button>
+      <button type="button" class="ap-tab" data-tab="upload"
+              style="padding:8px 14px; border:none; background:none; border-bottom:2px solid transparent; font-weight:500; color:#6b7280; cursor:pointer;">上傳新圖片</button>
+    </div>
+    <div id="apTabAsset">
+      <div id="assetGrid" style="display:grid; grid-template-columns: repeat(auto-fill,minmax(120px,1fr)); gap:10px; max-height:50vh; overflow:auto; padding:8px 0;">載入中…</div>
+    </div>
+    <div id="apTabUpload" hidden style="padding:16px 8px;">
+      <p class="muted" style="margin:0 0 12px; font-size:12.5px;">支援 PNG / JPEG / WEBP / GIF。上傳的圖片只會嵌入這份 PDF，不會加到資產庫。如果要重複使用，請到「<a href="/admin/assets" target="_blank">管理資產</a>」上傳。</p>
+      <label style="display:flex; flex-direction:column; gap:10px; align-items:center; padding:32px; border:2px dashed #cbd5e1; border-radius:8px; cursor:pointer; background:#f8fafc;">
+        <div style="color:#64748b; font-size:14px;">點此挑選圖片檔，或拖放到此</div>
+        <input type="file" id="apUploadInput" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" />
+      </label>
+      <div id="apUploadStatus" class="muted" style="margin-top:8px; font-size:12px;"></div>
+    </div>
+    <div style="text-align:right; margin-top:12px;">
+      <button type="button" class="btn" id="assetCancel">取消</button>
+      <a href="/admin/assets" target="_blank" class="btn" style="margin-right:8px;">管理資產</a>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+// ============ State ============
+let uploadId = null;
+let originalFilename = null;
+let pages = [];
+let pageCanvases = [];
+let currentTool = 'select';
+const PREVIEW_DPI = 120;
+const PT2PX = PREVIEW_DPI / 72;
+let zoom = 1.0;
+// Undo/redo — one history stack across all pages (whole-editor snapshots).
+// Snapshots are debounced (SNAPSHOT_DELAY ms) so a single logical op that
+// fires multiple Fabric events (e.g. "add text" = object:added + text:changed)
+// produces one history entry, not two. Otherwise Undo would need to be
+// pressed N times per op.
+let history = [];
+let histIdx = -1;
+let suppressHistory = false;
+let snapshotTimer = null;
+const SNAPSHOT_DELAY = 250;  // ms coalescing window
+// Auto-save debounce
+let autoSaveTimer = null;
+let saveInFlight = false;
+let pendingSave = false;
+const AUTOSAVE_DELAY = 800;   // ms after last edit before we save
+// Set to true when the last save skipped the active object (because it
+// was being edited). selection:cleared watches this and triggers one
+// follow-up save to bake the now-finished object into the background.
+let needBakeOnDeselect = false;
+
+function scheduleAutoSave() {
+  if (!$('peAutoSave')?.checked) return;
+  if (!uploadId) return;
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(doAutoSave, AUTOSAVE_DELAY);
+}
+async function doAutoSave() {
+  if (saveInFlight) { pendingSave = true; return; }
+  saveInFlight = true;
+  try { await savePdf(true); }
+  finally {
+    saveInFlight = false;
+    if (pendingSave) { pendingSave = false; scheduleAutoSave(); }
+  }
+}
+
+const $ = (id) => document.getElementById(id);
+function setStatus(msg) { $('peStatus').textContent = msg || ''; }
+
+// ============ Toolbar ============
+function setTool(name) {
+  currentTool = name;
+  document.querySelectorAll('.pe-toolbar button').forEach(b => b.classList.remove('active'));
+  const map = {select:'toolSelect', pick:'toolPick', text:'toolText', image:'toolImage',
+               whiteout:'toolWhiteout', rect:'toolRect', line:'toolLine', arrow:'toolArrow',
+               ellipse:'toolEllipse', pencil:'toolPencil',
+               highlight:'toolHighlight', sticky:'toolStickyNote'};
+  $(map[name])?.classList.add('active');
+  pageCanvases.forEach(c => {
+    c.selection = (name === 'select');
+    c.isDrawingMode = (name === 'pencil');
+    if (name === 'pencil' && c.freeDrawingBrush) {
+      c.freeDrawingBrush.color = '#000';
+      c.freeDrawingBrush.width = 2;
+    }
+  });
+  $('canvasWrap').style.cursor = name === 'select' ? 'default' : 'crosshair';
+}
+
+const TOOL_KEYS = {
+  v:'select', s:'pick', t:'text', i:'image', w:'whiteout',
+  r:'rect', l:'line', a:'arrow', o:'ellipse', p:'pencil',
+  h:'highlight', n:'sticky',
+};
+// Per-page "deleted originals" list — bboxes of existing PDF content the
+// user clicked-and-deleted. Sent with /save so backend redacts them.
+let deletedOrigs = {};   // {pageIdx: [[x0,y0,x1,y1], ...]}
+
+// ============ Upload ============
+async function handleUpload(file) {
+  if (!file) return;
+  setStatus('上傳中…');
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const r = await (peFu
+      ? peFu.upload('/tools/pdf-editor/load', fd, {processingLabel: '渲染預覽中…'})
+      : fetch('/tools/pdf-editor/load', {method:'POST', body: fd}));
+    if (!r.ok) { setStatus('上傳失敗：' + await r.text()); return; }
+    const data = await r.json();
+    uploadId = data.upload_id;
+    originalFilename = data.filename || 'edited.pdf';
+    pages = data.pages;
+    $('editor-panel').hidden = false;
+    buildCanvases();
+    clearHistory();
+    snapshotHistory();
+    // Default to "fit to view" on load so the first page is fully
+    // visible without scrolling. Use setTimeout so layout is settled
+    // before we measure canvasWrap's clientWidth/Height.
+    setTimeout(() => fitPageToView(), 0);
+    setStatus(`載入完成，${pages.length} 頁。選工具開始編輯。`);
+  } catch (e) { setStatus('上傳錯誤：' + e.message); }
+}
+const uploadRoot = $('peUpload');
+let peFu = null;
+if (uploadRoot) peFu = new FileUpload(uploadRoot, (file) => handleUpload(file));
+
+// ============ Canvas build ============
+function buildCanvases() {
+  const stage = $('zoomStage');
+  stage.innerHTML = '';
+  pageCanvases = [];
+  pages.forEach((pg, pIdx) => {
+    const w_px = pg.width_pt * PT2PX, h_px = pg.height_pt * PT2PX;
+    const pageDiv = document.createElement('div');
+    pageDiv.className = 'pe-page';
+    pageDiv.style.width = w_px + 'px';
+    pageDiv.style.height = h_px + 'px';
+    const img = document.createElement('img');
+    img.className = 'bg'; img.src = pg.preview_url;
+    img.width = w_px; img.height = h_px;
+    pageDiv.appendChild(img);
+    const canvas = document.createElement('canvas');
+    canvas.className = 'overlay'; canvas.width = w_px; canvas.height = h_px;
+    pageDiv.appendChild(canvas);
+    stage.appendChild(pageDiv);
+    const fc = new fabric.Canvas(canvas, {
+      selection: true, preserveObjectStacking: true, backgroundColor: 'transparent',
+    });
+    fc._pageIndex = pIdx;
+    attachPageHandlers(fc);
+    installSnap(fc);
+    pageCanvases.push(fc);
+  });
+  applyZoom();
+}
+
+function applyZoom() {
+  const stage = $('zoomStage');
+  stage.style.transform = `scale(${zoom})`;
+  // Ensure canvas-wrap scrollable area matches scaled content
+  stage.style.width = 'max-content';
+}
+
+// ============ Object creation ============
+function attachPageHandlers(fc) {
+  fc.on('mouse:down', (opt) => {
+    if (currentTool === 'select' || currentTool === 'pencil') return;
+    if (opt.target) return;
+    const pointer = fc.getPointer(opt.e);
+    if (currentTool === 'pick') {
+      pickExistingObject(fc, pointer);
+      return;
+    }
+    createObject(fc, pointer, currentTool);
+  });
+  // Track deletion of existing objects so backend knows to redact them
+  // even when they're no longer on the canvas.
+  fc.on('object:removed', (opt) => {
+    const o = opt.target;
+    if (!o) return;
+    if (o._peMarker) {
+      // Marker itself removed — user wants to cancel the redaction.
+      // Drop it from deletedOrigs for this page.
+      const pi = fc._pageIndex;
+      if (deletedOrigs[pi] && o._origBbox) {
+        deletedOrigs[pi] = deletedOrigs[pi].filter(bb =>
+          !(Math.abs(bb[0]-o._origBbox[0]) < 0.5 &&
+            Math.abs(bb[1]-o._origBbox[1]) < 0.5));
+      }
+      return;
+    }
+    if (o._origBbox) {
+      const pi = fc._pageIndex;
+      if (!deletedOrigs[pi]) deletedOrigs[pi] = [];
+      deletedOrigs[pi].push(o._origBbox.slice());
+      // KEEP the marker visible — it represents the deletion intent and
+      // reminds the user the original position will be cleared on save.
+      // Upgrade it to be selectable so they can delete it to cancel.
+      if (o._marker) {
+        // Keep fully opaque white (so the original content stays hidden)
+        // and make the marker itself selectable so user can delete it
+        // if they want to cancel the redaction.
+        o._marker.set({
+          selectable: true, evented: true,
+          hoverCursor: 'pointer',
+          stroke: '#dc2626', strokeWidth: 1.5,
+          fill: '#ffffff',
+        });
+        fc.requestRenderAll();
+      }
+    }
+  });
+  const onSelect = (opt) => {
+    const o = opt && opt.target;
+    if (o && o._peSaved) {
+      // Un-fade a previously-saved object so the user can see + edit it
+      o.set('opacity', 1);
+      o.canvas && o.canvas.requestRenderAll();
+    }
+    updatePropsPanel();
+  };
+  fc.on('selection:created', onSelect);
+  fc.on('selection:updated', onSelect);
+  fc.on('selection:cleared', () => {
+    // Split handling: objects already baked into the background PDF
+    // (_peSaved) can safely fade back to invisible — no flicker because
+    // the background shows them. Objects that were EDITED or never
+    // saved stay opaque until the upcoming save completes; otherwise
+    // the user would see them vanish while the backend re-renders.
+    fc.getObjects().forEach(o => {
+      if (o._peMarker) return;
+      if (o._peSaved) o.set('opacity', 0.01);
+    });
+    fc.requestRenderAll();
+    $('propsPanel').innerHTML = '<h3>屬性</h3><div class="muted">點選物件後在此編輯。</div>';
+    if (needBakeOnDeselect) {
+      needBakeOnDeselect = false;
+      scheduleAutoSave();
+    }
+  });
+  // History snapshots + auto-save debounce on any modification.
+  // NOTE: 'object:moving' and 'object:scaling' fire many times during a
+  // drag; we only listen to the "end" events (object:modified) to avoid
+  // thrashing.
+  ['object:added', 'object:modified', 'object:removed', 'path:created',
+   'text:changed'].forEach(ev => {
+    fc.on(ev, () => {
+      if (!suppressHistory) snapshotHistory();
+      scheduleAutoSave();
+    });
+  });
+}
+
+function createObject(fc, p, tool) {
+  let obj = null;
+  if (tool === 'text') {
+    // IText auto-sizes to its content (no fixed width/wrap). Better than
+    // Textbox when users type freely — selection box follows the glyphs.
+    obj = new fabric.IText('請輸入文字', {
+      left: p.x, top: p.y, fontSize: 16, fill: '#000000',
+      fontFamily: 'sans-serif',
+    });
+    obj._peType = 'text';
+    fc.add(obj); fc.setActiveObject(obj); obj.enterEditing(); obj.selectAll();
+  } else if (tool === 'whiteout') {
+    obj = new fabric.Rect({
+      left: p.x, top: p.y, width: 120, height: 20,
+      fill: 'rgba(255,255,255,0.95)', stroke: 'rgba(0,0,0,0.2)',
+      strokeDashArray: [4, 2], strokeWidth: 1,
+    });
+    obj._peType = 'whiteout';
+    fc.add(obj); fc.setActiveObject(obj);
+  } else if (tool === 'rect') {
+    obj = new fabric.Rect({ left: p.x, top: p.y, width: 120, height: 80,
+      fill: '', stroke: '#000000', strokeWidth: 1 });
+    obj._peType = 'rect';
+    fc.add(obj); fc.setActiveObject(obj);
+  } else if (tool === 'ellipse') {
+    obj = new fabric.Ellipse({ left: p.x, top: p.y, rx: 60, ry: 40,
+      fill: '', stroke: '#000000', strokeWidth: 1 });
+    obj._peType = 'ellipse';
+    fc.add(obj); fc.setActiveObject(obj);
+  } else if (tool === 'line') {
+    obj = new fabric.Line([p.x, p.y, p.x + 120, p.y],
+      { stroke: '#000000', strokeWidth: 1 });
+    obj._peType = 'line';
+    fc.add(obj); fc.setActiveObject(obj);
+  } else if (tool === 'arrow') {
+    obj = new fabric.Line([p.x, p.y, p.x + 120, p.y],
+      { stroke: '#000000', strokeWidth: 2 });
+    obj._peType = 'arrow';
+    fc.add(obj); fc.setActiveObject(obj);
+  } else if (tool === 'highlight') {
+    obj = new fabric.Rect({ left: p.x, top: p.y, width: 160, height: 16,
+      fill: 'rgba(255, 235, 59, 0.45)', stroke: null, strokeWidth: 0 });
+    obj._peType = 'highlight';
+    fc.add(obj); fc.setActiveObject(obj);
+  } else if (tool === 'sticky') {
+    // Small rounded yellow badge representing a PDF text annotation.
+    // strokeUniform keeps the border thin regardless of scale.
+    const group = new fabric.Rect({
+      left: p.x, top: p.y, width: 26, height: 26,
+      fill: '#fde68a', stroke: '#d97706', strokeWidth: 1.2, rx: 4, ry: 4,
+      strokeUniform: true,
+    });
+    group._peType = 'sticky';
+    group._noteText = '便箋內容…';
+    fc.add(group); fc.setActiveObject(group);
+  } else if (tool === 'image') {
+    openAssetPicker((result) => {
+      // result is either {kind:'asset', asset} or {kind:'upload', url, width, height}
+      if (result.kind === 'asset') {
+        const asset = result.asset;
+        fabric.Image.fromURL(asset.file_url, (img) => {
+          const targetW = 100 * PT2PX;
+          const s = targetW / img.width;
+          img.set({ left: p.x, top: p.y, scaleX: s, scaleY: s });
+          img._peType = 'image';
+          img._assetId = asset.id;
+          fc.add(img); fc.setActiveObject(img); fc.requestRenderAll();
+        }, { crossOrigin: 'anonymous' });
+      } else if (result.kind === 'upload') {
+        fabric.Image.fromURL(result.url, (img) => {
+          // Default width ~120pt so it's visibly placed, then user can resize.
+          const targetW = 120 * PT2PX;
+          const s = targetW / img.width;
+          img.set({ left: p.x, top: p.y, scaleX: s, scaleY: s });
+          img._peType = 'image';
+          img._existingSrc = result.url;
+          fc.add(img); fc.setActiveObject(img); fc.requestRenderAll();
+        }, { crossOrigin: 'anonymous' });
+      }
+    });
+  }
+  if (tool !== 'image') setTool('select');
+}
+
+// ============ Snap alignment guides ============
+// User-configurable via the Settings popover — defaults mirror the UI.
+const snapPrefs = { show: true, snap: true, dist: 5 };
+function installSnap(fc) {
+  let guideH = null, guideV = null;
+  const clearGuides = () => {
+    if (guideH) { fc.remove(guideH); guideH = null; }
+    if (guideV) { fc.remove(guideV); guideV = null; }
+  };
+  const makeGuide = (pts) => new fabric.Line(pts, {
+    stroke: '#ef4444', strokeWidth: 1, strokeDashArray: [4, 3],
+    selectable: false, evented: false,
+    _peMarker: true,  // save-loop treats this as visual-only
+  });
+  fc.on('object:moving', (opt) => {
+    const o = opt.target;
+    if (!o || o._peMarker) return;
+    if (!snapPrefs.snap && !snapPrefs.show) return;
+    const threshold = snapPrefs.dist;
+    const oW = o.getScaledWidth(), oH = o.getScaledHeight();
+    const myEdges = { left: o.left, right: o.left + oW, cx: o.left + oW/2 };
+    const myRows  = { top:  o.top,  bottom: o.top  + oH, cy: o.top  + oH/2 };
+    let bestX = null, bestY = null;
+    fc.getObjects().forEach(other => {
+      if (other === o || other._peMarker) return;
+      const ow = other.getScaledWidth(), oh = other.getScaledHeight();
+      const theirEdges = { left: other.left, right: other.left + ow, cx: other.left + ow/2 };
+      const theirRows  = { top:  other.top,  bottom: other.top  + oh, cy: other.top  + oh/2 };
+      for (const mk of ['left', 'right', 'cx']) {
+        for (const tk of ['left', 'right', 'cx']) {
+          const d = myEdges[mk] - theirEdges[tk];
+          if (Math.abs(d) < threshold &&
+              (bestX === null || Math.abs(d) < Math.abs(bestX.d))) {
+            bestX = { d, line_x: theirEdges[tk] };
+          }
+        }
+      }
+      for (const mk of ['top', 'bottom', 'cy']) {
+        for (const tk of ['top', 'bottom', 'cy']) {
+          const d = myRows[mk] - theirRows[tk];
+          if (Math.abs(d) < threshold &&
+              (bestY === null || Math.abs(d) < Math.abs(bestY.d))) {
+            bestY = { d, line_y: theirRows[tk] };
+          }
+        }
+      }
+    });
+    clearGuides();
+    if (bestX) {
+      if (snapPrefs.snap) o.left -= bestX.d;
+      if (snapPrefs.show) {
+        guideV = makeGuide([bestX.line_x, 0, bestX.line_x, fc.getHeight()]);
+        fc.add(guideV); guideV.sendToBack();
+      }
+    }
+    if (bestY) {
+      if (snapPrefs.snap) o.top -= bestY.d;
+      if (snapPrefs.show) {
+        guideH = makeGuide([0, bestY.line_y, fc.getWidth(), bestY.line_y]);
+        fc.add(guideH); guideH.sendToBack();
+      }
+    }
+  });
+  fc.on('mouse:up', clearGuides);
+  fc.on('object:modified', clearGuides);
+}
+
+// Lock an object's movement/scaling/rotation until the current mouse
+// cycle ends. Prevents "pick + accidental drag" — Fabric treats the
+// still-pressed mouse from the pick-click as the start of a drag, and
+// on mouse-up fires object:modified → triggers auto-save unnecessarily.
+function lockUntilMouseUp(fc, obj) {
+  obj.lockMovementX = true; obj.lockMovementY = true;
+  obj.lockScalingX = true;  obj.lockScalingY = true;
+  obj.lockRotation = true;
+  const unlock = () => {
+    obj.lockMovementX = false; obj.lockMovementY = false;
+    obj.lockScalingX = false;  obj.lockScalingY = false;
+    obj.lockRotation = false;
+    fc.off('mouse:up', unlock);
+  };
+  fc.on('mouse:up', unlock);
+}
+
+// ============ Pick existing PDF content ============
+// Build a semi-transparent white "will be redacted" marker sitting at the
+// original bbox, so the user sees immediately that the old position will
+// be cleared on save. Marker is linked to the extracted object; removing
+// the object also removes the marker.
+function addRedactMarker(fc, bb, ownerObj) {
+  const marker = new fabric.Rect({
+    left: bb[0] * PT2PX, top: bb[1] * PT2PX,
+    width: (bb[2] - bb[0]) * PT2PX,
+    height: (bb[3] - bb[1]) * PT2PX,
+    // Fully opaque white — this simulates the post-save redaction so
+    // the user sees the ORIGINAL CONTENT HIDDEN immediately, not
+    // bleeding through. Dashed red border tells them it's a preview.
+    fill: '#ffffff',
+    stroke: '#dc2626', strokeDashArray: [5, 3], strokeWidth: 1.2,
+    selectable: false, evented: false,
+    hoverCursor: 'default',
+  });
+  marker._peMarker = true;  // flag so save skips it
+  marker._ownerId = ownerObj._peId = ownerObj._peId || ('pick_' + Math.random().toString(36).slice(2,8));
+  marker._origBbox = bb.slice();
+  fc.add(marker);
+  // Put marker above the background but BELOW the extracted object so
+  // the object (which sits at the same origin before the user moves it)
+  // is visible on top.
+  fc.sendToBack(marker);
+  ownerObj._marker = marker;
+  ownerObj.bringToFront();
+  return marker;
+}
+
+async function pickExistingObject(fc, p) {
+  // Convert canvas px → PDF pt for the hit test
+  const x_pt = p.x / PT2PX;
+  const y_pt = p.y / PT2PX;
+  setStatus('偵測中…');
+  try {
+    const r = await fetch('/tools/pdf-editor/detect-objects', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        upload_id: uploadId,
+        page: fc._pageIndex,
+        x: x_pt, y: y_pt,
+      }),
+    });
+    const data = await r.json();
+    if (!data || !data.kind) {
+      setStatus('此位置沒有可選取的物件');
+      setTimeout(() => setStatus(''), 2000);
+      return;
+    }
+    const bb = data.bbox;
+    if (data.kind === 'widget') {
+      // AcroForm field — offer one-click redact+remove. No overlay
+      // content to re-insert, so we just add a visible "will delete"
+      // marker and push into the page's deleted_widgets list on save.
+      const marker = new fabric.Rect({
+        left: bb[0] * PT2PX, top: bb[1] * PT2PX,
+        width: (bb[2] - bb[0]) * PT2PX,
+        height: (bb[3] - bb[1]) * PT2PX,
+        fill: 'rgba(239,68,68,0.12)',
+        stroke: '#ef4444', strokeDashArray: [6, 4],
+        strokeWidth: 1.5, strokeUniform: true,
+        hasControls: false, hasBorders: true,
+      });
+      marker._peType = 'widget_delete';
+      marker._widgetFieldName = data.field_name || '';
+      marker._origBbox = bb.slice();
+      fc.add(marker);
+      fc.setActiveObject(marker); fc.requestRenderAll();
+      setStatus(`已標記表單欄位「${data.field_name || '未命名'}」為刪除；儲存後會被移除。`);
+      setTool('select');
+      return;
+    }
+    if (data.kind === 'drawing') {
+      const marker = new fabric.Rect({
+        left: bb[0] * PT2PX, top: bb[1] * PT2PX,
+        width: (bb[2] - bb[0]) * PT2PX,
+        height: (bb[3] - bb[1]) * PT2PX,
+        fill: 'rgba(239,68,68,0.12)',
+        stroke: '#ef4444', strokeDashArray: [6, 4],
+        strokeWidth: 1.5, strokeUniform: true,
+        hasControls: false, hasBorders: true,
+      });
+      marker._peType = 'drawing_delete';
+      marker._origBbox = bb.slice();
+      fc.add(marker);
+      fc.setActiveObject(marker); fc.requestRenderAll();
+      setStatus('已標記此向量圖形為刪除；儲存後會被遮蓋移除。');
+      setTool('select');
+      return;
+    }
+    if (data.kind === 'text') {
+      const obj = new fabric.IText(data.text || '', {
+        left: bb[0] * PT2PX, top: bb[1] * PT2PX,
+        fontSize: Math.max(6, (data.font_size || 11) * PT2PX),
+        fill: data.color || '#000000',
+        fontFamily: 'sans-serif',
+        backgroundColor: 'rgba(255, 230, 100, 0.25)',
+      });
+      obj._peType = 'text';
+      obj._origBbox = bb.slice();
+      fc.add(obj);
+      addRedactMarker(fc, bb, obj);
+      lockUntilMouseUp(fc, obj);
+      fc.setActiveObject(obj); fc.requestRenderAll();
+      setStatus(`已擷取文字。原位置有虛線框表示儲存時會被真刪除。`);
+    } else if (data.kind === 'image') {
+      if (!data.thumb_url) {
+        setStatus('此圖片無法擷取（可能是 vector）');
+        setTimeout(() => setStatus(''), 2000);
+        return;
+      }
+      fabric.Image.fromURL(data.thumb_url, (img) => {
+        const targetW = (bb[2] - bb[0]) * PT2PX;
+        const targetH = (bb[3] - bb[1]) * PT2PX;
+        const sx = targetW / img.width;
+        const sy = targetH / img.height;
+        img.set({ left: bb[0] * PT2PX, top: bb[1] * PT2PX,
+                  scaleX: sx, scaleY: sy });
+        img._peType = 'image';
+        img._origBbox = bb.slice();
+        img._existingSrc = data.thumb_url;
+        fc.add(img);
+        addRedactMarker(fc, bb, img);
+        lockUntilMouseUp(fc, img);
+        fc.setActiveObject(img); fc.requestRenderAll();
+        setStatus(`已擷取圖片。原位置有虛線框表示儲存時會被真刪除。`);
+      }, { crossOrigin: 'anonymous' });
+    }
+  } catch (e) {
+    setStatus('偵測失敗：' + e.message);
+  }
+  setTool('select');
+}
+
+// Pencil paths — tag them as 'pencil' so save knows
+function tagPencilPaths(fc) {
+  fc.on('path:created', (opt) => {
+    if (opt.path) opt.path._peType = 'pencil';
+  });
+}
+// wire after canvases are created
+const _origBuild = buildCanvases;
+
+// ============ Props panel ============
+function updatePropsPanel() {
+  const active = getActiveObject();
+  if (!active) return;
+  const panel = $('propsPanel');
+  // Multi-selection: Fabric wraps selected objects in an ActiveSelection.
+  // Show a batch properties panel that applies changes to every text
+  // object inside (both newly added text and extracted existing text).
+  if (active.type === 'activeSelection' || active.type === 'activeselection') {
+    const children = active.getObjects ? active.getObjects() : (active._objects || []);
+    const textKids = children.filter(o => o._peType === 'text');
+    const count = children.length;
+    const tCount = textKids.length;
+    let html = `<h3>多選（${count} 個物件）</h3>`;
+    if (tCount > 0) {
+      const first = textKids[0];
+      const curFont = first._peFont || 'pymupdf:default';
+      const curSize = Math.round(first.fontSize || 16);
+      const curColor = colorToHex(first.fill, '#000000');
+      html += `
+        <div class="muted" style="margin:4px 0 8px; font-size:12px;">其中 ${tCount} 個文字可批次變更屬性：</div>
+        <div class="row"><label>字型</label><select id="pfBatchFont"><option value="${curFont}" selected>載入字型清單中…</option></select></div>
+        <div class="row"><label>字級</label><input type="number" id="pfBatchSize" value="${curSize}" step="1" min="6" max="96"></div>
+        <div class="row"><label>顏色</label><div class="inline">
+          <input type="color" id="pfBatchColor" value="${curColor}">
+          <input type="text" id="pfBatchColorHex" value="${curColor}" style="flex:1;">
+        </div></div>
+        <div class="row chip-row">
+          <button type="button" id="pfBatchBold"><b>B</b></button>
+          <button type="button" id="pfBatchItalic"><i>I</i></button>
+          <button type="button" id="pfBatchUnderline"><u>U</u></button>
+        </div>
+        <div class="muted" style="font-size:11.5px;">改動會套用到這 ${tCount} 個文字，不影響其他物件。</div>`;
+    } else {
+      html += `<div class="muted">選取的物件都不是文字，無可批次編輯的屬性。</div>`;
+    }
+    panel.innerHTML = html;
+    if (tCount > 0) {
+      wireBatchPanel(active, textKids);
+      const sel = document.getElementById('pfBatchFont');
+      if (sel) populateFontDropdown(sel, textKids[0]._peFont || 'pymupdf:default');
+    }
+    return;
+  }
+  const t = active._peType;
+  let html = '';
+  if (t === 'text') {
+    const curFont = active._peFont || 'pymupdf:default';
+    html = `<h3>文字框</h3>
+      <div class="row"><label>文字</label><input type="text" id="pfText" value="${escapeHTML(active.text || '')}"></div>
+      <div class="row"><label>字型</label><select id="pfFont"><option value="${curFont}" selected>載入字型清單中…</option></select></div>
+      <div class="row"><label>字級</label><input type="number" id="pfSize" value="${Math.round(active.fontSize)}" step="1" min="6" max="96"></div>
+      <div class="row"><label>顏色</label><div class="inline">
+        <input type="color" id="pfColor" value="${colorToHex(active.fill, '#000000')}">
+        <input type="text" id="pfColorHex" value="${colorToHex(active.fill, '#000000')}" style="flex:1;">
+      </div></div>
+      <div class="row chip-row">
+        <button type="button" id="pfBold" class="${active.fontWeight === 'bold' ? 'on':''}"><b>B</b></button>
+        <button type="button" id="pfItalic" class="${active.fontStyle === 'italic' ? 'on':''}"><i>I</i></button>
+        <button type="button" id="pfUnderline" class="${active.underline ? 'on':''}"><u>U</u></button>
+      </div>
+      <div class="muted">位置 (pt)：x=${(active.left/PT2PX).toFixed(1)} y=${(active.top/PT2PX).toFixed(1)}</div>`;
+  } else if (t === 'whiteout') {
+    html = `<h3>白底遮罩</h3>
+      <div class="row muted">${(active.getScaledWidth()/PT2PX).toFixed(1)} × ${(active.getScaledHeight()/PT2PX).toFixed(1)} pt</div>
+      <div class="muted">蓋掉底層內容。按 Delete 移除。</div>`;
+  } else if (t === 'rect' || t === 'ellipse') {
+    html = `<h3>${t === 'rect' ? '矩形' : '橢圓'}</h3>
+      <div class="row"><label>描邊色</label><input type="color" id="pfStroke" value="${colorToHex(active.stroke, '#000000')}"></div>
+      <div class="row"><label>線寬</label><input type="number" id="pfStrokeW" value="${active.strokeWidth || 1}" step="0.5" min="0" max="20"></div>
+      <div class="row"><label>填色</label><div class="inline">
+        <input type="color" id="pfFill" value="${colorToHex(active.fill, '#ffffff')}">
+        <label><input type="checkbox" id="pfFillOn" ${active.fill && active.fill !== '' && active.fill !== 'transparent' ? 'checked':''}> 填色</label>
+      </div></div>`;
+  } else if (t === 'line' || t === 'arrow') {
+    html = `<h3>${t === 'arrow' ? '箭頭' : '線段'}</h3>
+      <div class="row"><label>色彩</label><input type="color" id="pfStroke" value="${colorToHex(active.stroke, '#000000')}"></div>
+      <div class="row"><label>線寬</label><input type="number" id="pfStrokeW" value="${active.strokeWidth || 1}" step="0.5" min="0" max="20"></div>`;
+  } else if (t === 'image') {
+    html = `<h3>圖片</h3>
+      <div class="row"><label>不透明度</label><input type="range" id="pfOpacity" min="0" max="100" value="${Math.round((active.opacity || 1)*100)}" style="width:100%;"></div>
+      <div class="row"><label>旋轉</label><input type="number" id="pfAngle" value="${Math.round(active.angle || 0)}" step="15"></div>
+      <div class="muted">比例：${active.scaleX.toFixed(2)} × ${active.scaleY.toFixed(2)}</div>`;
+  } else if (t === 'pencil') {
+    html = `<h3>手繪</h3>
+      <div class="row"><label>色彩</label><input type="color" id="pfStroke" value="${colorToHex(active.stroke, '#000000')}"></div>
+      <div class="row"><label>線寬</label><input type="number" id="pfStrokeW" value="${active.strokeWidth || 2}" step="0.5" min="0.5" max="20"></div>`;
+  } else if (t === 'highlight') {
+    html = `<h3>螢光筆</h3>
+      <div class="row"><label>顏色</label><input type="color" id="pfFill" value="${colorToHex(active.fill, '#fde047')}"></div>
+      <div class="muted">拖拉 / 縮放調整框住要螢光的區域。</div>`;
+  } else if (t === 'sticky') {
+    html = `<h3>便箋註解</h3>
+      <div class="row"><label>備註內容</label><textarea id="pfNote" rows="4" style="width:100%; padding:6px 8px; border:1px solid #d1d5db; border-radius:5px; font-size:13px; resize:vertical; font-family:inherit;">${escapeHTML(active._noteText || '')}</textarea></div>
+      <div class="muted">存檔後會變成 PDF 標準便箋 (text annotation)，點擊彈出內容。</div>`;
+  } else {
+    html = `<h3>物件</h3><div class="muted">未知類型</div>`;
+  }
+  panel.innerHTML = html;
+  wirePropsPanel(active);
+}
+
+function wirePropsPanel(active) {
+  const c = active.canvas;
+  const rerender = () => {
+    active.dirty = true;
+    const isText = active.type === 'textbox' || active.type === 'i-text' || active.type === 'text';
+    if (isText) {
+      if (active.styles) active.styles = {};
+      if (active._styleMap) active._styleMap = {};
+      if (active._clearCache) active._clearCache();
+      // Force IText / Text to recompute width from current text —
+      // initDimensions isn't always enough on programmatic set('text'),
+      // leaving the selection bounding box locked to the old width.
+      if (typeof active.calcTextWidth === 'function') {
+        active.width = active.calcTextWidth() + (active.cursorWidth || 2);
+      }
+      if (typeof active.initDimensions === 'function') {
+        try { active.initDimensions(); } catch (_) {}
+      }
+      active.setCoords();
+    }
+    // Property changes don't fire Fabric's built-in object:modified event,
+    // so we must manually mark dirty AND trigger the same flow that would
+    // happen after a drag: a snapshot for undo + a debounced save for the
+    // live preview.
+    if (active._peSaved) {
+      // Re-editing a previously-saved object — un-fade it and bring back
+      active._peSaved = false;
+      active.set('opacity', 1);
+    }
+    c.renderAll();
+    if (!suppressHistory) snapshotHistory();
+    scheduleAutoSave();
+  };
+  const pfText = $('pfText');
+  if (pfText) pfText.addEventListener('input', (e) => { active.set('text', e.target.value); rerender(); });
+  const pfSize = $('pfSize');
+  if (pfSize) pfSize.addEventListener('input', (e) => { active.set('fontSize', Number(e.target.value)||11); rerender(); });
+  const pfColor = $('pfColor');
+  if (pfColor) pfColor.addEventListener('input', (e) => {
+    active.set('fill', e.target.value);
+    const hex = $('pfColorHex'); if (hex) hex.value = e.target.value;
+    // Textbox with styles needs individual char-style clear
+    if (active.removeStyle) active.removeStyle('fill');
+    rerender();
+  });
+  const pfFont = $('pfFont');
+  if (pfFont) {
+    populateFontDropdown(pfFont, active._peFont || 'pymupdf:default');
+    pfFont.addEventListener('change', (e) => {
+    const v = e.target.value;
+    active._peFont = v;
+    // Update Fabric fontFamily for on-screen preview too
+    const ff = fontFamilyForKey(v);
+    active.set('fontFamily', ff);
+    rerender();
+    scheduleAutoSave();
+  });
+  }
+  const pfColorHex = $('pfColorHex');
+  if (pfColorHex) pfColorHex.addEventListener('change', (e) => {
+    if (/^#[0-9a-f]{6}$/i.test(e.target.value)) {
+      active.set('fill', e.target.value);
+      const cp = $('pfColor'); if (cp) cp.value = e.target.value;
+      if (active.removeStyle) active.removeStyle('fill');
+      rerender();
+    }
+  });
+  const pfBold = $('pfBold');
+  if (pfBold) pfBold.addEventListener('click', () => {
+    const nw = active.fontWeight === 'bold' ? 'normal' : 'bold';
+    active.set('fontWeight', nw); pfBold.classList.toggle('on', nw === 'bold'); rerender();
+  });
+  const pfItalic = $('pfItalic');
+  if (pfItalic) pfItalic.addEventListener('click', () => {
+    const ns = active.fontStyle === 'italic' ? 'normal' : 'italic';
+    active.set('fontStyle', ns); pfItalic.classList.toggle('on', ns === 'italic'); rerender();
+  });
+  const pfUnderline = $('pfUnderline');
+  if (pfUnderline) pfUnderline.addEventListener('click', () => {
+    const nu = !active.underline;
+    active.set('underline', nu); pfUnderline.classList.toggle('on', nu); rerender();
+  });
+  const pfStroke = $('pfStroke');
+  if (pfStroke) pfStroke.addEventListener('input', (e) => { active.set('stroke', e.target.value); rerender(); });
+  const pfStrokeW = $('pfStrokeW');
+  if (pfStrokeW) pfStrokeW.addEventListener('input', (e) => { active.set('strokeWidth', Number(e.target.value)||1); rerender(); });
+  const pfFill = $('pfFill');
+  const pfFillOn = $('pfFillOn');
+  if (pfFill) pfFill.addEventListener('input', (e) => {
+    if (pfFillOn?.checked) active.set('fill', e.target.value); rerender();
+  });
+  if (pfFillOn) pfFillOn.addEventListener('change', (e) => {
+    active.set('fill', e.target.checked ? (pfFill.value || '#ffffff') : ''); rerender();
+  });
+  const pfOpacity = $('pfOpacity');
+  if (pfOpacity) pfOpacity.addEventListener('input', (e) => { active.set('opacity', Number(e.target.value)/100); rerender(); });
+  const pfAngle = $('pfAngle');
+  if (pfAngle) pfAngle.addEventListener('input', (e) => { active.set('angle', Number(e.target.value)||0); rerender(); });
+  const pfNote = $('pfNote');
+  if (pfNote) pfNote.addEventListener('input', (e) => { active._noteText = e.target.value; scheduleAutoSave(); });
+}
+
+function wireBatchPanel(sel, textKids) {
+  const anyCanvas = (textKids[0] && textKids[0].canvas) || pageCanvases[0];
+  const bump = () => {
+    textKids.forEach(o => {
+      o.dirty = true;
+      if (o.styles) o.styles = {};
+      if (o._clearCache) o._clearCache();
+      if (typeof o.calcTextWidth === 'function') {
+        o.width = o.calcTextWidth() + (o.cursorWidth || 2);
+      }
+      if (typeof o.initDimensions === 'function') {
+        try { o.initDimensions(); } catch (_) {}
+      }
+      o.setCoords();
+    });
+    if (anyCanvas) anyCanvas.requestRenderAll();
+    snapshotHistory(); scheduleAutoSave();
+  };
+  const fontSel = $('pfBatchFont');
+  if (fontSel) fontSel.addEventListener('change', (e) => {
+    const v = e.target.value;
+    textKids.forEach(o => { o._peFont = v; o.set('fontFamily', fontFamilyForKey(v)); });
+    bump();
+  });
+  const sizeEl = $('pfBatchSize');
+  if (sizeEl) sizeEl.addEventListener('input', (e) => {
+    const v = Math.max(6, Number(e.target.value) || 16);
+    textKids.forEach(o => o.set('fontSize', v));
+    bump();
+  });
+  const cl = $('pfBatchColor');
+  const clHex = $('pfBatchColorHex');
+  const syncColor = (hex) => {
+    const v = hex || '#000000';
+    textKids.forEach(o => o.set('fill', v));
+    bump();
+  };
+  if (cl) cl.addEventListener('input', (e) => {
+    if (clHex) clHex.value = e.target.value;
+    syncColor(e.target.value);
+  });
+  if (clHex) clHex.addEventListener('input', (e) => {
+    if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) {
+      if (cl) cl.value = e.target.value;
+      syncColor(e.target.value);
+    }
+  });
+  const bBold = $('pfBatchBold');
+  if (bBold) bBold.addEventListener('click', () => {
+    const allBold = textKids.every(o => o.fontWeight === 'bold');
+    const nv = allBold ? 'normal' : 'bold';
+    textKids.forEach(o => o.set('fontWeight', nv));
+    bBold.classList.toggle('on', nv === 'bold'); bump();
+  });
+  const bItalic = $('pfBatchItalic');
+  if (bItalic) bItalic.addEventListener('click', () => {
+    const all = textKids.every(o => o.fontStyle === 'italic');
+    const nv = all ? 'normal' : 'italic';
+    textKids.forEach(o => o.set('fontStyle', nv));
+    bItalic.classList.toggle('on', nv === 'italic'); bump();
+  });
+  const bUnder = $('pfBatchUnderline');
+  if (bUnder) bUnder.addEventListener('click', () => {
+    const all = textKids.every(o => !!o.underline);
+    const nv = !all;
+    textKids.forEach(o => o.set('underline', nv));
+    bUnder.classList.toggle('on', nv); bump();
+  });
+}
+
+function getActiveObject() {
+  for (const c of pageCanvases) { const a = c.getActiveObject(); if (a) return a; }
+  return null;
+}
+
+// ============ Font catalog (lazy-loaded) ============
+let _fontGroups = null;  // cached catalog from /fonts
+function populateFontDropdown(selectEl, currentId) {
+  if (_fontGroups) { _applyFontGroups(selectEl, currentId); return; }
+  fetch('/tools/pdf-editor/fonts').then(r => r.json()).then(data => {
+    _fontGroups = data.groups || [];
+    _applyFontGroups(selectEl, currentId);
+  }).catch(() => {
+    // Fallback to basic PyMuPDF options if fetch fails
+    _fontGroups = [{
+      key: 'pymupdf', title: 'PyMuPDF 內建', fonts: [
+        {id: 'pymupdf:default', label: '自動'},
+        {id: 'pymupdf:sans', label: 'Sans'},
+        {id: 'pymupdf:serif', label: 'Serif'},
+      ]
+    }];
+    _applyFontGroups(selectEl, currentId);
+  });
+}
+function _applyFontGroups(selectEl, currentId) {
+  // Populate the native <select> (kept hidden but used as the value
+  // carrier so existing `.addEventListener('change', …)` keeps working)
+  selectEl.innerHTML = '';
+  for (const g of _fontGroups) {
+    const og = document.createElement('optgroup');
+    og.label = g.title;
+    for (const f of g.fonts) {
+      const opt = document.createElement('option');
+      opt.value = f.id;
+      opt.textContent = f.label;
+      if (f.id === currentId) opt.selected = true;
+      og.appendChild(opt);
+    }
+    selectEl.appendChild(og);
+  }
+  // Replace the native widget with our searchable picker on first use.
+  installFontPicker(selectEl, currentId);
+}
+
+// --- Searchable, categorized font picker that mirrors a hidden <select>.
+// The <select> element stays in the DOM (display:none) so existing code
+// reading `.value` and listening to `change` keeps working unchanged.
+function installFontPicker(selectEl, currentId) {
+  if (selectEl._fpInstalled) {
+    // Already wrapped — just re-sync the current value.
+    selectEl._fpSetValue && selectEl._fpSetValue(currentId);
+    return;
+  }
+  selectEl.style.display = 'none';
+
+  const wrap = document.createElement('div');
+  wrap.className = 'fp-wrap';
+  wrap.innerHTML = `
+    <button type="button" class="fp-trigger" tabindex="0">
+      <span class="fp-cur">—</span>
+      <span class="fp-caret">▾</span>
+    </button>
+    <div class="fp-pop" hidden>
+      <div class="fp-search-row">
+        <input type="search" class="fp-search" placeholder="搜尋字型名稱…" />
+      </div>
+      <div class="fp-list"></div>
+    </div>`;
+  selectEl.insertAdjacentElement('afterend', wrap);
+
+  const trig = wrap.querySelector('.fp-trigger');
+  const pop  = wrap.querySelector('.fp-pop');
+  const list = wrap.querySelector('.fp-list');
+  const curSpan = wrap.querySelector('.fp-cur');
+  const search = wrap.querySelector('.fp-search');
+
+  // Build rows once per open — fonts don't change often, but we re-filter
+  // on each search keystroke.
+  function findEntry(id) {
+    for (const g of (_fontGroups || [])) {
+      for (const f of g.fonts) if (f.id === id) return {group: g, font: f};
+    }
+    return null;
+  }
+  function renderCurrent() {
+    const id = selectEl.value || '';
+    const hit = findEntry(id);
+    curSpan.textContent = hit ? hit.font.label : id;
+  }
+  function renderList(q) {
+    list.innerHTML = '';
+    const qq = (q || '').trim().toLowerCase();
+    for (const g of (_fontGroups || [])) {
+      const matches = g.fonts.filter(f =>
+        !qq || (f.label || '').toLowerCase().includes(qq)
+              || (f.id || '').toLowerCase().includes(qq)
+      );
+      if (!matches.length) continue;
+      const gh = document.createElement('div');
+      gh.className = 'fp-group';
+      gh.textContent = g.title;
+      list.appendChild(gh);
+      for (const f of matches) {
+        const row = document.createElement('div');
+        row.className = 'fp-item';
+        row.dataset.id = f.id;
+        const preview = fontFamilyForKey(f.id);
+        row.innerHTML = `
+          <span class="fp-item-name">${escapeHTML(f.label)}</span>
+          <span class="fp-item-preview" style="font-family:${preview};">字 Ag 1</span>`;
+        if (f.id === selectEl.value) row.classList.add('fp-item-active');
+        row.addEventListener('click', () => {
+          selectEl.value = f.id;
+          selectEl.dispatchEvent(new Event('change', {bubbles: true}));
+          closePop();
+          renderCurrent();
+        });
+        list.appendChild(row);
+      }
+    }
+    if (!list.firstChild) {
+      list.innerHTML = '<div class="fp-empty">沒有符合的字型</div>';
+    }
+  }
+
+  function openPop() {
+    renderList(search.value);
+    pop.hidden = false;
+    setTimeout(() => search.focus(), 20);
+    document.addEventListener('click', onDocClick, true);
+  }
+  function closePop() {
+    pop.hidden = true;
+    document.removeEventListener('click', onDocClick, true);
+  }
+  function onDocClick(e) {
+    if (!wrap.contains(e.target)) closePop();
+  }
+  trig.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (pop.hidden) openPop(); else closePop();
+  });
+  search.addEventListener('input', () => renderList(search.value));
+  search.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closePop(); trig.focus(); }
+    else if (e.key === 'Enter') {
+      const first = list.querySelector('.fp-item');
+      if (first) first.click();
+    }
+  });
+
+  selectEl._fpInstalled = true;
+  selectEl._fpSetValue = (id) => { selectEl.value = id || ''; renderCurrent(); };
+  renderCurrent();
+}
+function fontFamilyForKey(key) {
+  if (!key) return 'sans-serif';
+  if (key.startsWith('pymupdf:')) {
+    const k = key.slice(8);
+    if (k === 'serif' || k === 'tiro') return 'serif';
+    if (k === 'cour') return 'monospace';
+    return 'sans-serif';
+  }
+  // system:<path> — we don't load the actual font in browser; approximate
+  // by using a generic fallback based on catalog's "style" if available.
+  const cat = (_fontGroups || []).flatMap(g => g.fonts).find(f => f.id === key);
+  if (cat) {
+    if (cat.style === 'serif') return 'serif';
+    if (cat.style === 'mono') return 'monospace';
+  }
+  return 'sans-serif';
+}
+
+// ============ Keyboard ============
+document.addEventListener('keydown', (e) => {
+  const t = document.activeElement;
+  const inField = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+  if (inField) return;
+  const k = e.key.toLowerCase();
+  if ((e.metaKey || e.ctrlKey) && k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+  if ((e.metaKey || e.ctrlKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return; }
+  if (TOOL_KEYS[k]) { setTool(TOOL_KEYS[k]); return; }
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    const active = getActiveObject();
+    if (active) { active.canvas.remove(active); e.preventDefault(); }
+  }
+});
+// Toolbar click handlers
+Object.entries({toolSelect:'select', toolPick:'pick', toolText:'text', toolImage:'image',
+  toolWhiteout:'whiteout', toolRect:'rect', toolLine:'line', toolArrow:'arrow',
+  toolEllipse:'ellipse', toolPencil:'pencil',
+  toolHighlight:'highlight', toolStickyNote:'sticky'}).forEach(([id, tool]) => {
+  $(id).onclick = () => setTool(tool);
+});
+$('btnUndo').onclick = undo;
+$('btnRedo').onclick = redo;
+
+// ============ Zoom ============
+$('zoomSlider').addEventListener('input', (e) => {
+  zoom = Number(e.target.value) / 100;
+  $('zoomLabel').textContent = Math.round(zoom*100) + '%';
+  applyZoom();
+});
+
+// Fit-to-view: compute zoom so page 1 fits fully in the canvas-wrap area
+function fitPageToView() {
+  if (!pages.length) return;
+  const wrap = $('canvasWrap');
+  const page = pages[0];
+  // Minus padding (16px each side per our CSS)
+  const availW = wrap.clientWidth - 40;
+  const availH = wrap.clientHeight - 40;
+  const pageW_px = page.width_pt * PT2PX;
+  const pageH_px = page.height_pt * PT2PX;
+  const r = Math.min(availW / pageW_px, availH / pageH_px);
+  // Clamp to slider range 50-200
+  zoom = Math.max(0.5, Math.min(2.0, r));
+  // Update UI
+  const pct = Math.round(zoom * 100);
+  $('zoomSlider').value = pct;
+  $('zoomLabel').textContent = pct + '%';
+  applyZoom();
+}
+$('btnFitPage').addEventListener('click', fitPageToView);
+
+// ============ Prefs popover ============
+const prefsBox = $('peSettings');
+$('btnPrefs').addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (prefsBox.style.display === 'block') { prefsBox.style.display = 'none'; return; }
+  // Position under the button
+  const r = e.currentTarget.getBoundingClientRect();
+  prefsBox.style.top  = (window.scrollY + r.bottom + 6) + 'px';
+  prefsBox.style.left = (window.scrollX + r.left) + 'px';
+  prefsBox.style.display = 'block';
+});
+document.addEventListener('click', (e) => {
+  if (!prefsBox.contains(e.target) && e.target !== $('btnPrefs')) {
+    prefsBox.style.display = 'none';
+  }
+});
+$('prefsClose').addEventListener('click', () => prefsBox.style.display = 'none');
+$('prefShowGuides').addEventListener('change', (e) => { snapPrefs.show = e.target.checked; });
+$('prefSnap').addEventListener('change', (e) => { snapPrefs.snap = e.target.checked; });
+$('prefSnapDist').addEventListener('input', (e) => {
+  snapPrefs.dist = Number(e.target.value) || 5;
+  $('prefSnapDistLabel').textContent = snapPrefs.dist + ' px';
+});
+
+// ============ Undo/Redo via snapshots ============
+function canvasSnapshot() {
+  return pageCanvases.map(c => c.toJSON(['_peType', '_assetId']));
+}
+function restoreSnapshot(snap) {
+  suppressHistory = true;
+  snap.forEach((json, i) => {
+    const c = pageCanvases[i];
+    if (!c) return;
+    c.loadFromJSON(json, () => { c.requestRenderAll(); });
+  });
+  setTimeout(() => { suppressHistory = false; updateHistoryButtons(); }, 50);
+}
+function clearHistory() {
+  history = []; histIdx = -1;
+  if (snapshotTimer) { clearTimeout(snapshotTimer); snapshotTimer = null; }
+  updateHistoryButtons();
+}
+function snapshotHistory() {
+  if (suppressHistory) return;
+  // Debounce — coalesce multiple events fired by a single user action
+  // (e.g. "add text" → object:added + text:changed) into one entry so
+  // Undo/Redo each step back one logical op, not half-ops.
+  if (snapshotTimer) clearTimeout(snapshotTimer);
+  snapshotTimer = setTimeout(() => {
+    snapshotTimer = null;
+    if (suppressHistory) return;
+    const snap = canvasSnapshot();
+    history = history.slice(0, histIdx + 1);
+    history.push(snap);
+    if (history.length > 50) history = history.slice(-50);
+    histIdx = history.length - 1;
+    updateHistoryButtons();
+  }, SNAPSHOT_DELAY);
+}
+// Undo/redo should see the latest state even if a snapshot is pending.
+function flushSnapshot() {
+  if (snapshotTimer) { clearTimeout(snapshotTimer); snapshotTimer = null;
+    if (suppressHistory) return;
+    const snap = canvasSnapshot();
+    history = history.slice(0, histIdx + 1);
+    history.push(snap);
+    if (history.length > 50) history = history.slice(-50);
+    histIdx = history.length - 1;
+    updateHistoryButtons();
+  }
+}
+function undo() {
+  flushSnapshot();                       // capture pending edits first
+  if (histIdx <= 0) return;
+  histIdx--; restoreSnapshot(history[histIdx]);
+}
+function redo() {
+  flushSnapshot();
+  if (histIdx >= history.length - 1) return;
+  histIdx++; restoreSnapshot(history[histIdx]);
+}
+function updateHistoryButtons() {
+  $('btnUndo').disabled = histIdx <= 0;
+  $('btnRedo').disabled = histIdx >= history.length - 1;
+}
+
+// ============ Asset picker ============
+let _assetPickerResolve = null;
+function setAssetTab(tab) {
+  document.querySelectorAll('.ap-tab').forEach(b => {
+    const on = b.dataset.tab === tab;
+    b.classList.toggle('ap-tab-active', on);
+    b.style.borderBottom = on ? '2px solid #2563eb' : '2px solid transparent';
+    b.style.color = on ? '#2563eb' : '#6b7280';
+    b.style.fontWeight = on ? '600' : '500';
+  });
+  $('apTabAsset').hidden = tab !== 'asset';
+  $('apTabUpload').hidden = tab !== 'upload';
+}
+document.querySelectorAll('.ap-tab').forEach(b => {
+  b.addEventListener('click', () => setAssetTab(b.dataset.tab));
+});
+
+function openAssetPicker(onPick) {
+  _assetPickerResolve = onPick;
+  setAssetTab('asset');
+  $('assetPicker').style.display = 'flex';
+  const grid = $('assetGrid');
+  grid.innerHTML = '載入中…';
+  fetch('/tools/pdf-editor/assets').then(r => r.json()).then(data => {
+    if (!data.assets?.length) {
+      grid.innerHTML = '<div class="muted" style="grid-column:1/-1;">尚無資產，請切到「上傳新圖片」或到「管理資產」新增印章 / 簽名 / Logo。</div>';
+      return;
+    }
+    grid.innerHTML = '';
+    data.assets.forEach(a => {
+      const div = document.createElement('div');
+      div.style.cssText = 'border:1px solid #e5e7eb; border-radius:6px; padding:8px; cursor:pointer; text-align:center; background:#fff;';
+      const typeMap = {stamp:'印章', signature:'簽名', logo:'Logo'};
+      div.innerHTML = `
+        <img src="${a.thumb_url}" style="max-width:100px; max-height:100px; display:block; margin:0 auto 4px;" />
+        <div style="font-size:12px; font-weight:600;">${escapeHTML(a.name)}</div>
+        <div class="muted" style="font-size:11px;">${typeMap[a.type] || a.type}</div>`;
+      div.addEventListener('click', () => {
+        $('assetPicker').style.display = 'none';
+        if (_assetPickerResolve) { _assetPickerResolve({kind:'asset', asset:a}); _assetPickerResolve = null; }
+      });
+      grid.appendChild(div);
+    });
+  });
+}
+$('assetCancel').addEventListener('click', () => {
+  $('assetPicker').style.display = 'none';
+  if (_assetPickerResolve) { _assetPickerResolve = null; setTool('select'); }
+});
+
+// Direct image upload (no asset-library round trip)
+$('apUploadInput').addEventListener('change', async () => {
+  const f = $('apUploadInput').files[0];
+  if (!f) return;
+  const status = $('apUploadStatus');
+  status.textContent = `上傳中：${f.name} …`;
+  const fd = new FormData();
+  fd.append('upload_id', uploadId);
+  fd.append('file', f);
+  try {
+    const r = await fetch('/tools/pdf-editor/upload-image', {method:'POST', body: fd});
+    if (!r.ok) { status.textContent = '上傳失敗：' + await r.text(); return; }
+    const d = await r.json();
+    $('assetPicker').style.display = 'none';
+    status.textContent = '';
+    $('apUploadInput').value = '';
+    if (_assetPickerResolve) {
+      _assetPickerResolve({kind:'upload', url:d.url, width:d.width, height:d.height});
+      _assetPickerResolve = null;
+    }
+  } catch (e) {
+    status.textContent = '上傳失敗：' + e.message;
+  }
+});
+
+// ============ Save ============
+$('btnSave').addEventListener('click', () => savePdf(false));
+
+// ============ Global font replace ============
+$('btnGlobalFont').addEventListener('click', () => {
+  if (!uploadId) { setStatus('請先上傳 PDF'); return; }
+  $('fontPicker').style.display = 'flex';
+  const sel = $('gfFontSelect');
+  populateFontDropdown(sel, 'pymupdf:default');
+  $('gfStatus').textContent = '';
+});
+$('gfCancel').addEventListener('click', () => { $('fontPicker').style.display = 'none'; });
+$('gfGo').addEventListener('click', async () => {
+  const font_id = $('gfFontSelect').value || 'pymupdf:default';
+  const status = $('gfStatus');
+  status.textContent = '換字型中…';
+  showLoading('整份換字型中…');
+  try {
+    const r = await fetch('/tools/pdf-editor/replace-all-fonts', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({upload_id: uploadId, font_id}),
+    });
+    if (!r.ok) { status.textContent = '失敗：' + await r.text(); hideLoading(); return; }
+    const data = await r.json();
+    // Refresh each page's background thumbnail (same technique as save)
+    document.querySelectorAll('.pe-page img.bg').forEach((img, i) => {
+      if (data.pages[i]) img.src = data.pages[i].preview_url;
+    });
+    status.textContent = `完成！已重繪 ${data.replaced} 段文字。`;
+    setTimeout(() => { $('fontPicker').style.display = 'none'; }, 900);
+    setStatus(`已把 ${data.replaced} 段文字換成新字型。`);
+  } catch (e) {
+    status.textContent = '錯誤：' + e.message;
+  } finally {
+    hideLoading();
+  }
+});
+
+function showLoading(text) {
+  $('peLoadingText').textContent = text || '重新渲染中…';
+  $('peLoading').classList.add('show');
+}
+function hideLoading() { $('peLoading').classList.remove('show'); }
+
+async function savePdf(isAuto) {
+  if (!uploadId) return;
+  if (!isAuto) setStatus('儲存中…');
+  else setStatus('自動儲存中…');
+  // Full-screen overlay only on manual save — auto-save shouldn't cover
+  // the canvas because it hides the object the user is editing.
+  if (!isAuto) showLoading('儲存並重繪中…');
+  const model = { upload_id: uploadId, pages: [] };
+  // Active object per canvas — skip it during this save so the background
+  // PDF doesn't duplicate its rendering on top of the Fabric overlay the
+  // user is actively editing. Next save (after deselect) bakes it in.
+  const activePerCanvas = pageCanvases.map(fc => fc.getActiveObject());
+  let anySkipped = false;
+  pageCanvases.forEach((fc, pIdx) => {
+    const objs = [];
+    const widgetDeletes = [];
+    const extraDrawingDeletes = [];
+    const skipObj = activePerCanvas[pIdx];
+    if (skipObj) anySkipped = true;
+    fc.getObjects().forEach((o) => {
+      if (o._peMarker) return;   // visual-only redact preview, not serialized
+      if (o === skipObj) return; // live-edit object — leave it as Fabric overlay only
+      // Phase-3 deletions: AcroForm widgets + vector drawings
+      if (o._peType === 'widget_delete') {
+        widgetDeletes.push({
+          field_name: o._widgetFieldName || '',
+          bbox: o._origBbox || null,
+        });
+        return;
+      }
+      if (o._peType === 'drawing_delete') {
+        if (o._origBbox) extraDrawingDeletes.push(o._origBbox.slice());
+        return;
+      }
+      const x_pt = o.left / PT2PX;
+      const y_pt = o.top / PT2PX;
+      const w_pt = o.getScaledWidth() / PT2PX;
+      const h_pt = o.getScaledHeight() / PT2PX;
+      const t = o._peType;
+      // Common: existing-object marker (set when extracted via pick tool)
+      const origBbox = o._origBbox || null;
+      if (t === 'text') {
+        const fontPt = o.fontSize / PT2PX;
+        // Ensure rect is generous enough for the font_size so
+        // insert_textbox doesn't reject due to tight bounds. Use at
+        // least 1.5× font_size as height, 2× as width.
+        const hSafe = Math.max(h_pt, fontPt * 1.6, 14);
+        const wSafe = Math.max(w_pt, fontPt * 2, 20);
+        objs.push({ id: rid(), type: 'text',
+          x: x_pt, y: y_pt, w: wSafe, h: hSafe,
+          text: o.text || '',
+          font: o._peFont || 'default',
+          font_size: fontPt,
+          color: colorToHex(o.fill, '#000000'),
+          bold: o.fontWeight === 'bold',
+          italic: o.fontStyle === 'italic',
+          underline: !!o.underline,
+          original_bbox: origBbox,
+        });
+      } else if (t === 'whiteout') {
+        objs.push({ id: rid(), type: 'whiteout', x: x_pt, y: y_pt, w: w_pt, h: h_pt });
+      } else if (t === 'image') {
+        objs.push({ id: rid(), type: 'image', x: x_pt, y: y_pt, w: w_pt, h: h_pt,
+          asset_id: o._assetId,
+          existing_src: o._existingSrc || null,  // URL of extracted PNG from PDF
+          opacity: o.opacity || 1, angle: o.angle || 0,
+          original_bbox: origBbox });
+      } else if (t === 'rect') {
+        objs.push({ id: rid(), type: 'rect', x: x_pt, y: y_pt, w: w_pt, h: h_pt,
+          stroke: colorToHex(o.stroke, '#000000'),
+          fill: (o.fill && o.fill !== '' && o.fill !== 'transparent') ? colorToHex(o.fill, null) : null,
+          stroke_width: o.strokeWidth || 1 });
+      } else if (t === 'ellipse') {
+        objs.push({ id: rid(), type: 'ellipse', x: x_pt, y: y_pt, w: w_pt, h: h_pt,
+          stroke: colorToHex(o.stroke, '#000000'),
+          fill: (o.fill && o.fill !== '' && o.fill !== 'transparent') ? colorToHex(o.fill, null) : null,
+          stroke_width: o.strokeWidth || 1 });
+      } else if (t === 'line' || t === 'arrow') {
+        const x1 = o.left, y1 = o.top;
+        const x2 = o.left + (o.x2 - o.x1);
+        const y2 = o.top  + (o.y2 - o.y1);
+        objs.push({ id: rid(), type: t,
+          x: x1/PT2PX, y: y1/PT2PX, x2: x2/PT2PX, y2: y2/PT2PX, w: 0, h: 0,
+          stroke: colorToHex(o.stroke, '#000000'),
+          stroke_width: o.strokeWidth || 1 });
+      } else if (t === 'highlight') {
+        objs.push({ id: rid(), type: 'highlight', x: x_pt, y: y_pt,
+          w: w_pt, h: h_pt,
+          color: colorToHex(o.fill, '#fde047') });
+      } else if (t === 'sticky') {
+        objs.push({ id: rid(), type: 'sticky',
+          x: x_pt, y: y_pt, w: w_pt, h: h_pt,
+          note: o._noteText || '便箋內容…' });
+      } else if (o.type === 'path' || t === 'pencil') {
+        // Free-hand drawing — resolve each path command to ABSOLUTE
+        // canvas coords using Fabric's own transform matrix, then
+        // convert to pt. This side-steps the earlier pathOffset / left
+        // / scale gymnastics that kept misplacing the curve.
+        const matrix = o.calcTransformMatrix();
+        const ox = o.pathOffset ? o.pathOffset.x : 0;
+        const oy = o.pathOffset ? o.pathOffset.y : 0;
+        const toPt = (lx, ly) => {
+          const canvasPt = fabric.util.transformPoint(
+            new fabric.Point(lx - ox, ly - oy), matrix
+          );
+          return [canvasPt.x / PT2PX, canvasPt.y / PT2PX];
+        };
+        const pts = [];
+        let lx = 0, ly = 0;
+        (o.path || []).forEach(seg => {
+          const cmd = seg[0];
+          if (cmd === 'M' || cmd === 'L') {
+            pts.push(toPt(seg[1], seg[2]));
+            lx = seg[1]; ly = seg[2];
+          } else if (cmd === 'Q') {
+            // Sample quadratic Bezier from (lx,ly) via (seg[1],seg[2]) to (seg[3],seg[4])
+            const cx = seg[1], cy = seg[2];
+            const ex = seg[3], ey = seg[4];
+            for (let t = 0.2; t <= 1.0001; t += 0.2) {
+              const u = 1 - t;
+              const bx = u*u*lx + 2*u*t*cx + t*t*ex;
+              const by = u*u*ly + 2*u*t*cy + t*t*ey;
+              pts.push(toPt(bx, by));
+            }
+            lx = ex; ly = ey;
+          } else if (cmd === 'C') {
+            // Cubic fallback (rare from PencilBrush but possible)
+            const c1x = seg[1], c1y = seg[2];
+            const c2x = seg[3], c2y = seg[4];
+            const ex = seg[5], ey = seg[6];
+            for (let t = 0.2; t <= 1.0001; t += 0.2) {
+              const u = 1 - t;
+              const bx = u*u*u*lx + 3*u*u*t*c1x + 3*u*t*t*c2x + t*t*t*ex;
+              const by = u*u*u*ly + 3*u*u*t*c1y + 3*u*t*t*c2y + t*t*t*ey;
+              pts.push(toPt(bx, by));
+            }
+            lx = ex; ly = ey;
+          }
+        });
+        objs.push({ id: rid(), type: 'pencil',
+          points: pts,  // already in PDF pt, absolute
+          stroke: colorToHex(o.stroke, '#000000'),
+          stroke_width: (o.strokeWidth || 2) / PT2PX,
+        });
+      }
+    });
+    // Include "deleted originals" for this page so backend redacts them
+    // even without a corresponding surviving object. We do NOT reset the
+    // list after save — each save replays all edits from pristine SRC,
+    // so deleted_originals must stay cumulative.
+    const delList = (deletedOrigs[pIdx] || []).concat(extraDrawingDeletes);
+    model.pages.push({
+      page: pIdx,
+      objects: objs,
+      deleted_originals: delList,
+      deleted_widgets: widgetDeletes,
+    });
+  });
+  try {
+    const r = await fetch('/tools/pdf-editor/save', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(model),
+    });
+    if (!r.ok) { setStatus('儲存失敗：' + await r.text()); return; }
+    const data = await r.json();
+    pages = data.pages;
+    document.querySelectorAll('.pe-page img.bg').forEach((img, i) => {
+      if (data.pages[i]) img.src = data.pages[i].preview_url + '?t=' + Date.now();
+    });
+    const dl = $('btnDownload');
+    dl.href = data.download_url;
+    dl.style.display = ''; dl.innerHTML = dl.innerHTML.includes('svg') ? dl.innerHTML : '下載 PDF';
+    dl.setAttribute('download', suggestedFilename());
+    // NOTE: intentionally NOT clearing _origBbox or markers. Each save
+    // replays all edits on pristine SRC, so state must persist across
+    // saves. The user can explicitly delete markers to cancel redactions.
+    // Fade all overlay objects to near-invisible after save — the
+    // background PDF now shows them baked in. EXCEPT the currently
+    // selected object (preserve selection across auto-save so the user
+    // keeps editing the same thing without re-clicking).
+    pageCanvases.forEach(fc => {
+      const stillSelected = fc.getActiveObject();
+      fc.getObjects().forEach(o => {
+        if (o._peMarker) return;
+        o._peSaved = true;
+        // Keep the selected one fully visible; fade the rest
+        if (o === stillSelected) {
+          o.set('opacity', 1);
+        } else {
+          o.set('opacity', 0.01);
+        }
+      });
+      if (stillSelected) fc.setActiveObject(stillSelected);
+      fc.requestRenderAll();
+    });
+    // Remember if we skipped the active object, so selection:cleared
+    // can trigger a follow-up save to finally bake it in.
+    needBakeOnDeselect = anySkipped;
+    setStatus(isAuto ? '已自動儲存。' : '已儲存。預覽已更新，點「下載 PDF」取回。');
+  } catch (e) { setStatus('儲存錯誤：' + e.message); }
+  finally { if (!isAuto) hideLoading(); }
+}
+
+function suggestedFilename() {
+  const base = (originalFilename || 'edited.pdf').replace(/\.[^.]+$/, '');
+  return `${base}_edited.pdf`;
+}
+
+// ============ Helpers ============
+function colorToHex(c, fallback) {
+  if (!c || typeof c !== 'string') return fallback;
+  if (c.startsWith('#')) {
+    if (c.length === 7) return c.toLowerCase();
+    if (c.length === 4) return ('#' + c[1]+c[1]+c[2]+c[2]+c[3]+c[3]).toLowerCase();
+    return fallback;
+  }
+  const m = c.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (!m) return fallback;
+  return '#' + [m[1],m[2],m[3]].map(n => Number(n).toString(16).padStart(2,'0')).join('');
+}
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function rid() { return 'o' + Math.random().toString(36).slice(2, 10); }
+</script>
+{% endblock %}

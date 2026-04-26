@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}PDF 用印與簽名 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('stamp', size=22) }} PDF 用印與簽名</h1>
+<p class="muted">上傳 PDF，選擇要用的印章、簽名或 Logo 圖片，平台會依照預設位置自動套用。需要微調時可以切到進階模式。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 選擇要蓋的圖片（印章 / 簽名 / Logo）</h2>
+  {% if not stamps %}
+    <div class="empty">還沒有任何可用的印章 / 簽名 / Logo，請先到「<a href="/admin/assets">資產管理</a>」上傳。</div>
+  {% else %}
+  <div class="asset-list" style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));">
+    {% for s in stamps %}
+    <label class="asset-item" style="cursor:pointer;">
+      <div class="thumb"><img src="/admin/assets/{{ s.id }}/thumb" /></div>
+      <div class="name">
+        <input type="radio" name="stamp" value="{{ s.id }}" {% if s.id == default_id %}checked{% endif %} />
+        {{ s.name }}
+        <span class="type-chip type-{{ s.type }}">{{ {'stamp':'印章','signature':'簽名','logo':'Logo'}[s.type] or s.type }}</span>
+      </div>
+      <div class="meta">{{ '%.0f'|format(s.preset.width_mm) }}×{{ '%.0f'|format(s.preset.height_mm) }}mm, Y={{ '%.0f'|format(s.preset.y_mm) }}</div>
+    </label>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">2. 上傳 PDF</h2>
+  {% with upload_id='pdfUpload', accept='application/pdf', multiple=True, hint='支援單/多檔；多檔會打包為 ZIP 下載' %}
+    {% include "components/file_upload.html" %}
+  {% endwith %}
+  <div id="batch-list" class="batch-list" hidden></div>
+
+  <div class="form-row" style="margin-top:12px;">
+    <label>蓋章頁面</label>
+    <select id="page-mode">
+      <option value="all">所有頁</option>
+      <option value="first">僅第一頁</option>
+      <option value="last">僅最後一頁</option>
+    </select>
+  </div>
+
+</div>
+
+<div class="panel" id="preview-panel" hidden>
+  <div class="preview-toolbar">
+    <h2 style="margin:0;">預覽</h2>
+    <div class="mode-switch" role="tablist" style="margin-left:12px;">
+      <button class="mode-btn active" type="button" data-mode="edit">編輯模式</button>
+      <button class="mode-btn" type="button" data-mode="composite">合成模式</button>
+    </div>
+    <span style="flex:1;"></span>
+    <span id="sim-status" class="muted" style="font-size:12px;"></span>
+  </div>
+  <p class="muted" style="font-size:12px; margin:6px 0;">
+    <b>編輯模式</b>：在 PDF 上拖曳藍框調整位置 / 大小 / 旋轉（只顯示第一頁）。
+    <b>合成模式</b>：列出實際蓋章後的<strong>每一頁</strong>，所見即所得。
+    任何調整只套用到這一次，不會改到印章預設值。
+  </p>
+  <div id="edit-mode" style="margin-top:8px;">
+    {% set editor_id='stampOverride' %}
+    {% include "components/drag_position_editor.html" %}
+  </div>
+  <div id="composite-mode" hidden style="margin-top:8px; background:#e5e7eb; border-radius:6px; padding:16px;">
+    <div id="sim-page-nav" hidden style="display:flex; gap:8px; align-items:center; justify-content:center; margin-bottom:10px;">
+      <button class="btn btn-small" type="button" id="sim-prev">‹ 上一頁</button>
+      <span id="sim-page-info" style="font-size:13px; color:#475569; font-family: ui-monospace, monospace;">— / —</span>
+      <button class="btn btn-small" type="button" id="sim-next">下一頁 ›</button>
+      <span style="margin-left:14px; font-size:11.5px; color:#94a3b8;">或左右鍵切換</span>
+    </div>
+    <div id="sim-single" style="display:flex; flex-direction:column; gap:6px; align-items:center;">
+      <img id="sim-image" alt="蓋章後預覽" style="max-width:100%; max-height:640px; box-shadow:0 4px 20px rgba(0,0,0,.15); background:#fff;" />
+      <div id="sim-cap" style="font-size:12px; color:#475569;"></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">3. 執行</h2>
+  <button class="btn btn-primary" id="btn-submit">{{ icon('stamp') }}開始蓋章</button>
+  {% with progress_id='jobProgress' %}
+    {% include "components/job_progress.html" %}
+  {% endwith %}
+</div>
+<style>
+.batch-list { margin-top: 10px; padding: 10px 12px; background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; }
+.batch-list ul { list-style: disc; font-size: 13px; color: #334155; }
+.batch-list li { margin: 2px 0; word-break: break-all; }
+.type-chip { display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; vertical-align: middle; }
+.type-stamp     { background: #fee2e2; color: #b91c1c; }
+.type-signature { background: #dbeafe; color: #1d4ed8; }
+.type-logo      { background: #dcfce7; color: #166534; }
+.preview-toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.mode-switch { display: inline-flex; background: #e5e7eb; padding: 3px; border-radius: 8px; gap: 0; }
+.mode-btn { background: transparent; border: none; padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; color: #475569; font-weight: 500; }
+.mode-btn:hover { background: rgba(255,255,255,0.5); }
+.mode-btn.active { background: #fff; color: #1e293b; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script src="/static/js/job_progress.js"></script>
+<script src="/static/js/drag_position_editor.js"></script>
+<script>
+let pickedFiles = [];   // all picked PDFs
+let editor = null;
+let previewInfo = null; // { preview_url, paper_w_mm, paper_h_mm } for the FIRST file
+
+const fu = new FileUpload(document.getElementById('pdfUpload'), async (_first, files) => {
+  pickedFiles = Array.isArray(files) ? files : (files ? [files] : []);
+  renderBatchList();
+  if (pickedFiles.length) {
+    document.getElementById('preview-panel').hidden = false;
+    await ensureEditor();
+    refreshSim();
+  } else {
+    document.getElementById('preview-panel').hidden = true;
+  }
+});
+
+function renderBatchList() {
+  const box = document.getElementById('batch-list');
+  if (!box) return;
+  if (pickedFiles.length <= 1) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  box.innerHTML = '<div class="muted" style="font-size:12px; margin-bottom:6px;">共 '
+    + pickedFiles.length + ' 份 PDF，將統一套用相同位置、尺寸、頁面模式，完成後打包為 ZIP。</div>'
+    + '<ul style="margin:0; padding-left:18px;">'
+    + pickedFiles.map(f => `<li>${escapeHTML(f.name)}</li>`).join('')
+    + '</ul>';
+}
+function escapeHTML(s) { return String(s).replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function firstFile() { return pickedFiles[0] || null; }
+
+const progress = new JobProgress(document.getElementById('jobProgress'), {
+  onReset: () => { fu.reset(); pickedFiles = []; renderBatchList(); },
+});
+
+// Mode switch: 編輯 / 合成
+document.querySelectorAll('.mode-switch .mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-switch .mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const m = btn.dataset.mode;
+    document.getElementById('edit-mode').hidden = m !== 'edit';
+    document.getElementById('composite-mode').hidden = m !== 'composite';
+    if (m === 'composite') refreshSim();
+  });
+});
+
+async function loadPreview() {
+  const f = firstFile();
+  if (!f) return null;
+  const fd = new FormData();
+  fd.append('file', f);
+  const r = await fu.upload('/tools/pdf-stamp/preview', fd, {processingLabel: '產生預覽中…'});
+  if (!r.ok) return null;
+  previewInfo = await r.json();
+  if (editor) {
+    editor.setPaper(previewInfo.paper_w_mm, previewInfo.paper_h_mm);
+    editor.setBackground(previewInfo.preview_url);
+  }
+  return previewInfo;
+}
+
+function getSelectedStamp() {
+  const el = document.querySelector('input[name=stamp]:checked');
+  return el ? el.value : null;
+}
+
+function getSelectedStampPreset() {
+  const stamps = window.__STAMPS__;
+  const id = getSelectedStamp();
+  return stamps.find(s => s.id === id)?.preset || null;
+}
+
+async function ensureEditor() {
+  const id = getSelectedStamp();
+  if (!id) return;
+  const preset = getSelectedStampPreset();
+  await loadPreview();
+  if (editor) {
+    editor.setPaper(previewInfo?.paper_w_mm || 210, previewInfo?.paper_h_mm || 297);
+    if (previewInfo?.preview_url) editor.setBackground(previewInfo.preview_url);
+    return;
+  }
+  editor = new DragPositionEditor({
+    root: document.getElementById('stampOverride'),
+    asset_url: `/admin/assets/${id}/file`,
+    paper_w_mm: previewInfo?.paper_w_mm || preset.paper_w_mm || 210,
+    paper_h_mm: previewInfo?.paper_h_mm || preset.paper_h_mm || 297,
+    value: preset,
+    bg_url: previewInfo?.preview_url || null,
+    lock_aspect: preset.lock_aspect ?? true,
+    onChange: () => { refreshSim(); },
+  });
+}
+
+let simSeq = 0;
+let simDebounce = null;
+let simPages = [];
+let simPageIdx = 0;
+let simPageCount = 0;
+
+function _renderSimPage() {
+  if (!simPages.length) return;
+  if (simPageIdx < 0) simPageIdx = 0;
+  if (simPageIdx >= simPages.length) simPageIdx = simPages.length - 1;
+  const p = simPages[simPageIdx];
+  const t = Date.now();
+  const img = document.getElementById('sim-image');
+  img.src = p.preview_url + '?t=' + t;
+  img.alt = 'page ' + (p.index + 1);
+  document.getElementById('sim-cap').textContent =
+    '第 ' + (p.index + 1) + ' 頁 / 共 ' + simPageCount + ' 頁' + (p.stamped ? ' · 已蓋章' : ' · 此頁未蓋章');
+  document.getElementById('sim-page-info').textContent = (simPageIdx + 1) + ' / ' + simPages.length;
+  document.getElementById('sim-prev').disabled = simPageIdx === 0;
+  document.getElementById('sim-next').disabled = simPageIdx >= simPages.length - 1;
+  document.getElementById('sim-page-nav').hidden = simPages.length <= 1;
+}
+
+async function refreshSim() {
+  const f = firstFile();
+  if (!f) return;
+  const stampId = getSelectedStamp();
+  if (!stampId) return;
+  // debounce to coalesce rapid drag events
+  clearTimeout(simDebounce);
+  simDebounce = setTimeout(async () => {
+    const seq = ++simSeq;
+    const status = document.getElementById('sim-status');
+    status.textContent = '產生合成圖中…';
+    const fd = new FormData();
+    fd.append('stamp_id', stampId);
+    fd.append('file', f);
+    fd.append('page_mode', document.getElementById('page-mode').value);
+    // Always send the live editor value so backend re-renders with the
+    // current dragged position. Without this the override would be stale
+    // (or absent) and the composite preview would keep showing the preset.
+    if (editor) fd.append('override', JSON.stringify(editor.getValue()));
+    try {
+      const r = await fu.upload('/tools/pdf-stamp/preview-all-pages', fd, {processingLabel: '產生全頁預覽中…'});
+      if (seq !== simSeq) return; // superseded
+      if (!r.ok) { status.textContent = '模擬圖產生失敗'; return; }
+      const j = await r.json();
+      simPages = j.pages;
+      simPageCount = j.page_count;
+      const stamped = simPages.filter(p => p.stamped).length;
+      status.textContent = `共 ${simPageCount} 頁，蓋章 ${stamped} 頁（依實際位置、尺寸、旋轉角度）`;
+      // Keep current page index if still valid; otherwise reset to first
+      // stamped page (more useful than always page 1).
+      if (simPageIdx >= simPages.length) {
+        const firstStamped = simPages.findIndex(p => p.stamped);
+        simPageIdx = firstStamped >= 0 ? firstStamped : 0;
+      }
+      _renderSimPage();
+    } catch (e) {
+      if (seq !== simSeq) return;
+      status.textContent = '模擬圖產生失敗';
+    }
+  }, 250);
+}
+
+document.getElementById('sim-prev').addEventListener('click', () => { simPageIdx--; _renderSimPage(); });
+document.getElementById('sim-next').addEventListener('click', () => { simPageIdx++; _renderSimPage(); });
+document.addEventListener('keydown', (e) => {
+  // Only react when composite mode is visible
+  if (document.getElementById('composite-mode').hidden) return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'ArrowLeft' && simPageIdx > 0) { simPageIdx--; _renderSimPage(); e.preventDefault(); }
+  else if (e.key === 'ArrowRight' && simPageIdx < simPages.length - 1) { simPageIdx++; _renderSimPage(); e.preventDefault(); }
+});
+
+// Re-run sim on stamp selection or page mode change. When the stamp
+// itself changes, also swap the editor's draggable image + preset so
+// the user immediately sees the new asset (not stale image from the
+// first stamp they clicked).
+document.addEventListener('change', (e) => {
+  if (e.target.matches('input[name=stamp]')) {
+    if (editor) {
+      const id = getSelectedStamp();
+      const preset = getSelectedStampPreset();
+      if (id && editor.$assetImg) {
+        editor.$assetImg.src = `/admin/assets/${id}/file?t=${Date.now()}`;
+      }
+      if (preset) {
+        editor.value = {
+          x_mm: preset.x_mm, y_mm: preset.y_mm,
+          width_mm: preset.width_mm, height_mm: preset.height_mm,
+          rotation_deg: preset.rotation_deg || 0,
+        };
+        editor.aspect = preset.width_mm / preset.height_mm || 1;
+        if (editor.$w) editor.$w.value = preset.width_mm.toFixed(1);
+        if (editor.$h) editor.$h.value = preset.height_mm.toFixed(1);
+        editor._clamp(); editor._render(); editor._emit();
+      }
+    }
+    refreshSim();
+  } else if (e.target.id === 'page-mode') {
+    refreshSim();
+  }
+});
+
+document.getElementById('btn-submit').addEventListener('click', async () => {
+  const stampId = getSelectedStamp();
+  if (!stampId) return alert('請先選擇印章');
+  if (!pickedFiles.length) return alert('請先上傳 PDF');
+  const fd = new FormData();
+  fd.append('stamp_id', stampId);
+  for (const f of pickedFiles) fd.append('file', f);
+  fd.append('page_mode', document.getElementById('page-mode').value);
+  if (editor) fd.append('override', JSON.stringify(editor.getValue()));
+  const r = await fu.upload('/tools/pdf-stamp/submit', fd, {processingLabel: '排隊用印中…'});
+  if (!r.ok) {
+    const txt = await r.text();
+    return alert('送出失敗：' + txt);
+  }
+  const j = await r.json();
+  progress.track(j.job_id);
+});
+
+// Cache stamp presets into page for the editor
+window.__STAMPS__ = {{ stamps | tojson }} ;
+</script>
+{% endblock %}

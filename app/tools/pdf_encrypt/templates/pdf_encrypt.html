@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}PDF 密碼保護 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.enc-card { background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px;
+  padding:12px 14px; margin-top:10px; }
+.enc-card .title { font-weight:600; font-size:13px; color:#0f172a; margin-bottom:8px; }
+.enc-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap:8px 14px; }
+.enc-grid label { display:inline-flex; align-items:center; gap:6px;
+  font-size:13px; color:#334155; cursor:pointer; }
+.enc-pw { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+.enc-pw label { font-size:13px; min-width:110px; color:#475569; font-weight:500; }
+.enc-pw input { flex:1; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('lock', size=22) }} PDF 密碼保護</h1>
+<p class="muted">為 PDF 設開啟密碼 + 權限控制；輸出 AES-256 加密 PDF。支援多檔批次。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳 PDF</h2>
+  {% with upload_id='encUp', accept='application/pdf', multiple=True %}{% include "components/file_upload.html" %}{% endwith %}
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">2. 密碼</h2>
+  <div class="enc-pw">
+    <label for="userPw">開啟密碼</label>
+    <input id="userPw" type="password" class="field" placeholder="打開 PDF 時要求的密碼（留空表示不需）" />
+  </div>
+  <div class="enc-pw">
+    <label for="ownerPw">擁有者密碼</label>
+    <input id="ownerPw" type="password" class="field" placeholder="修改權限設定時才會要求的密碼（不填就用開啟密碼）" />
+  </div>
+  <div class="enc-pw">
+    <label for="algo">加密演算法</label>
+    <select id="algo" class="field" style="max-width:240px;">
+      <option value="aes-256" selected>AES-256（推薦）</option>
+      <option value="aes-128">AES-128</option>
+      <option value="rc4-128">RC4-128（舊系統相容）</option>
+    </select>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">3. 權限（勾選 = 允許）</h2>
+  <p class="muted" style="font-size:12px; margin-top:-4px;">未勾選的動作，開啟密碼輸入後仍被限制；擁有者密碼輸入後可解除所有限制。</p>
+  <div class="enc-grid">
+    <label><input type="checkbox" id="allow_print"> 允許列印（一般畫質）</label>
+    <label><input type="checkbox" id="allow_print_hq"> 允許列印（高畫質）</label>
+    <label><input type="checkbox" id="allow_copy"> 允許複製文字 / 圖片</label>
+    <label><input type="checkbox" id="allow_modify"> 允許編輯內容</label>
+    <label><input type="checkbox" id="allow_annotate"> 允許加註解 / 畫記</label>
+    <label><input type="checkbox" id="allow_form"> 允許填寫表單</label>
+    <label><input type="checkbox" id="allow_assemble"> 允許頁面重排 / 插入</label>
+    <label><input type="checkbox" id="allow_accessibility" checked> 允許輔助工具讀取（建議打開）</label>
+  </div>
+</div>
+
+<div style="margin-top:12px;">
+  <button class="btn btn-primary" id="btn-submit">{{ icon('lock', size=14) }} 加密並下載</button>
+</div>
+<div style="margin-top:10px;">
+  {% with progress_id='encJob' %}{% include "components/job_progress.html" %}{% endwith %}
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script src="/static/js/job_progress.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let files = [];
+const fu = new FileUpload($('encUp'), (_first, fs) => {
+  files = Array.isArray(fs) ? fs : (fs ? [fs] : []);
+});
+const jp = new JobProgress($('encJob'), { onReset: () => { fu.reset(); files = []; } });
+
+$('btn-submit').addEventListener('click', async () => {
+  if (!files.length) return alert('請上傳 PDF');
+  const up = $('userPw').value, op = $('ownerPw').value;
+  if (!up && !op) return alert('請至少填一組密碼');
+  const fd = new FormData();
+  for (const f of files) fd.append('file', f);
+  fd.append('user_pw', up);
+  fd.append('owner_pw', op);
+  fd.append('algorithm', $('algo').value);
+  ['allow_print','allow_print_hq','allow_copy','allow_modify','allow_annotate','allow_form','allow_assemble','allow_accessibility'].forEach(k => {
+    if ($(k).checked) fd.append(k, 'true');
+  });
+  const r = await fu.upload('/tools/pdf-encrypt/submit', fd, {processingLabel: '排隊加密中…'});
+  if (!r.ok) return alert('失敗：' + await r.text());
+  const j = await r.json();
+  jp.track(j.job_id);
+});
+</script>
+{% endblock %}

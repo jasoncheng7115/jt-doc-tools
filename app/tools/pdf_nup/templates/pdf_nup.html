@@ -1,0 +1,364 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}多頁合併 · {{ app_name }}{% endblock %}
+{% block content %}
+<style>
+.nup-hint { background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px;
+  padding: 10px 14px; font-size: 13px; color:#075985; margin: 10px 0; }
+.nup-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid #e5e7eb; }
+.nup-section:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+.nup-section h3 { margin: 0 0 10px; font-size: 13px; color:#334155;
+  text-transform: uppercase; letter-spacing: 0.05em; }
+.nup-grid-cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+}
+.nup-grid-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 10px 8px 8px; cursor: pointer; text-align: center;
+  transition: all 0.1s; display: flex; flex-direction: column;
+  align-items: center; gap: 6px;
+}
+.nup-grid-card:hover { border-color: #c7d2fe; background: #fafbff; }
+.nup-grid-card.active {
+  border-color: #4f46e5; background: #eef2ff; box-shadow: 0 0 0 1px #4f46e5;
+}
+.nup-grid-thumb {
+  width: 42px; height: 54px; background: #f8fafc; border: 1px solid #cbd5e1;
+  border-radius: 3px; display: grid; gap: 2px; padding: 3px;
+}
+.nup-grid-card.active .nup-grid-thumb { border-color: #4f46e5; background: #fff; }
+.nup-grid-thumb > div {
+  background: linear-gradient(135deg, #cbd5e1, #94a3b8);
+  border-radius: 1.5px;
+}
+.nup-grid-card.active .nup-grid-thumb > div {
+  background: linear-gradient(135deg, #818cf8, #4f46e5);
+}
+.nup-grid-card .nup-grid-label { font-size: 12px; font-weight: 600; color: #334155; }
+.nup-grid-card .nup-grid-sub { font-size: 10.5px; color: #94a3b8; }
+.nup-grid-card.active .nup-grid-label { color: #312e81; }
+.nup-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: center; margin-bottom: 8px; }
+.nup-row label { font-size: 13px; color: #475569; }
+.nup-num-group { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: #475569; }
+.nup-num { width: 72px; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; }
+.nup-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .nup-layout { grid-template-columns: 1fr; } }
+.nup-preview-wrap { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px;
+  padding: 12px; display: flex; flex-direction: column; align-items: center; min-height: 500px; }
+.nup-preview-wrap img { max-width: 100%; max-height: 70vh; box-shadow: 0 2px 12px rgba(0,0,0,.1); background: #fff; }
+.nup-preview-wrap .placeholder { color: #94a3b8; font-size: 13px; padding: 60px 10px; text-align: center; }
+.nup-files-list { font-size: 13px; color: #475569; margin-top: 6px; }
+.nup-files-list li { padding: 2px 0; }
+.nup-radio-group { display: inline-flex; gap: 14px; }
+.nup-radio-group label { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #475569; cursor: pointer; }
+input.field { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+</style>
+
+<h1>{{ icon('tile', size=22) }} 多頁合併（N-up）</h1>
+<p class="muted">把多頁 PDF 縮小排在同一張紙上，適合列印草稿 / 講義 / 對照閱讀。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳檔案</h2>
+  {% with upload_id='nupUpload', accept='.pdf,.doc,.docx,.odt,.xls,.xlsx,.ods,.ppt,.pptx,.odp', multiple=True, hint='支援多檔；多檔會依上傳順序接續排入格子' %}
+    {% include "components/file_upload.html" %}
+  {% endwith %}
+  <div id="nupFilesInfo" class="nup-files-list" hidden></div>
+</div>
+
+<div class="panel" id="nupPanel" hidden>
+  <h2 style="margin-top:0;">2. 設定版面</h2>
+  <div class="nup-layout">
+    <div>
+      <div class="nup-section">
+        <h3>每頁顯示張數</h3>
+        <div class="nup-grid-cards" id="gridChips">
+          {% for preset in [(1,2,'2','1×2'),(2,2,'4','2×2'),(2,3,'6','2×3'),(2,4,'8','2×4'),(3,3,'9','3×3'),(4,4,'16','4×4')] %}
+          <div class="nup-grid-card {% if preset[0]==2 and preset[1]==2 %}active{% endif %}"
+               data-cols="{{ preset[0] }}" data-rows="{{ preset[1] }}">
+            <div class="nup-grid-thumb"
+                 style="grid-template-columns: repeat({{ preset[0] }}, 1fr); grid-template-rows: repeat({{ preset[1] }}, 1fr);">
+              {% for _ in range(preset[0] * preset[1]) %}<div></div>{% endfor %}
+            </div>
+            <div class="nup-grid-label">{{ preset[2] }} 頁</div>
+            <div class="nup-grid-sub">{{ preset[3] }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        <div style="margin-top:10px;" class="nup-num-group">
+          自訂：
+          <input id="cols" class="nup-num" type="number" min="1" max="10" value="2"> 欄
+          ×
+          <input id="rows" class="nup-num" type="number" min="1" max="10" value="2"> 列
+        </div>
+      </div>
+
+      <div class="nup-section">
+        <h3>紙張</h3>
+        <div class="nup-row">
+          <label>尺寸</label>
+          <select id="paper" class="field">
+            {% for p in paper_opts %}<option value="{{ p.key }}" {% if p.key=='a4' %}selected{% endif %}>{{ p.label }}</option>{% endfor %}
+            <option value="custom">自訂</option>
+          </select>
+        </div>
+        <div class="nup-row" id="customPaperRow" style="display:none;">
+          <label>自訂 (mm)</label>
+          <div class="nup-num-group">
+            <input id="paperW" class="nup-num" type="number" value="210"> ×
+            <input id="paperH" class="nup-num" type="number" value="297">
+          </div>
+        </div>
+        <div class="nup-row">
+          <label>方向</label>
+          <div class="nup-radio-group">
+            <label><input type="radio" name="orient" value="auto" checked> 自動</label>
+            <label><input type="radio" name="orient" value="portrait"> 直式</label>
+            <label><input type="radio" name="orient" value="landscape"> 橫式</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="nup-section">
+        <h3>排列</h3>
+        <div class="nup-row">
+          <label>方向</label>
+          <div class="nup-radio-group">
+            <label><input type="radio" name="direction" value="ltr" checked> 左→右</label>
+            <label><input type="radio" name="direction" value="ttb"> 上→下</label>
+          </div>
+        </div>
+        <div class="nup-row">
+          <label>順序</label>
+          <div class="nup-radio-group">
+            <label><input type="radio" name="reverse" value="false" checked> 正常</label>
+            <label><input type="radio" name="reverse" value="true"> 反向</label>
+          </div>
+        </div>
+        <div class="nup-row">
+          <label>自動旋轉</label>
+          <label><input type="checkbox" id="autoRotate" checked> 依格子形狀自動旋轉來源頁</label>
+        </div>
+        <div class="nup-row">
+          <label>對齊</label>
+          <div class="nup-radio-group">
+            <label><input type="radio" name="align" value="center" checked> 置中</label>
+            <label><input type="radio" name="align" value="left-top"> 左上</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="nup-section">
+        <h3>邊距（mm）</h3>
+        <div class="nup-row">
+          <label>上 / 下</label>
+          <div class="nup-num-group">
+            <input id="mTop" class="nup-num" type="number" value="10" min="0"> ·
+            <input id="mBottom" class="nup-num" type="number" value="10" min="0">
+          </div>
+        </div>
+        <div class="nup-row">
+          <label>左 / 右</label>
+          <div class="nup-num-group">
+            <input id="mLeft" class="nup-num" type="number" value="10" min="0"> ·
+            <input id="mRight" class="nup-num" type="number" value="10" min="0">
+          </div>
+        </div>
+        <div class="nup-row">
+          <label>間距（mm）</label>
+          <div class="nup-num-group">
+            <input id="gapX" class="nup-num" type="number" value="5" min="0"> 水平 ·
+            <input id="gapY" class="nup-num" type="number" value="5" min="0"> 垂直
+          </div>
+        </div>
+      </div>
+
+      <div class="nup-section">
+        <h3>邊框 / 裁切線 / 頁碼</h3>
+        <div class="nup-row">
+          <label><input type="checkbox" id="showBorder"> 顯示邊框</label>
+          <div class="nup-num-group">
+            <input id="borderW" class="nup-num" type="number" value="0.5" step="0.1" min="0"> pt
+            <input id="borderC" type="color" value="#94a3b8" style="width:32px; height:26px; border:1px solid #cbd5e1; border-radius:4px;">
+          </div>
+        </div>
+        <div class="nup-row">
+          <label><input type="checkbox" id="showPageNum"> 顯示頁碼</label>
+          <div class="nup-num-group">
+            格式 <input id="pageNumFmt" class="field" type="text" value="{n}" style="width:80px;">
+            <input id="pageNumSize" class="nup-num" type="number" value="8" step="1"> pt
+          </div>
+        </div>
+        <div class="nup-row">
+          <label><input type="checkbox" id="showCrop"> 裁切線</label>
+          <div class="nup-num-group">長度 <input id="cropLen" class="nup-num" type="number" value="4"> mm</div>
+        </div>
+        <div class="nup-row">
+          <label>空白補齊</label>
+          <label><input type="checkbox" id="padBlanks" checked> 不足格數時補空白頁</label>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h3 style="margin:0 0 10px; font-size:13px; color:#334155; text-transform:uppercase; letter-spacing:0.05em;">即時預覽（第一張）</h3>
+      <div class="nup-preview-wrap" id="previewWrap">
+        <div class="placeholder">上傳檔案後會自動預覽</div>
+      </div>
+      <div style="margin-top:10px; display:flex; gap:10px;">
+        <button class="btn" id="btnRefresh">{{ icon('refresh') }} 重新預覽</button>
+        <button class="btn btn-primary" id="btnGenerate" disabled>{{ icon('download') }} 產生 PDF</button>
+        <span id="status" class="muted" style="align-self:center; font-size:12.5px;"></span>
+      </div>
+      <div id="doneBox" class="muted" style="margin-top:10px;" hidden>
+        <a id="dlLink" class="btn btn-primary" href="#">{{ icon('download') }} 下載結果</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let uploadId = null;
+let fileCount = 0;
+let totalPages = 0;
+let debounceTimer = null;
+
+const fu = new FileUpload($('nupUpload'), async (_first, files) => {
+  const list = Array.isArray(files) ? files : (files ? [files] : []);
+  if (!list.length) return;
+  $('status').textContent = '上傳中…';
+  const fd = new FormData();
+  for (const f of list) fd.append('files', f);
+  const r = await fu.upload('/tools/pdf-nup/load', fd, {processingLabel: '載入頁面中…'});
+  if (!r.ok) { $('status').textContent = '上傳失敗：' + await r.text(); return; }
+  const d = await r.json();
+  uploadId = d.upload_id;
+  fileCount = d.file_count;
+  totalPages = d.total_pages;
+  const info = $('nupFilesInfo');
+  info.hidden = false;
+  info.innerHTML = '<b>已上傳</b>：共 ' + d.total_pages + ' 頁' +
+    '<ul>' + d.files.map(f => `<li>${escapeHTML(f.name)} · ${f.pages} 頁</li>`).join('') + '</ul>';
+  $('nupPanel').hidden = false;
+  $('btnGenerate').disabled = false;
+  $('status').textContent = '';
+  schedulePreview();
+});
+
+function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+// Preset grid cards
+document.querySelectorAll('#gridChips .nup-grid-card').forEach(ch => {
+  ch.addEventListener('click', () => {
+    document.querySelectorAll('#gridChips .nup-grid-card').forEach(c => c.classList.remove('active'));
+    ch.classList.add('active');
+    $('cols').value = ch.dataset.cols;
+    $('rows').value = ch.dataset.rows;
+    schedulePreview();
+  });
+});
+// Sync custom inputs → highlight matching card if any
+function syncGridCardsFromInputs() {
+  const c = parseInt($('cols').value) || 0;
+  const r = parseInt($('rows').value) || 0;
+  document.querySelectorAll('#gridChips .nup-grid-card').forEach(card => {
+    card.classList.toggle('active',
+      parseInt(card.dataset.cols) === c && parseInt(card.dataset.rows) === r);
+  });
+}
+$('cols').addEventListener('input', syncGridCardsFromInputs);
+$('rows').addEventListener('input', syncGridCardsFromInputs);
+
+// Paper custom toggle
+$('paper').addEventListener('change', () => {
+  $('customPaperRow').style.display = $('paper').value === 'custom' ? '' : 'none';
+  schedulePreview();
+});
+
+// Debounced preview on any input change
+function collectOpts() {
+  const q = (name) => document.querySelector(`input[name="${name}"]:checked`)?.value;
+  return {
+    upload_id: uploadId,
+    file_count: fileCount,
+    cols: parseInt($('cols').value) || 2,
+    rows: parseInt($('rows').value) || 2,
+    paper: $('paper').value,
+    paper_w_mm: parseFloat($('paperW').value) || 210,
+    paper_h_mm: parseFloat($('paperH').value) || 297,
+    orientation: q('orient') || 'auto',
+    margin_top_mm: parseFloat($('mTop').value) || 0,
+    margin_right_mm: parseFloat($('mRight').value) || 0,
+    margin_bottom_mm: parseFloat($('mBottom').value) || 0,
+    margin_left_mm: parseFloat($('mLeft').value) || 0,
+    gap_x_mm: parseFloat($('gapX').value) || 0,
+    gap_y_mm: parseFloat($('gapY').value) || 0,
+    direction: q('direction') || 'ltr',
+    reverse: q('reverse') === 'true',
+    auto_rotate: $('autoRotate').checked,
+    page_align: q('align') || 'center',
+    show_border: $('showBorder').checked,
+    border_width_pt: parseFloat($('borderW').value) || 0.5,
+    border_color: $('borderC').value,
+    show_page_num: $('showPageNum').checked,
+    page_num_format: $('pageNumFmt').value || '{n}',
+    page_num_size_pt: parseFloat($('pageNumSize').value) || 8,
+    show_crop_marks: $('showCrop').checked,
+    crop_mark_len_mm: parseFloat($('cropLen').value) || 4,
+    pad_blanks: $('padBlanks').checked,
+  };
+}
+
+function schedulePreview() {
+  if (!uploadId) return;
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(refreshPreview, 300);
+}
+
+async function refreshPreview() {
+  if (!uploadId) return;
+  $('status').textContent = '預覽中…';
+  const opts = collectOpts();
+  const r = await fetch('/tools/pdf-nup/preview', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(opts),
+  });
+  if (!r.ok) { $('status').textContent = '預覽失敗：' + await r.text(); return; }
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  $('previewWrap').innerHTML = `<img src="${url}" alt="預覽">`;
+  $('status').textContent = '';
+}
+
+// Wire up all inputs to refresh preview
+document.querySelectorAll('#nupPanel input, #nupPanel select').forEach(el => {
+  el.addEventListener('change', schedulePreview);
+  if (el.type === 'number' || el.type === 'text') el.addEventListener('input', schedulePreview);
+});
+
+$('btnRefresh').addEventListener('click', refreshPreview);
+
+$('btnGenerate').addEventListener('click', async () => {
+  if (!uploadId) return;
+  $('status').textContent = '產生中…';
+  $('btnGenerate').disabled = true;
+  try {
+    const r = await fetch('/tools/pdf-nup/generate', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(collectOpts()),
+    });
+    if (!r.ok) { $('status').textContent = '失敗：' + await r.text(); return; }
+    const d = await r.json();
+    $('dlLink').href = d.url;
+    $('doneBox').hidden = false;
+    $('status').textContent = '完成';
+  } finally {
+    $('btnGenerate').disabled = false;
+  }
+});
+</script>
+{% endblock %}

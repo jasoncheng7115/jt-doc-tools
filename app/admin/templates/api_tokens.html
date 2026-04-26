@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}API Token · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('gear', size=22) }} API Token</h1>
+<p class="muted">
+  呼叫本工具的 REST API（<code>/api/*</code>、<code>/tools/*/submit</code> 等）時要帶的 bearer token。
+  使用方式：<code>Authorization: Bearer &lt;token&gt;</code>。
+</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">強制檢查</h2>
+  <div class="form-row">
+    <label>狀態</label>
+    <div class="field">
+      <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" id="enforce" {% if enforce %}checked{% endif %}>
+        <b>強制所有 API 呼叫必須帶 token</b>
+      </label>
+      <div class="muted" style="font-size:12px; margin-top:4px;">
+        關閉（預設）：寬限期，方便 web UI 與既有 script 無痛使用；不檢查 token。<br>
+        開啟：沒帶有效 token 的 <code>/api/*</code> 呼叫一律拒絕 401；web UI 本身仍照常運作（不走 token）。
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0; display:flex; align-items:center; gap:8px;">
+    現有 Token
+    <span class="muted" style="font-size:12px; font-weight:normal;">（{{ tokens|length }} 個）</span>
+  </h2>
+  {% if not tokens %}
+    <p class="muted">（沒有任何 token，請新增一個）</p>
+  {% else %}
+  <table class="tokens-table">
+    <thead>
+      <tr>
+        <th>Label</th>
+        <th>Token</th>
+        <th>建立時間</th>
+        <th>最近使用</th>
+        <th>狀態</th>
+        <th style="width:140px;">動作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tokens %}
+      <tr data-token="{{ t.token }}">
+        <td><strong>{{ t.label }}</strong></td>
+        <td>
+          <code class="token-masked" data-full="{{ t.token }}">{{ t.token[:6] }}…{{ t.token[-4:] }}</code>
+          <button class="btn btn-small btn-reveal" type="button" title="顯示完整 token">{{ icon('eye', size=12) }}顯示</button>
+          <button class="btn btn-small btn-copy" type="button" title="複製到剪貼簿">複製</button>
+        </td>
+        <td class="muted" style="font-size:12px;">
+          <script>document.write(new Date({{ t.created_at * 1000 | int }}).toLocaleString('zh-TW'));</script>
+        </td>
+        <td class="muted" style="font-size:12px;">
+          {% if t.last_used_at %}
+            <script>document.write(new Date({{ t.last_used_at * 1000 | int }}).toLocaleString('zh-TW'));</script>
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if t.enabled %}<span class="tag-ok">啟用</span>{% else %}<span class="tag-off">停用</span>{% endif %}
+        </td>
+        <td>
+          <button class="btn btn-small btn-revoke" type="button" style="background:#fee2e2; color:#991b1b;">撤銷</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <div style="margin-top:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <input type="text" id="new-label" class="field" placeholder="新 token 的 label（例：my-script）"
+           style="flex:1; min-width:220px; max-width:360px;" />
+    <button class="btn btn-primary" id="btn-create" type="button">{{ icon('save') }}產生新 Token</button>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">使用範例</h2>
+  <pre style="background:#f1f5f9; padding:12px; border-radius:6px; font-size:12px; overflow-x:auto; line-height:1.5;"><code># cURL
+curl -X POST http://localhost:8765/api/llm-review \
+  -H "Authorization: Bearer &lt;YOUR_TOKEN&gt;" \
+  -F file=@your.pdf
+
+# Python (httpx)
+import httpx
+r = httpx.post(
+    "http://localhost:8765/api/convert-to-pdf",
+    headers={"Authorization": "Bearer &lt;YOUR_TOKEN&gt;"},
+    files={"file": open("doc.docx", "rb")},
+)
+</code></pre>
+</div>
+
+<style>
+.tokens-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tokens-table th, .tokens-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+.tokens-table th { background: #f1f5f9; font-weight: 600; }
+.tokens-table code.token-masked { font-family: ui-monospace, SFMono-Regular, monospace; background:#f8fafc; padding:2px 6px; border-radius:4px; }
+.tokens-table .btn-small { padding: 2px 8px; font-size:11px; margin-left:4px; }
+.tag-ok  { background: #d1fae5; color: #065f46; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+.tag-off { background: #e5e7eb; color: #374151; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+</style>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const $ = (id) => document.getElementById(id);
+
+$('enforce').addEventListener('change', async () => {
+  const r = await fetch('/admin/api/tokens/enforce', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({enforce: $('enforce').checked}),
+  });
+  if (r.ok && window.showToast) {
+    showToast($('enforce').checked ? '已啟用強制檢查' : '已關閉強制檢查', 'ok');
+  }
+});
+
+$('btn-create').addEventListener('click', async () => {
+  const label = $('new-label').value.trim();
+  if (!label) { alert('請輸入 label'); return; }
+  const r = await fetch('/admin/api/tokens/create', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({label}),
+  });
+  if (r.ok) {
+    const j = await r.json();
+    alert(`已產生新 token：\n\n${j.token}\n\n請立即複製保留，離開本頁後仍可用「顯示」查看完整值。`);
+    location.reload();
+  } else {
+    alert('產生失敗');
+  }
+});
+
+// Reveal / copy / revoke handlers — delegated
+document.addEventListener('click', async (e) => {
+  const row = e.target.closest('tr[data-token]');
+  if (!row) return;
+  const full = row.dataset.token;
+
+  if (e.target.closest('.btn-reveal')) {
+    const code = row.querySelector('.token-masked');
+    if (code.textContent.includes('…')) {
+      code.textContent = full;
+      e.target.closest('.btn-reveal').textContent = '隱藏';
+    } else {
+      code.textContent = full.slice(0,6) + '…' + full.slice(-4);
+      e.target.closest('.btn-reveal').innerHTML = '<span>顯示</span>';
+    }
+  }
+  if (e.target.closest('.btn-copy')) {
+    try {
+      await navigator.clipboard.writeText(full);
+      if (window.showToast) showToast('已複製', 'ok');
+      else { e.target.textContent = '✓ 已複製'; setTimeout(() => e.target.textContent = '複製', 1500); }
+    } catch (err) { alert('複製失敗：' + err.message); }
+  }
+  if (e.target.closest('.btn-revoke')) {
+    if (!confirm('確定要撤銷這個 token？\n之後任何用它的 script 都會 401。')) return;
+    const r = await fetch('/admin/api/tokens/revoke', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({token: full}),
+    });
+    if (r.ok) location.reload();
+    else alert('撤銷失敗');
+  }
+});
+</script>
+{% endblock %}

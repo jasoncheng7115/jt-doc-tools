@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}權限矩陣 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('gear', size=22) }} 權限矩陣</h1>
+<p class="muted" style="margin-top:0;">
+  每位使用者 / 群組可以指派多個角色（自動聯集權限）。
+  進階：直接 grant 個別工具給特定 subject（少數客製情境用）。
+  左側選 subject，右側即時編輯，存檔後生效。
+</p>
+
+{% if not subjects %}
+<div class="panel"><i>尚無使用者或群組。</i></div>
+{% else %}
+<div class="perm-shell panel">
+  <!-- ===== Left: subject list ===== -->
+  <aside class="perm-side">
+    <div class="perm-side-toolbar">
+      <input class="field perm-search" id="permSearch" type="search" placeholder="搜尋名稱 / 帳號…">
+      <div class="perm-tabs" role="group">
+        <button type="button" class="pt-btn active" data-type="">全部 <span class="pt-cnt" id="cntAll">0</span></button>
+        <button type="button" class="pt-btn" data-type="user">使用者 <span class="pt-cnt" id="cntUser">0</span></button>
+        <button type="button" class="pt-btn" data-type="group">群組 <span class="pt-cnt" id="cntGroup">0</span></button>
+      </div>
+    </div>
+    <div class="perm-list" id="permList">
+      {% for s in subjects %}
+      <div class="perm-row" data-type="{{ s.type }}" data-key="{{ s.key }}"
+           data-name="{{ s.name }} {{ s.username }}"
+           data-source="{{ s.source }}">
+        <div class="perm-row-icon">
+          {% if s.type == 'user' %}{{ icon('user', size=14) }}{% else %}{{ icon('building', size=14) }}{% endif %}
+        </div>
+        <div class="perm-row-text">
+          <div class="perm-row-name">
+            {{ s.name }}
+            {% if s.is_admin_seed %}<span class="badge-seed">SEED</span>{% endif %}
+          </div>
+          <div class="perm-row-sub">
+            {% if s.type == 'user' %}{{ s.username }}{% else %}群組{% endif %}
+            <span class="src-badge src-{{ s.source }}">{{ s.source }}</span>
+          </div>
+        </div>
+        <div class="perm-row-roles">
+          <span class="role-count" data-roles="{{ s.roles|join(',') }}" data-direct="{{ s.direct_tools|length }}">
+            {{ s.roles|length }}
+          </span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </aside>
+
+  <!-- ===== Right: detail editor ===== -->
+  <section class="perm-detail" id="permDetail">
+    <div class="perm-empty" id="permEmpty">
+      {{ icon('shield', size=36) }}
+      <p>從左側選一位使用者或群組來編輯權限。</p>
+    </div>
+
+    <div class="perm-form" id="permForm" hidden>
+      <div class="perm-detail-head">
+        <div>
+          <div class="perm-detail-title" id="pdTitle"></div>
+          <div class="perm-detail-sub" id="pdSub"></div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <span id="pdDirty" class="muted" style="font-size:11.5px;" hidden>未儲存的變更</span>
+          <button class="btn btn-primary" type="button" id="pdSave">{{ icon('save', size=14) }} 儲存</button>
+        </div>
+      </div>
+
+      <fieldset class="auth-section" style="margin-top:14px;">
+        <legend>{{ icon('shield', size=14) }} 角色</legend>
+        <div class="picker">
+          <div class="picker-toolbar">
+            <input class="field picker-search" type="search" id="pdRoleSearch" placeholder="搜尋角色…">
+            <span class="picker-count" id="pdRoleCount">0 / 0</span>
+            <button type="button" class="btn btn-small picker-clear" id="pdRoleClear">清除</button>
+          </div>
+          <div class="picker-list" id="pdRoleList"></div>
+        </div>
+      </fieldset>
+
+      <fieldset class="auth-section" style="margin-top:12px;">
+        <legend>{{ icon('tool', size=14) }} 進階：直接 grant 工具 <span class="muted" style="font-weight:400;font-size:11px">（角色之外的客製授權）</span></legend>
+        <div class="picker">
+          <div class="picker-toolbar">
+            <input class="field picker-search" type="search" id="pdToolSearch" placeholder="搜尋工具…">
+            <span class="picker-count" id="pdToolCount">0 / 0</span>
+            <button type="button" class="btn btn-small picker-clear" id="pdToolClear">清除</button>
+          </div>
+          <div class="picker-list" id="pdToolList"></div>
+        </div>
+      </fieldset>
+    </div>
+  </section>
+</div>
+{% endif %}
+
+<style>
+  .perm-shell { display:grid; grid-template-columns: minmax(260px, 320px) 1fr; gap:0; padding:0; min-height:520px; }
+  @media (max-width: 880px) { .perm-shell { grid-template-columns: 1fr; } }
+  .perm-side { border-right:1px solid #e5e7eb; display:flex; flex-direction:column; min-width:0; }
+  .perm-side-toolbar { padding:10px; border-bottom:1px solid #e5e7eb; background:#f9fafb; display:flex; flex-direction:column; gap:8px; }
+  .perm-search { width:100%; padding:6px 10px; font-size:12.5px; box-sizing:border-box; }
+  .perm-tabs { display:flex; gap:0; border:1px solid var(--border); border-radius:6px; overflow:hidden; background:#fff; font-size:11.5px; }
+  .perm-tabs .pt-btn { flex:1; background:transparent; border:0; padding:5px 6px; cursor:pointer; color:#475569; border-right:1px solid var(--border); }
+  .perm-tabs .pt-btn:last-child { border-right:0; }
+  .perm-tabs .pt-btn:hover { background:#f3f4f6; }
+  .perm-tabs .pt-btn.active { background:#eef2ff; color:#3730a3; font-weight:600; }
+  .perm-tabs .pt-cnt { display:inline-block; padding:0 5px; margin-left:2px; background:#e2e8f0; color:#475569; border-radius:8px; font-size:10.5px; min-width:14px; text-align:center; }
+  .perm-tabs .pt-btn.active .pt-cnt { background:#c7d2fe; color:#3730a3; }
+  .perm-list { overflow-y:auto; max-height:560px; }
+  .perm-row {
+    display:flex; align-items:center; gap:10px; padding:8px 12px;
+    border-bottom:1px solid #f3f4f6; cursor:pointer;
+  }
+  .perm-row:hover { background:#f9fafb; }
+  .perm-row.active { background:#eef2ff; border-left:3px solid #4f46e5; padding-left:9px; }
+  .perm-row-icon { color:#64748b; flex-shrink:0; display:flex; }
+  .perm-row.active .perm-row-icon { color:#4f46e5; }
+  .perm-row-text { flex:1; min-width:0; line-height:1.3; }
+  .perm-row-name { font-size:13px; font-weight:600; color:#1e293b; display:flex; align-items:center; gap:5px; }
+  .perm-row-sub { font-size:10.5px; color:#94a3b8; display:flex; align-items:center; gap:5px; }
+  .perm-row-sub .src-badge { font-size:9.5px; padding:0 5px; }
+  .role-count {
+    display:inline-block; min-width:22px; height:22px; padding:0 6px;
+    text-align:center; line-height:22px; font-size:11.5px; font-weight:600;
+    background:#e0e7ff; color:#3730a3; border-radius:11px;
+  }
+  .role-count[data-roles=""] { background:#f1f5f9; color:#94a3b8; }
+  .badge-seed { background:#fef3c7; color:#92400e; padding:0 5px; border-radius:3px; font-size:9.5px; font-weight:600; }
+  .src-badge { display:inline-block; font-size:11px; font-weight:600; padding:1px 7px; border-radius:8px; }
+  .src-local { background:#e5e7eb; color:#374151; }
+  .src-ldap  { background:#dbeafe; color:#1e40af; }
+  .src-ad    { background:#ede9fe; color:#5b21b6; }
+  .src-off   { background:#f1f5f9; color:#64748b; }
+
+  .perm-detail { padding:18px 20px; min-width:0; }
+  .perm-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8; padding:60px 20px; gap:8px; text-align:center; }
+  .perm-empty svg { color:#cbd5e1; }
+  .perm-detail-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; }
+  .perm-detail-title { font-size:18px; font-weight:700; color:#1e293b; }
+  .perm-detail-sub { font-size:12px; color:#64748b; margin-top:2px; }
+
+  /* ----- shared picker (matches admin_users) ----- */
+  .picker { border:1px solid #e5e7eb; border-radius:6px; background:#fff; overflow:hidden; }
+  .picker-toolbar { display:flex; gap:6px; align-items:center; padding:6px;
+    border-bottom:1px solid #e5e7eb; background:#f9fafb; }
+  .picker-search { flex:1; min-width:0; padding:5px 8px; font-size:12.5px; }
+  .picker-count { font-size:11.5px; color:#6b7280; white-space:nowrap; }
+  .picker-clear { padding:3px 10px !important; font-size:11px !important; }
+  .picker-list { max-height:240px; overflow-y:auto; overflow-x:hidden; padding:4px;
+    display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:2px; }
+  .picker-item { display:flex; align-items:flex-start; gap:6px; padding:5px 8px; border-radius:4px;
+    cursor:pointer; font-weight:normal; font-size:12.5px; min-width:0; line-height:1.4; }
+  .picker-item:hover { background:#f3f4f6; }
+  .picker-item input { margin:2px 0 0; flex-shrink:0; }
+  .picker-item:has(input:checked) { background:#eef2ff; }
+  .picker-name { flex:1; min-width:0; word-break:break-word; overflow-wrap:anywhere; }
+  .picker-empty { padding:10px; text-align:center; color:#9ca3af; font-size:12px; }
+
+  /* ----- fieldset (reused from admin_auth_settings) ----- */
+  .auth-section { border:1px solid #e5e7eb; border-radius:8px; padding:14px 16px 12px; background:#fff; }
+  .auth-section > legend {
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:13px; font-weight:700; color:#1e293b;
+    padding:3px 10px; background:#eef2ff; border:1px solid #c7d2fe; border-radius:4px;
+    margin-left:4px;
+  }
+  .auth-section > legend svg.ic { color:#4f46e5; flex-shrink:0; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ALL_ROLES = {{ all_roles|tojson }};
+const ALL_TOOLS = {{ tools|tojson }};
+const SUBJECTS = {{ subjects|tojson }};
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Group SUBJECTS by composite key for O(1) lookup.
+const subjectByKey = {};
+SUBJECTS.forEach(s => { subjectByKey[`${s.type}:${s.key}`] = s; });
+
+// ----- left side: search + type filter + count badges -----
+const permList = document.getElementById('permList');
+const permRows = Array.from(permList.querySelectorAll('.perm-row'));
+const search = document.getElementById('permSearch');
+let activeType = '';
+
+function recountBadges() {
+  let nUser = 0, nGroup = 0;
+  permRows.forEach(r => { if (r.dataset.type === 'user') nUser++; else if (r.dataset.type === 'group') nGroup++; });
+  document.getElementById('cntAll').textContent = permRows.length;
+  document.getElementById('cntUser').textContent = nUser;
+  document.getElementById('cntGroup').textContent = nGroup;
+}
+recountBadges();
+
+function applyListFilter() {
+  const q = (search.value || '').toLowerCase().trim();
+  permRows.forEach(r => {
+    const matchType = !activeType || r.dataset.type === activeType;
+    const matchText = !q || (r.dataset.name || '').toLowerCase().includes(q);
+    r.hidden = !(matchType && matchText);
+  });
+}
+search.addEventListener('input', applyListFilter);
+document.querySelectorAll('.pt-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    activeType = b.dataset.type || '';
+    document.querySelectorAll('.pt-btn').forEach(x => x.classList.toggle('active', x === b));
+    applyListFilter();
+  });
+});
+
+// ----- right side: detail form -----
+let currentSubject = null;
+let dirty = false;
+
+function bindPicker(listId, searchId, countId, clearId) {
+  const list = document.getElementById(listId);
+  const sEl = document.getElementById(searchId);
+  const cEl = document.getElementById(countId);
+  const clrEl = document.getElementById(clearId);
+  function refresh() {
+    const all = list.querySelectorAll('.picker-item');
+    const sel = list.querySelectorAll('.picker-item input:checked').length;
+    cEl.textContent = `已選 ${sel} / ${all.length}`;
+  }
+  sEl.oninput = () => {
+    const q = (sEl.value || '').toLowerCase().trim();
+    list.querySelectorAll('.picker-item').forEach(el => {
+      el.hidden = q && !(el.dataset.name || '').toLowerCase().includes(q);
+    });
+  };
+  list.onchange = () => { refresh(); markDirty(true); };
+  clrEl.onclick = () => {
+    list.querySelectorAll('input:checked').forEach(c => c.checked = false);
+    refresh(); markDirty(true);
+  };
+  return refresh;
+}
+
+function markDirty(d) {
+  dirty = d;
+  document.getElementById('pdDirty').hidden = !d;
+}
+
+function loadSubject(s) {
+  currentSubject = s;
+  document.getElementById('permEmpty').hidden = true;
+  document.getElementById('permForm').hidden = false;
+  document.getElementById('pdTitle').textContent = s.label;
+  document.getElementById('pdSub').textContent =
+    `subject_type=${s.type} · subject_key=${s.key}`;
+
+  // Roles picker
+  const haveR = new Set(s.roles || []);
+  const roleList = document.getElementById('pdRoleList');
+  roleList.innerHTML = ALL_ROLES.length
+    ? ALL_ROLES.map(r => {
+        const id = r.id, name = r.display_name || r.id;
+        return `<label class="picker-item" data-name="${escapeHtml(name)} ${escapeHtml(id)}" title="${escapeHtml(id)}">
+          <input type="checkbox" data-rid="${escapeHtml(id)}" ${haveR.has(id)?'checked':''}>
+          <span class="picker-name">${escapeHtml(name)}</span>
+        </label>`;
+      }).join('')
+    : '<div class="picker-empty">尚無角色</div>';
+  document.getElementById('pdRoleSearch').value = '';
+  bindPicker('pdRoleList', 'pdRoleSearch', 'pdRoleCount', 'pdRoleClear')();
+
+  // Direct-tools picker
+  const haveT = new Set(s.direct_tools || []);
+  const toolList = document.getElementById('pdToolList');
+  toolList.innerHTML = ALL_TOOLS.length
+    ? ALL_TOOLS.map(t => {
+        return `<label class="picker-item" data-name="${escapeHtml(t.name)} ${escapeHtml(t.id)}" title="${escapeHtml(t.id)}">
+          <input type="checkbox" data-tid="${escapeHtml(t.id)}" ${haveT.has(t.id)?'checked':''}>
+          <span class="picker-name">${escapeHtml(t.name)}</span>
+        </label>`;
+      }).join('')
+    : '<div class="picker-empty">尚無工具</div>';
+  document.getElementById('pdToolSearch').value = '';
+  bindPicker('pdToolList', 'pdToolSearch', 'pdToolCount', 'pdToolClear')();
+
+  markDirty(false);
+}
+
+permRows.forEach(r => {
+  r.addEventListener('click', async () => {
+    if (dirty) {
+      const ok = await showConfirm('目前有未儲存的變更，要切換嗎？變更會遺失。',
+        { title: '未儲存', kind: 'warn', okText: '捨棄' });
+      if (!ok) return;
+    }
+    permRows.forEach(x => x.classList.toggle('active', x === r));
+    const key = `${r.dataset.type}:${r.dataset.key}`;
+    loadSubject(subjectByKey[key]);
+  });
+});
+
+document.getElementById('pdSave').addEventListener('click', async () => {
+  if (!currentSubject) return;
+  const body = {
+    subject_type: currentSubject.type,
+    subject_key: currentSubject.key,
+    roles: Array.from(document.querySelectorAll('#pdRoleList input:checked')).map(c => c.dataset.rid),
+    direct_tools: Array.from(document.querySelectorAll('#pdToolList input:checked')).map(c => c.dataset.tid),
+  };
+  const r = await fetch('/admin/permissions/set', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if (r.ok) {
+    showToast('已儲存', 'ok');
+    markDirty(false);
+    // Refresh in-memory subject + the row's role-count badge.
+    currentSubject.roles = body.roles;
+    currentSubject.direct_tools = body.direct_tools;
+    const row = document.querySelector(`.perm-row[data-type="${currentSubject.type}"][data-key="${currentSubject.key}"]`);
+    if (row) {
+      const rc = row.querySelector('.role-count');
+      rc.textContent = body.roles.length;
+      rc.dataset.roles = body.roles.join(',');
+      rc.dataset.direct = String(body.direct_tools.length);
+    }
+  } else {
+    showAlert('儲存失敗：' + await r.text());
+  }
+});
+</script>
+{% endblock %}

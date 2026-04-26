@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}歷史記錄 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>📝 表單自動填寫 · 歷史記錄</h1>
+<p class="muted">所有上傳過的 PDF 與填寫結果永久保留於 <code>data/fill_history/</code>。</p>
+
+<div class="panel">
+  <h2>歷史清單（{{ history|length }} 筆）</h2>
+  {% if history %}
+  <div class="history-toolbar">
+    <label class="sel-all">
+      <input type="checkbox" id="selAll" /> 全選
+    </label>
+    <span class="muted sel-count" id="selCount">未選取</span>
+    <span style="flex:1;"></span>
+    <button class="btn btn-small btn-danger" id="bulkDeleteBtn" type="button" disabled>{{ icon('trash') }}批次刪除</button>
+  </div>
+  <div class="history-list">
+    {% for h in history %}
+    <div class="history-item" data-hid="{{ h.id }}">
+      <label class="item-check">
+        <input type="checkbox" class="row-sel" value="{{ h.id }}" />
+      </label>
+      <div class="thumb">
+        {% if h.has_preview %}
+        <a href="/tools/pdf-fill/history/{{ h.id }}/file/preview" target="_blank">
+          <img src="/tools/pdf-fill/history/{{ h.id }}/file/preview" alt="preview" />
+        </a>
+        {% else %}
+        <div class="no-thumb muted">無預覽</div>
+        {% endif %}
+      </div>
+      <div class="info">
+        <div class="filename">{{ h.filename }}</div>
+        <div class="meta">
+          <span>{{ h.saved_at|int }}</span>
+          {% if h.template_name %}· <span class="chip">📝 {{ h.template_name }}</span>{% endif %}
+          {% if h.report and h.report.filled %}· 填入 {{ h.report.filled }}{% if h.report.detected %}/{{ h.report.detected }}{% endif %}{% endif %}
+        </div>
+        <div class="actions">
+          {% if h.has_filled %}
+          <a class="btn btn-small" href="/tools/pdf-fill/history/{{ h.id }}/file/filled" target="_blank">{{ icon('eye') }}檢視填好</a>
+          <a class="btn btn-small" href="/tools/pdf-fill/history/{{ h.id }}/file/filled" download>{{ icon('download') }}下載填好</a>
+          {% endif %}
+          {% if h.has_original %}
+          <a class="btn btn-small" href="/tools/pdf-fill/history/{{ h.id }}/file/original" download>{{ icon('download') }}原檔</a>
+          <button class="btn btn-small btn-primary" data-act="refill" type="button">{{ icon('refresh') }}重新填寫</button>
+          {% endif %}
+          <button class="btn btn-small btn-danger" data-act="del" type="button">{{ icon('trash') }}刪除</button>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">還沒有任何歷史記錄。到 <a href="/tools/pdf-fill/">PDF 表單自動填寫</a> 上傳 PDF 後就會自動保留。</p>
+  {% endif %}
+</div>
+
+<style>
+  .history-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: #f8fafc; }
+  .history-toolbar label.sel-all { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .history-toolbar .sel-count { font-size: 12px; }
+  .history-list { display: flex; flex-direction: column; gap: 10px; }
+  .history-item { display: flex; gap: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: #fff; align-items: stretch; }
+  .history-item.selected { border-color: #2563eb; background: #eff6ff; box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.15); }
+  .history-item .item-check { display: flex; align-items: center; padding: 0 4px; cursor: pointer; }
+  .history-item .thumb { flex: 0 0 110px; width: 110px; max-height: 140px; overflow: hidden; border-radius: 4px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; }
+  .history-item .thumb img { max-width: 100%; max-height: 140px; display: block; }
+  .history-item .thumb .no-thumb { font-size: 12px; }
+  .history-item .info { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .history-item .filename { font-weight: 600; font-size: 14px; word-break: break-all; }
+  .history-item .meta { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .history-item .meta .chip { background: #eef2ff; color: #3730a3; padding: 1px 6px; border-radius: 10px; }
+  .history-item .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const selAll = document.getElementById('selAll');
+const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+const selCountEl = document.getElementById('selCount');
+
+function rowChecks() { return Array.from(document.querySelectorAll('.row-sel')); }
+function selectedIds() { return rowChecks().filter(c => c.checked).map(c => c.value); }
+
+function refreshSelUI() {
+  const total = rowChecks().length;
+  const checked = selectedIds().length;
+  selAll.indeterminate = checked > 0 && checked < total;
+  selAll.checked = checked > 0 && checked === total;
+  if (checked === 0) selCountEl.textContent = '未選取';
+  else selCountEl.textContent = `已選 ${checked} / ${total}`;
+  bulkDeleteBtn.disabled = checked === 0;
+  rowChecks().forEach(c => c.closest('.history-item').classList.toggle('selected', c.checked));
+}
+
+selAll.addEventListener('change', () => {
+  const on = selAll.checked;
+  rowChecks().forEach(c => { c.checked = on; });
+  refreshSelUI();
+});
+
+document.addEventListener('change', (e) => {
+  if (e.target.classList.contains('row-sel')) refreshSelUI();
+});
+
+bulkDeleteBtn.addEventListener('click', async () => {
+  const ids = selectedIds();
+  if (!ids.length) return;
+  if (!(await showConfirm(`確定刪除已選的 ${ids.length} 筆歷史記錄？`, { title: '批次刪除', kind: 'danger' }))) return;
+  bulkDeleteBtn.disabled = true;
+  bulkDeleteBtn.innerHTML = '<span class="spinner"></span>刪除中…';
+  const r = await fetch('/tools/pdf-fill/history/bulk-delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  });
+  if (r.ok) {
+    const d = await r.json();
+    ids.forEach(id => {
+      const item = document.querySelector(`.history-item[data-hid="${id}"]`);
+      if (item) item.remove();
+    });
+    if (typeof showToast === 'function') showToast(`已刪除 ${d.deleted} 筆`, 'ok');
+    refreshSelUI();
+  } else {
+    alert('批次刪除失敗');
+  }
+  bulkDeleteBtn.innerHTML = '🗑 批次刪除';
+});
+
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const item = btn.closest('.history-item');
+  const hid = item.dataset.hid;
+  if (btn.dataset.act === 'del') {
+    if (!(await showConfirm(`確定刪除「${item.querySelector('.filename').textContent}」的歷史記錄？`, { title: '刪除記錄', kind: 'danger' }))) return;
+    const r = await fetch(`/tools/pdf-fill/history/${hid}/delete`, { method: 'POST' });
+    if (r.ok) { item.remove(); refreshSelUI(); }
+    else showAlert('刪除失敗');
+  } else if (btn.dataset.act === 'refill') {
+    // Redirect to the tool with ?refill=<id>; the tool index page will
+    // detect the param, call /history/<id>/refill, and render the result.
+    location.href = '/tools/pdf-fill/?refill=' + encodeURIComponent(hid);
+  }
+});
+
+document.querySelectorAll('.history-item .meta span:first-child').forEach(el => {
+  const ts = parseInt(el.textContent, 10);
+  if (!isNaN(ts)) el.textContent = new Date(ts * 1000).toLocaleString('zh-Hant');
+});
+
+refreshSelUI();
+</script>
+{% endblock %}

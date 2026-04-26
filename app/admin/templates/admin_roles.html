@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}角色管理 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('shield', size=22) }} 角色管理</h1>
+<p class="muted">角色 = 一組工具權限。指派角色給使用者 / 群組 / OU，他們就能用這些工具。
+建議從預設角色開始；需要時複製預設角色再客製。</p>
+
+<details class="panel">
+  <summary><b>新增角色</b></summary>
+  <form id="newRoleForm" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-top:12px;">
+    <div><label>id（英文）<br><input class="field" name="id" required pattern="[a-z][a-z0-9-]{1,30}" placeholder="例：accountant"></label></div>
+    <div><label>顯示名稱<br><input class="field" name="display_name" required maxlength="64" placeholder="例：會計"></label></div>
+    <div style="flex:1;"><label>說明<br><input class="field" name="description" maxlength="500" style="width:100%;"></label></div>
+    <button class="btn btn-primary" type="submit">{{ icon('plus', size=14) }} 建立</button>
+  </form>
+</details>
+
+{% for r in roles %}
+<div class="panel" data-role="{{ r.id }}" style="margin-bottom:14px;">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <div>
+      <h2 style="margin:0; display:inline;">{{ r.display_name }}</h2>
+      <code style="margin-left:10px; font-size:12px; color:#6b7280;">{{ r.id }}</code>
+      {% if r.is_builtin %}<span class="badge">預設</span>{% endif %}
+      {% if r.is_protected %}<span class="badge" style="background:#dbeafe; color:#1e40af;">受保護</span>{% endif %}
+    </div>
+    <div>
+      <button class="btn btn-small" data-act="save">{{ icon('save', size=12) }} 儲存</button>
+      {% if not r.is_protected %}
+      <button class="btn btn-small btn-danger" data-act="delete">{{ icon('trash', size=12) }} 刪除</button>
+      {% endif %}
+    </div>
+  </div>
+  {% if r.description %}<p class="muted" style="font-size:12.5px;">{{ r.description }}</p>{% endif %}
+  {% if r.id == 'admin' %}
+  <p style="background:#fef3c7; padding:8px 10px; border-radius:6px; font-size:12.5px;">
+    🔒 admin 角色擁有所有工具與設定區的存取權，無需個別勾選。此角色不可刪、不可改名。
+  </p>
+  {% else %}
+  <div class="tool-grid">
+    {% for t in tools %}
+    <label class="tool-chk">
+      <input type="checkbox" data-tool="{{ t.id }}" {% if t.id in r.tools %}checked{% endif %}>
+      <span>{{ t.name }} <code class="muted" style="font-size:10px;">{{ t.id }}</code></span>
+    </label>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+<style>
+  .badge { background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:4px; font-size:10px; margin-left:6px; }
+  .tool-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:6px; margin-top:10px; }
+  .tool-chk { display:flex; align-items:center; gap:6px; font-size:12.5px; padding:4px; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('newRoleForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const r = await fetch('/admin/roles/create', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      id: fd.get('id'),
+      display_name: fd.get('display_name'),
+      description: fd.get('description'),
+      tools: [],
+    }),
+  });
+  if (r.ok) location.reload();
+  else showAlert('建立失敗：' + await r.text());
+});
+
+document.querySelectorAll('[data-role] [data-act="save"]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const panel = btn.closest('[data-role]');
+    const roleId = panel.dataset.role;
+    const tools = Array.from(panel.querySelectorAll('input[type=checkbox]:checked'))
+                       .map(c => c.dataset.tool);
+    const r = await fetch(`/admin/roles/${roleId}/update`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({tools}),
+    });
+    if (r.ok) showToast('已儲存', 'ok');
+    else showAlert('儲存失敗：' + await r.text());
+  });
+});
+
+document.querySelectorAll('[data-role] [data-act="delete"]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const panel = btn.closest('[data-role]');
+    const roleId = panel.dataset.role;
+    if (!(await showConfirm(`刪除角色「${roleId}」？所有指派會一併移除。`,
+          { title: '刪除', kind: 'danger', okText: '刪除' }))) return;
+    const r = await fetch(`/admin/roles/${roleId}/delete`, {method:'POST'});
+    if (r.ok) location.reload();
+    else showAlert('刪除失敗：' + await r.text());
+  });
+});
+</script>
+{% endblock %}

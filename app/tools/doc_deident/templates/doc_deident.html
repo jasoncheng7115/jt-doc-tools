@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}文件去識別化 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.dd-hint { background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px;
+  padding: 10px 14px; font-size: 13px; color:#075985; margin: 10px 0; }
+.dd-types {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px 14px; margin: 8px 0;
+}
+.dd-type-groups { display: flex; flex-direction: column; gap: 12px; margin: 8px 0; }
+.dd-type-group { border: 1px solid #e5e7eb; border-radius: 10px; background: #fafbfc;
+  padding: 12px 14px 14px; }
+.dd-type-group-title {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 700; color: #1e293b;
+  cursor: pointer; user-select: none; margin-bottom: 10px;
+  padding: 3px 8px 3px 3px; border-radius: 999px;
+}
+.dd-type-group-title:hover { background: rgba(99, 102, 241, 0.08); }
+.dd-type-group-title input[type="checkbox"] {
+  width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: #4f46e5;
+}
+.dd-type-group-label { letter-spacing: 0.02em; }
+.dd-type-group-count { font-size: 11.5px; font-weight: 500; color: #64748b; }
+.dd-type-items {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px;
+}
+.dd-type-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 10px; border-radius: 8px;
+  background: #fff; border: 1px solid #e2e8f0;
+  font-size: 13px; color: #475569; cursor: pointer;
+  transition: border-color 0.1s, background 0.1s, color 0.1s;
+}
+.dd-type-pill:hover { border-color: #c7d2fe; background: #fafbff; }
+.dd-type-pill input[type="checkbox"] {
+  width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: #4f46e5;
+  flex: 0 0 auto;
+}
+.dd-type-pill .dd-type-ico { display: inline-flex; color: #64748b; flex: 0 0 auto; }
+.dd-type-pill:has(input:checked) {
+  border-color: #4f46e5; background: #eef2ff; color: #1e1b4b; font-weight: 500;
+}
+.dd-type-pill:has(input:checked) .dd-type-ico { color: #4f46e5; }
+.dd-type-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Legacy flat layout used elsewhere */
+.dd-types label { display:inline-flex; align-items:center; gap:6px;
+  font-size: 13px; color:#334155; cursor: pointer; padding: 3px 0; }
+.dd-custom textarea {
+  width: 100%; box-sizing: border-box;
+  padding: 8px; border:1px solid var(--border); border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; min-height: 60px;
+}
+.dd-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px; margin: 10px 0;
+}
+.dd-stat { background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px;
+  padding: 8px 12px; }
+.dd-stat .lbl { font-size: 11.5px; color:#64748b; }
+.dd-stat .val { font-size: 18px; font-weight: 700; color:#0f172a; }
+
+.dd-findings { max-height: 50vh; overflow: auto; border:1px solid #e5e7eb;
+  border-radius: 8px; margin-top: 8px; }
+.dd-findings table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.dd-findings th { position: sticky; top: 0; background:#f8fafc;
+  text-align: left; padding: 6px 10px; border-bottom: 1px solid #e5e7eb;
+  font-size: 12px; color:#475569; font-weight: 600; }
+.dd-findings td { padding: 5px 10px; border-bottom: 1px solid #f1f5f9; }
+.dd-findings tr:hover td { background: #fafafa; }
+.dd-findings .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; color:#0f172a; }
+.dd-findings .masked { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; color:#059669; }
+.dd-findings .type-tag {
+  display:inline-block; padding: 1px 8px; border-radius: 4px;
+  font-size: 11px; background: #fef3c7; color:#92400e;
+}
+
+.dd-mode-picker {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px;
+}
+.dd-mode {
+  border: 1.5px solid #e5e7eb; border-radius: 10px; padding: 14px; cursor: pointer;
+  background:#fff; transition: all 0.12s; display: flex; gap: 10px; align-items:flex-start;
+}
+.dd-mode:hover { border-color:#93c5fd; background:#eff6ff; }
+.dd-mode.active { border-color:#2563eb; background:#dbeafe; }
+.dd-mode .ic { flex: 0 0 32px; width: 32px; height: 32px; border-radius: 8px;
+  display:inline-flex; align-items:center; justify-content:center; color:#fff; }
+.dd-mode.mode-redact .ic { background: linear-gradient(135deg, #64748b, #334155); }
+.dd-mode.mode-mask .ic   { background: linear-gradient(135deg, #38bdf8, #0284c7); }
+.dd-mode .title { font-weight: 600; font-size: 14px; color:#0f172a; }
+.dd-mode .desc  { font-size: 12px; color:#475569; line-height: 1.5; }
+
+.dd-result {
+  background:#ecfdf5; border:1px solid #86efac; border-radius:10px;
+  padding: 14px 16px; margin-top: 12px;
+}
+.dd-preview-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px; margin-top: 12px;
+}
+.dd-preview-card {
+  background:#fff; border:1px solid #e5e7eb; border-radius:8px;
+  padding: 6px; text-align: center;
+}
+.dd-preview-card img { width: 100%; aspect-ratio: 0.7071;
+  object-fit: contain; background:#f8fafc; border-radius:4px;
+  cursor: zoom-in; }
+.dd-preview-card .num { font-size: 11.5px; color:#64748b; margin-top: 4px; }
+.dd-lightbox {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.85); z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  cursor: zoom-out; padding: 20px;
+}
+.dd-lightbox img { max-width: 95%; max-height: 95vh; background:#fff;
+  border-radius: 4px; box-shadow: 0 16px 48px rgba(0,0,0,.5); }
+.dd-lightbox-close {
+  position: absolute; top: 14px; right: 18px; color:#fff; font-size: 28px;
+  background: none; border: none; cursor: pointer;
+}
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('shield', size=22) }} 文件去識別化</h1>
+<p class="muted">偵測 PDF / Office 文件中的敏感資料（身分證、手機、Email、統編、信用卡、地址 …），可選擇「編修」(Redaction，不可還原) 或「資料遮罩」(Masking，保留格式)。</p>
+
+<div class="dd-hint">
+  <b>⚠ 警告：</b> Redaction 是 <b>毀滅性</b> 操作，處理後原值無法還原，請務必保留原始檔備份。Masking 適合測試 / 報表場景，<b>不要當成加密手段</b>。
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳檔案</h2>
+  {% with upload_id='ddUpload',
+          accept='application/pdf,.pdf,.doc,.docx,.odt,.rtf,.xls,.xlsx,.ods,.ppt,.pptx,.odp,.txt,.csv',
+          hint='支援 PDF 與 Office 檔；非 PDF 會先自動轉成 PDF。掃描檔需先 OCR。' %}
+    {% include "components/file_upload.html" %}
+  {% endwith %}
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">2. 選擇要偵測的類型</h2>
+  <div class="dd-type-groups" id="ddTypes">
+    {% for g in pattern_groups %}
+    <div class="dd-type-group">
+      <label class="dd-type-group-title">
+        <input type="checkbox" class="dd-group-master" data-group="{{ g.title }}">
+        <span class="dd-type-group-label">{{ g.title }}</span>
+        <span class="dd-type-group-count"></span>
+      </label>
+      <div class="dd-type-items">
+        {% for p in g.entries %}
+        <label class="dd-type-pill">
+          <input type="checkbox" class="dd-type-cb" data-group="{{ g.title }}"
+                 value="{{ p.id }}" {% if p.default_on %}checked{% endif %}>
+          <span class="dd-type-ico">{{ icon(p.icon, size=14) }}</span>
+          <span class="dd-type-name">{{ p.label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <details class="dd-custom" style="margin-top:10px;">
+    <summary class="muted" style="cursor:pointer; font-size:13px;">+ 自訂 regex（一行一條，格式：<code>標籤|正則式</code>）</summary>
+    <textarea id="ddCustom" placeholder="員編|EMP\d{5}&#10;合約號|CON-\d{4}-\d{3}"></textarea>
+  </details>
+  <div style="margin-top:10px;">
+    <button class="btn btn-primary" id="btnDetect">{{ icon('eye', size=14) }} 偵測敏感資料</button>
+    <span id="detectStatus" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
+  </div>
+</div>
+
+<div class="panel" id="resultPanel" hidden>
+  <h2 style="margin-top:0;">3. 偵測結果</h2>
+  <div class="dd-stats" id="ddStats"></div>
+  <div class="dd-findings">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:36px;"><input type="checkbox" id="selAll" checked></th>
+          <th>類型</th>
+          <th>頁</th>
+          <th>原值</th>
+          <th>遮罩預覽</th>
+        </tr>
+      </thead>
+      <tbody id="ddTable"></tbody>
+    </table>
+  </div>
+
+  <h2 style="margin-top:16px;">4. 處理模式</h2>
+  <div class="dd-mode-picker" id="ddModes">
+    <div class="dd-mode mode-redact" data-mode="redact">
+      <div class="ic">{{ icon('trash', size=18) }}</div>
+      <div>
+        <div class="title">🔒 Redaction（編修）</div>
+        <div class="desc">原文字完全刪除 + 塗黑覆蓋，複製選取都拿不到原值。<b>不可還原。</b>適合機密文件對外釋出。</div>
+      </div>
+    </div>
+    <div class="dd-mode mode-mask active" data-mode="mask">
+      <div class="ic">{{ icon('edit', size=18) }}</div>
+      <div>
+        <div class="title">🧬 Masking（資料遮罩）</div>
+        <div class="desc">保留格式，中段以 * 替換（例：0912****678）。適合測試 / 報表 / 內部分享用。</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:14px;">
+    <button class="btn btn-primary" id="btnProcess">{{ icon('shield', size=14) }} 產生處理後 PDF</button>
+    <span id="procStatus" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
+  </div>
+</div>
+
+<div class="dd-result" id="doneBox" hidden>
+  <h3 style="margin:0 0 8px; color:#064e3b;">處理完成</h3>
+  <div id="doneSummary" style="margin-bottom:10px; font-size:13px; color:#065f46;"></div>
+  <a class="btn btn-primary" id="dlLink" href="#">{{ icon('download') }} 下載處理後的 PDF</a>
+  <h4 style="margin:16px 0 4px; font-size:14px; color:#064e3b;">處理後預覽</h4>
+  <p class="muted" style="font-size:12px; margin:0 0 6px;">點縮圖可放大檢視。</p>
+  <div class="dd-preview-grid" id="ddPreviewGrid"></div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let currentFile = null;
+let detectResult = null;
+let chosenMode = 'mask';
+
+function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+// Master checkbox per group: reflects 全選/部分/無；點擊 = 全選/全取消
+function refreshMaster(master) {
+  const grp = master.dataset.group;
+  const boxes = document.querySelectorAll(`.dd-type-cb[data-group="${CSS.escape(grp)}"]`);
+  const total = boxes.length;
+  const on = Array.from(boxes).filter(b => b.checked).length;
+  master.checked = on === total && total > 0;
+  master.indeterminate = on > 0 && on < total;
+  const countEl = master.parentElement.querySelector('.dd-type-group-count');
+  if (countEl) countEl.textContent = `(${on}/${total})`;
+}
+document.querySelectorAll('.dd-group-master').forEach(master => {
+  master.addEventListener('click', () => {
+    const grp = master.dataset.group;
+    const boxes = document.querySelectorAll(`.dd-type-cb[data-group="${CSS.escape(grp)}"]`);
+    const allOn = Array.from(boxes).every(b => b.checked);
+    boxes.forEach(b => { b.checked = !allOn; });
+    refreshMaster(master);
+  });
+  refreshMaster(master);
+});
+document.querySelectorAll('.dd-type-cb').forEach(cb => {
+  cb.addEventListener('change', () => {
+    const grp = cb.dataset.group;
+    const master = document.querySelector(`.dd-group-master[data-group="${CSS.escape(grp)}"]`);
+    if (master) refreshMaster(master);
+  });
+});
+
+const fu = new FileUpload($('ddUpload'), (f) => {
+  currentFile = f;
+  $('resultPanel').hidden = true;
+  $('doneBox').hidden = true;
+  $('detectStatus').textContent = currentFile ? `已選：${currentFile.name}` : '';
+});
+
+$('btnDetect').addEventListener('click', async () => {
+  if (!currentFile) return alert('請先上傳檔案');
+  const types = Array.from(document.querySelectorAll('#ddTypes input:checked'))
+    .map(c => c.value).join(',');
+  const custom = $('ddCustom').value || '';
+  $('detectStatus').textContent = '偵測中…';
+  $('btnDetect').disabled = true;
+  const fd = new FormData();
+  fd.append('file', currentFile);
+  fd.append('types', types);
+  fd.append('custom', custom);
+  try {
+    const r = await fu.upload('/tools/doc-deident/detect', fd, {processingLabel: '偵測敏感資料中…'});
+    if (!r.ok) { $('detectStatus').textContent = '失敗：' + await r.text(); return; }
+    detectResult = await r.json();
+    renderDetect(detectResult);
+    $('resultPanel').hidden = false;
+    $('doneBox').hidden = true;
+    $('resultPanel').scrollIntoView({behavior:'smooth', block:'start'});
+  } catch (e) {
+    $('detectStatus').textContent = '錯誤：' + e.message;
+  } finally {
+    $('btnDetect').disabled = false;
+  }
+});
+
+function renderDetect(d) {
+  const stats = $('ddStats');
+  stats.innerHTML = `
+    <div class="dd-stat"><div class="lbl">來源</div><div class="val">${d.source_type.toUpperCase()}</div></div>
+    <div class="dd-stat"><div class="lbl">頁數</div><div class="val">${d.pages}</div></div>
+    <div class="dd-stat"><div class="lbl">偵測到</div><div class="val">${d.findings.length}</div></div>`;
+  for (const [t, n] of Object.entries(d.by_type || {})) {
+    const el = document.createElement('div');
+    el.className = 'dd-stat';
+    el.innerHTML = `<div class="lbl">${escapeHTML(t)}</div><div class="val">${n}</div>`;
+    stats.appendChild(el);
+  }
+  const body = $('ddTable');
+  if (!d.findings.length) {
+    body.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px; color:#94a3b8;">沒有偵測到敏感資料 🎉</td></tr>`;
+    $('detectStatus').textContent = `完成 — 沒有偵測到敏感資料`;
+    return;
+  }
+  body.innerHTML = d.findings.map(f => `
+    <tr>
+      <td><input type="checkbox" class="fchk" value="${f.id}" checked></td>
+      <td><span class="type-tag">${escapeHTML(f.type_label)}</span></td>
+      <td>p.${f.page}</td>
+      <td class="val">${escapeHTML(f.value)}</td>
+      <td class="masked">${escapeHTML(f.masked)}</td>
+    </tr>`).join('');
+  $('detectStatus').textContent = `完成 — 共 ${d.findings.length} 筆`;
+}
+
+$('selAll').addEventListener('change', (e) => {
+  document.querySelectorAll('.fchk').forEach(c => c.checked = e.target.checked);
+});
+
+// Lightbox for preview thumbnails
+document.getElementById('ddPreviewGrid').addEventListener('click', (e) => {
+  const img = e.target.closest('img');
+  if (!img) return;
+  const full = img.dataset.full || img.src;
+  const lb = document.createElement('div');
+  lb.className = 'dd-lightbox';
+  lb.innerHTML = `<button class="dd-lightbox-close" type="button">×</button>
+                  <img src="${full}" alt="" />`;
+  lb.addEventListener('click', () => lb.remove());
+  document.addEventListener('keydown', function esc(ev){
+    if (ev.key === 'Escape') { lb.remove(); document.removeEventListener('keydown', esc); }
+  });
+  document.body.appendChild(lb);
+});
+
+document.querySelectorAll('.dd-mode').forEach(m => {
+  m.addEventListener('click', () => {
+    document.querySelectorAll('.dd-mode').forEach(x => x.classList.remove('active'));
+    m.classList.add('active');
+    chosenMode = m.dataset.mode;
+  });
+});
+
+$('btnProcess').addEventListener('click', async () => {
+  if (!detectResult) return;
+  const chosenIds = new Set(
+    Array.from(document.querySelectorAll('.fchk:checked')).map(c => parseInt(c.value))
+  );
+  const selections = detectResult.findings.filter(f => chosenIds.has(f.id));
+  if (!selections.length) { await showAlert('請先勾選至少一筆要處理的項目'); return; }
+  if (chosenMode === 'redact') {
+    const ok = await showConfirm(`編修 ${selections.length} 筆資料？這個操作無法還原。`,
+      { title: '確認編修', kind: 'danger', okText: '確認編修', cancelText: '取消' });
+    if (!ok) return;
+  }
+  $('btnProcess').disabled = true;
+  $('procStatus').textContent = '處理中…';
+  try {
+    const r = await fetch('/tools/doc-deident/process', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        upload_id: detectResult.upload_id,
+        mode: chosenMode,
+        selections: selections,
+      }),
+    });
+    if (!r.ok) { $('procStatus').textContent = '失敗：' + await r.text(); return; }
+    const d = await r.json();
+    $('procStatus').textContent = `完成，共處理 ${d.processed} 筆`;
+    $('doneSummary').textContent =
+      `模式：${chosenMode === 'redact' ? 'Redaction（編修）' : 'Masking（資料遮罩）'}　·　處理 ${d.processed} 筆`;
+    $('dlLink').href = d.download_url;
+    const grid = $('ddPreviewGrid');
+    grid.innerHTML = (d.pages || []).map(p => `
+      <div class="dd-preview-card">
+        <img src="${p.thumb_url}" data-full="${p.large_url}" alt="page ${p.page}" loading="lazy" />
+        <div class="num">第 ${p.page} 頁</div>
+      </div>`).join('');
+    $('doneBox').hidden = false;
+    $('doneBox').scrollIntoView({behavior:'smooth', block:'end'});
+  } catch (e) {
+    $('procStatus').textContent = '錯誤：' + e.message;
+  } finally {
+    $('btnProcess').disabled = false;
+  }
+});
+</script>
+{% endblock %}

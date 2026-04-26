@@ -1,0 +1,1110 @@
+"""PDF Editor router — Phase 1 endpoints.
+
+Routes:
+  GET  /                       → editor page
+  POST /load                   → upload PDF, return upload_id + pages info
+  GET  /preview/{filename}     → serve rendered page PNGs
+  GET  /file/{upload_id}       → serve original PDF (for PDF.js if needed)
+  POST /save                   → accept JSON model, burn into new PDF
+  GET  /download/{upload_id}   → download the saved PDF
+"""
+from __future__ import annotations
+
+import io
+import json
+import time
+import uuid
+from pathlib import Path
+from typing import Optional
+
+import fitz  # PyMuPDF
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+
+from ...config import settings
+from ...core import pdf_preview
+from ...core.asset_manager import asset_manager
+
+
+router = APIRouter()
+
+
+@router.get("/fonts")
+async def list_fonts():
+    """Return the font catalog for the text-tool dropdown."""
+    from ...core import font_catalog
+    fonts = font_catalog.list_fonts()
+    # Group by category for nicer UI
+    groups: dict[str, list] = {}
+    for f in fonts:
+        groups.setdefault(f["category"], []).append({
+            "id": f["id"],
+            "label": f["label"],
+            "family": f["family"],
+            "variant": f.get("variant", ""),
+            "cjk": f.get("cjk"),
+            "style": f.get("style"),
+        })
+    group_titles = {
+        "taiwan": "台灣系統字型",
+        "free-cjk": "開源 CJK 字型",
+        "cjk": "其他 CJK 字型",
+        "latin": "西文開源字型",
+        "pymupdf": "PyMuPDF 內建（最輕量、相容性最好）",
+    }
+    ordered = []
+    for key in ("taiwan", "free-cjk", "cjk", "latin", "pymupdf"):
+        if key in groups:
+            ordered.append({"key": key, "title": group_titles[key], "fonts": groups[key]})
+    return {"groups": ordered, "total": len(fonts)}
+
+
+@router.post("/detect-objects")
+async def detect_objects(request: Request):
+    """Click-hit test on an existing PDF page. Given (upload_id, page, x, y)
+    in PDF points, find the topmost text span or image at that location.
+    Returns {kind, bbox, ...} or {kind: null} when nothing hit.
+    """
+    body = await request.json()
+    upload_id = (body.get("upload_id") or "").strip()
+    page_idx = int(body.get("page", 0))
+    x = float(body.get("x", 0))
+    y = float(body.get("y", 0))
+    if not upload_id:
+        raise HTTPException(400, "upload_id required")
+    src = _work_dir() / f"pe_{upload_id}_src.pdf"
+    if not src.exists():
+        raise HTTPException(404, "upload expired")
+
+    with fitz.open(str(src)) as doc:
+        if page_idx < 0 or page_idx >= doc.page_count:
+            raise HTTPException(400, "page out of range")
+        page = doc[page_idx]
+
+        # 1) Text spans (most common hit for form editing)
+        td = page.get_text("dict")
+        for block in td.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    bx0, by0, bx1, by1 = span.get("bbox", (0, 0, 0, 0))
+                    if bx0 <= x <= bx1 and by0 <= y <= by1:
+                        col_int = int(span.get("color", 0) or 0)
+                        r = (col_int >> 16) & 0xff
+                        g = (col_int >> 8) & 0xff
+                        b = col_int & 0xff
+                        return {
+                            "kind": "text",
+                            "bbox": [bx0, by0, bx1, by1],
+                            "text": span.get("text", ""),
+                            "font_size": float(span.get("size", 11)),
+                            "color": f"#{r:02x}{g:02x}{b:02x}",
+                            "font": span.get("font", ""),
+                        }
+
+        # 2) Images — get_image_info returns bboxes
+        try:
+            for info in page.get_image_info(xrefs=True):
+                b = info.get("bbox")
+                if not b:
+                    continue
+                bx0, by0, bx1, by1 = b
+                if bx0 <= x <= bx1 and by0 <= y <= by1:
+                    xref = info.get("xref") or 0
+                    thumb_png = None
+                    if xref:
+                        # Export image as PNG under work_dir for the
+                        # frontend to preview.
+                        img_file = (_work_dir() /
+                                    f"pe_{upload_id}_imgx{xref}_p{page_idx}.png")
+                        if not img_file.exists():
+                            try:
+                                pix = fitz.Pixmap(doc, xref)
+                                if pix.alpha or pix.n > 4:
+                                    pix = fitz.Pixmap(fitz.csRGB, pix)
+                                pix.save(str(img_file))
+                                pix = None
+                            except Exception:
+                                img_file = None
+                        if img_file and img_file.exists():
+                            thumb_png = f"/tools/pdf-editor/preview/{img_file.name}"
+                    return {
+                        "kind": "image",
+                        "bbox": [bx0, by0, bx1, by1],
+                        "xref": xref,
+                        "thumb_url": thumb_png,
+                    }
+        except Exception:
+            pass
+
+        # 3) AcroForm widgets — form fields (text input, checkbox,
+        # combo, signature). Returns the field name + rect so the
+        # frontend can mark them for deletion.
+        try:
+            for w in page.widgets() or []:
+                r = w.rect
+                if r is None:
+                    continue
+                bx0, by0, bx1, by1 = r.x0, r.y0, r.x1, r.y1
+                if bx0 <= x <= bx1 and by0 <= y <= by1:
+                    # Field type: text / check / combo / radio / signature
+                    try:
+                        field_type = w.field_type_string
+                    except Exception:
+                        field_type = str(getattr(w, "field_type", ""))
+                    return {
+                        "kind": "widget",
+                        "bbox": [bx0, by0, bx1, by1],
+                        "field_name": w.field_name or "",
+                        "field_type": field_type,
+                    }
+        except Exception:
+            pass
+
+        # 4) Vector drawings — lines, rects, paths. Returns a small
+        # bounding rect around the click so the frontend can show a
+        # marker and let the user redact it.
+        try:
+            drawings = page.get_drawings() or []
+            for dw in drawings:
+                rect = dw.get("rect")
+                if rect is None:
+                    continue
+                try:
+                    bx0, by0, bx1, by1 = rect.x0, rect.y0, rect.x1, rect.y1
+                except AttributeError:
+                    bx0, by0, bx1, by1 = rect
+                if bx0 <= x <= bx1 and by0 <= y <= by1:
+                    # Skip huge full-page rectangles (page background).
+                    pw, ph = page.rect.width, page.rect.height
+                    if (bx1 - bx0) >= pw * 0.9 and (by1 - by0) >= ph * 0.9:
+                        continue
+                    return {
+                        "kind": "drawing",
+                        "bbox": [bx0, by0, bx1, by1],
+                        "type": dw.get("type", ""),
+                    }
+        except Exception:
+            pass
+
+    return {"kind": None}
+
+
+@router.get("/assets")
+async def list_assets():
+    """Return all stamp/signature/logo assets usable in the editor."""
+    out = []
+    for t in ("stamp", "signature", "logo"):
+        for a in asset_manager.list(type=t):
+            out.append({
+                "id": a.id,
+                "name": a.name,
+                "type": a.type,
+                "thumb_url": f"/admin/assets/{a.id}/thumb",
+                "file_url": f"/admin/assets/{a.id}/file",
+                "preset": {"width_mm": a.preset.width_mm, "height_mm": a.preset.height_mm},
+            })
+    return {"assets": out}
+
+
+def _resolve_fonts_for_pref(
+    font_pref: str, has_cjk: bool, bold: bool, italic: bool,
+    page, cache: dict, pno: int,
+) -> tuple[str, str]:
+    """Return (cjk_font, ascii_font) fit for an insert_text call. Mirrors the
+    save-path logic so the one-click "換字型" feature stays visually
+    consistent with the editor's per-text font selection."""
+    custom_font_name: str | None = None
+    if font_pref.startswith("system:"):
+        from ...core import font_catalog
+        entry = font_catalog.resolve_font_id(font_pref)
+        if entry and entry.get("path"):
+            fkey = (pno, entry["path"], int(entry.get("idx") or 0))
+            if fkey in cache:
+                custom_font_name = cache[fkey]
+            else:
+                try:
+                    reg_name = f"uf{len(cache)}"
+                    page.insert_font(fontname=reg_name, fontfile=entry["path"])
+                    cache[fkey] = reg_name
+                    custom_font_name = reg_name
+                except Exception:
+                    custom_font_name = None
+    if font_pref.startswith("custom:"):
+        from ...core import font_catalog
+        entry = font_catalog.resolve_font_id(font_pref)
+        if entry and entry.get("path"):
+            fkey = (pno, entry["path"], int(entry.get("idx") or 0))
+            if fkey in cache:
+                custom_font_name = cache[fkey]
+            else:
+                try:
+                    reg_name = f"uc{len(cache)}"
+                    page.insert_font(fontname=reg_name, fontfile=entry["path"])
+                    cache[fkey] = reg_name
+                    custom_font_name = reg_name
+                except Exception:
+                    custom_font_name = None
+
+    def _style(base: str) -> str:
+        if base in ("helv", "hebo", "heit", "hebi"):
+            return {(0, 0): "helv", (1, 0): "hebo",
+                    (0, 1): "heit", (1, 1): "hebi"}[(int(bold), int(italic))]
+        if base in ("tiro", "tibo", "tiit", "tibi"):
+            return {(0, 0): "tiro", (1, 0): "tibo",
+                    (0, 1): "tiit", (1, 1): "tibi"}[(int(bold), int(italic))]
+        return base
+
+    if custom_font_name:
+        return (custom_font_name, custom_font_name)
+    if font_pref in ("pymupdf:sans", "sans"):
+        return ("china-ts" if has_cjk else _style("helv"), _style("helv"))
+    if font_pref in ("pymupdf:serif", "serif"):
+        return ("china-t", _style("tiro"))
+    if font_pref in ("pymupdf:simplified", "simplified"):
+        return ("china-ss", _style("helv"))
+    if font_pref in ("pymupdf:helv", "helv"):
+        return ("china-t", _style("helv"))
+    if font_pref in ("pymupdf:tiro", "tiro"):
+        return ("china-t", _style("tiro"))
+    if font_pref in ("pymupdf:cour", "mono"):
+        return ("china-t", _style("cour"))
+    # "default" / "pymupdf:default"
+    return ("china-t", _style("helv"))
+
+
+def _replace_all_fonts_sync(src, upload_id: str, font_id: str):
+    """Heavy CPU work for replace-all-fonts; called via asyncio.to_thread
+    so the async event loop stays responsive."""
+    replaced = 0
+    font_cache: dict = {}
+    doc = fitz.open(str(src))
+    try:
+        for pno in range(doc.page_count):
+            page = doc[pno]
+            spans: list[dict] = []
+            for block in page.get_text("dict").get("blocks", []) or []:
+                if block.get("type") != 0:
+                    continue
+                for line in block.get("lines", []) or []:
+                    for sp in line.get("spans", []) or []:
+                        txt = sp.get("text") or ""
+                        if not txt.strip():
+                            continue
+                        spans.append(sp)
+            if not spans:
+                continue
+            # Redact all existing text first.
+            for sp in spans:
+                page.add_redact_annot(fitz.Rect(*sp["bbox"]), fill=(1, 1, 1))
+            try:
+                page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+            except Exception:
+                page.apply_redactions()
+            # Re-insert with chosen font, preserving size + color + bold/italic
+            for sp in spans:
+                bx0, by0, bx1, by1 = sp["bbox"]
+                text = sp.get("text") or ""
+                size = float(sp.get("size", 11) or 11)
+                col_int = int(sp.get("color", 0) or 0)
+                r_c = ((col_int >> 16) & 0xff) / 255.0
+                g_c = ((col_int >> 8) & 0xff) / 255.0
+                b_c = (col_int & 0xff) / 255.0
+                flags = int(sp.get("flags", 0) or 0)
+                bold = bool(flags & 16)
+                italic = bool(flags & 2)
+                has_cjk = any("一" <= c <= "鿿" for c in text)
+                cjk_f, ascii_f = _resolve_fonts_for_pref(
+                    font_id, has_cjk, bold, italic, page, font_cache, pno,
+                )
+                # baseline: roughly bottom minus a small descender
+                base_y = by1 - size * 0.18
+                _insert_mixed_text(page, bx0, base_y, text,
+                                   cjk_font=cjk_f, ascii_font=ascii_f,
+                                   font_size=size, color=(r_c, g_c, b_c))
+                replaced += 1
+        # Save to a temp and atomically replace the pristine src so the
+        # editor session now sees the re-fonted PDF as its base.
+        tmp = _work_dir() / f"pe_{upload_id}_src_new.pdf"
+        doc.save(str(tmp), garbage=3, deflate=True)
+    finally:
+        doc.close()
+    tmp.replace(src)
+
+    # Re-render page PNGs so thumbnails refresh on the frontend.
+    pages_info = []
+    with fitz.open(str(src)) as d2:
+        for i in range(d2.page_count):
+            page = d2[i]
+            png = _work_dir() / f"pe_{upload_id}_p{i+1}.png"
+            pdf_preview.render_page_png(src, png, i, dpi=120)
+            pages_info.append({
+                "index": i,
+                "width_pt": page.rect.width,
+                "height_pt": page.rect.height,
+                "preview_url": f"/tools/pdf-editor/preview/{png.name}?t={int(time.time())}",
+            })
+
+    return replaced, pages_info
+
+
+@router.post("/replace-all-fonts")
+async def replace_all_fonts(request: Request):
+    """One-click: replace every existing text span in the PDF with the
+    same text rendered in a chosen font. Destructive — overwrites the
+    editor session's pristine source with the new PDF."""
+    body = await request.json()
+    upload_id = (body.get("upload_id") or "").strip()
+    font_id = str(body.get("font_id") or "pymupdf:default")
+    if not upload_id:
+        raise HTTPException(400, "upload_id required")
+    src = _work_dir() / f"pe_{upload_id}_src.pdf"
+    if not src.exists():
+        raise HTTPException(404, "upload expired or missing")
+    import asyncio as _asyncio
+    replaced, pages_info = await _asyncio.to_thread(
+        _replace_all_fonts_sync, src, upload_id, font_id
+    )
+    return {"ok": True, "replaced": replaced, "pages": pages_info}
+
+
+@router.post("/upload-image")
+async def upload_image(
+    upload_id: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """Accept an ad-hoc image (PNG/JPEG) from the editor UI. Stash it under
+    the tool work_dir with a pe_ prefix so the same save-time flow that
+    re-inserts extracted PDF images (via ``existing_src``) can re-use it.
+    Returns {url, width, height} so the frontend can place the image on
+    the canvas at its natural aspect ratio.
+    """
+    import uuid as _uuid
+    if not upload_id:
+        raise HTTPException(400, "upload_id required")
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "empty file")
+    fname_lower = (file.filename or "").lower()
+    if not any(fname_lower.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif")):
+        raise HTTPException(400, "只支援 PNG / JPEG / WEBP / GIF")
+    # Normalize everything to PNG so PyMuPDF's insert_image + alpha handling
+    # is consistent.
+    png_bytes: bytes
+    try:
+        from io import BytesIO
+        try:
+            from PIL import Image  # type: ignore
+            im = Image.open(BytesIO(data))
+            if im.mode not in ("RGB", "RGBA"):
+                im = im.convert("RGBA" if "A" in im.mode else "RGB")
+            buf = BytesIO()
+            im.save(buf, format="PNG")
+            png_bytes = buf.getvalue()
+            w, h = im.size
+        except Exception:
+            # Pillow not available — fall back to raw bytes (PyMuPDF can
+            # still consume PNG/JPEG via stream=).
+            png_bytes = data
+            # Ask PyMuPDF for dimensions instead.
+            try:
+                pix = fitz.Pixmap(data)
+                w, h = pix.width, pix.height
+                pix = None
+            except Exception:
+                w, h = 100, 100
+    except Exception as e:
+        raise HTTPException(400, f"解碼失敗：{e}")
+
+    fname = f"pe_{upload_id}_userimg_{_uuid.uuid4().hex}.png"
+    (_work_dir() / fname).write_bytes(png_bytes)
+    return {
+        "ok": True,
+        "url": f"/tools/pdf-editor/preview/{fname}",
+        "width": w,
+        "height": h,
+    }
+
+
+# Subfolder under temp_dir for this tool's working files.
+def _work_dir() -> Path:
+    p = settings.temp_dir
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _hex_rgb01(h: str) -> tuple[float, float, float]:
+    """#rrggbb (or rrggbb) → (r, g, b) each 0-1 for PyMuPDF colour args."""
+    h = (h or "").lstrip("#")
+    if len(h) != 6:
+        return (0.0, 0.0, 0.0)
+    try:
+        return (int(h[0:2], 16)/255.0, int(h[2:4], 16)/255.0, int(h[4:6], 16)/255.0)
+    except Exception:
+        return (0.0, 0.0, 0.0)
+
+
+def _insert_mixed_text(page, x: float, y: float, text: str, *,
+                       cjk_font: str, ascii_font: str,
+                       font_size: float, color: tuple) -> float:
+    """Render a text run by splitting into consecutive CJK / ASCII groups
+    and drawing each with the right font. This avoids PyMuPDF's China-
+    series fonts rendering ASCII punctuation as wide "full-width" glyphs
+    (which makes e.g. "]]]" look like "] ] ]" with big gaps). Returns
+    the ending x-coordinate.
+    """
+    if not text:
+        return x
+    # Group consecutive chars by script
+    runs: list[tuple[bool, str]] = []
+    cur = ""
+    cur_is_cjk: Optional[bool] = None
+    def _is_cjk(ch: str) -> bool:
+        # Include CJK Unified + full-width punctuation ranges
+        return ("一" <= ch <= "鿿" or
+                "　" <= ch <= "〿" or
+                "＀" <= ch <= "￯")
+    for ch in text:
+        is_cjk = _is_cjk(ch)
+        if cur_is_cjk is None:
+            cur = ch; cur_is_cjk = is_cjk
+        elif is_cjk == cur_is_cjk:
+            cur += ch
+        else:
+            runs.append((cur_is_cjk, cur))
+            cur = ch; cur_is_cjk = is_cjk
+    if cur:
+        runs.append((cur_is_cjk, cur))
+
+    cx = x
+    for is_cjk, run in runs:
+        fn = cjk_font if is_cjk else ascii_font
+        try:
+            page.insert_text(fitz.Point(cx, y), run,
+                             fontname=fn, fontsize=font_size, color=color)
+        except Exception:
+            page.insert_text(fitz.Point(cx, y), run,
+                             fontname="helv", fontsize=font_size, color=color)
+        # Advance x by measured width of that run
+        try:
+            cx += fitz.get_text_length(run, fontname=fn, fontsize=font_size)
+        except Exception:
+            cx += font_size * len(run) * 0.6  # rough fallback
+    return cx
+
+
+def _sample_path(path_str: str, ox: float, oy: float,
+                 sx: float = 1.0, sy: float = 1.0,
+                 path_offset_x: float = 0.0, path_offset_y: float = 0.0) -> list:
+    """Parse a simplified SVG-ish path string (as emitted by Fabric.Path)
+    and return a list of fitz.Point approximating the curve. Supported
+    commands: M x y, L x y, Q cx cy x y (sampled linearly).
+
+    Fabric emits commands separated by spaces with numeric args. Points
+    are in the path's own coordinate space; we apply offset+scale so the
+    resulting points land at the object's canvas position.
+    """
+    import re as _re
+    tokens = [t for t in _re.split(r"\s+", path_str.strip()) if t]
+    pts: list = []
+    i = 0
+    def _xy(n: int) -> tuple[float, float]:
+        px = float(tokens[n])
+        py = float(tokens[n + 1])
+        return (ox + px * sx, oy + py * sy)
+    def _adj(px, py):
+        # Subtract Fabric's internal pathOffset (centers the path in its
+        # local coord system) then scale + place at canvas origin.
+        return (ox + (px - path_offset_x) * sx,
+                oy + (py - path_offset_y) * sy)
+    last = None
+    while i < len(tokens):
+        cmd = tokens[i].upper()
+        if cmd in ("M", "L") and i + 2 < len(tokens):
+            try:
+                px = float(tokens[i + 1])
+                py = float(tokens[i + 2])
+                x, y = _adj(px, py)
+                pts.append(fitz.Point(x, y))
+                last = (x, y)
+            except ValueError:
+                pass
+            i += 3
+        elif cmd == "Q" and i + 4 < len(tokens):
+            try:
+                cx_raw = float(tokens[i + 1]); cy_raw = float(tokens[i + 2])
+                ex_raw = float(tokens[i + 3]); ey_raw = float(tokens[i + 4])
+                cx, cy = _adj(cx_raw, cy_raw)
+                ex, ey = _adj(ex_raw, ey_raw)
+                # Sample Bezier Q with ~6 points between last and (ex,ey)
+                if last is None:
+                    last = (ex, ey)
+                lx, ly = last
+                for t in (0.2, 0.4, 0.6, 0.8, 1.0):
+                    u = 1 - t
+                    px = u*u*lx + 2*u*t*cx + t*t*ex
+                    py = u*u*ly + 2*u*t*cy + t*t*ey
+                    pts.append(fitz.Point(px, py))
+                last = (ex, ey)
+            except ValueError:
+                pass
+            i += 5
+        elif cmd == "Z":
+            i += 1
+        else:
+            # Unknown token — skip
+            i += 1
+    return pts
+
+
+@router.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    templates = request.app.state.templates
+    return templates.TemplateResponse("pdf_editor.html", {"request": request})
+
+
+@router.post("/load")
+async def load(file: UploadFile = File(...)):
+    """Upload a PDF, render each page as a preview PNG, return upload_id +
+    per-page info (size in pt + preview URL)."""
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "empty file")
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "only PDF is supported in Phase 1")
+
+    upload_id = uuid.uuid4().hex
+    src = _work_dir() / f"pe_{upload_id}_src.pdf"
+    src.write_bytes(data)
+    # Stash the original filename so /download can suggest it back with
+    # an _edited suffix.
+    try:
+        (_work_dir() / f"pe_{upload_id}_name.txt").write_text(
+            file.filename or "document.pdf", encoding="utf-8")
+    except Exception:
+        pass
+
+    # Render each page to PNG at a consistent DPI. Editor UI scales the
+    # displayed image and keeps pt coords from the PDF so save-back maps
+    # back without resolution loss.
+    preview_dpi = 120
+    import asyncio as _asyncio
+    def _do_render():
+        out = []
+        with fitz.open(str(src)) as doc:
+            for i in range(doc.page_count):
+                page = doc[i]
+                w_pt = page.rect.width
+                h_pt = page.rect.height
+                png = _work_dir() / f"pe_{upload_id}_p{i+1}.png"
+                pdf_preview.render_page_png(src, png, i, dpi=preview_dpi)
+                out.append({
+                    "index": i,
+                    "width_pt": w_pt,
+                    "height_pt": h_pt,
+                    "preview_url": f"/tools/pdf-editor/preview/{png.name}",
+                })
+        return out
+    pages_info = await _asyncio.to_thread(_do_render)
+
+    return {
+        "upload_id": upload_id,
+        "filename": file.filename,
+        "preview_dpi": preview_dpi,
+        "pages": pages_info,
+    }
+
+
+@router.get("/preview/{filename}")
+async def preview(filename: str):
+    # Guard against directory traversal — only allow files we created.
+    if not filename.startswith("pe_") or ".." in filename or "/" in filename:
+        raise HTTPException(400, "invalid filename")
+    path = _work_dir() / filename
+    if not path.exists():
+        raise HTTPException(404, "not found")
+    return FileResponse(str(path), media_type="image/png")
+
+
+@router.get("/file/{upload_id}")
+async def original_file(upload_id: str):
+    src = _work_dir() / f"pe_{upload_id}_src.pdf"
+    if not src.exists():
+        raise HTTPException(404, "upload expired or missing")
+    return FileResponse(str(src), media_type="application/pdf")
+
+
+@router.post("/save")
+async def save(request: Request):
+    """Accept the editor JSON model + upload_id. Burn overlay objects into
+    a new PDF and return the download URL.
+
+    Body shape (Phase 1 subset — only 'text' and 'whiteout' handled):
+      {
+        "upload_id": "<hex>",
+        "pages": [
+          {"page": 0, "objects": [
+            {"id": "...", "type": "text", "x": <pt>, "y": <pt>,
+             "w": <pt>, "h": <pt>, "text": "...", "font_size": 12,
+             "color": "#000000"},
+            {"id": "...", "type": "whiteout", "x": <pt>, "y": <pt>,
+             "w": <pt>, "h": <pt>}
+          ]}
+        ]
+      }
+    """
+    body = await request.json()
+    upload_id = (body.get("upload_id") or "").strip()
+    if not upload_id:
+        raise HTTPException(400, "upload_id required")
+    pages = body.get("pages") or []
+    src = _work_dir() / f"pe_{upload_id}_src.pdf"
+    if not src.exists():
+        raise HTTPException(404, "upload expired or missing")
+
+    out = _work_dir() / f"pe_{upload_id}_out.pdf"
+    # Always open the pristine original — the client sends the FULL edit
+    # model (all origBboxes, all deleted_originals, all added objects) on
+    # each save, and we replay them from scratch. This keeps redactions
+    # idempotent and avoids content duplication when users move an
+    # extracted object multiple times.
+    doc = fitz.open(str(src))
+    # Per-page cache of system fonts already registered this save
+    # {(page_index, font_path, idx): buffername}
+    _custom_font_cache: dict = {}
+    try:
+        # ---- Pass 1: apply redactions (destructive removal of existing
+        # PDF content that the user deleted, moved, or resized). All
+        # redactions for a page must be applied before we insert new
+        # content, otherwise apply_redactions can wipe our new overlays.
+        for pg in pages:
+            pno = int(pg.get("page", 0))
+            if pno < 0 or pno >= doc.page_count:
+                continue
+            page = doc[pno]
+            has_redact = False
+            for obj in pg.get("objects", []):
+                orig = obj.get("original_bbox")
+                if not orig or len(orig) != 4:
+                    continue
+                ox0, oy0, ox1, oy1 = [float(v) for v in orig]
+                page.add_redact_annot(
+                    fitz.Rect(ox0, oy0, ox1, oy1),
+                    fill=(1, 1, 1),
+                )
+                has_redact = True
+            # Explicit "deleted existing" entries (no new content, just redact)
+            for dbb in pg.get("deleted_originals", []) or []:
+                if not dbb or len(dbb) != 4:
+                    continue
+                dx0, dy0, dx1, dy1 = [float(v) for v in dbb]
+                page.add_redact_annot(
+                    fitz.Rect(dx0, dy0, dx1, dy1),
+                    fill=(1, 1, 1),
+                )
+                has_redact = True
+
+            # AcroForm widgets marked for deletion. Match by field_name
+            # when available (survives bbox jitter), otherwise by bbox.
+            for wd in pg.get("deleted_widgets", []) or []:
+                target_name = (wd.get("field_name") or "").strip()
+                bb = wd.get("bbox") or []
+                try:
+                    for widget in list(page.widgets() or []):
+                        matched = False
+                        if target_name and (widget.field_name or "") == target_name:
+                            matched = True
+                        elif bb and len(bb) == 4 and widget.rect:
+                            # Loose bbox match (within 2pt) as fallback.
+                            wr = widget.rect
+                            if (abs(wr.x0 - bb[0]) < 2 and abs(wr.y0 - bb[1]) < 2
+                                and abs(wr.x1 - bb[2]) < 2 and abs(wr.y1 - bb[3]) < 2):
+                                matched = True
+                        if not matched:
+                            continue
+                        # Also paint over the widget area with a redact so
+                        # any visible appearance goes away.
+                        try:
+                            page.add_redact_annot(widget.rect, fill=(1, 1, 1))
+                            has_redact = True
+                        except Exception:
+                            pass
+                        try:
+                            page.delete_widget(widget)
+                        except Exception:
+                            try:
+                                widget.field_name = ""
+                                widget.update()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
+            if has_redact:
+                # IMAGES=NONE keeps embedded images intact outside redact
+                # rects (default behaviour would wipe whole images).
+                try:
+                    page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+                except Exception:
+                    page.apply_redactions()
+
+        # ---- Pass 2: draw overlays and re-inserts.
+        for pg in pages:
+            pno = int(pg.get("page", 0))
+            if pno < 0 or pno >= doc.page_count:
+                continue
+            page = doc[pno]
+            for obj in pg.get("objects", []):
+                ot = obj.get("type")
+                x = float(obj.get("x", 0))
+                y = float(obj.get("y", 0))
+                w = float(obj.get("w", 0))
+                h = float(obj.get("h", 0))
+                rect = fitz.Rect(x, y, x + w, y + h)
+                if ot == "whiteout":
+                    # Paint an opaque white rectangle over the target area.
+                    # Not a redaction (that removes content); this is a
+                    # visual cover. True redact lives in a later phase.
+                    page.draw_rect(rect, color=None, fill=(1, 1, 1),
+                                   fill_opacity=1.0, overlay=True)
+                elif ot == "image":
+                    # Source: either an asset (stamp/signature/logo) OR an
+                    # extracted existing image (existing_src points to a PNG
+                    # we wrote under work_dir during detect-objects).
+                    src_file = None
+                    asset_id = obj.get("asset_id") or ""
+                    if asset_id:
+                        a = asset_manager.get(asset_id)
+                        if a:
+                            cand = settings.assets_files_dir / a.file_key
+                            if cand.exists():
+                                src_file = cand
+                    if src_file is None:
+                        # existing_src is a URL like /tools/pdf-editor/preview/pe_<id>_imgxN_pM.png
+                        es = obj.get("existing_src") or ""
+                        if es:
+                            fname = es.rsplit("/", 1)[-1]
+                            # Only allow our own pe_ prefix files (no traversal)
+                            if (fname.startswith("pe_") and ".." not in fname
+                                and "/" not in fname):
+                                cand = _work_dir() / fname
+                                if cand.exists():
+                                    src_file = cand
+                    if src_file is None:
+                        continue
+                    try:
+                        # Use stream=bytes (same as pdf-stamp), which
+                        # preserves PNG alpha correctly. filename=... +
+                        # alpha=... can introduce a gray matte artefact
+                        # on some PyMuPDF versions.
+                        with open(src_file, "rb") as _f:
+                            img_bytes = _f.read()
+                        kwargs = dict(stream=img_bytes,
+                                      keep_proportion=False, overlay=True)
+                        ang = float(obj.get("angle") or 0.0)
+                        if ang:
+                            kwargs["rotate"] = ang
+                        page.insert_image(rect, **kwargs)
+                        # Optional opacity wasn't applied here — we omit
+                        # it on purpose because `alpha=int` in PyMuPDF
+                        # overwrites per-pixel transparency. If future
+                        # versions need user-controlled opacity, apply
+                        # via a Pillow pre-pass that multiplies the
+                        # alpha channel.
+                    except Exception:
+                        continue
+                elif ot == "rect":
+                    stroke = str(obj.get("stroke") or "#000000").lstrip("#")
+                    fill = obj.get("fill")  # nullable
+                    sw = float(obj.get("stroke_width") or 1.0)
+                    sr, sg, sb = _hex_rgb01(stroke)
+                    fill_rgb = _hex_rgb01(str(fill).lstrip("#")) if fill else None
+                    page.draw_rect(
+                        rect,
+                        color=(sr, sg, sb),
+                        fill=fill_rgb,
+                        width=sw,
+                        overlay=True,
+                    )
+                elif ot == "line":
+                    x2 = float(obj.get("x2", x + w))
+                    y2 = float(obj.get("y2", y + h))
+                    stroke = str(obj.get("stroke") or "#000000").lstrip("#")
+                    sw = float(obj.get("stroke_width") or 1.0)
+                    sr, sg, sb = _hex_rgb01(stroke)
+                    page.draw_line(
+                        fitz.Point(x, y), fitz.Point(x2, y2),
+                        color=(sr, sg, sb), width=sw, overlay=True,
+                    )
+                elif ot == "arrow":
+                    # Line + a filled triangular head at (x2, y2).
+                    x2 = float(obj.get("x2", x + w))
+                    y2 = float(obj.get("y2", y + h))
+                    stroke = str(obj.get("stroke") or "#000000").lstrip("#")
+                    sw = float(obj.get("stroke_width") or 1.0)
+                    col = _hex_rgb01(stroke)
+                    import math as _m
+                    page.draw_line(fitz.Point(x, y), fitz.Point(x2, y2),
+                                   color=col, width=sw, overlay=True)
+                    # Arrowhead triangle
+                    dx, dy = x2 - x, y2 - y
+                    ang = _m.atan2(dy, dx)
+                    ah = max(6.0, sw * 4.0)   # arrowhead length
+                    aw = ah * 0.6             # half-width
+                    p1 = fitz.Point(x2, y2)
+                    p2 = fitz.Point(x2 - ah*_m.cos(ang) + aw*_m.sin(ang),
+                                    y2 - ah*_m.sin(ang) - aw*_m.cos(ang))
+                    p3 = fitz.Point(x2 - ah*_m.cos(ang) - aw*_m.sin(ang),
+                                    y2 - ah*_m.sin(ang) + aw*_m.cos(ang))
+                    shape = page.new_shape()
+                    shape.draw_polyline([p1, p2, p3, p1])
+                    shape.finish(color=col, fill=col, width=sw)
+                    shape.commit(overlay=True)
+                elif ot == "highlight":
+                    # Yellow translucent rectangle over the area. Using
+                    # draw_rect with fill_opacity gives a predictable
+                    # visual result (PDF highlight annotations anchor to
+                    # text spans, which we don't track here).
+                    color_hex = str(obj.get("color") or "#fde047").lstrip("#")
+                    r, g, b = _hex_rgb01(color_hex)
+                    page.draw_rect(rect, color=None, fill=(r, g, b),
+                                   fill_opacity=0.45, overlay=True)
+                elif ot == "sticky":
+                    # Real PDF text annotation — clickable in viewers,
+                    # shows the note text as a popup bubble.
+                    note = str(obj.get("note") or "便箋")
+                    try:
+                        annot = page.add_text_annot(
+                            fitz.Point(x, y), note, icon="Note",
+                        )
+                        try:
+                            annot.set_colors(stroke=(1.0, 0.83, 0.09))
+                            annot.update()
+                        except Exception:
+                            pass
+                    except Exception:
+                        # Fallback: draw a small yellow square so user
+                        # still sees something even if annot API fails
+                        page.draw_rect(
+                            fitz.Rect(x, y, x + max(w, 18), y + max(h, 18)),
+                            color=(0.85, 0.47, 0.04), fill=(0.99, 0.90, 0.52),
+                            width=0.8, overlay=True,
+                        )
+                elif ot == "pencil":
+                    # Free-hand path. Frontend has resolved Fabric's
+                    # pathOffset/scale/translation and sent a flat list
+                    # of absolute (x, y) points in PDF points — all we
+                    # have to do is draw the polyline.
+                    raw_pts = obj.get("points") or []
+                    stroke = str(obj.get("stroke") or "#000000").lstrip("#")
+                    sw = float(obj.get("stroke_width") or 1.0)
+                    col = _hex_rgb01(stroke)
+                    pts = []
+                    for p in raw_pts:
+                        if isinstance(p, (list, tuple)) and len(p) >= 2:
+                            try:
+                                pts.append(fitz.Point(float(p[0]), float(p[1])))
+                            except (TypeError, ValueError):
+                                continue
+                    if len(pts) >= 2:
+                        shape = page.new_shape()
+                        shape.draw_polyline(pts)
+                        # closePath=False: do NOT connect last point back
+                        # to first. Essential for freehand strokes, which
+                        # otherwise form a filled loop.
+                        shape.finish(color=col, fill=None, width=sw,
+                                     lineCap=1, lineJoin=1, closePath=False)
+                        shape.commit(overlay=True)
+                elif ot == "ellipse":
+                    stroke = str(obj.get("stroke") or "#000000").lstrip("#")
+                    fill = obj.get("fill")
+                    sw = float(obj.get("stroke_width") or 1.0)
+                    sr, sg, sb = _hex_rgb01(stroke)
+                    fill_rgb = _hex_rgb01(str(fill).lstrip("#")) if fill else None
+                    page.draw_oval(
+                        rect, color=(sr, sg, sb), fill=fill_rgb,
+                        width=sw, overlay=True,
+                    )
+                elif ot == "text":
+                    text = str(obj.get("text") or "")
+                    if not text:
+                        continue
+                    font_size = float(obj.get("font_size") or 11)
+                    col = _hex_rgb01(str(obj.get("color") or "#000000"))
+                    bold = bool(obj.get("bold"))
+                    italic = bool(obj.get("italic"))
+                    underline = bool(obj.get("underline"))
+                    font_pref = str(obj.get("font") or "default")
+                    has_cjk = any("一" <= c <= "鿿" for c in text)
+                    # System font override — user picked a .ttf/.otf/.ttc
+                    # from the catalog. Register it with the page if we
+                    # haven't already, and use the registered name for the
+                    # insert_text call.
+                    custom_font_name = None
+                    if font_pref.startswith("system:"):
+                        from ...core import font_catalog
+                        entry = font_catalog.resolve_font_id(font_pref)
+                        if entry and entry.get("path"):
+                            fkey = (pno, entry["path"], int(entry.get("idx") or 0))
+                            if fkey in _custom_font_cache:
+                                custom_font_name = _custom_font_cache[fkey]
+                            else:
+                                try:
+                                    reg_name = f"uf{len(_custom_font_cache)}"
+                                    page.insert_font(
+                                        fontname=reg_name,
+                                        fontfile=entry["path"],
+                                        # TTC subfont index (0 if not TTC)
+                                    )
+                                    _custom_font_cache[fkey] = reg_name
+                                    custom_font_name = reg_name
+                                except Exception:
+                                    # Registration failed — fall through to built-ins
+                                    custom_font_name = None
+
+                    # Pick PyMuPDF fontname based on user preference + content.
+                    # PyMuPDF built-in font names:
+                    #   helv / hebo / heit / hebi  — Helvetica family
+                    #   tiro / tibo / tiit / tibi  — Times family
+                    #   cour / cobo / coit / cobi  — Courier family
+                    #   china-s / china-ss          — SimSun (simplified CJK)
+                    #   china-t / china-ts          — MingLiu (traditional CJK)
+                    def _style_suffix(base: str) -> str:
+                        # Map base + bold/italic flags; not all bases have all 4
+                        if base in ("helv", "hebo", "heit", "hebi"):
+                            return {(0,0):"helv", (1,0):"hebo",
+                                    (0,1):"heit", (1,1):"hebi"}[(int(bold), int(italic))]
+                        if base in ("tiro", "tibo", "tiit", "tibi"):
+                            return {(0,0):"tiro", (1,0):"tibo",
+                                    (0,1):"tiit", (1,1):"tibi"}[(int(bold), int(italic))]
+                        if base in ("cour", "cobo", "coit", "cobi"):
+                            return {(0,0):"cour", (1,0):"cobo",
+                                    (0,1):"coit", (1,1):"cobi"}[(int(bold), int(italic))]
+                        return base  # china-s/china-t have no style variants
+
+                    # PyMuPDF built-in CJK fonts:
+                    #   china-t  = Traditional 宋體 (MingLiU)     ← Taiwan default
+                    #   china-ts = Traditional 黑體 (DFKai-SB-ish)
+                    #   china-s  = Simplified 宋體 (SimSun)
+                    #   china-ss = Simplified 黑體 (SimHei)
+                    # Use traditional as default — this tool is
+                    # Taiwan-focused and 繁中 fonts substitute weirdly when
+                    # rendered through Simplified CID tables (銜 → 衛 etc).
+                    if custom_font_name:
+                        fontname = custom_font_name
+                    elif font_pref == "pymupdf:sans" or font_pref == "sans":
+                        fontname = "china-ts" if has_cjk else _style_suffix("helv")
+                    elif font_pref == "pymupdf:serif" or font_pref == "serif":
+                        fontname = "china-t" if has_cjk else _style_suffix("tiro")
+                    elif font_pref == "pymupdf:cour" or font_pref == "mono":
+                        fontname = "china-t" if has_cjk else _style_suffix("cour")
+                    elif font_pref == "pymupdf:helv" or font_pref == "helv":
+                        fontname = _style_suffix("helv")
+                    elif font_pref == "pymupdf:tiro" or font_pref == "tiro":
+                        fontname = _style_suffix("tiro")
+                    elif font_pref == "pymupdf:simplified" or font_pref == "simplified":
+                        fontname = "china-ss" if has_cjk else _style_suffix("helv")
+                    else:  # "default" / "pymupdf:default"
+                        fontname = "china-t" if has_cjk else _style_suffix("helv")
+                    # Split text into CJK / ASCII runs and render each
+                    # with the right font so ASCII punctuation in mixed
+                    # content doesn't blow up to full-width. ASCII font
+                    # tracks the user's preference (helv/tiro/cour) and
+                    # its bold/italic variant.
+                    if fontname.startswith("uf"):
+                        # Custom system font — user picked it specifically,
+                        # use it for all chars without splitting (it's
+                        # presumably designed for the content they pasted).
+                        ascii_font = fontname
+                        cjk_font = fontname
+                    elif font_pref in ("pymupdf:serif", "serif"):
+                        cjk_font = "china-t"
+                        ascii_font = _style_suffix("tiro")
+                    elif font_pref in ("pymupdf:simplified", "simplified"):
+                        cjk_font = "china-ss"
+                        ascii_font = _style_suffix("helv")
+                    elif font_pref in ("pymupdf:helv", "helv"):
+                        cjk_font = "china-t"  # fallback for any CJK in "ASCII-only" picks
+                        ascii_font = _style_suffix("helv")
+                    elif font_pref in ("pymupdf:tiro", "tiro"):
+                        cjk_font = "china-t"
+                        ascii_font = _style_suffix("tiro")
+                    elif font_pref in ("pymupdf:cour", "mono"):
+                        cjk_font = "china-t"
+                        ascii_font = _style_suffix("cour")
+                    else:  # sans / default
+                        cjk_font = "china-ts"
+                        ascii_font = _style_suffix("helv")
+
+                    lines = text.split("\n") if "\n" in text else [text]
+                    ybase = rect.y0 + font_size
+                    for i, line in enumerate(lines):
+                        if not line:
+                            continue
+                        try:
+                            _insert_mixed_text(
+                                page, rect.x0, ybase + i * font_size * 1.2,
+                                line, cjk_font=cjk_font, ascii_font=ascii_font,
+                                font_size=font_size, color=col,
+                            )
+                        except Exception:
+                            try:
+                                page.insert_text(
+                                    fitz.Point(rect.x0, ybase + i * font_size * 1.2),
+                                    line, fontname="helv",
+                                    fontsize=font_size, color=col,
+                                )
+                            except Exception:
+                                pass
+                    # Underline drawn manually beneath the first line
+                    if underline:
+                        y_line = rect.y1 - font_size * 0.15
+                        page.draw_line(
+                            fitz.Point(rect.x0, y_line),
+                            fitz.Point(rect.x1, y_line),
+                            color=col, width=max(0.5, font_size * 0.05),
+                            overlay=True,
+                        )
+        doc.save(str(out), garbage=4, deflate=True)
+    finally:
+        doc.close()
+
+    # Re-render previews so the user can see the result
+    preview_dpi = 120
+    pages_info = []
+    with fitz.open(str(out)) as d2:
+        for i in range(d2.page_count):
+            page = d2[i]
+            png = _work_dir() / f"pe_{upload_id}_out_p{i+1}.png"
+            pdf_preview.render_page_png(out, png, i, dpi=preview_dpi)
+            pages_info.append({
+                "index": i,
+                "width_pt": page.rect.width,
+                "height_pt": page.rect.height,
+                "preview_url": f"/tools/pdf-editor/preview/{png.name}",
+            })
+
+    return {
+        "upload_id": upload_id,
+        "download_url": f"/tools/pdf-editor/download/{upload_id}",
+        "pages": pages_info,
+    }
+
+
+@router.get("/download/{upload_id}")
+async def download(upload_id: str):
+    out = _work_dir() / f"pe_{upload_id}_out.pdf"
+    if not out.exists():
+        raise HTTPException(404, "saved file not found — save first")
+    # Recover original filename if stashed, else fallback to a random one.
+    name_file = _work_dir() / f"pe_{upload_id}_name.txt"
+    orig = "document.pdf"
+    try:
+        if name_file.exists():
+            orig = name_file.read_text(encoding="utf-8").strip() or orig
+    except Exception:
+        pass
+    base = orig.rsplit(".", 1)[0]
+    fn = f"{base}_edited.pdf"
+    return FileResponse(str(out), media_type="application/pdf", filename=fn)

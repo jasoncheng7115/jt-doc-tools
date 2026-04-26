@@ -1,0 +1,65 @@
+{# Drag-position editor. Initialize with new DragPositionEditor({root, asset_url, paper_w_mm, paper_h_mm, value, onChange, bgUrl}) #}
+{% from "components/icons.html" import icon %}
+<div class="dpe-wrapper" id="{{ editor_id|default('dpe') }}">
+  <div class="dpe-canvas-wrap">
+    <div class="dpe-paper">
+      <img class="dpe-bg" alt="" />
+      <div class="dpe-asset">
+        <img alt="asset" />
+        <div class="dpe-handle nw" data-h="nw"></div>
+        <div class="dpe-handle ne" data-h="ne"></div>
+        <div class="dpe-handle sw" data-h="sw"></div>
+        <div class="dpe-handle se" data-h="se"></div>
+      </div>
+      <div class="dpe-guide v" hidden></div>
+      <div class="dpe-guide h" hidden></div>
+    </div>
+  </div>
+  <div class="dpe-panel panel">
+    <h2 style="margin-top:0;">位置與尺寸</h2>
+    <div class="form-row"><label>X (mm)</label><input type="number" step="0.1" class="dpe-x" /></div>
+    <div class="form-row"><label>Y (mm)</label><input type="number" step="0.1" class="dpe-y" /></div>
+    <div class="form-row"><label>寬 (mm)</label><input type="number" step="0.1" class="dpe-w" /></div>
+    <div class="form-row"><label>高 (mm)</label><input type="number" step="0.1" class="dpe-h" /></div>
+    <div class="form-row">
+      <label>紙張</label>
+      <select class="dpe-paper-select">
+        <option value="210,297">A4 直 (210×297)</option>
+        <option value="297,210">A4 橫 (297×210)</option>
+        <option value="297,420">A3 直 (297×420)</option>
+        <option value="420,297">A3 橫 (420×297)</option>
+        <option value="216,279">Letter 直 (216×279)</option>
+      </select>
+    </div>
+    <div class="form-row"><label><input type="checkbox" class="dpe-lock" /> 鎖定長寬比</label></div>
+    <div class="form-row"><label>旋轉 (度)</label><input type="number" step="0.5" min="-45" max="45" class="dpe-rot" /></div>
+    <div class="rot-actions">
+      <button type="button" class="btn btn-small dpe-rot-reset">{{ icon('reset') }}歸零</button>
+      <button type="button" class="btn btn-small dpe-rot-rand" data-range="3">{{ icon('dice') }}隨機 ±3°</button>
+      <button type="button" class="btn btn-small dpe-rot-rand" data-range="10" data-min="3">{{ icon('dice') }}隨機 ±3°~10°</button>
+      <button type="button" class="btn btn-small dpe-rot-rand" data-range="30" data-min="10">{{ icon('dice') }}隨機 ±10°~30°</button>
+    </div>
+
+    <div>
+      <div class="muted" style="font-size:12px; margin-bottom:4px;">快速定位</div>
+      <div class="presets">
+        <button type="button" class="btn btn-small" data-preset="tl">{{ icon('align-tl') }}左上</button>
+        <button type="button" class="btn btn-small" data-preset="tr">{{ icon('align-tr') }}右上</button>
+        <button type="button" class="btn btn-small" data-preset="bl">{{ icon('align-bl') }}左下</button>
+        <button type="button" class="btn btn-small" data-preset="br">{{ icon('align-br') }}右下</button>
+        <button type="button" class="btn btn-small" data-preset="hc">{{ icon('align-hc') }}水平置中</button>
+        <button type="button" class="btn btn-small" data-preset="vc">{{ icon('align-vc') }}垂直置中</button>
+        <button type="button" class="btn btn-small" data-preset="center">{{ icon('align-center') }}正中</button>
+        <button type="button" class="btn btn-small" data-preset="mbottom">{{ icon('align-mbottom') }}中間偏下</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="muted" style="font-size:12px; margin-bottom:4px;">底圖</div>
+      <div class="bg-toggle">
+        <button type="button" class="btn btn-small dpe-bg-blank">{{ icon('page') }}白紙</button>
+        <button type="button" class="btn btn-small dpe-bg-pdf" hidden>{{ icon('eye') }}PDF 預覽</button>
+      </div>
+    </div>
+  </div>
+</div>

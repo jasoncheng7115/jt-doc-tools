@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}上傳檔案記錄 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('upload', size=22) }} 上傳檔案記錄</h1>
+<p class="muted">所有透過工具上傳的檔案（從稽核記錄裡篩出有 filename 的 <code>tool_invoke</code> 事件）。
+  保留時間跟稽核記錄一致 — 90 天後自動清除。</p>
+
+<form method="get" class="uploads-filter">
+  <select class="field" name="q_user">
+    <option value="">所有使用者</option>
+    {% for u in distinct_users %}
+    <option value="{{ u }}" {% if u == q_user %}selected{% endif %}>{{ u }}</option>
+    {% endfor %}
+  </select>
+  <select class="field" name="q_tool">
+    <option value="">所有工具</option>
+    {% for t in distinct_tools %}
+    <option value="{{ t }}" {% if t == q_tool %}selected{% endif %}>{{ t }}</option>
+    {% endfor %}
+  </select>
+  <input class="field" type="search" name="q_filename" value="{{ q_filename }}" placeholder="檔名包含…" style="width:160px;">
+  <input class="field" type="datetime-local" name="q_from" value="{{ q_from }}">
+  <input class="field" type="datetime-local" name="q_to" value="{{ q_to }}">
+  <button class="btn btn-primary" type="submit">{{ icon('search', size=14) }} 篩選</button>
+  <a class="btn" href="/admin/uploads">{{ icon('back', size=14) }} 清除</a>
+</form>
+
+<div class="panel">
+  <p class="muted" style="font-size:12.5px;">
+    共 <b>{{ total }}</b> 筆（本頁累計大小 <b id="ulPageSize">—</b>）；第 {{ page }}/{{ pages }} 頁，每頁 {{ page_size }} 筆
+  </p>
+
+  <table class="uploads-table">
+    <colgroup>
+      <col style="width:160px;"><!-- 時間 -->
+      <col style="width:110px;"><!-- 使用者 -->
+      <col style="width:110px;"><!-- IP -->
+      <col style="width:160px;"><!-- 工具 -->
+      <col><!-- 檔名 -->
+      <col style="width:90px;"><!-- 大小 -->
+      <col style="width:60px;"><!-- 狀態 -->
+    </colgroup>
+    <thead>
+      <tr>
+        <th>時間</th><th>使用者</th><th>IP</th><th>工具</th>
+        <th>檔名</th><th>大小</th><th>狀態</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in uploads %}
+      <tr>
+        <td class="ul-time"><span data-ts="{{ (u.ts*1000)|int }}">—</span></td>
+        <td>{{ u.username }}</td>
+        <td class="muted" style="font-size:11px;">{{ u.ip }}</td>
+        <td><code class="tool-pill">{{ u.tool_id }}</code></td>
+        <td class="ul-name" data-bytes="{{ u.size_bytes }}">
+          {% if u.filenames %}
+            {% for fn in u.filenames %}<div>📄 {{ fn }}</div>{% endfor %}
+            <div class="muted" style="font-size:10.5px;">{{ u.file_count }} 個檔案</div>
+          {% else %}
+            📄 {{ u.filename or '(空)' }}
+          {% endif %}
+          {% if u.action %}<span class="muted" style="font-size:10.5px; margin-left:4px;">· {{ u.action }}</span>{% endif %}
+        </td>
+        <td class="ul-bytes" data-bytes="{{ u.size_bytes }}">—</td>
+        <td>
+          {% if u.status >= 200 and u.status < 300 %}
+            <span style="color:#16a34a; font-weight:600;">{{ u.status }}</span>
+          {% elif u.status >= 400 %}
+            <span style="color:#dc2626; font-weight:600;">{{ u.status }}</span>
+          {% else %}
+            <span class="muted">{{ u.status or '—' }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if pages > 1 %}
+  <div class="pagination" style="margin-top:14px; display:flex; gap:6px; align-items:center;">
+    {% if page > 1 %}
+    <a class="btn btn-small" href="?page={{ page-1 }}&q_user={{ q_user }}&q_tool={{ q_tool }}&q_filename={{ q_filename }}&q_from={{ q_from }}&q_to={{ q_to }}">‹ 上一頁</a>
+    {% endif %}
+    <span style="font-size:12.5px;">{{ page }} / {{ pages }}</span>
+    {% if page < pages %}
+    <a class="btn btn-small" href="?page={{ page+1 }}&q_user={{ q_user }}&q_tool={{ q_tool }}&q_filename={{ q_filename }}&q_from={{ q_from }}&q_to={{ q_to }}">下一頁 ›</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function fmtTs(ts) {
+    const d = new Date(ts);
+    return d.getFullYear() + '/' + pad(d.getMonth()+1) + '/' + pad(d.getDate())
+         + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+  function fmtBytes(n) {
+    if (!n) return '—';
+    if (n < 1024) return n + ' B';
+    if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+    if (n < 1024*1024*1024) return (n/1024/1024).toFixed(2) + ' MB';
+    return (n/1024/1024/1024).toFixed(2) + ' GB';
+  }
+  document.querySelectorAll('.ul-time span[data-ts]').forEach(el => {
+    const ts = parseInt(el.dataset.ts, 10);
+    if (ts) el.textContent = fmtTs(ts);
+  });
+  let pageSum = 0;
+  document.querySelectorAll('.ul-bytes').forEach(td => {
+    const n = parseInt(td.dataset.bytes, 10) || 0;
+    pageSum += n;
+    td.textContent = fmtBytes(n);
+  });
+  document.getElementById('ulPageSize').textContent = fmtBytes(pageSum);
+})();
+</script>
+
+<style>
+  .uploads-filter { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center; }
+  .uploads-filter input, .uploads-filter select {
+    padding:6px 8px; border:1px solid var(--border); border-radius:4px; font:inherit;
+  }
+  .uploads-table { width:100%; border-collapse:collapse; font-size:12.5px; table-layout:fixed; }
+  .uploads-table th, .uploads-table td {
+    padding:5px 8px; border-bottom:1px solid #f3f4f6; vertical-align:top; word-break:break-word;
+  }
+  .uploads-table th { background:#f9fafb; font-size:11px; color:#6b7280; text-align:left; }
+  .uploads-table .ul-time { font-size:11.5px; color:#475569; white-space:nowrap;
+    font-family: ui-monospace, SFMono-Regular, monospace; }
+  .uploads-table .ul-bytes { text-align:right; font-family: ui-monospace, SFMono-Regular, monospace; color:#334155; }
+  .uploads-table .ul-name { line-height:1.45; }
+  .tool-pill { background:#eef2ff; color:#3730a3; padding:1px 7px; border-radius:4px; font-size:11.5px; }
+</style>
+{% endblock %}

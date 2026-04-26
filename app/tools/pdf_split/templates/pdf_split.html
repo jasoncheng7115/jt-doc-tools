@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}PDF 分拆 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('split', size=22) }} 分拆</h1>
+<p class="muted">把 PDF 一頁一份切開，或依範圍切成多份；多檔上傳會分別處理並打包成 ZIP。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">上傳 PDF（單/多檔）</h2>
+  {% with upload_id='spUp', accept='application/pdf', multiple=True %}{% include "components/file_upload.html" %}{% endwith %}
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">分拆方式</h2>
+  <div class="form-row">
+    <label>模式</label>
+    <div class="field option-cards">
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('pages', size=28) }}</span>
+        <span class="opt-label">每頁一份</span>
+        <span class="opt-desc">10 頁 → 10 份</span>
+        <input type="radio" name="mode" value="each" checked />
+      </label>
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('split', size=28) }}</span>
+        <span class="opt-label">依範圍切割</span>
+        <span class="opt-desc">例：1-3, 5, 7-</span>
+        <input type="radio" name="mode" value="ranges" />
+      </label>
+    </div>
+  </div>
+  <div class="form-row" id="ranges-row" hidden>
+    <label>範圍</label>
+    <input id="ranges" class="field" type="text" placeholder="例：1-3, 5, 7-（每段以逗號分隔）" />
+  </div>
+  <button class="btn btn-primary" id="btn-submit">{{ icon('save') }}開始分拆</button>
+  {% with progress_id='jp' %}{% include "components/job_progress.html" %}{% endwith %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script src="/static/js/job_progress.js"></script>
+<script>
+let files = [];
+const fu = new FileUpload(document.getElementById('spUp'), (_first, fs) => { files = Array.isArray(fs)?fs:(fs?[fs]:[]); });
+const jp = new JobProgress(document.getElementById('jp'), { onReset: () => { fu.reset(); files=[]; }});
+document.querySelectorAll('input[name=mode]').forEach(r=>r.addEventListener('change',()=>{
+  document.getElementById('ranges-row').hidden = document.querySelector('input[name=mode]:checked').value !== 'ranges';
+}));
+document.getElementById('btn-submit').addEventListener('click', async () => {
+  if (!files.length) return alert('請先上傳 PDF');
+  const fd = new FormData();
+  for (const f of files) fd.append('file', f);
+  fd.append('mode', document.querySelector('input[name=mode]:checked').value);
+  fd.append('ranges', document.getElementById('ranges').value);
+  const r = await fu.upload('/tools/pdf-split/submit', fd, {processingLabel: '排隊分拆中…'});
+  if (!r.ok) return alert('送出失敗：' + await r.text());
+  const j = await r.json(); jp.track(j.job_id);
+});
+</script>
+{% endblock %}

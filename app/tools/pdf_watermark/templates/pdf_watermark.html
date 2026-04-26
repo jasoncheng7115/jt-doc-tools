@@ -1,0 +1,522 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}PDF 浮水印 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('image', size=22) }} PDF 浮水印</h1>
+<p class="muted">把浮水印 / Logo 印進 PDF。可調透明度、角度，平鋪填滿整頁或只放在指定位置。輸出後浮水印是頁面的一部分，無法被選取移除。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 浮水印來源</h2>
+  <div class="form-row">
+    <label>來源</label>
+    <div class="field option-cards">
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('image', size=28) }}</span>
+        <span class="opt-label">圖片資產</span>
+        <span class="opt-desc">使用浮水印圖檔</span>
+        <input type="radio" name="source" value="asset" checked />
+      </label>
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('text', size=28) }}</span>
+        <span class="opt-label">文字</span>
+        <span class="opt-desc">直接輸入文字</span>
+        <input type="radio" name="source" value="text" />
+      </label>
+    </div>
+  </div>
+
+  <div id="asset-source" class="wm-source-block">
+    <div class="wm-source-block-title">選擇浮水印圖片</div>
+    {% if not assets %}
+      <div class="empty">還沒有任何浮水印資產。請到「<a href="/admin/assets">資產管理</a>」上傳（類型選「浮水印 watermark」），或切到「文字」模式。</div>
+    {% else %}
+    <div class="wm-asset-grid">
+      {% for s in assets %}
+      <label class="wm-asset-card{% if s.id == default_id %} selected{% endif %}">
+        <input type="radio" name="asset" value="{{ s.id }}" {% if s.id == default_id %}checked{% endif %} />
+        <div class="wm-asset-thumb"><img src="/admin/assets/{{ s.id }}/thumb" /></div>
+        <div class="wm-asset-meta">
+          <span class="wm-asset-name">{{ s.name }}</span>
+          <span class="type-chip type-{{ s.type }}">{{ {'stamp':'印章','signature':'簽名','logo':'Logo','watermark':'浮水印'}[s.type] or s.type }}</span>
+        </div>
+      </label>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div id="text-source" class="wm-source-block" hidden>
+    <div class="wm-source-block-title">輸入浮水印文字</div>
+    <div class="form-row">
+      <label>文字</label>
+      <input id="wm-text" class="field" type="text" placeholder="例：機密 / CONFIDENTIAL / DRAFT" />
+    </div>
+    <div class="form-row">
+      <label>顏色</label>
+      <div class="field" style="display:flex; gap:8px; align-items:center;">
+        <input id="wm-text-color" type="color" value="#cc0000" style="width:48px; height:32px; padding:0; border:1px solid var(--border); border-radius:6px;" />
+        <input id="wm-text-color-hex" type="text" value="#cc0000" style="width:96px; padding:4px 8px; font-family: ui-monospace, monospace;" />
+      </div>
+    </div>
+    <div class="form-row">
+      <label>字級 (pt)</label>
+      <div class="field" style="display:flex; gap:10px; align-items:center;">
+        <input id="wm-text-size" type="range" min="12" max="200" value="48" style="flex:1; max-width:280px;" />
+        <input id="wm-text-size-num" type="number" min="12" max="200" value="48" step="2" style="width:80px;" />
+      </div>
+    </div>
+    <div class="form-row">
+      <label>樣式</label>
+      <div class="field" style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
+        <label style="font-weight:normal; display:inline-flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="wm-text-bold" /> <strong>粗體</strong>
+        </label>
+        <label style="font-weight:normal; display:inline-flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="wm-text-italic" /> <em>斜體</em>
+        </label>
+        <label style="font-weight:normal; display:inline-flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="wm-text-underline" /> <span style="text-decoration:underline;">底線</span>
+        </label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">2. 上傳 PDF</h2>
+  {% with upload_id='wmUpload', accept='application/pdf', multiple=True, hint='支援單/多檔；多檔會打包為 ZIP 下載' %}
+    {% include "components/file_upload.html" %}
+  {% endwith %}
+  <div id="batch-list" class="batch-list" hidden></div>
+  <div class="form-row" style="margin-top:12px;">
+    <label>套用頁面</label>
+    <select id="page-mode" class="field" style="max-width:200px;">
+      <option value="all">所有頁</option>
+      <option value="first">僅第一頁</option>
+      <option value="last">僅最後一頁</option>
+    </select>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">3. 浮水印設定</h2>
+  <div class="form-row">
+    <label>模式</label>
+    <div class="field option-cards">
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('tile', size=28) }}</span>
+        <span class="opt-label">平鋪填滿整頁</span>
+        <span class="opt-desc">交錯排列鋪滿頁面</span>
+        <input type="radio" name="mode" value="tile" checked />
+      </label>
+      <label class="option-card">
+        <span class="opt-ic">{{ icon('pin', size=28) }}</span>
+        <span class="opt-label">指定位置</span>
+        <span class="opt-desc">拖曳藍框決定位置</span>
+        <input type="radio" name="mode" value="single" />
+      </label>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>透明度</label>
+    <div class="field" style="display:flex; gap:10px; align-items:center;">
+      <input type="range" id="opacity" min="5" max="100" value="25" style="flex:1;" />
+      <span id="opacity-label" style="width:48px; text-align:right; font-variant-numeric: tabular-nums;">25%</span>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>旋轉角度</label>
+    <div class="field" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <input type="range" id="rotation" min="-180" max="180" value="30" style="flex:1; min-width:200px;" />
+      <input type="number" id="rotation-num" min="-180" max="180" value="30" step="5" style="width:80px;" />
+      <span class="muted" style="font-size:12px;">度</span>
+    </div>
+  </div>
+
+  <div id="tile-fields">
+    <div class="form-row" id="tile-image-size-row">
+      <label>圖片尺寸</label>
+      <div class="field" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <input type="range" id="tile-size" min="10" max="200" step="1" value="60" style="flex:1; min-width:200px; max-width:360px;" />
+        <input type="number" id="tile-size-num" min="10" max="200" step="1" value="60" style="width:80px;" />
+        <span class="muted" style="font-size:12px;">mm（依圖片自動維持比例；文字模式由「字級」決定）</span>
+      </div>
+    </div>
+    <div class="form-row">
+      <label>間距</label>
+      <div class="field" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <input type="range" id="gap-range" min="0" max="200" step="1" value="30" style="flex:1; min-width:200px; max-width:360px;" />
+        <input type="number" id="gap-mm" min="0" max="200" step="1" value="30" style="width:80px;" />
+        <span class="muted" style="font-size:12px;">mm（浮水印之間的水平 / 垂直留白）</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="single-fields" hidden>
+    <p class="muted" style="font-size:12px;">指定位置模式：拖曳藍框決定位置與大小。</p>
+    {% set editor_id='wmEditor' %}
+    {% include "components/drag_position_editor.html" %}
+  </div>
+</div>
+
+<div class="panel" id="sim-panel" hidden>
+  <h2 style="margin-top:0;">即時預覽</h2>
+  <div id="sim-status" class="muted" style="font-size:12px;">產生中…</div>
+  <div id="sim-image-wrap" style="margin-top:8px; background:#e5e7eb; border-radius:6px; padding:16px; display:flex; justify-content:center;">
+    <img id="sim-image" alt="浮水印預覽" style="max-width:100%; max-height:600px; box-shadow:0 4px 20px rgba(0,0,0,.15); background:#fff;" />
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">4. 執行</h2>
+  <button class="btn btn-primary" id="btn-submit">{{ icon('stamp') }}產製合併浮水印</button>
+  {% with progress_id='jobProgress' %}
+    {% include "components/job_progress.html" %}
+  {% endwith %}
+</div>
+
+<style>
+.batch-list { margin-top: 10px; padding: 10px 12px; background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; }
+.batch-list ul { list-style: disc; font-size: 13px; color: #334155; }
+.batch-list li { margin: 2px 0; word-break: break-all; }
+.type-chip { display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; vertical-align: middle; }
+.type-stamp     { background: #fee2e2; color: #b91c1c; }
+.type-signature { background: #dbeafe; color: #1d4ed8; }
+.type-logo      { background: #dcfce7; color: #166534; }
+.type-watermark { background: #ede9fe; color: #6d28d9; }
+
+/* Visually separates the source-content area (asset list / text inputs)
+   from the source-type radio above, so the active source area reads as
+   "the area you're now working in". */
+.wm-source-block {
+  margin-top: 14px; padding: 14px 16px;
+  background: #f8fafc; border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.wm-source-block-title {
+  font-size: 12px; font-weight: 600; color: #64748b;
+  letter-spacing: 0.04em; margin-bottom: 10px;
+  text-transform: none;
+}
+
+/* Compact asset picker — flex layout so a single card doesn't sprawl across
+   the whole row, and selected card gets a clear ring. */
+.wm-asset-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+.wm-asset-card {
+  position: relative; width: 200px; background: #fff;
+  border: 2px solid var(--border); border-radius: 10px; padding: 8px;
+  cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .1s;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.wm-asset-card:hover { border-color: #94a3b8; }
+.wm-asset-card.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.20);
+}
+.wm-asset-card input[type=radio] { position: absolute; opacity: 0; pointer-events: none; }
+.wm-asset-thumb {
+  height: 110px; background: #f8fafc
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14'><rect width='7' height='7' fill='%23eef2f7'/><rect x='7' y='7' width='7' height='7' fill='%23eef2f7'/></svg>");
+  border-radius: 6px; display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.wm-asset-thumb img { max-width: 100%; max-height: 100%; }
+.wm-asset-meta { display: flex; flex-direction: column; gap: 2px; }
+.wm-asset-name { font-weight: 600; font-size: 13px; color: #0f172a; word-break: break-all; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script src="/static/js/job_progress.js"></script>
+<script src="/static/js/drag_position_editor.js"></script>
+<script>
+let pickedFiles = [];
+let editor = null;
+let previewInfo = null;
+
+const fu = new FileUpload(document.getElementById('wmUpload'), async (_first, files) => {
+  pickedFiles = Array.isArray(files) ? files : (files ? [files] : []);
+  renderBatchList();
+  await loadPreviewInfo();
+  refreshSim();
+});
+function renderBatchList() {
+  const box = document.getElementById('batch-list');
+  if (!box) return;
+  if (pickedFiles.length <= 1) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  box.innerHTML = '<div class="muted" style="font-size:12px; margin-bottom:6px;">共 '
+    + pickedFiles.length + ' 份 PDF，將套用相同浮水印設定，完成後打包為 ZIP。</div>'
+    + '<ul style="margin:0; padding-left:18px;">'
+    + pickedFiles.map(f => `<li>${escapeHTML(f.name)}</li>`).join('')
+    + '</ul>';
+}
+function escapeHTML(s){return String(s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function firstFile(){ return pickedFiles[0] || null; }
+
+const progress = new JobProgress(document.getElementById('jobProgress'), {
+  onReset: () => { fu.reset(); pickedFiles = []; renderBatchList(); },
+});
+
+// Slider <-> number sync
+const opacity = document.getElementById('opacity');
+const opacityLabel = document.getElementById('opacity-label');
+opacity.addEventListener('input', () => { opacityLabel.textContent = opacity.value + '%'; refreshSim(); });
+const rot = document.getElementById('rotation');
+const rotNum = document.getElementById('rotation-num');
+rot.addEventListener('input', () => { rotNum.value = rot.value; refreshSim(); });
+rotNum.addEventListener('input', () => { rot.value = rotNum.value; refreshSim(); });
+
+// Tile-size slider <-> number sync
+const tileSize = document.getElementById('tile-size');
+const tileSizeNum = document.getElementById('tile-size-num');
+tileSize.addEventListener('input', () => { tileSizeNum.value = tileSize.value; refreshSim(); });
+tileSizeNum.addEventListener('input', () => { tileSize.value = tileSizeNum.value; refreshSim(); });
+// Gap slider <-> number sync
+const gapRange = document.getElementById('gap-range');
+const gapNum = document.getElementById('gap-mm');
+gapRange.addEventListener('input', () => { gapNum.value = gapRange.value; refreshSim(); });
+gapNum.addEventListener('input', () => { gapRange.value = gapNum.value; refreshSim(); });
+
+document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', async () => {
+  const mode = getMode();
+  document.getElementById('tile-fields').hidden = mode !== 'tile';
+  document.getElementById('single-fields').hidden = mode !== 'single';
+  if (mode === 'single') {
+    // Lazy-init the editor; works for both image and text source.
+    try { await ensureEditor(); } catch(e) {}
+  }
+  refreshSim();
+}));
+
+function getMode(){ return document.querySelector('input[name=mode]:checked').value; }
+
+async function loadPreviewInfo(){
+  const f = firstFile(); if (!f) return null;
+  const fd = new FormData(); fd.append('file', f);
+  const r = await fu.upload('/tools/pdf-watermark/preview', fd, {processingLabel: '產生預覽中…'});
+  if (!r.ok) return null;
+  previewInfo = await r.json();
+  if (editor) {
+    editor.setPaper(previewInfo.paper_w_mm, previewInfo.paper_h_mm);
+    editor.setBackground(previewInfo.preview_url);
+  }
+  return previewInfo;
+}
+
+function getEditorAssetUrl(){
+  const src = getSource();
+  if (src === 'text') {
+    const t = document.getElementById('wm-text').value.trim();
+    if (!t) return null;
+    const params = new URLSearchParams({
+      text: t,
+      color: document.getElementById('wm-text-color').value || '#cc0000',
+      size: document.getElementById('wm-text-size').value || '48',
+      bold: document.getElementById('wm-text-bold').checked,
+      italic: document.getElementById('wm-text-italic').checked,
+      underline: document.getElementById('wm-text-underline').checked,
+    });
+    return `/tools/pdf-watermark/text-png?${params.toString()}&v=${Date.now()}`;
+  }
+  const id = getSelectedAsset();
+  return id ? `/admin/assets/${id}/file?v=${Date.now()}` : null;
+}
+
+// Probe a URL for natural image dimensions, return aspect ratio (w/h) or 1 on failure.
+function probeAspect(url) {
+  return new Promise((resolve) => {
+    if (!url) return resolve(1);
+    const im = new Image();
+    im.onload = () => resolve((im.naturalWidth || 1) / (im.naturalHeight || 1));
+    im.onerror = () => resolve(1);
+    im.src = url;
+  });
+}
+
+// Apply natural image aspect to the editor's value so a wide logo doesn't
+// get squished into a square. Long edge defaults to 60mm.
+async function applyAssetAspectToEditor(url, longEdgeMm = 60) {
+  if (!editor) return;
+  const aspect = await probeAspect(url);
+  let w, h;
+  if (aspect >= 1) { w = longEdgeMm; h = longEdgeMm / aspect; }
+  else             { h = longEdgeMm; w = longEdgeMm * aspect; }
+  editor.value.width_mm = w;
+  editor.value.height_mm = h;
+  editor.aspect = aspect;
+  if (editor.$w) editor.$w.value = w.toFixed(1);
+  if (editor.$h) editor.$h.value = h.toFixed(1);
+  editor._clamp(); editor._render(); editor._emit();
+}
+
+async function ensureEditor(){
+  const url = getEditorAssetUrl();
+  if (!url) { alert(getSource() === 'text' ? '請先輸入浮水印文字' : '請先選擇浮水印圖片'); return; }
+  // Always make sure we have an up-to-date PDF preview to show as the
+  // editor's background — calling loadPreviewInfo() is cheap (cached PNG)
+  // and avoids the case where the user uploaded a new PDF after the
+  // editor was first created.
+  await loadPreviewInfo();
+  if (editor) {
+    editor.setPaper(previewInfo?.paper_w_mm || 210, previewInfo?.paper_h_mm || 297);
+    if (previewInfo?.preview_url) editor.setBackground(previewInfo.preview_url);
+    if (editor.$assetImg) editor.$assetImg.src = url;
+    await applyAssetAspectToEditor(url);
+    return;
+  }
+  editor = new DragPositionEditor({
+    root: document.getElementById('wmEditor'),
+    asset_url: url,
+    paper_w_mm: previewInfo?.paper_w_mm || 210,
+    paper_h_mm: previewInfo?.paper_h_mm || 297,
+    value: { x_mm: 80, y_mm: 130, width_mm: 60, height_mm: 60, rotation_deg: parseFloat(rot.value) || 0 },
+    bg_url: previewInfo?.preview_url || null,
+    lock_aspect: true,
+    onChange: () => refreshSim(),
+  });
+  // Some browsers fire the load event for the bg image before the
+  // constructor finishes binding; force-apply once after init.
+  if (previewInfo?.preview_url) {
+    requestAnimationFrame(() => editor.setBackground(previewInfo.preview_url));
+  }
+  // Adjust initial w/h to match the asset's natural aspect (so wide logos
+  // don't appear squished into a square).
+  await applyAssetAspectToEditor(url);
+}
+
+function getSelectedAsset(){
+  const el = document.querySelector('input[name=asset]:checked');
+  return el ? el.value : null;
+}
+
+function getSource(){ return document.querySelector('input[name=source]:checked').value; }
+
+function buildParams(){
+  const p = {
+    mode: getMode(),
+    opacity: (parseFloat(opacity.value) || 25) / 100,
+    rotation_deg: parseFloat(rot.value) || 0,
+  };
+  if (p.mode === 'tile') {
+    p.tile_size_mm = parseFloat(document.getElementById('tile-size').value) || 60;
+    p.gap_mm = parseFloat(document.getElementById('gap-mm').value) || 0;
+  } else {
+    if (editor) {
+      const v = editor.getValue();
+      p.x_mm = v.x_mm; p.y_mm = v.y_mm;
+      p.width_mm = v.width_mm; p.height_mm = v.height_mm;
+      p.rotation_deg = v.rotation_deg;
+    }
+  }
+  if (getSource() === 'text') {
+    p.text = document.getElementById('wm-text').value || '';
+    p.text_color = document.getElementById('wm-text-color').value || '#cc0000';
+    p.text_size_pt = parseFloat(document.getElementById('wm-text-size').value) || 48;
+    p.text_bold = document.getElementById('wm-text-bold').checked;
+    p.text_italic = document.getElementById('wm-text-italic').checked;
+    p.text_underline = document.getElementById('wm-text-underline').checked;
+  }
+  return p;
+}
+
+let simSeq = 0; let simDebounce = null;
+function refreshSim(){
+  const f = firstFile(); if (!f) { document.getElementById('sim-panel').hidden = true; return; }
+  const src = getSource();
+  if (src === 'asset' && !getSelectedAsset()) { document.getElementById('sim-panel').hidden = true; return; }
+  if (src === 'text' && !document.getElementById('wm-text').value.trim()) { document.getElementById('sim-panel').hidden = true; return; }
+  // Refresh the position editor's draggable image when text params change.
+  if (editor && editor.$assetImg && src === 'text') {
+    const url = getEditorAssetUrl();
+    if (url) editor.$assetImg.src = url;
+  }
+  clearTimeout(simDebounce);
+  simDebounce = setTimeout(async () => {
+    const seq = ++simSeq;
+    const panel = document.getElementById('sim-panel');
+    const status = document.getElementById('sim-status');
+    const img = document.getElementById('sim-image');
+    panel.hidden = false; status.textContent = '產生預覽中…';
+    const fd = new FormData();
+    if (src === 'asset') fd.append('asset_id', getSelectedAsset());
+    fd.append('file', f);
+    fd.append('params', JSON.stringify(buildParams()));
+    try {
+      const r = await fu.upload('/tools/pdf-watermark/preview-watermarked', fd, {processingLabel: '產生預覽中…'});
+      if (seq !== simSeq) return;
+      if (!r.ok) { status.textContent = '預覽產生失敗'; return; }
+      const j = await r.json();
+      img.src = j.preview_url + `?t=${Date.now()}`;
+      status.textContent = `第 1 頁預覽 / 共 ${j.page_count} 頁（依目前設定）`;
+    } catch(e) {
+      if (seq !== simSeq) return;
+      status.textContent = '預覽產生失敗';
+    }
+  }, 300);
+}
+
+document.addEventListener('change', (e) => {
+  if (e.target.matches('input[name=asset]')) {
+    document.querySelectorAll('.wm-asset-card').forEach(c => {
+      const r = c.querySelector('input[name=asset]');
+      c.classList.toggle('selected', !!(r && r.checked));
+    });
+    // 指定位置模式下，editor 的拖曳圖也要立刻換成新選的資產，
+    // 不然會看到舊資產的圖被拖在那裡；同時依新資產的長寬比調整 w/h。
+    if (editor && editor.$assetImg && getSource() === 'asset') {
+      const url = getEditorAssetUrl();
+      if (url) {
+        editor.$assetImg.src = url;
+        applyAssetAspectToEditor(url);
+      }
+    }
+    refreshSim();
+  } else if (e.target.id === 'page-mode') {
+    refreshSim();
+  }
+});
+
+document.getElementById('btn-submit').addEventListener('click', async () => {
+  const src = getSource();
+  if (src === 'asset' && !getSelectedAsset()) return alert('請先選擇浮水印圖片，或切到「文字」模式');
+  if (src === 'text' && !document.getElementById('wm-text').value.trim()) return alert('請輸入浮水印文字');
+  if (!pickedFiles.length) return alert('請先上傳 PDF');
+  const fd = new FormData();
+  if (src === 'asset') fd.append('asset_id', getSelectedAsset());
+  for (const f of pickedFiles) fd.append('file', f);
+  fd.append('params', JSON.stringify(buildParams()));
+  fd.append('page_mode', document.getElementById('page-mode').value);
+  const r = await fu.upload('/tools/pdf-watermark/submit', fd, {processingLabel: '排隊處理浮水印中…'});
+  if (!r.ok) { return alert('送出失敗：' + await r.text()); }
+  const j = await r.json();
+  progress.track(j.job_id);
+});
+
+// Source toggle + text controls
+document.querySelectorAll('input[name=source]').forEach(r => r.addEventListener('change', () => {
+  const src = getSource();
+  document.getElementById('asset-source').hidden = src !== 'asset';
+  document.getElementById('text-source').hidden  = src !== 'text';
+  // 文字模式時不需要圖片尺寸（由字級決定）
+  const sizeRow = document.getElementById('tile-image-size-row');
+  if (sizeRow) sizeRow.hidden = src === 'text';
+  refreshSim();
+}));
+['wm-text-bold','wm-text-italic','wm-text-underline'].forEach(id => {
+  document.getElementById(id).addEventListener('change', refreshSim);
+});
+const wmText = document.getElementById('wm-text');
+const wmColor = document.getElementById('wm-text-color');
+const wmColorHex = document.getElementById('wm-text-color-hex');
+const wmSize = document.getElementById('wm-text-size');
+const wmSizeNum = document.getElementById('wm-text-size-num');
+wmText.addEventListener('input', refreshSim);
+wmColor.addEventListener('input', () => { wmColorHex.value = wmColor.value; refreshSim(); });
+wmColorHex.addEventListener('input', () => {
+  if (/^#[0-9a-fA-F]{6}$/.test(wmColorHex.value)) { wmColor.value = wmColorHex.value; refreshSim(); }
+});
+wmSize.addEventListener('input', () => { wmSizeNum.value = wmSize.value; refreshSim(); });
+wmSizeNum.addEventListener('input', () => { wmSize.value = wmSizeNum.value; refreshSim(); });
+</script>
+{% endblock %}

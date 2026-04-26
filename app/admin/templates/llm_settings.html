@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}LLM 設定 · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="llm-page">
+<h1>{{ icon('gear', size=22) }} LLM 設定 <span class="addon-badge">附加功能</span></h1>
+<p class="muted">
+  視覺 LLM 校驗是<strong>附加功能</strong>，預設關閉。啟用後 pdf-fill 等工具可選擇性地把
+  填寫結果送給本地或 LAN 上的 LLM server (OpenAI-compat) 做品質檢查與學習。
+  本機 / LAN 上需有運行中的 LLM backend (Ollama / vLLM / LM Studio / jan.ai 皆可)。
+</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 啟用</h2>
+  <div class="form-row">
+    <label>狀態</label>
+    <div class="field">
+      <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; font-weight:500;">
+        <input type="checkbox" id="enabled" {% if settings.enabled %}checked{% endif %}>
+        啟用 LLM 校驗
+      </label>
+      <div class="muted" style="font-size:12px; margin-top:4px;">
+        關閉時，所有 LLM 邏輯不會執行，pdf-fill 等工具行為等同於沒裝這個功能。
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">2. 連線資訊</h2>
+  <div class="form-row">
+    <label>Base URL</label>
+    <div class="field" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <input type="text" id="base_url" class="field" style="flex:1; min-width:280px;"
+             value="{{ settings.base_url }}"
+             placeholder="http://localhost:11434/v1" />
+      <button class="btn btn-primary" id="btn-test" type="button">
+        {{ icon('refresh', size=14) }} 測試連線
+      </button>
+    </div>
+  </div>
+  <div class="form-row" id="conn-status-row" hidden>
+    <label></label>
+    <div class="field">
+      <div id="conn-status" style="padding:8px 12px; border-radius:6px; font-size:13px;"></div>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>API Key</label>
+    <div class="field">
+      <input type="password" id="api_key" class="field" style="max-width:400px;"
+             value="{{ settings.api_key or '' }}"
+             placeholder="(空白 — Ollama 不需要)" />
+      <div class="muted" style="font-size:12px; margin-top:4px;">
+        雲端 OpenAI-compat 服務才需要；本地 Ollama / vLLM 留空。
+      </div>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>單次 Timeout</label>
+    <div class="field" style="display:flex; gap:8px; align-items:center;">
+      <input type="number" id="timeout_seconds" min="10" max="600" step="5"
+             value="{{ settings.timeout_seconds }}" style="width:90px;" />
+      <span class="muted" style="font-size:12px;">秒（單次 HTTP call 上限；冷啟動 model 可能要 30-90s）</span>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">3. 模型</h2>
+  <div class="form-row">
+    <label>模型</label>
+    <div class="field" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <select id="model" class="field" style="flex:1; min-width:280px; max-width:400px;">
+        <option value="{{ settings.model }}">{{ settings.model }}</option>
+      </select>
+      <button class="btn" id="btn-refresh-models" type="button">
+        {{ icon('refresh', size=14) }} 重新整理清單
+      </button>
+    </div>
+  </div>
+  <div class="muted" style="font-size:12px; margin-left:160px;">
+    清單會在「測試連線」後從 server 抓取。視覺模型 (vl/vision/llava/gemma 等) 會標 ✨。<br>
+    建議：<b><code>gemma4:26b</code></b>（預設；MoE 架構、4 張廠商表單實測 100% 準、平均 11 秒）、
+    <code>qwen3-vl:8b</code>（低 VRAM 備案；~8GB、筆電部署用）。<br>
+    <span style="color:#b91c1c;">⚠️ gemma4:e4b 對繁中人名/公司名多處誤判（58% 準），qwen3-vl:2b/4b 會 timeout，皆不建議。</span>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">4. 校驗行為</h2>
+  <div class="form-row">
+    <label>預設審查輪數</label>
+    <div class="field" style="display:flex; gap:8px; align-items:center;">
+      <input type="number" id="default_review_rounds" min="1" max="5" step="1"
+             value="{{ settings.default_review_rounds }}" style="width:80px;" />
+      <span class="muted" style="font-size:12px;">輪 (1-5)；每輪是一次 LLM 來回</span>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>Confidence 門檻</label>
+    <div class="field" style="display:flex; gap:8px; align-items:center;">
+      <input type="number" id="confidence_threshold" min="0.5" max="1.0" step="0.05"
+             value="{{ settings.confidence_threshold }}" style="width:80px;" />
+      <span class="muted" style="font-size:12px;">(0.0-1.0) — 影響自動採納門檻（UI 顯示全部）</span>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>連續 N 次同錯才接受</label>
+    <div class="field" style="display:flex; gap:8px; align-items:center;">
+      <input type="number" id="consecutive_required" min="1" max="3" step="1"
+             value="{{ settings.consecutive_required }}" style="width:80px;" />
+      <span class="muted" style="font-size:12px;">保守規則，避免 LLM 抖動造成誤改</span>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>整體 Timeout</label>
+    <div class="field" style="display:flex; gap:8px; align-items:center;">
+      <input type="number" id="overall_timeout_seconds" min="30" max="600" step="10"
+             value="{{ settings.overall_timeout_seconds }}" style="width:90px;" />
+      <span class="muted" style="font-size:12px;">秒 — review loop 上限，避免死循環</span>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">5. 除錯</h2>
+  <div class="form-row">
+    <label>Debug log</label>
+    <div class="field">
+      <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" id="debug_log" {% if settings.debug_log %}checked{% endif %}>
+        儲存送 LLM 的 PNG 與回應 JSON
+      </label>
+      <div class="muted" style="font-size:12px; margin-top:4px;">
+        儲存於 <code>data/llm_debug/</code>，方便排錯。會佔用磁碟空間，使用時記得手動清理。
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:16px; display:flex; gap:8px;">
+  <button class="btn btn-primary" id="btn-save">{{ icon('save') }}儲存</button>
+  <a class="btn" href="/admin">{{ icon('back') }}回管理</a>
+</div>
+</div><!-- /.llm-page -->
+
+<style>
+.addon-badge {
+  display:inline-block; padding:2px 8px; margin-left:8px;
+  background:#fef3c7; color:#92400e;
+  border-radius:10px; font-size:12px; font-weight:600; vertical-align:middle;
+}
+.conn-ok   { background:#d1fae5; color:#065f46; border:1px solid #6ee7b7; }
+.conn-fail { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
+.conn-pend { background:#dbeafe; color:#1e40af; border:1px solid #93c5fd; }
+/* Override platform.css `.form-row input[type=number] { flex: 1 }` so our
+   small numeric inputs stay 80px wide and unit/hint text sits next to them. */
+.llm-page .form-row input[type=number] { flex: 0 0 auto; max-width: 90px; }
+.llm-page .form-row input[type=text]   { flex: 1 1 auto; }
+.llm-page .form-row label              { min-width: 160px; width: auto; }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function testConnection() {
+  const status = $('conn-status');
+  const row    = $('conn-status-row');
+  row.hidden = false;
+  status.className = 'conn-pend';
+  status.textContent = '連線中…';
+
+  const body = {
+    base_url:        $('base_url').value.trim(),
+    api_key:         $('api_key').value.trim() || null,
+    timeout_seconds: parseFloat($('timeout_seconds').value) || 10,
+  };
+
+  try {
+    const r = await fetch('/admin/api/llm/test-connection', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (!j.ok) {
+      status.className = 'conn-fail';
+      status.textContent = `❌ ${j.error || '連線失敗'}`;
+      return;
+    }
+    status.className = 'conn-ok';
+    status.innerHTML = `✅ 已連線（${j.latency_ms}ms） — 找到 ${j.models.length} 個模型`;
+    fillModelDropdown(j.models);
+  } catch (e) {
+    status.className = 'conn-fail';
+    status.textContent = `❌ ${e.message}`;
+  }
+}
+
+function fillModelDropdown(models) {
+  const sel = $('model');
+  const current = sel.value;  // preserve current selection if still in list
+  sel.innerHTML = '';
+
+  // Sort: vision models first, alphabetical within each group
+  const vision = models.filter(m => m.looks_vision).sort((a,b)=>a.id.localeCompare(b.id));
+  const others = models.filter(m => !m.looks_vision).sort((a,b)=>a.id.localeCompare(b.id));
+
+  if (vision.length) {
+    const grp = document.createElement('optgroup');
+    grp.label = '✨ 視覺模型（推薦）';
+    vision.forEach(m => grp.appendChild(makeOpt(m)));
+    sel.appendChild(grp);
+  }
+  if (others.length) {
+    const grp = document.createElement('optgroup');
+    grp.label = '其他模型（可能不支援圖片）';
+    others.forEach(m => grp.appendChild(makeOpt(m)));
+    sel.appendChild(grp);
+  }
+  if (!vision.length && !others.length) {
+    const o = document.createElement('option');
+    o.textContent = '(server 上沒有任何模型)';
+    o.disabled = true;
+    sel.appendChild(o);
+  }
+
+  // Restore selection if still available
+  if ([...sel.options].some(o => o.value === current)) {
+    sel.value = current;
+  }
+}
+
+function makeOpt(m) {
+  const o = document.createElement('option');
+  o.value = m.id;
+  let label = m.id;
+  if (m.size_bytes) label += `  (${(m.size_bytes/1024**3).toFixed(1)} GB)`;
+  o.textContent = label;
+  return o;
+}
+
+async function refreshModels() {
+  // Use saved settings (i.e. /api/llm/models endpoint)
+  const status = $('conn-status');
+  const row    = $('conn-status-row');
+  row.hidden = false;
+  status.className = 'conn-pend';
+  status.textContent = '抓取模型清單…';
+
+  try {
+    const r = await fetch('/admin/api/llm/models');
+    const j = await r.json();
+    if (!j.ok) {
+      status.className = 'conn-fail';
+      status.textContent = `❌ ${j.error || '抓取失敗'} — 請先測試連線並儲存`;
+      return;
+    }
+    fillModelDropdown(j.models);
+    status.className = 'conn-ok';
+    status.textContent = `✅ 找到 ${j.models.length} 個模型`;
+  } catch (e) {
+    status.className = 'conn-fail';
+    status.textContent = `❌ ${e.message}`;
+  }
+}
+
+async function saveSettings() {
+  const body = {
+    enabled:                  $('enabled').checked,
+    base_url:                 $('base_url').value.trim(),
+    api_key:                  $('api_key').value.trim() || null,
+    model:                    $('model').value,
+    timeout_seconds:          parseFloat($('timeout_seconds').value),
+    default_review_rounds:    parseInt($('default_review_rounds').value),
+    confidence_threshold:     parseFloat($('confidence_threshold').value),
+    consecutive_required:     parseInt($('consecutive_required').value),
+    overall_timeout_seconds:  parseFloat($('overall_timeout_seconds').value),
+    debug_log:                $('debug_log').checked,
+  };
+  const r = await fetch('/admin/api/llm/settings', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    alert('儲存失敗');
+    return;
+  }
+  if (window.showToast) window.showToast('已儲存', 'ok');
+  else alert('已儲存');
+}
+
+$('btn-test').addEventListener('click', testConnection);
+$('btn-refresh-models').addEventListener('click', refreshModels);
+$('btn-save').addEventListener('click', saveSettings);
+</script>
+{% endblock %}

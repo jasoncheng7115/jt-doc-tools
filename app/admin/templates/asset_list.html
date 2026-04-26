@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}資產管理 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('image', size=22) }} 資產管理</h1>
+<p class="muted">管理所有工具會用到的圖片資產（印章、浮水印、簽名、Logo）。</p>
+
+<details class="panel" open>
+  <summary>新增資產</summary>
+  <form method="post" action="/admin/assets/upload" enctype="multipart/form-data" id="assetUploadForm">
+    {% with upload_id='assetUpload', accept='image/png,image/jpeg', input_name='file', hint='PNG（建議帶透明背景）或 JPEG' %}
+      {% include "components/file_upload.html" %}
+    {% endwith %}
+    <div class="form-row">
+      <label>名稱</label>
+      <input class="field" type="text" name="name" required placeholder="例：公司報價章" />
+    </div>
+    <div class="form-row">
+      <label>類型</label>
+      <select class="field" name="type">
+        <option value="stamp">印章 stamp</option>
+        <option value="watermark">浮水印 watermark</option>
+        <option value="signature">簽名 signature</option>
+        <option value="logo">Logo</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <label>去背</label>
+      <label class="field" style="font-weight:normal;display:inline-flex;align-items:center;gap:6px;">
+        <input type="checkbox" name="remove_bg" value="true" />
+        白底自動轉透明（掃描件／手機拍攝的簽名或印章適用）
+      </label>
+    </div>
+    <div class="form-row">
+      <label></label>
+      <div class="field" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-primary" type="submit" id="assetUploadBtn" disabled>{{ icon('upload') }}上傳</button>
+        <span class="muted" style="font-size:12px;">建議 PNG 帶透明背景；上傳後可在編輯頁調整預設位置與尺寸。</span>
+      </div>
+    </div>
+  </form>
+</details>
+
+<h2 style="display:flex;align-items:center;gap:10px;">
+  現有資產
+  <span style="flex:1;"></span>
+  <a class="btn btn-small" href="/admin/assets/export" download>{{ icon('download') }}匯出 ZIP</a>
+  <button class="btn btn-small" id="assetImportMergeBtn" type="button" title="保留現有資產，把匯入檔的資產通通新增進來（id 重複會自動分配新 id）">{{ icon('upload') }}匯入（合併）</button>
+  <button class="btn btn-small btn-danger" id="assetImportReplaceBtn" type="button" title="清掉現有所有資產，整個換成匯入檔內容（不可還原）">{{ icon('upload') }}匯入（取代）</button>
+  <input type="file" id="assetImportFile" accept="application/zip,.zip" style="display:none">
+</h2>
+<div class="asset-list">
+  {% for a in assets %}
+  <div class="asset-item">
+    <div class="thumb">
+      <img src="/admin/assets/{{ a.id }}/thumb?v={{ a.updated_at|default(0) }}" alt="{{ a.name }}"
+           data-zoom-src="/admin/assets/{{ a.id }}/file?v={{ a.updated_at|default(0) }}" data-zoom-name="{{ a.name }}"
+           title="點一下放大檢視" />
+    </div>
+    <div class="name">{{ a.name }} {% if a.is_default %}<span class="badge-default">預設</span>{% endif %}</div>
+    <div class="meta">{{ a.type }} · {{ '%.0f'|format(a.preset.width_mm) }}×{{ '%.0f'|format(a.preset.height_mm) }} mm</div>
+    <div class="actions">
+      <a class="btn btn-small" href="/admin/assets/{{ a.id }}/edit">{{ icon('edit') }}編輯</a>
+      <a class="btn btn-small" href="/admin/assets/{{ a.id }}/file" download="{{ a.name }}.png">{{ icon('download') }}下載</a>
+      {% if not a.is_default %}
+      <button class="btn btn-small" data-act="default" data-id="{{ a.id }}">{{ icon('star') }}設為預設</button>
+      {% endif %}
+      <button class="btn btn-small btn-danger" data-act="delete" data-id="{{ a.id }}">{{ icon('trash') }}刪除</button>
+    </div>
+  </div>
+  {% else %}
+  <div class="empty">尚未上傳任何資產。</div>
+  {% endfor %}
+</div>
+
+<div id="asset-lightbox" class="lightbox" hidden>
+  <div class="lightbox-inner">
+    <img id="lightbox-img" alt="" />
+    <div class="lightbox-caption" id="lightbox-caption"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+// Wire drop-zone → submit button
+(function(){
+  const root = document.getElementById('assetUpload');
+  const btn = document.getElementById('assetUploadBtn');
+  const nameInput = document.querySelector('#assetUploadForm input[name="name"]');
+  if (!root || !btn) return;
+  const fu = new FileUpload(root, (f) => {
+    btn.disabled = false;
+    if (nameInput && !nameInput.value) {
+      nameInput.value = f.name.replace(/\.[^.]+$/, '');
+    }
+  });
+})();
+</script>
+<script>
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (btn) {
+    const id = btn.dataset.id;
+    if (btn.dataset.act === 'default') {
+      await fetch(`/admin/assets/${id}/default`, { method: 'POST' });
+      location.reload();
+    } else if (btn.dataset.act === 'delete') {
+      if (!confirm('確定刪除這個資產？')) return;
+      await fetch(`/admin/assets/${id}/delete`, { method: 'POST' });
+      location.reload();
+    }
+    return;
+  }
+  const thumb = e.target.closest('.thumb img[data-zoom-src]');
+  if (thumb) {
+    const lb = document.getElementById('asset-lightbox');
+    document.getElementById('lightbox-img').src = thumb.dataset.zoomSrc;
+    document.getElementById('lightbox-caption').textContent = thumb.dataset.zoomName || '';
+    lb.hidden = false;
+    return;
+  }
+  const lb = document.getElementById('asset-lightbox');
+  if (lb && !lb.hidden && e.target.closest('#asset-lightbox')) {
+    lb.hidden = true;
+    document.getElementById('lightbox-img').src = '';
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const lb = document.getElementById('asset-lightbox');
+    if (lb && !lb.hidden) {
+      lb.hidden = true;
+      document.getElementById('lightbox-img').src = '';
+    }
+  }
+});
+
+// ---------- 資產匯入 ----------
+const assetImportFile = document.getElementById('assetImportFile');
+let pendingAssetMode = 'merge';
+
+document.getElementById('assetImportMergeBtn').addEventListener('click', () => {
+  pendingAssetMode = 'merge';
+  assetImportFile.value = '';
+  assetImportFile.click();
+});
+
+document.getElementById('assetImportReplaceBtn').addEventListener('click', async () => {
+  const ok = await showConfirm(
+    '「整個取代」會刪掉現有所有資產（包含 PNG 檔），只保留匯入檔的內容。\n這個動作不可還原，確定要繼續？',
+    { title: '確認整個取代', kind: 'danger', okText: '我確定，繼續', cancelText: '取消' }
+  );
+  if (!ok) return;
+  pendingAssetMode = 'replace';
+  assetImportFile.value = '';
+  assetImportFile.click();
+});
+
+assetImportFile.addEventListener('change', async () => {
+  const f = assetImportFile.files[0];
+  if (!f) return;
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('mode', pendingAssetMode);
+  const res = await fetch('/admin/assets/import', { method: 'POST', body: fd });
+  assetImportFile.value = '';
+  if (!res.ok) {
+    showToast('匯入失敗：' + (await res.text()), 'err');
+    return;
+  }
+  const j = await res.json();
+  showToast(`匯入完成：新增 ${j.added} 筆，目前共 ${j.total} 筆`, 'ok');
+  setTimeout(() => location.reload(), 900);
+});
+</script>
+{% endblock %}

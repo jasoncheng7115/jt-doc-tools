@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}隱藏內容掃描 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.hs-cat { background:#fff; border:1px solid #e5e7eb; border-radius:8px;
+  padding: 10px 14px; margin-top: 10px; }
+.hs-cat-head { display:flex; align-items:center; gap:8px;
+  font-weight: 600; font-size: 14px; color:#0f172a; }
+.hs-cat .count { display:inline-block; padding: 1px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; }
+.hs-cat.ok { border-color:#86efac; background:#ecfdf5; }
+.hs-cat.ok .count { background:#059669; color:#fff; }
+.hs-cat.warn { border-color:#fcd34d; background:#fef3c7; }
+.hs-cat.warn .count { background:#d97706; color:#fff; }
+.hs-cat.alert { border-color:#fecaca; background:#fef2f2; }
+.hs-cat.alert .count { background:#dc2626; color:#fff; }
+.hs-cat .desc { font-size: 12px; color:#475569; margin: 4px 0; }
+.hs-cat .items { margin-top: 6px; max-height: 180px; overflow: auto;
+  border:1px solid rgba(0,0,0,0.06); border-radius:4px; background:#fff;
+  font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color:#334155; }
+.hs-cat .items div { padding: 3px 8px; border-bottom:1px solid #f1f5f9; }
+.hs-cat .items div:last-child { border-bottom: none; }
+.hs-cat label { display:inline-flex; align-items:center; gap:6px;
+  font-size: 12.5px; margin-top: 6px; color:#0f172a; cursor: pointer; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('search', size=22) }} 隱藏內容掃描</h1>
+<p class="muted">找出 PDF 中可能造成資安風險的隱藏內容：JavaScript、嵌入檔、外部連結、白字文字、頁面外文字、3D / 多媒體、註解等。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳 PDF</h2>
+  {% with upload_id='hsUp', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+</div>
+
+<div class="panel" id="resultPanel" hidden>
+  <h2 style="margin-top:0;">2. 掃描結果</h2>
+  <p class="muted" style="font-size:12px;">勾選要一併清除的類別，底下按鈕產生清除後的 PDF。</p>
+  <div id="hsCats"></div>
+  <div style="margin-top:12px;">
+    <button class="btn btn-primary" id="btnClean">{{ icon('trash', size=14) }} 清除勾選項目並下載</button>
+    <button class="btn" id="btnCleanAll" style="margin-left:6px;">全部清除</button>
+    <span id="cleanStatus" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
+  </div>
+</div>
+
+<div class="panel" id="dlPanel" hidden style="background:#ecfdf5; border-color:#86efac;">
+  <h3 style="margin:0 0 8px; color:#064e3b;">清除完成</h3>
+  <div id="dlSummary" style="font-size:13px; color:#065f46; margin-bottom:10px;"></div>
+  <a class="btn btn-primary" id="dlLink" href="#">{{ icon('download') }} 下載清除後的 PDF</a>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let uploadId = null;
+let lastFindings = null;
+
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+const CATS = [
+  { key:'js',          strip:'js',          title:'JavaScript 動作',        severity:'alert',
+    desc:'PDF 開檔自動執行或使用者互動時觸發的 JS。多半不是正常需求，建議清除。',
+    list:(f)=>f.js_events.map(x=>`[${x.scope}] ${x.kind} — ${esc(x.detail)}`) },
+  { key:'embeds',      strip:'embeds',      title:'嵌入檔案 (EmbeddedFiles)', severity:'alert',
+    desc:'PDF 可以藏任何檔案（.exe / .js / 另一份 PDF）。外送前應清除或改用「附件萃取」手動取出審查。',
+    list:(f)=>f.embeds.map(x=>`📎 ${esc(x.name)} ${x.size?`(${x.size} bytes)`:''}`) },
+  { key:'uri',         strip:'uri',         title:'外部連結 (URI)',          severity:'warn',
+    desc:'可連結到外部網站。若敏感文件，建議視情況清除。',
+    list:(f)=>f.uri_links.map(x=>`p.${x.page} → ${esc(x.uri)}`) },
+  { key:'launch',      strip:'launch',      title:'啟動外部程式 (Launch)',   severity:'alert',
+    desc:'點擊會啟動外部檔案或程式。幾乎都是可疑內容，請清除。',
+    list:(f)=>f.launch_actions.map(x=>`p.${x.page} → ${esc(x.target)}`) },
+  { key:'hidden_text', strip:'hidden_text', title:'隱藏文字',                severity:'warn',
+    desc:'白底白字 / 字級 0 / 頁面外文字 — 通常是沒清乾淨的草稿，可能夾帶敏感資料。',
+    list:(f)=>f.hidden_text.map(x=>`p.${x.page} [${x.reason}] ${esc(x.text)}`) },
+  { key:'annots',      strip:'annots',      title:'註解 / 標記',             severity:'warn',
+    desc:'內含作者姓名、修改記錄；外送前常要清掉。',
+    list:(f)=>f.annot_details.map(x=>`p.${x.page} · ${x.type} ${x.author?`(${esc(x.author)})`:''} ${x.content?'— '+esc(x.content):''}`) },
+  { key:'3d',          strip:'3d',          title:'3D / 多媒體',             severity:'warn',
+    desc:'3D 物件、影片、RichMedia — 通常不必要，且增加檔案大小與攻擊面。',
+    list:(f)=>f.threed_multi.map(x=>`p.${x.page}`) },
+];
+
+const fu = new FileUpload($('hsUp'), async (f) => {
+  if (!f) { $('resultPanel').hidden = true; return; }
+  $('dlPanel').hidden = true;
+  $('resultPanel').hidden = false;
+  $('hsCats').innerHTML = '<div class="muted">掃描中…</div>';
+  const fd = new FormData(); fd.append('file', f);
+  const r = await fu.upload('/tools/pdf-hidden-scan/scan', fd, {processingLabel: '掃描隱藏內容中…'});
+  if (!r.ok) { $('hsCats').innerHTML = '<span style="color:#b91c1c;">失敗：' + await r.text() + '</span>'; return; }
+  const d = await r.json();
+  uploadId = d.upload_id;
+  lastFindings = d.findings;
+  let html = '';
+  let anyAlert = false;
+  for (const cat of CATS) {
+    const items = cat.list(d.findings);
+    const n = items.length;
+    const cls = n === 0 ? 'ok' : cat.severity;
+    if (n > 0 && cat.severity === 'alert') anyAlert = true;
+    html += `<div class="hs-cat ${cls}">
+      <div class="hs-cat-head">
+        ${cat.title}
+        <span class="count">${n}</span>
+      </div>
+      <div class="desc">${cat.desc}</div>`;
+    if (n > 0) {
+      html += `<div class="items">${items.map(s=>`<div>${s}</div>`).join('')}</div>`;
+      html += `<label><input type="checkbox" class="strip-chk" value="${cat.strip}" ${cat.severity==='alert'?'checked':''}> 清除這個類別（${n} 項）</label>`;
+    }
+    html += `</div>`;
+  }
+  $('hsCats').innerHTML = html;
+});
+
+async function runClean(all) {
+  if (!uploadId) return;
+  let strip;
+  if (all) strip = CATS.map(c => c.strip);
+  else strip = Array.from(document.querySelectorAll('.strip-chk:checked')).map(c => c.value);
+  if (!strip.length) return alert('請至少勾選一個類別');
+  $('cleanStatus').textContent = '清除中…';
+  const r = await fetch('/tools/pdf-hidden-scan/clean', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({upload_id: uploadId, strip}),
+  });
+  if (!r.ok) { $('cleanStatus').textContent = '失敗：' + await r.text(); return; }
+  const d = await r.json();
+  $('cleanStatus').textContent = '完成';
+  const rm = d.removed || {};
+  $('dlSummary').textContent =
+    '已清除：' + Object.entries(rm).filter(([_,v])=>v>0).map(([k,v])=>`${k} ${v}`).join('　·　');
+  $('dlLink').href = d.download_url;
+  $('dlPanel').hidden = false;
+  $('dlPanel').scrollIntoView({behavior:'smooth', block:'end'});
+}
+$('btnClean').addEventListener('click', () => runClean(false));
+$('btnCleanAll').addEventListener('click', () => runClean(true));
+</script>
+{% endblock %}
