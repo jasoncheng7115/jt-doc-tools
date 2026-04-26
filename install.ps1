@@ -116,7 +116,10 @@ function Install-Uv {
     # uv 官方 PowerShell 安裝腳本，限定安裝目錄
     $env:UV_INSTALL_DIR = $BinDir
     $env:UV_NO_MODIFY_PATH = '1'
-    Invoke-Expression (Invoke-WebRequest -UseBasicParsing https://astral.sh/uv/install.ps1).Content
+    # 注意：astral.sh/uv/install.ps1 走 application/octet-stream，PS 5.1 的
+    # iwr.Content 會回 byte[]，iex 會炸 "無法將 byte[] 轉換為 String"。
+    # 用 irm (Invoke-RestMethod) 才會自動 UTF-8 解碼成 string。
+    Invoke-Expression (Invoke-RestMethod -Uri 'https://astral.sh/uv/install.ps1')
     if (-not (Test-Path $UvExe)) { Die "uv 安裝失敗" }
     Ok "uv 安裝在 $UvExe"
 }
