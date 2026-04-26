@@ -136,8 +136,27 @@ function Install-Nssm {
     Log "下載 NSSM (Windows Service wrapper) ..."
     New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
     $tmp = Join-Path $env:TEMP "nssm.zip"
-    # NSSM 2.24 是最後正式版，仍是最穩的：
-    Invoke-WebRequest -Uri 'https://nssm.cc/release/nssm-2.24.zip' -OutFile $tmp
+    # NSSM 2.24 是最後正式版。nssm.cc 偶爾 503，準備多個 mirror。
+    $urls = @(
+        'https://nssm.cc/release/nssm-2.24.zip',
+        'https://web.archive.org/web/2024/https://nssm.cc/release/nssm-2.24.zip',
+        'https://github.com/jasoncheng7115/jt-doc-tools/releases/download/deps/nssm-2.24.zip'
+    )
+    $ok = $false
+    foreach ($url in $urls) {
+        Log "  嘗試 $url"
+        for ($i = 0; $i -lt 3; $i++) {
+            try {
+                (New-Object Net.WebClient).DownloadFile($url, $tmp)
+                if ((Get-Item $tmp).Length -gt 100000) { $ok = $true; break }
+            } catch {
+                Warn "    第 $($i+1) 次失敗：$($_.Exception.Message.Split([Environment]::NewLine)[0])"
+                Start-Sleep -Seconds 2
+            }
+        }
+        if ($ok) { Ok "  下載成功"; break }
+    }
+    if (-not $ok) { Die "NSSM 下載失敗（所有 mirror 都連不上）。請稍後重試，或手動下載 nssm-2.24.zip 放到 $tmp 後再跑一次。" }
     $extractDir = Join-Path $env:TEMP "nssm-extract"
     if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
     Expand-Archive -Path $tmp -DestinationPath $extractDir -Force
