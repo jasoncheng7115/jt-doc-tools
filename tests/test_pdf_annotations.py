@@ -1,0 +1,253 @@
+"""Tests for the pdf-annotations tool."""
+from __future__ import annotations
+
+import io
+import json
+
+import fitz
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+
+def _make_pdf_with_annots() -> bytes:
+    """Build a 3-page PDF with several user-facing annotations."""
+    doc = fitz.open()
+    p1 = doc.new_page(width=595, height=842)
+    p1.insert_text((50, 80), "First page text — a contract clause.", fontsize=12, fontname="helv")
+    a = p1.add_text_annot((40, 70), "請修改金額")
+    a.set_info(content="請修改金額", title="Jason")
+    a.update()
+
+    h = p1.add_highlight_annot(fitz.Rect(50, 70, 250, 90))
+    h.set_info(content="", title="Jason")  # highlight, content recovered from text
+    h.update()
+
+    p2 = doc.new_page(width=595, height=842)
+    p2.insert_text((50, 80), "Second page about legal review.", fontsize=12, fontname="helv")
+    a2 = p2.add_text_annot((40, 70), "這段需法務確認")
+    a2.set_info(content="這段需法務確認", title="Mary", subject="Legal")
+    a2.update()
+
+    p3 = doc.new_page(width=595, height=842)
+    p3.insert_text((50, 80), "Third page placeholder.", fontsize=12, fontname="helv")
+    # no annotation on p3
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    doc.close()
+    return buf.getvalue()
+
+
+def _make_blank_pdf() -> bytes:
+    doc = fitz.open()
+    doc.new_page(width=595, height=842)
+    buf = io.BytesIO()
+    doc.save(buf)
+    doc.close()
+    return buf.getvalue()
+
+
+@pytest.fixture
+def client():
+    return TestClient(app)
+
+
+# ---------- index ----------
+
+def test_index_renders(client):
+    r = client.get("/tools/pdf-annotations/")
+    assert r.status_code == 200
+    assert "註解整理" in r.text
+
+
+# ---------- analyze ----------
+
+def test_analyze_returns_summary_and_annots(client):
+    r = client.post(
+        "/tools/pdf-annotations/analyze",
+        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
+    )
+    assert r.status_code == 200
+    j = r.json()
+    assert j["page_count"] == 3
+    assert j["filename"] == "doc.pdf"
+    assert j["summary"]["total"] == 3            # 2 text annots + 1 highlight
+    assert j["summary"]["pages_with_annot"] == 2
+    authors = {x["author"] for x in j["summary"]["by_author"]}
+    assert authors == {"Jason", "Mary"}
+    types = {x["label"] for x in j["summary"]["by_type"]}
+    assert {"文字註解", "螢光筆"}.issubset(types)
+
+
+def test_analyze_recovers_highlight_text(client):
+    """Highlights typically have empty content. We recover text via quad rects."""
+    r = client.post(
+        "/tools/pdf-annotations/analyze",
+        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
+    )
+    annots = r.json()["annots"]
+    highlights = [a for a in annots if a["type"] == "Highlight"]
+    assert highlights
+    # The highlight covers some of "First page text — a contract clause."
+    # content should now contain at least part of that text.
+    assert highlights[0]["content"]
+
+
+def test_analyze_rejects_non_pdf(client):
+    r = client.post(
+        "/tools/pdf-annotations/analyze",
+        files={"file": ("note.txt", b"hello", "text/plain")},
+    )
+    assert r.status_code == 400
+
+
+def test_analyze_rejects_empty_pdf(client):
+    r = client.post(
+        "/tools/pdf-annotations/analyze",
+        files={"file": ("empty.pdf", b"", "application/pdf")},
+    )
+    assert r.status_code == 400
+
+
+def test_analyze_blank_pdf_has_zero_annots(client):
+    r = client.post(
+        "/tools/pdf-annotations/analyze",
+        files={"file": ("blank.pdf", _make_blank_pdf(), "application/pdf")},
+    )
+    assert r.status_code == 200
+    j = r.json()
+    assert j["summary"]["total"] == 0
+    assert j["annots"] == []
+
+
+def test_api_alias_works(client):
+    r = client.post(
+        "/tools/pdf-annotations/api/pdf-annotations",
+        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
+    )
+    assert r.status_code == 200
+    assert r.json()["summary"]["total"] == 3
+
+
+# ---------- export-csv ----------
+
+def test_export_csv_full(client):
+    r = client.post(
+        "/tools/pdf-annotations/export-csv",
+        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
+    )
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/csv")
+    text = r.content.decode("utf-8-sig")
+    rows = [ln for ln in text.splitlines() if ln.strip()]
+    assert rows[0].startswith("page,type,")
+    assert len(rows) == 1 + 3  # header + 3 annots
+
+
+def test_export_csv_filter_by_author(client):
+    r = client.post(
+        "/tools/pdf-annotations/export-csv",
+        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
+        data={"authors": "Mary"},
+    )
+    assert r.status_code == 200
+    text = r.content.decode("utf-8-sig")
+    rows = [ln for ln in text.splitlines() if ln.strip()]
+    assert len(rows) == 1 + 1  # only Mary's
+    assert "Mary" in rows[1]
+
+
+def test_export_csv_filter_by_type(client):
+    r = client.post(
+        "/tools/pdf-annotations/export-csv",
+        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
+        data={"types": "Text"},  # exclude highlight
+    )
+    assert r.status_code == 200
+    text = r.content.decode("utf-8-sig")
+    rows = [ln for ln in text.splitlines() if ln.strip()]
+    # 2 text annots, no highlight
+    assert len(rows) == 1 + 2
+
+
+def test_export_csv_filename_handles_cjk(client):
+    r = client.post(
+        "/tools/pdf-annotations/export-csv",
+        files={"file": ("中文檔名.pdf", _make_pdf_with_annots(), "application/pdf")},
+    )
+    assert r.status_code == 200
+    cd = r.headers.get("content-disposition", "")
+    assert "filename*=" in cd or "filename=" in cd
+
+
+# ---------- export-review (Markdown) ----------
+
+def test_export_review_groups_by_page(client):
+    r = client.post(
+        "/tools/pdf-annotations/export-review",
+        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
+        data={"group_by": "page"},
+    )
+    assert r.status_code == 200
+    md = r.content.decode("utf-8")
+    assert "# 註解審閱報告" in md
+    assert "## 第 1 頁" in md
+    assert "## 第 2 頁" in md
+
+
+def test_export_review_groups_by_author(client):
+    r = client.post(
+        "/tools/pdf-annotations/export-review",
+        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
+        data={"group_by": "author"},
+    )
+    assert r.status_code == 200
+    md = r.content.decode("utf-8")
+    assert "## Jason" in md
+    assert "## Mary" in md
+
+
+# ---------- export-todo ----------
+
+def test_export_todo_markdown_has_checkboxes(client):
+    r = client.post(
+        "/tools/pdf-annotations/export-todo",
+        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
+        data={"fmt": "md"},
+    )
+    assert r.status_code == 200
+    md = r.content.decode("utf-8")
+    assert "# 待辦清單" in md
+    assert "- [ ]" in md
+    # 3 todo lines
+    assert md.count("- [ ]") == 3
+
+
+def test_export_todo_csv(client):
+    r = client.post(
+        "/tools/pdf-annotations/export-todo",
+        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
+        data={"fmt": "csv"},
+    )
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/csv")
+    text = r.content.decode("utf-8-sig")
+    rows = [ln for ln in text.splitlines() if ln.strip()]
+    assert rows[0].startswith("status,page,todo,")
+    assert len(rows) == 1 + 3
+
+
+# ---------- export-json ----------
+
+def test_export_json_returns_full_payload(client):
+    r = client.post(
+        "/tools/pdf-annotations/export-json",
+        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
+    )
+    assert r.status_code == 200
+    j = json.loads(r.content.decode("utf-8"))
+    assert j["page_count"] == 3
+    assert j["summary"]["total"] == 3
+    assert isinstance(j["annots"], list)

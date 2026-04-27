@@ -4,6 +4,23 @@
 
 ---
 
+## [1.1.52] - 2026-04-27
+
+### 新增(三個 PDF 註解相關工具)
+
+- **註解整理 `pdf-annotations`**(內容擷取):擷取 PDF 中所有註解(螢光筆 / 文字註解 / 圖章 / 自由文字 / 手繪 / 底線 / 刪除線 / 檔案附件等),提供三種輸出模式:
+  - **完整清單** — CSV / JSON,含頁碼、類型、作者、subject、內容、建立 / 修改時間、座標
+  - **審閱報告** — Markdown,可依頁碼 / 作者 / 類型分組(給主管 / 客戶 / 法務看)
+  - **待辦清單** — Markdown checkbox 或 CSV(status / page / todo / assignee / priority / type / notes)
+  - 螢光筆 / 底線等 content 通常為空,本工具會用 quad rect 從原文 reverse 出實際標註的文字
+  - 類型 / 作者 chip 篩選,可即時 redraw 預覽列表
+- **註解清除 `pdf-annotations-strip`**(資安處理):刪除 PDF 中的註解。兩種模式 — 全部刪除或依類型 / 作者篩選刪除;輸出乾淨副本。
+- **註解固定化 `pdf-annotations-flatten`**(檔案編輯):用 PyMuPDF `doc.bake(annots=True, widgets=False)` 把註解燒進頁面內容流,收件方無法移除或編輯。表單欄位 (AcroForm widgets) 保留可填。
+- 共 32 條 pytest:類型 / 作者篩選、CJK 檔名、empty PDF、API endpoint、bake 後 annot count = 0 等。
+- 新加 `sticky-note` 與 `layers` 兩個 SVG icon。
+
+---
+
 ## [1.1.51] - 2026-04-27
 
 ### 變更（pdf-wordcount UI 細修）
