@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}註解整理 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.an-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px; margin-top: 12px; }
+.an-stat { border-radius:10px; padding: 12px 14px; border:1px solid; }
+.an-stat .lbl { font-size: 12px; font-weight:500; opacity: 0.85; }
+.an-stat .val { font-size: 22px; font-weight: 700; margin-top: 2px;
+  font-variant-numeric: tabular-nums; }
+.an-stat-1 { background:linear-gradient(135deg,#dbeafe 0%,#bfdbfe 100%); border-color:#93c5fd; color:#1e3a8a; }
+.an-stat-2 { background:linear-gradient(135deg,#dcfce7 0%,#bbf7d0 100%); border-color:#86efac; color:#14532d; }
+.an-stat-3 { background:linear-gradient(135deg,#ede9fe 0%,#ddd6fe 100%); border-color:#c4b5fd; color:#4c1d95; }
+.an-stat-4 { background:linear-gradient(135deg,#ffedd5 0%,#fed7aa 100%); border-color:#fdba74; color:#7c2d12; }
+
+.an-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+@media (max-width: 800px) { .an-filters { grid-template-columns: 1fr; } }
+.an-filter h4 { margin: 0 0 6px; font-size: 13px; color:#475569; }
+.an-chips { display:flex; flex-wrap:wrap; gap: 6px; }
+.an-chip { display:inline-flex; align-items:center; gap: 5px; padding: 4px 10px;
+  border-radius: 999px; background:#f1f5f9; border:1px solid #e2e8f0;
+  font-size: 12.5px; cursor: pointer; user-select: none; color:#334155; }
+.an-chip.on { background:#1e40af; border-color:#1e40af; color:#fff; }
+.an-chip .ct { font-size: 11px; opacity: 0.7; }
+.an-chip.on .ct { opacity: 0.9; }
+
+.an-modes { display:flex; gap: 4px; margin-top: 10px; flex-wrap: wrap; }
+.an-mode { background:#f1f5f9; border:0; padding: 6px 14px; border-radius: 6px;
+  font-size: 13px; cursor: pointer; color:#475569; }
+.an-mode.active { background:#1e40af; color:#fff; }
+
+.an-list { margin-top: 14px; max-height: 600px; overflow-y: auto;
+  border:1px solid #e5e7eb; border-radius: 8px; padding: 4px; }
+.an-group { margin-bottom: 4px; }
+.an-group-h { background:#f8fafc; padding: 8px 12px; font-weight: 600;
+  font-size: 13px; color:#334155; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; }
+.an-row { display:flex; gap: 10px; padding: 10px 12px;
+  border-bottom: 1px dashed #e5e7eb; font-size: 13px; }
+.an-row:last-child { border-bottom: 0; }
+.an-row .meta { flex: 0 0 130px; color:#64748b; font-size: 12px; }
+.an-row .meta b { color:#0f172a; font-weight: 600; }
+.an-row .body { flex: 1; min-width: 0; color:#0f172a; }
+.an-type-pill { display:inline-block; padding: 1px 7px; border-radius: 4px;
+  font-size: 11px; background:#e2e8f0; color:#475569; }
+
+.an-export { display:flex; gap: 8px; flex-wrap:wrap; margin-top: 12px; }
+.an-export .btn { font-size: 12.5px; padding: 5px 12px; }
+
+.an-empty { text-align:center; padding: 36px 12px; color:#94a3b8; font-size: 13.5px; }
+.an-warn { background:#fef3c7; border:1px solid #fde68a; color:#78350f;
+  padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-top: 10px; }
+#anResults { margin-top: 16px; }
+#anResults > .panel + .panel { margin-top: 14px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('sticky-note', size=22) }} 註解整理</h1>
+<p class="muted">擷取 PDF 中所有註解(螢光筆 / 文字註解 / 圖章 / 自由文字 / 手繪 …),依需求輸出完整清單、審閱報告或待辦清單。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳 PDF</h2>
+  {% with upload_id='anUp', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+  <div id="anLoading" class="muted" style="margin-top:10px; font-size:12.5px;" hidden>
+    {{ icon('refresh', size=14) }} 分析中…
+  </div>
+  <div id="anError" class="an-warn" hidden></div>
+</div>
+
+<div id="anResults" hidden>
+
+<div class="panel">
+  <h2 style="margin-top:0;">統計總覽 <span class="muted" style="font-size:13px; font-weight:400; margin-left:8px;" id="anFile"></span></h2>
+  <div class="an-stats">
+    <div class="an-stat an-stat-1"><div class="lbl">註解總數</div><div class="val" id="sTotal">—</div></div>
+    <div class="an-stat an-stat-2"><div class="lbl">頁數</div><div class="val" id="sPages">—</div></div>
+    <div class="an-stat an-stat-3"><div class="lbl">含註解的頁</div><div class="val" id="sPagesAnn">—</div></div>
+    <div class="an-stat an-stat-4"><div class="lbl">作者數</div><div class="val" id="sAuthors">—</div></div>
+  </div>
+
+  <div class="an-filters">
+    <div class="an-filter">
+      <h4>類型篩選 (按一下切換)</h4>
+      <div class="an-chips" id="filterTypes"></div>
+    </div>
+    <div class="an-filter">
+      <h4>作者篩選</h4>
+      <div class="an-chips" id="filterAuthors"></div>
+    </div>
+  </div>
+
+  <h4 style="margin: 14px 0 6px; font-size:13px; color:#475569;">分組顯示與報告</h4>
+  <div class="an-modes">
+    <button class="an-mode active" data-group="page">依頁碼</button>
+    <button class="an-mode" data-group="author">依作者</button>
+    <button class="an-mode" data-group="type">依類型</button>
+  </div>
+
+  <div class="an-export">
+    <button class="btn" id="btnCsv">{{ icon('download', size=12) }} 完整清單 CSV</button>
+    <button class="btn" id="btnJson">{{ icon('download', size=12) }} 完整清單 JSON</button>
+    <button class="btn" id="btnReview">{{ icon('download', size=12) }} 審閱報告 (Markdown)</button>
+    <button class="btn" id="btnTodoMd">{{ icon('download', size=12) }} 待辦清單 (Markdown)</button>
+    <button class="btn" id="btnTodoCsv">{{ icon('download', size=12) }} 待辦清單 CSV</button>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">註解明細 <span class="muted" style="font-size:13px; font-weight:400; margin-left:8px;" id="anCount"></span></h2>
+  <div id="anList" class="an-list"></div>
+  <div id="anListEmpty" class="an-empty" hidden>沒有符合篩選的註解</div>
+</div>
+
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let lastResult = null;
+let lastFile   = null;
+const filterState = { types: new Set(), authors: new Set() };
+let groupBy = "page";
+
+function fmt(n) { return (n || 0).toLocaleString(); }
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[<>&"']/g, c =>
+    ({"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+const fu = new FileUpload($("anUp"), async (f) => {
+  if (!f) return;
+  lastFile = f;
+  $("anResults").hidden = true;
+  $("anError").hidden = true;
+  $("anLoading").hidden = false;
+  filterState.types.clear();
+  filterState.authors.clear();
+
+  const fd = new FormData();
+  fd.append("file", f);
+  let resp;
+  try {
+    resp = await fetch("/tools/pdf-annotations/analyze", { method: "POST", body: fd });
+  } catch (err) {
+    $("anLoading").hidden = true;
+    $("anError").textContent = "網路錯誤:" + err.message;
+    $("anError").hidden = false;
+    return;
+  }
+  $("anLoading").hidden = true;
+  if (!resp.ok) {
+    let msg = "HTTP " + resp.status;
+    try { msg = (await resp.json()).detail || msg; } catch (e) {}
+    $("anError").textContent = "分析失敗:" + msg;
+    $("anError").hidden = false;
+    return;
+  }
+  lastResult = await resp.json();
+  render(lastResult);
+});
+
+function render(r) {
+  $("anResults").hidden = false;
+  $("anFile").textContent = r.filename || "";
+  $("sTotal").textContent    = fmt(r.summary.total);
+  $("sPages").textContent    = fmt(r.page_count);
+  $("sPagesAnn").textContent = fmt(r.summary.pages_with_annot);
+  $("sAuthors").textContent  = fmt(r.summary.by_author.length);
+
+  // populate filter chips — start all selected
+  filterState.types.clear();
+  filterState.authors.clear();
+  $("filterTypes").innerHTML = "";
+  for (const t of r.summary.by_type) {
+    const chip = document.createElement("span");
+    chip.className = "an-chip on";
+    chip.dataset.label = t.label;
+    chip.dataset.kind  = "type";
+    chip.innerHTML = escapeHtml(t.label) + ' <span class="ct">' + fmt(t.count) + '</span>';
+    chip.addEventListener("click", () => toggleChip(chip));
+    $("filterTypes").appendChild(chip);
+    filterState.types.add(t.label);
+  }
+  $("filterAuthors").innerHTML = "";
+  for (const a of r.summary.by_author) {
+    const chip = document.createElement("span");
+    chip.className = "an-chip on";
+    chip.dataset.label = a.author;
+    chip.dataset.kind  = "author";
+    chip.innerHTML = escapeHtml(a.author) + ' <span class="ct">' + fmt(a.count) + '</span>';
+    chip.addEventListener("click", () => toggleChip(chip));
+    $("filterAuthors").appendChild(chip);
+    filterState.authors.add(a.author);
+  }
+
+  if (r.summary.total === 0) {
+    $("anError").textContent = "⚠ 此 PDF 沒有偵測到任何註解 (排除掉表單欄位 / 連結 / popup 後)。";
+    $("anError").hidden = false;
+  } else {
+    $("anError").hidden = true;
+  }
+
+  redrawList();
+}
+
+function toggleChip(chip) {
+  chip.classList.toggle("on");
+  const set = chip.dataset.kind === "type" ? filterState.types : filterState.authors;
+  if (chip.classList.contains("on")) set.add(chip.dataset.label);
+  else set.delete(chip.dataset.label);
+  redrawList();
+}
+
+document.querySelectorAll(".an-mode").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".an-mode").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    groupBy = b.dataset.group;
+    redrawList();
+  });
+});
+
+function _typeIdsToEnglish(labels) {
+  // The chip stores Chinese label; we need the English type for /export-csv etc.
+  // We have it in r.annots already, so just collect.
+  const map = new Map();
+  for (const a of (lastResult ? lastResult.annots : [])) {
+    map.set(a.type_label, a.type);
+  }
+  const out = new Set();
+  for (const l of labels) if (map.has(l)) out.add(map.get(l));
+  return Array.from(out);
+}
+function _filteredAnnots() {
+  if (!lastResult) return [];
+  return lastResult.annots.filter(a =>
+    filterState.types.has(a.type_label) &&
+    filterState.authors.has(a.author || "(未署名)"));
+}
+
+function redrawList() {
+  if (!lastResult) return;
+  const annots = _filteredAnnots();
+  $("anCount").textContent = `(顯示 ${fmt(annots.length)} / ${fmt(lastResult.summary.total)})`;
+  $("anListEmpty").hidden = annots.length > 0;
+  if (!annots.length) { $("anList").innerHTML = ""; return; }
+
+  // group
+  const buckets = new Map();
+  const keyfn = a =>
+    groupBy === "page" ? `第 ${a.page} 頁` :
+    groupBy === "author" ? (a.author || "(未署名)") :
+    a.type_label;
+  for (const a of annots) {
+    const k = keyfn(a);
+    if (!buckets.has(k)) buckets.set(k, []);
+    buckets.get(k).push(a);
+  }
+
+  let html = "";
+  for (const [k, items] of buckets) {
+    html += `<div class="an-group">`;
+    html += `<div class="an-group-h">${escapeHtml(k)} <span style="opacity:.6;font-weight:400;">(${items.length})</span></div>`;
+    for (const a of items) {
+      const who = a.author || "(未署名)";
+      const body = a.content || a.subject || "<em style='color:#94a3b8'>(無文字內容)</em>";
+      html += `<div class="an-row">`;
+      html += `<div class="meta"><b>第 ${a.page} 頁</b><br>${escapeHtml(who)}<br><span class="an-type-pill">${escapeHtml(a.type_label)}</span></div>`;
+      html += `<div class="body">${escapeHtml(body).replace(/\n/g, "<br>")}</div>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+  $("anList").innerHTML = html;
+}
+
+// ---- export buttons ----
+function _filterFormData() {
+  const fd = new FormData();
+  fd.append("file", lastFile);
+  fd.append("types",   _typeIdsToEnglish(filterState.types).join(","));
+  fd.append("authors", Array.from(filterState.authors).join(","));
+  return fd;
+}
+async function _post(url, fd) {
+  const r = await fetch(url, { method: "POST", body: fd });
+  if (!r.ok) { alert("下載失敗:HTTP " + r.status); return; }
+  const blob = await r.blob();
+  const cd = r.headers.get("Content-Disposition") || "";
+  let name = "download";
+  const m = cd.match(/filename\*=UTF-8''([^;]+)/i) || cd.match(/filename="?([^";]+)"?/i);
+  if (m) try { name = decodeURIComponent(m[1]); } catch (e) { name = m[1]; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+}
+$("btnCsv").addEventListener("click",     () => _post("/tools/pdf-annotations/export-csv",   _filterFormData()));
+$("btnJson").addEventListener("click",    () => _post("/tools/pdf-annotations/export-json",  _filterFormData()));
+$("btnReview").addEventListener("click",  () => {
+  const fd = _filterFormData();
+  fd.append("group_by", groupBy);
+  _post("/tools/pdf-annotations/export-review", fd);
+});
+$("btnTodoMd").addEventListener("click",  () => {
+  const fd = _filterFormData();
+  fd.append("fmt", "md");
+  _post("/tools/pdf-annotations/export-todo", fd);
+});
+$("btnTodoCsv").addEventListener("click", () => {
+  const fd = _filterFormData();
+  fd.append("fmt", "csv");
+  _post("/tools/pdf-annotations/export-todo", fd);
+});
+</script>
+{% endblock %}

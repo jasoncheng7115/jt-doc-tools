@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}註解固定化 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.af-stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr));
+  gap:10px; margin-top:12px; }
+.af-stat { background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%);
+  border:1px solid #fcd34d; color:#78350f; padding:12px 14px; border-radius:10px; }
+.af-stat .lbl { font-size:12px; opacity:0.85; }
+.af-stat .val { font-size:22px; font-weight:700; margin-top:2px;
+  font-variant-numeric: tabular-nums; }
+
+.af-types { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.af-types .pill { padding:4px 10px; border-radius:999px;
+  background:#f1f5f9; border:1px solid #e2e8f0;
+  font-size:12.5px; color:#334155; }
+.af-types .pill .ct { font-size:11px; opacity:0.7; margin-left:4px; }
+
+.af-warn { background:#fef3c7; border:1px solid #fde68a; color:#78350f;
+  padding:10px 12px; border-radius:8px; font-size:13px; margin-top:10px; }
+.af-info { background:#eff6ff; border:1px solid #bfdbfe; color:#1e3a8a;
+  padding:10px 12px; border-radius:8px; font-size:13px; margin-top:10px; }
+#afResults { margin-top:16px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('layers', size=22) }} 註解固定化</h1>
+<p class="muted">把 PDF 中的註解(螢光筆 / 文字註解 / 圖章 / 自由文字 …)燒進頁面內容流。視覺上完全一樣,但<b>收件方無法移除、無法另存</b>,適合對外定稿前的最後一步。</p>
+<div class="af-info">
+  表單欄位 (AcroForm widgets) 不會被固定化,使用者收到後仍可填表。
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳 PDF</h2>
+  {% with upload_id='afUp', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+  <div id="afLoading" class="muted" style="margin-top:10px; font-size:12.5px;" hidden>分析中…</div>
+  <div id="afError" class="af-warn" hidden></div>
+</div>
+
+<div id="afResults" hidden>
+
+<div class="panel">
+  <h2 style="margin-top:0;">註解總覽 <span class="muted" style="font-size:13px; font-weight:400; margin-left:8px;" id="afFile"></span></h2>
+  <div class="af-stats">
+    <div class="af-stat"><div class="lbl">註解總數</div><div class="val" id="aTotal">—</div></div>
+    <div class="af-stat"><div class="lbl">頁數</div><div class="val" id="aPages">—</div></div>
+    <div class="af-stat"><div class="lbl">含表單欄位</div><div class="val" id="aWidgets">—</div></div>
+  </div>
+  <div class="af-types" id="afTypes"></div>
+
+  <div style="margin-top:14px;">
+    <button class="btn btn-primary" id="btnFlatten">{{ icon('layers', size=14) }} 固定化並下載</button>
+    <span id="flatStatus" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
+  </div>
+  <div class="af-warn" style="margin-top:10px;">
+    <b>不可逆</b>:輸出檔的註解已變成頁面像素,無法再透過 PDF 工具編輯或移除。建議保留原檔。
+  </div>
+</div>
+
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let lastResult = null;
+let lastFile   = null;
+
+function fmt(n) { return (n || 0).toLocaleString(); }
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[<>&"']/g, c =>
+    ({"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+const fu = new FileUpload($("afUp"), async (f) => {
+  if (!f) return;
+  lastFile = f;
+  $("afResults").hidden = true;
+  $("afError").hidden = true;
+  $("afLoading").hidden = false;
+
+  const fd = new FormData();
+  fd.append("file", f);
+  let resp;
+  try {
+    resp = await fetch("/tools/pdf-annotations-flatten/analyze", { method: "POST", body: fd });
+  } catch (err) {
+    $("afLoading").hidden = true;
+    $("afError").textContent = "網路錯誤:" + err.message;
+    $("afError").hidden = false;
+    return;
+  }
+  $("afLoading").hidden = true;
+  if (!resp.ok) {
+    let msg = "HTTP " + resp.status;
+    try { msg = (await resp.json()).detail || msg; } catch (e) {}
+    $("afError").textContent = "分析失敗:" + msg;
+    $("afError").hidden = false;
+    return;
+  }
+  lastResult = await resp.json();
+  render(lastResult);
+});
+
+function render(r) {
+  $("afResults").hidden = false;
+  $("afFile").textContent = r.filename || "";
+  $("aTotal").textContent   = fmt(r.total);
+  $("aPages").textContent   = fmt(r.page_count);
+  $("aWidgets").textContent = r.has_widgets ? "有(會保留)" : "無";
+
+  $("afTypes").innerHTML = r.by_type.map(t =>
+    `<span class="pill">${escapeHtml(t.label)}<span class="ct">${fmt(t.count)}</span></span>`
+  ).join("");
+
+  if (r.total === 0) {
+    $("afError").textContent = "⚠ 此 PDF 沒有偵測到註解,固定化會直接輸出原檔副本(不會出錯)。";
+    $("afError").hidden = false;
+  } else {
+    $("afError").hidden = true;
+  }
+}
+
+$("btnFlatten").addEventListener("click", async () => {
+  if (!lastFile) return;
+  if (lastResult && lastResult.total > 0) {
+    if (!confirm(`即將把 ${lastResult.total} 條註解燒進頁面,操作不可逆,要繼續?`)) return;
+  }
+  const fd = new FormData();
+  fd.append("file", lastFile);
+  $("flatStatus").textContent = "處理中…";
+  const r = await fetch("/tools/pdf-annotations-flatten/flatten", { method: "POST", body: fd });
+  if (!r.ok) {
+    let msg = "HTTP " + r.status;
+    try { msg = (await r.json()).detail || msg; } catch (e) {}
+    $("flatStatus").textContent = "失敗:" + msg;
+    return;
+  }
+  const baked = r.headers.get("X-Annotations-Baked") || "?";
+  const blob = await r.blob();
+  const cd = r.headers.get("Content-Disposition") || "";
+  let name = "flattened.pdf";
+  const m = cd.match(/filename\*=UTF-8''([^;]+)/i) || cd.match(/filename="?([^";]+)"?/i);
+  if (m) try { name = decodeURIComponent(m[1]); } catch (e) { name = m[1]; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+  $("flatStatus").textContent = `完成,固定化了 ${baked} 條註解`;
+});
+</script>
+{% endblock %}

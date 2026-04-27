@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.1.51"
+VERSION = "1.1.52"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -77,6 +77,9 @@ _TOOL_ALIASES = {
     "pdf-hidden-scan":    "hidden content javascript js embedded launch uri whitetext offpage scan remove 隱藏 掃描 JavaScript 嵌入檔 白字 頁面外 外部連結 啟動 風險 資安",
     "pdf-attachments":    "attachment attachments embedded file extract pdf paperclip 附件 嵌入檔 萃取 取出 EmbeddedFiles",
     "pdf-wordcount":      "wordcount word count words chars characters letter 字數 統計 字元 字數統計 統計圖表 chart histogram frequency 高頻詞 頻率 段落 句子 paragraph sentence 閱讀時間 reading time stats statistics analytics",
+    "pdf-annotations":    "annotations annotation comments comment markup highlight underline strikeout sticky-note review todo extract export 註解 批註 標註 螢光筆 底線 刪除線 文字註解 圖章 自由文字 手繪 審閱 待辦 校稿 合約 修訂",
+    "pdf-annotations-strip":   "strip remove delete clean annotations comments markup 註解 批註 移除 刪除 清除 清除註解 移除註解 校稿後清除",
+    "pdf-annotations-flatten": "flatten bake burn annotations comments markup permanent lock final 固定化 扁平化 燒入 鎖定 定稿 收件方無法移除",
     "pdf-diff":           "diff compare comparison difference changes contract audit review 差異 比對 比較 合約審閱 變更 改版",
     "aes-zip":            "zip aes encrypt archive password email attachment winzip 7zip keka archive utility 加密 壓縮檔 密碼保護 AES 寄信 附件 打包",
     "pdf-nup":            "nup n-up multiple pages per sheet imposition 2up 4up 6up 8up tile tiled layout grid imposition 多頁合併 多合一 拼貼 省紙 N合一 2合1 4合1 講義 草稿 版面",

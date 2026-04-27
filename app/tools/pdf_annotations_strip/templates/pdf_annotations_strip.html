@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}註解清除 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.as-stats { display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap:10px; margin-top:12px; }
+.as-stat { background:linear-gradient(135deg,#fee2e2 0%,#fecaca 100%);
+  border:1px solid #fca5a5; color:#7f1d1d; padding:12px 14px; border-radius:10px; }
+.as-stat .lbl { font-size:12px; opacity:0.85; }
+.as-stat .val { font-size:22px; font-weight:700; margin-top:2px;
+  font-variant-numeric: tabular-nums; }
+
+.as-modes { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+.as-mode { background:#f1f5f9; border:0; padding:6px 14px; border-radius:6px;
+  font-size:13px; cursor:pointer; color:#475569; }
+.as-mode.active { background:#b91c1c; color:#fff; }
+
+.as-filters { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:12px; }
+@media (max-width:800px) { .as-filters { grid-template-columns:1fr; } }
+.as-filter h4 { margin:0 0 6px; font-size:13px; color:#475569; }
+.as-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.as-chip { display:inline-flex; align-items:center; gap:5px; padding:4px 10px;
+  border-radius:999px; background:#f1f5f9; border:1px solid #e2e8f0;
+  font-size:12.5px; cursor:pointer; user-select:none; color:#334155; }
+.as-chip.on { background:#b91c1c; border-color:#b91c1c; color:#fff; }
+.as-chip .ct { font-size:11px; opacity:0.7; }
+
+.as-warn { background:#fef2f2; border:1px solid #fca5a5; color:#7f1d1d;
+  padding:10px 12px; border-radius:8px; font-size:13px; margin-top:10px; }
+#asResults { margin-top:16px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('trash', size=22) }} 註解清除</h1>
+<p class="muted">把 PDF 中的註解全部刪掉,或依作者 / 類型篩選後刪除。產出新的 PDF 副本(原檔不動)。</p>
+<div class="as-warn">
+  <b>注意</b>:這是<b>不可逆</b>操作 — 刪除的註解資訊不會留在輸出檔內。建議保留原始檔案。
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳 PDF</h2>
+  {% with upload_id='asUp', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+  <div id="asLoading" class="muted" style="margin-top:10px; font-size:12.5px;" hidden>分析中…</div>
+  <div id="asError" class="as-warn" hidden></div>
+</div>
+
+<div id="asResults" hidden>
+
+<div class="panel">
+  <h2 style="margin-top:0;">註解總覽 <span class="muted" style="font-size:13px; font-weight:400; margin-left:8px;" id="asFile"></span></h2>
+  <div class="as-stats">
+    <div class="as-stat"><div class="lbl">註解總數</div><div class="val" id="aTotal">—</div></div>
+    <div class="as-stat"><div class="lbl">頁數</div><div class="val" id="aPages">—</div></div>
+  </div>
+
+  <h4 style="margin:14px 0 6px; font-size:13px; color:#475569;">2. 選擇刪除範圍</h4>
+  <div class="as-modes">
+    <button class="as-mode active" data-mode="all">全部刪除</button>
+    <button class="as-mode" data-mode="filter">依篩選刪除</button>
+  </div>
+
+  <div id="asFilterPanel" hidden>
+    <div class="as-filters">
+      <div class="as-filter">
+        <h4>選要刪除的類型</h4>
+        <div class="as-chips" id="filterTypes"></div>
+      </div>
+      <div class="as-filter">
+        <h4>選要刪除的作者</h4>
+        <div class="as-chips" id="filterAuthors"></div>
+      </div>
+    </div>
+    <p class="muted" style="font-size:12.5px; margin-top:8px;">勾起來的會被刪除。類型與作者之間是 OR 關係。</p>
+  </div>
+
+  <div style="margin-top:14px;">
+    <button class="btn btn-primary" id="btnStrip">{{ icon('trash', size=14) }} 刪除並下載</button>
+    <span id="stripStatus" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
+  </div>
+</div>
+
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let lastResult = null;
+let lastFile   = null;
+let mode = "all";
+const stripState = { types: new Set(), authors: new Set() };
+
+function fmt(n) { return (n || 0).toLocaleString(); }
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[<>&"']/g, c =>
+    ({"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+const fu = new FileUpload($("asUp"), async (f) => {
+  if (!f) return;
+  lastFile = f;
+  $("asResults").hidden = true;
+  $("asError").hidden = true;
+  $("asLoading").hidden = false;
+  stripState.types.clear();
+  stripState.authors.clear();
+
+  const fd = new FormData();
+  fd.append("file", f);
+  let resp;
+  try {
+    resp = await fetch("/tools/pdf-annotations-strip/analyze", { method: "POST", body: fd });
+  } catch (err) {
+    $("asLoading").hidden = true;
+    $("asError").textContent = "網路錯誤:" + err.message;
+    $("asError").hidden = false;
+    return;
+  }
+  $("asLoading").hidden = true;
+  if (!resp.ok) {
+    let msg = "HTTP " + resp.status;
+    try { msg = (await resp.json()).detail || msg; } catch (e) {}
+    $("asError").textContent = "分析失敗:" + msg;
+    $("asError").hidden = false;
+    return;
+  }
+  lastResult = await resp.json();
+  render(lastResult);
+});
+
+function render(r) {
+  $("asResults").hidden = false;
+  $("asFile").textContent = r.filename || "";
+  $("aTotal").textContent = fmt(r.total);
+  $("aPages").textContent = fmt(r.page_count);
+
+  $("filterTypes").innerHTML = "";
+  for (const t of r.by_type) {
+    const chip = document.createElement("span");
+    chip.className = "as-chip";
+    chip.dataset.label   = t.label;
+    chip.dataset.english = t.type;
+    chip.dataset.kind    = "type";
+    chip.innerHTML = escapeHtml(t.label) + ' <span class="ct">' + fmt(t.count) + '</span>';
+    chip.addEventListener("click", () => toggleChip(chip));
+    $("filterTypes").appendChild(chip);
+  }
+  $("filterAuthors").innerHTML = "";
+  for (const a of r.by_author) {
+    const chip = document.createElement("span");
+    chip.className = "as-chip";
+    chip.dataset.label = a.author;
+    chip.dataset.kind  = "author";
+    chip.innerHTML = escapeHtml(a.author) + ' <span class="ct">' + fmt(a.count) + '</span>';
+    chip.addEventListener("click", () => toggleChip(chip));
+    $("filterAuthors").appendChild(chip);
+  }
+
+  if (r.total === 0) {
+    $("asError").textContent = "⚠ 此 PDF 沒有偵測到任何可刪除的註解。";
+    $("asError").hidden = false;
+  } else {
+    $("asError").hidden = true;
+  }
+}
+
+function toggleChip(chip) {
+  chip.classList.toggle("on");
+  const set = chip.dataset.kind === "type" ? stripState.types : stripState.authors;
+  const key = chip.dataset.kind === "type" ? chip.dataset.english : chip.dataset.label;
+  if (chip.classList.contains("on")) set.add(key); else set.delete(key);
+}
+
+document.querySelectorAll(".as-mode").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".as-mode").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    mode = b.dataset.mode;
+    $("asFilterPanel").hidden = mode !== "filter";
+  });
+});
+
+$("btnStrip").addEventListener("click", async () => {
+  if (!lastFile) return;
+  if (mode === "filter" && stripState.types.size === 0 && stripState.authors.size === 0) {
+    alert("請至少勾選一個類型或作者");
+    return;
+  }
+  if (mode === "all" && lastResult && lastResult.total > 0) {
+    if (!confirm(`即將刪除全部 ${lastResult.total} 條註解,要繼續?`)) return;
+  }
+  const fd = new FormData();
+  fd.append("file", lastFile);
+  fd.append("mode", mode);
+  fd.append("types",   Array.from(stripState.types).join(","));
+  fd.append("authors", Array.from(stripState.authors).join(","));
+  $("stripStatus").textContent = "處理中…";
+  const r = await fetch("/tools/pdf-annotations-strip/strip", { method: "POST", body: fd });
+  if (!r.ok) {
+    let msg = "HTTP " + r.status;
+    try { msg = (await r.json()).detail || msg; } catch (e) {}
+    $("stripStatus").textContent = "失敗:" + msg;
+    return;
+  }
+  const removed = r.headers.get("X-Annotations-Removed") || "?";
+  const blob = await r.blob();
+  const cd = r.headers.get("Content-Disposition") || "";
+  let name = "no-annots.pdf";
+  const m = cd.match(/filename\*=UTF-8''([^;]+)/i) || cd.match(/filename="?([^";]+)"?/i);
+  if (m) try { name = decodeURIComponent(m[1]); } catch (e) { name = m[1]; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+  $("stripStatus").textContent = `完成,刪除了 ${removed} 條註解`;
+});
+</script>
+{% endblock %}
