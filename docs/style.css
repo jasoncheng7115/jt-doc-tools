@@ -829,3 +829,29 @@ code {
   .section { padding: 70px 0; }
   .hero { padding: 70px 0 50px; }
 }
+
+/* Disclaimer */
+.disclaimer-box {
+  max-width: 920px;
+  margin: 28px auto 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-left: 4px solid #ef4444;
+  border-radius: 10px;
+  padding: 28px 32px;
+  font-size: 14.5px;
+  line-height: 1.75;
+  color: #334155;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+}
+.disclaimer-box p { margin: 0 0 14px; }
+.disclaimer-box ul { margin: 12px 0 16px; padding-left: 22px; }
+.disclaimer-box li { margin-bottom: 8px; }
+.disclaimer-box b { color: #1e293b; }
+.disclaimer-foot {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: #64748b;
+}
