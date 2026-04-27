@@ -126,15 +126,12 @@ winget install --id Git.Git -e --accept-package-agreements --accept-source-agree
 以<b>「以系統管理員身分執行」</b>開啟 PowerShell（右鍵 PowerShell 圖示 → 系統管理員），貼：
 
 ```powershell
-$u="https://cdn.jsdelivr.net/gh/jasoncheng7115/jt-doc-tools@main/install.ps1"; $f="$env:TEMP\jtdt-install.ps1"; [Net.ServicePointManager]::SecurityProtocol='Tls12'; $d=(New-Object Net.WebClient).DownloadData($u); $b=New-Object byte[] ($d.Length+3); $b[0]=0xEF;$b[1]=0xBB;$b[2]=0xBF; [Array]::Copy($d,0,$b,3,$d.Length); [IO.File]::WriteAllBytes($f,$b); powershell -NoProfile -ExecutionPolicy Bypass -File $f; Read-Host '安裝結束，按 Enter 關閉'
+$f="$env:TEMP\jtdt-install.ps1"; [Net.ServicePointManager]::SecurityProtocol='Tls12'; (New-Object Net.WebClient).DownloadFile('https://cdn.jsdelivr.net/gh/jasoncheng7115/jt-doc-tools@main/install.ps1',$f); powershell -NoProfile -ExecutionPolicy Bypass -File $f; Read-Host '安裝結束，按 Enter 關閉'
 ```
 
-> **為什麼這麼長？** PS 5.1（Windows 內建版本）有三個雷：
-> 1. `iex (irm ...)` 模式下，腳本內 `exit` 會把整個 PowerShell 視窗一起關掉
-> 2. `irm -OutFile` 會做 UTF-8 → 系統 codepage 編碼轉換，把腳本內非 ASCII 字元搞壞
-> 3. **GitHub raw 會把 UTF-8 BOM 剝掉**，PS 5.1 沒看到 BOM 就會把檔案當系統 codepage（cp950 / Big5）解讀，UTF-8 多位元組序列被誤讀成 Big5 雙寬字 → parser 報「缺 `}`」一堆假錯誤
+> **為什麼用 jsdelivr 不用 raw.githubusercontent.com？** GitHub raw 的 Fastly cache 不認 query string 當 cache key，安裝腳本更新後最久要等 5 分鐘才生效。jsdelivr 的 CDN 對 GitHub repo 更新反應快得多，幾秒就同步。
 >
-> 對應做法：先抓**原始 bytes**（不經 PS 編碼層），自己**補上 UTF-8 BOM** 寫入 TEMP，再用**子 PowerShell** 執行（子行程退出不殺父視窗），最後父 shell `Read-Host` 等按 Enter。整段貼進「以系統管理員身分執行」的 PowerShell 就行。
+> 安裝腳本本身已是純 ASCII，不需要任何 BOM 或編碼處理；用**子 PowerShell** 執行（子行程退出不殺父視窗），最後父 shell `Read-Host` 等按 Enter。整段貼進「以系統管理員身分執行」的 PowerShell 就行。
 
 ---
 
