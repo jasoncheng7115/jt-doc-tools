@@ -17,8 +17,9 @@
 
 .wc-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; margin-top: 14px; }
 @media (max-width: 900px) { .wc-grid { grid-template-columns: 1fr; } }
-.wc-grid-bot { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
-@media (max-width: 900px) { .wc-grid-bot { grid-template-columns: 1fr; } }
+.wc-grid-bot { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 14px; }
+@media (max-width: 1200px) { .wc-grid-bot { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px)  { .wc-grid-bot { grid-template-columns: 1fr; } }
 
 .wc-card { background:#fff; border:1px solid #e5e7eb; border-radius:10px;
   padding: 14px 16px; }
@@ -49,11 +50,6 @@
 .wc-legend .sw { display:inline-block; width: 12px; height: 12px;
   border-radius: 3px; margin-right: 5px; vertical-align: middle; }
 
-.wc-tabs { display:flex; gap: 4px; margin-bottom: 8px; }
-.wc-tab { background:#f1f5f9; border:0; padding: 5px 12px; border-radius: 6px;
-  font-size: 12.5px; cursor: pointer; color:#475569; }
-.wc-tab.active { background: #1e40af; color: #fff; }
-
 .wc-export { display:flex; gap: 8px; flex-wrap:wrap; margin-top: 10px; }
 .wc-export .btn { font-size: 12.5px; padding: 5px 12px; }
 
@@ -64,7 +60,7 @@
 {% endblock %}
 {% block content %}
 <h1>{{ icon('chart-bar', size=22) }} 字數統計</h1>
-<p class="muted">統計 PDF 中的字數、字元、段落、句子,並繪製每頁字數、字元類型分布、高頻詞、頁長累積等四種圖表。</p>
+<p class="muted">統計 PDF 中的字數、字元、段落、句子,並繪製每頁字數直條圖、字元類型環圈、中文單字 / 中文雙字 / 英文 三類高頻詞圖表。</p>
 
 <div class="panel">
   <h2 style="margin-top:0;">1. 上傳 PDF</h2>
@@ -144,22 +140,23 @@
 
 <div class="wc-grid-bot">
   <div class="wc-card">
-    <h3>{{ icon('hash', size=14) }} 高頻詞 Top 20
-      <span class="hint">
-        <button class="wc-tab active" data-mode="cjk_chars">中文單字</button>
-        <button class="wc-tab" data-mode="cjk_bigrams">中文雙字</button>
-        <button class="wc-tab" data-mode="en_words">英文</button>
-      </span>
-    </h3>
-    <svg class="wc-chart" id="chartFreq" viewBox="0 0 600 480"></svg>
-    <div id="freqEmpty" class="wc-empty" hidden>無符合資料</div>
+    <h3>{{ icon('hash', size=14) }} 中文單字 Top 20</h3>
+    <svg class="wc-chart" id="chartFreqCjk" viewBox="0 0 380 480"></svg>
+    <div id="emptyCjk" class="wc-empty" hidden>(此 PDF 無中文)</div>
   </div>
-
   <div class="wc-card">
-    <h3>{{ icon('text', size=14) }} 累積字數曲線
-      <span class="hint">看內容密度趨勢</span>
+    <h3>{{ icon('hash', size=14) }} 中文雙字 Top 20
+      <span class="hint">連續兩字組</span>
     </h3>
-    <svg class="wc-chart" id="chartCum" viewBox="0 0 600 280"></svg>
+    <svg class="wc-chart" id="chartFreqBigram" viewBox="0 0 380 480"></svg>
+    <div id="emptyBigram" class="wc-empty" hidden>(此 PDF 無中文)</div>
+  </div>
+  <div class="wc-card">
+    <h3>{{ icon('hash', size=14) }} 英文 Top 20
+      <span class="hint">已過濾 stopwords</span>
+    </h3>
+    <svg class="wc-chart" id="chartFreqEn" viewBox="0 0 380 480"></svg>
+    <div id="emptyEn" class="wc-empty" hidden>(此 PDF 無英文)</div>
   </div>
 </div>
 
@@ -242,8 +239,9 @@ function render(r) {
 
   drawPerPage(r.pages);
   drawDonut(r.char_breakdown);
-  drawCumulative(r.pages);
-  drawFreq('cjk_chars', r.freq);
+  drawFreq('chartFreqCjk',    'emptyCjk',    r.freq.cjk_chars,   '#3b82f6', '#1e40af');
+  drawFreq('chartFreqBigram', 'emptyBigram', r.freq.cjk_bigrams, '#10b981', '#0d9488');
+  drawFreq('chartFreqEn',     'emptyEn',     r.freq.en_words,    '#a855f7', '#7c3aed');
 }
 
 // ---- Chart 1: per-page bar chart ----
@@ -376,24 +374,26 @@ function drawDonut(b) {
   });
 }
 
-// ---- Chart 3: top frequency horizontal bar ----
-function drawFreq(mode, freq) {
-  const svg = $('chartFreq');
+// ---- Chart 3a/3b/3c: top frequency horizontal bar (per category) ----
+function drawFreq(svgId, emptyId, items, c0, c1) {
+  const svg = $(svgId);
   svg.innerHTML = '';
-  const data = (freq[mode] || []).slice(0, 20);
-  $('freqEmpty').hidden = data.length > 0;
+  const data = (items || []).slice(0, 20);
+  $(emptyId).hidden = data.length > 0;
+  svg.style.display = data.length ? '' : 'none';
   if (!data.length) return;
-  const W = 600, padL = 90, padR = 50, padT = 10, padB = 10;
+  const W = 380, padL = 60, padR = 50, padT = 8, padB = 8;
   const rowH = 22;
   const H = padT + padB + data.length * rowH;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   const maxV = Math.max(1, ...data.map(d => d.count));
   const barW = W - padL - padR;
 
-  const grad = `<defs><linearGradient id="gradFreq" x1="0" y1="0" x2="1" y2="0">` +
-    `<stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#0d9488"/>` +
-    `</linearGradient></defs>`;
-  svg.insertAdjacentHTML('beforeend', grad);
+  const gid = 'grad_' + svgId;
+  svg.insertAdjacentHTML('beforeend',
+    `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="0">` +
+    `<stop offset="0%" stop-color="${c0}"/><stop offset="100%" stop-color="${c1}"/>` +
+    `</linearGradient></defs>`);
 
   data.forEach((d, i) => {
     const y = padT + i * rowH + 3;
@@ -401,7 +401,7 @@ function drawFreq(mode, freq) {
     svg.insertAdjacentHTML('beforeend',
       `<text class="label" x="${padL-8}" y="${y+12}" text-anchor="end">${escapeXml(d.term)}</text>` +
       `<rect class="bar-rect" x="${padL}" y="${y}" width="${w.toFixed(1)}" ` +
-      `height="${rowH-6}" fill="url(#gradFreq)" rx="3" data-t="${escapeXml(d.term)}" data-v="${d.count}"/>` +
+      `height="${rowH-6}" fill="url(#${gid})" rx="3" data-t="${escapeXml(d.term)}" data-v="${d.count}"/>` +
       `<text class="val-label" x="${padL+w+5}" y="${y+13}">${fmt(d.count)}</text>`);
   });
 
@@ -416,88 +416,6 @@ function escapeXml(s) {
     ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]));
 }
 
-document.querySelectorAll('.wc-tab').forEach(t => {
-  t.addEventListener('click', () => {
-    document.querySelectorAll('.wc-tab').forEach(x => x.classList.remove('active'));
-    t.classList.add('active');
-    if (lastResult) drawFreq(t.dataset.mode, lastResult.freq);
-  });
-});
-
-// ---- Chart 4: cumulative line ----
-function drawCumulative(pages) {
-  const svg = $('chartCum');
-  svg.innerHTML = '';
-  const W = 600, H = 280;
-  const padL = 50, padR = 20, padT = 14, padB = 28;
-  const cw = W - padL - padR;
-  const ch = H - padT - padB;
-
-  let cum = 0;
-  const cumPts = pages.map(p => { cum += p.word_total; return cum; });
-  const maxV = Math.max(1, cumPts[cumPts.length - 1]);
-
-  // grid + Y ticks
-  const ticks = 5;
-  for (let i = 0; i <= ticks; i++) {
-    const y = padT + ch * (1 - i / ticks);
-    const v = Math.round(maxV * i / ticks);
-    svg.insertAdjacentHTML('beforeend',
-      `<line class="grid-line" x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}"/>` +
-      `<text class="tick" x="${padL-6}" y="${y+3}" text-anchor="end">${fmt(v)}</text>`);
-  }
-  svg.insertAdjacentHTML('beforeend',
-    `<line class="axis" x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+ch}"/>` +
-    `<line class="axis" x1="${padL}" y1="${padT+ch}" x2="${W-padR}" y2="${padT+ch}"/>`);
-
-  const n = pages.length;
-  const xAt = i => padL + (n === 1 ? cw/2 : (cw * i / (n - 1)));
-  const yAt = v => padT + ch * (1 - v / maxV);
-
-  // area fill
-  const grad = `<defs><linearGradient id="gradArea" x1="0" y1="0" x2="0" y2="1">` +
-    `<stop offset="0%" stop-color="#a855f7" stop-opacity="0.4"/>` +
-    `<stop offset="100%" stop-color="#a855f7" stop-opacity="0.02"/></linearGradient></defs>`;
-  svg.insertAdjacentHTML('beforeend', grad);
-
-  let area = `M ${xAt(0).toFixed(1)} ${(padT+ch).toFixed(1)}`;
-  cumPts.forEach((v, i) => { area += ` L ${xAt(i).toFixed(1)} ${yAt(v).toFixed(1)}`; });
-  area += ` L ${xAt(n-1).toFixed(1)} ${(padT+ch).toFixed(1)} Z`;
-  svg.insertAdjacentHTML('beforeend',
-    `<path d="${area}" fill="url(#gradArea)"/>`);
-
-  // line
-  let line = '';
-  cumPts.forEach((v, i) => {
-    line += (i === 0 ? 'M ' : ' L ') + xAt(i).toFixed(1) + ' ' + yAt(v).toFixed(1);
-  });
-  svg.insertAdjacentHTML('beforeend',
-    `<path d="${line}" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linejoin="round"/>`);
-
-  // dots (skip if too many pages)
-  if (n <= 50) {
-    cumPts.forEach((v, i) => {
-      svg.insertAdjacentHTML('beforeend',
-        `<circle class="bar-rect" cx="${xAt(i).toFixed(1)}" cy="${yAt(v).toFixed(1)}" ` +
-        `r="3" fill="#7c3aed" stroke="#fff" stroke-width="1.5" ` +
-        `data-p="${pages[i].page}" data-c="${v}" data-v="${pages[i].word_total}"/>`);
-    });
-  }
-
-  // X labels
-  const xticks = n <= 10 ? pages.map((_, i) => i) :
-    [0, Math.floor(n*0.25), Math.floor(n*0.5), Math.floor(n*0.75), n-1];
-  xticks.forEach(i => {
-    svg.insertAdjacentHTML('beforeend',
-      `<text class="tick" x="${xAt(i).toFixed(1)}" y="${H-padB+14}" text-anchor="middle">${pages[i].page}</text>`);
-  });
-
-  svg.querySelectorAll('circle.bar-rect').forEach(el => {
-    el.addEventListener('mousemove', (e) =>
-      showTT(e, `<b>第 ${el.dataset.p} 頁</b><br>累計 ${fmt(el.dataset.c)} 字<br>本頁 ${fmt(el.dataset.v)} 字`));
-    el.addEventListener('mouseleave', hideTT);
-  });
-}
 
 // ---- exports ----
 function download(name, content, type) {
