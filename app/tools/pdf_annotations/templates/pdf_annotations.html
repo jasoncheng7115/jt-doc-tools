@@ -35,14 +35,25 @@
 .an-group { margin-bottom: 4px; }
 .an-group-h { background:#f8fafc; padding: 8px 12px; font-weight: 600;
   font-size: 13px; color:#334155; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; }
-.an-row { display:flex; gap: 10px; padding: 10px 12px;
-  border-bottom: 1px dashed #e5e7eb; font-size: 13px; }
+.an-row { display:flex; gap: 12px; padding: 10px 12px;
+  border-bottom: 1px dashed #e5e7eb; font-size: 13px; align-items: flex-start; }
 .an-row:last-child { border-bottom: 0; }
+.an-row .thumb { flex: 0 0 90px; width: 90px; }
+.an-row .thumb img { width: 100%; height: auto; display: block;
+  border: 1px solid #cbd5e1; border-radius: 4px; cursor: zoom-in;
+  background: #f8fafc; min-height: 60px; }
+.an-row .thumb img.loading { opacity: 0.4; }
 .an-row .meta { flex: 0 0 130px; color:#64748b; font-size: 12px; }
 .an-row .meta b { color:#0f172a; font-weight: 600; }
 .an-row .body { flex: 1; min-width: 0; color:#0f172a; }
 .an-type-pill { display:inline-block; padding: 1px 7px; border-radius: 4px;
   font-size: 11px; background:#e2e8f0; color:#475569; }
+
+/* lightbox for clicking a thumbnail to see the full page */
+.an-lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999; cursor: zoom-out; }
+.an-lightbox img { max-width: 92vw; max-height: 92vh; box-shadow: 0 8px 40px rgba(0,0,0,0.6); }
 
 .an-export { display:flex; gap: 8px; flex-wrap:wrap; margin-top: 12px; }
 .an-export .btn { font-size: 12.5px; padding: 5px 12px; }
@@ -266,7 +277,11 @@ function redrawList() {
     for (const a of items) {
       const who = a.author || "(未署名)";
       const body = a.content || a.subject || "<em style='color:#94a3b8'>(無文字內容)</em>";
+      const thumb = lastResult.upload_id
+        ? `<div class="thumb"><img loading="lazy" class="loading" src="/tools/pdf-annotations/preview/${lastResult.upload_id}/${a.page}" alt="第 ${a.page} 頁預覽" data-page="${a.page}" onload="this.classList.remove('loading')"></div>`
+        : "";
       html += `<div class="an-row">`;
+      html += thumb;
       html += `<div class="meta"><b>第 ${a.page} 頁</b><br>${escapeHtml(who)}<br><span class="an-type-pill">${escapeHtml(a.type_label)}</span></div>`;
       html += `<div class="body">${escapeHtml(body).replace(/\n/g, "<br>")}</div>`;
       html += `</div>`;
@@ -276,10 +291,26 @@ function redrawList() {
   $("anList").innerHTML = html;
 }
 
+// click thumbnail → lightbox
+$("anList").addEventListener("click", (e) => {
+  const t = e.target;
+  if (t.tagName === "IMG" && t.dataset.page) {
+    const lb = document.createElement("div");
+    lb.className = "an-lightbox";
+    lb.innerHTML = `<img src="${t.src}" alt="">`;
+    lb.addEventListener("click", () => lb.remove());
+    document.body.appendChild(lb);
+  }
+});
+
 // ---- export buttons ----
 function _filterFormData() {
+  if (!lastResult || !lastResult.upload_id) {
+    alert("請先上傳並分析 PDF");
+    return null;
+  }
   const fd = new FormData();
-  fd.append("file", lastFile);
+  fd.append("upload_id", lastResult.upload_id);
   fd.append("types",   _typeIdsToEnglish(filterState.types).join(","));
   fd.append("authors", Array.from(filterState.authors).join(","));
   return fd;
@@ -297,20 +328,20 @@ async function _post(url, fd) {
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
 }
-$("btnCsv").addEventListener("click",     () => _post("/tools/pdf-annotations/export-csv",   _filterFormData()));
-$("btnJson").addEventListener("click",    () => _post("/tools/pdf-annotations/export-json",  _filterFormData()));
+$("btnCsv").addEventListener("click",     () => { const fd = _filterFormData(); if (fd) _post("/tools/pdf-annotations/export-csv",   fd); });
+$("btnJson").addEventListener("click",    () => { const fd = _filterFormData(); if (fd) _post("/tools/pdf-annotations/export-json",  fd); });
 $("btnReview").addEventListener("click",  () => {
-  const fd = _filterFormData();
+  const fd = _filterFormData(); if (!fd) return;
   fd.append("group_by", groupBy);
   _post("/tools/pdf-annotations/export-review", fd);
 });
 $("btnTodoMd").addEventListener("click",  () => {
-  const fd = _filterFormData();
+  const fd = _filterFormData(); if (!fd) return;
   fd.append("fmt", "md");
   _post("/tools/pdf-annotations/export-todo", fd);
 });
 $("btnTodoCsv").addEventListener("click", () => {
-  const fd = _filterFormData();
+  const fd = _filterFormData(); if (!fd) return;
   fd.append("fmt", "csv");
   _post("/tools/pdf-annotations/export-todo", fd);
 });
