@@ -513,7 +513,7 @@
           <span class="install-warn-badge">⚠ 尚未完整測試</span>
         </div>
         <div class="install-cmd-wrap">
-          <pre><code id="cmd-win">$u="https://cdn.jsdelivr.net/gh/jasoncheng7115/jt-doc-tools@main/install.ps1"; $f="$env:TEMP\jtdt-install.ps1"; [Net.ServicePointManager]::SecurityProtocol='Tls12'; $d=(New-Object Net.WebClient).DownloadData($u); [IO.File]::WriteAllText($f,[Text.Encoding]::UTF8.GetString($d),[Text.Encoding]::Unicode); powershell -NoProfile -ExecutionPolicy Bypass -File $f; Read-Host '安裝結束，按 Enter 關閉'</code></pre>
+          <pre><code id="cmd-win">$u="https://cdn.jsdelivr.net/gh/jasoncheng7115/jt-doc-tools@main/install.ps1"; $f="$env:TEMP\jtdt-install.ps1"; [Net.ServicePointManager]::SecurityProtocol='Tls12'; $d=(New-Object Net.WebClient).DownloadData($u); $b=New-Object byte[] ($d.Length+3); $b[0]=0xEF;$b[1]=0xBB;$b[2]=0xBF; [Array]::Copy($d,0,$b,3,$d.Length); [IO.File]::WriteAllBytes($f,$b); powershell -NoProfile -ExecutionPolicy Bypass -File $f; Read-Host '安裝結束，按 Enter 關閉'</code></pre>
           <button type="button" class="copy-btn" data-target="cmd-win" aria-label="複製指令">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             <span class="copy-label">複製</span>
