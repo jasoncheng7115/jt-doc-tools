@@ -4,6 +4,28 @@
 
 ---
 
+## [1.1.49] - 2026-04-27
+
+### 新增（pdf-wordcount 字數統計工具）
+
+- **新工具：字數統計**（`/tools/pdf-wordcount/`，分類為「內容擷取」）。上傳 PDF 即得：總頁數、總字數、CJK 中文字、英文 word、字元含/不含空白、段落、句子、平均每頁字數、平均句長、預估閱讀時間（中 300 字/分、英 200 word/分）。
+- **四張精緻互動圖表**：每頁字數直條圖（漸層 + hover tooltip）、字元類型環圈圖（CJK / 英文 / 數字 / 標點 / 空白 / 其他）、Top 20 高頻詞水平條圖（中文單字 / 中文雙字 bigram / 英文三種模式可切換,英文有 stopwords 過濾）、累積字數面積線圖。全部 inline SVG 自繪,零依賴 / air-gap 友善。
+- **匯出**：每頁明細 CSV（UTF-8 BOM,Excel 友善）、完整 JSON、Markdown 報表。
+- **公開 API endpoint**：`POST /tools/pdf-wordcount/api/pdf-wordcount` 回 JSON,符合「所有功能必須有 API」規矩。
+- **掃描檔友善提示**：偵測無文字層 PDF 時顯示 banner 提示先做 OCR。
+- **測試**：14 條 pytest 案例(分類器/字數統計/句子切分/閱讀時間/詞頻 stopwords + bigram / 4 endpoint / CJK 檔名 RFC 5987)。
+
+### 文件
+
+- **README + 介紹網站新增 Office 引擎相依說明**：標 🔧 的工具(文書轉 PDF / 文書轉圖片 / 表單自動填寫 / 文件去識別化 / 擷取文字)需要 OxOffice 或 LibreOffice;其餘 17 個工具只處理 PDF,不需 Office 引擎。安裝腳本本來就會自動偵測 / 補裝 OxOffice,但之前文件沒寫清楚哪些工具會用到。
+
+### 修正
+
+- **`app/tools/__init__.py` 被誤覆蓋導致 linux 服務無法啟動**:之前 deploy 用 `cp -r app/tools/pdf_metadata/ /dest/app/tools/` 模式,結尾 `/` 讓 cp 把 pdf_metadata 自己的 `__init__.py` 倒進 `app/tools/__init__.py`,變成 `from ..base import` 指向不存在的 `app/base`,服務無法啟動。修復檔案 + 加 memory 規則永遠不再用該模式。
+- **Windows 安裝腳本: 已存在 `bin/` 子目錄時 `git clone` 失敗**:install.ps1 在已裝 uv/nssm 後 `bin/` 已存在,但 `git clone` 要求目標必須是空目錄,導致 `fatal: destination path ... already exists and is not an empty directory` + 後續 `uv sync` 找不到 `pyproject.toml`。改成 clone 到 temp 目錄再合併進 `$InstallDir`,保留 `bin/`。
+
+---
+
 ## [1.1.48] - 2026-04-27
 
 ### 新增（pdf-stamp 編輯模式分頁預覽）
