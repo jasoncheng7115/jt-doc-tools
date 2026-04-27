@@ -155,45 +155,52 @@ function Fetch-Code {
         Push-Location $InstallDir
         try {
             git fetch --depth=1 origin $RepoBranch
+            if ($LASTEXITCODE -ne 0) { Die "git fetch failed" }
             git reset --hard "origin/$RepoBranch"
+            if ($LASTEXITCODE -ne 0) { Die "git reset failed" }
         } finally { Pop-Location }
         return
     }
-    if ((Test-Path $InstallDir) -and (Get-ChildItem $InstallDir -Force | Where-Object { $_.Name -ne 'bin' }) ) {
-        # Stale install dir from a previous failed run. Keep bin/ (uv/nssm), wipe the rest.
-        # $DataDir is at a different path so user data is safe.
-        Warn "$InstallDir exists but is not a git repo (likely failed-install leftover); auto-cleaning ..."
-        Get-ChildItem $InstallDir -Force | Where-Object { $_.Name -ne 'bin' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-    }
+    # InstallDir may already exist because Install-Uv / Install-Nssm just put
+    # bin/ in there. We keep bin/ (uv + nssm) and wipe everything else, then
+    # clone into a temp dir and copy contents in. We can't clone directly
+    # into $InstallDir because git refuses non-empty destinations.
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-    # Clone or download into a temp dir, then copy contents in. We can't clone
-    # directly into $InstallDir because it already has bin/ (uv + nssm just
-    # got installed there) and git clone refuses non-empty destinations.
-    $stage = Join-Path $env:TEMP ("jtdt-src-" + [guid]::NewGuid().ToString('N'))
+    Warn "$InstallDir is not a git repo; cleaning non-bin files (keeping bin/uv.exe and bin/nssm.exe) ..."
+    Get-ChildItem $InstallDir -Force |
+        Where-Object { $_.Name -ne 'bin' } |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+    $tmpSrc = Join-Path $env:TEMP "jtdt-src-$(Get-Date -Format yyyyMMddHHmmss)"
+    if (Test-Path $tmpSrc) {
+        Remove-Item $tmpSrc -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     if (Get-Command git -ErrorAction SilentlyContinue) {
-        Log "Cloning code from $RepoUrl ..."
-        git clone --depth=1 --branch $RepoBranch $RepoUrl $stage
+        Log "Cloning code from $RepoUrl to temporary directory ..."
+        git clone --depth=1 --branch $RepoBranch $RepoUrl $tmpSrc
         if ($LASTEXITCODE -ne 0) { Die "git clone failed" }
+        Log "Copying source code to $InstallDir ..."
+        Get-ChildItem $tmpSrc -Force |
+            Copy-Item -Destination $InstallDir -Recurse -Force
+        Remove-Item $tmpSrc -Recurse -Force -ErrorAction SilentlyContinue
     } else {
         Log "git not installed, falling back to tarball download ..."
         $tmp = Join-Path $env:TEMP "jtdt-src.zip"
-        Invoke-WebRequest -Uri "$RepoUrl/archive/refs/heads/$RepoBranch.zip" -OutFile $tmp
         $extractDir = Join-Path $env:TEMP "jtdt-extract"
-        if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
+        if (Test-Path $tmp)        { Remove-Item $tmp        -Force         -ErrorAction SilentlyContinue }
+        if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue }
+        Invoke-WebRequest -Uri "$RepoUrl/archive/refs/heads/$RepoBranch.zip" -OutFile $tmp
         Expand-Archive -Path $tmp -DestinationPath $extractDir -Force
         $first = Get-ChildItem $extractDir -Directory | Select-Object -First 1
-        New-Item -ItemType Directory -Force -Path $stage | Out-Null
-        Copy-Item "$($first.FullName)\*" $stage -Recurse -Force
+        Copy-Item "$($first.FullName)\*" $InstallDir -Recurse -Force
         Remove-Item $tmp, $extractDir -Recurse -Force -ErrorAction SilentlyContinue
     }
-    # Merge stage into $InstallDir (preserves existing bin/ subdir)
-    Get-ChildItem $stage -Force | ForEach-Object {
-        Copy-Item $_.FullName -Destination $InstallDir -Recurse -Force
-    }
-    Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+
     if (-not (Test-Path (Join-Path $InstallDir 'pyproject.toml'))) {
         Die "Source fetch failed: pyproject.toml not found in $InstallDir"
     }
+    Ok "Source code ready"
 }
 
 function Setup-Python {
