@@ -328,11 +328,14 @@ code {
   .why-grid { grid-template-columns: 1fr; }
 }
 
-/* ===== Command reference table (in install spec block) ===== */
-.cmd-table { border-collapse: collapse; margin: 6px 0 8px; font-size: 13.5px; line-height: 1.6; }
-.cmd-table th, .cmd-table td { padding: 3px 12px 3px 0; vertical-align: top; text-align: left; font-weight: 500; white-space: nowrap; }
-.cmd-table th { color: var(--text); font-weight: 700; min-width: 56px; }
-.cmd-table td:first-of-type { color: var(--muted); font-size: 12.5px; }
+/* ===== Upgrade / uninstall command block (in install spec) ===== */
+.cmd-block { margin: 8px 0 10px; font-size: 13.5px; line-height: 1.7; }
+.cmd-block .cmd-os { color: var(--muted); font-size: 12px; font-weight: 600;
+  margin-top: 6px; letter-spacing: 0.04em; }
+.cmd-block .cmd-os:first-child { margin-top: 0; }
+.cmd-block .cmd-note { color: var(--muted-2); font-weight: 400;
+  font-size: 11.5px; margin-left: 4px; }
+.cmd-block code { display: inline-block; margin: 1px 0; }
 
 /* ===== Office engine callout ===== */
 .ofc-callout {
