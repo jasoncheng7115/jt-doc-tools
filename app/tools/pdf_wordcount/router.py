@@ -130,7 +130,7 @@ def _analyze_pdf(data: bytes, filename: str = "document.pdf") -> dict:
     try:
         with fitz.open(str(src)) as doc:
             if doc.needs_pass:
-                raise HTTPException(400, "PDF 已加密,請先解密再分析")
+                raise HTTPException(400, "PDF 已加密，請先解密再分析")
             page_count = doc.page_count
             pages: list[dict] = []
             full_text_parts: list[str] = []

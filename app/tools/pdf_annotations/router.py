@@ -69,7 +69,7 @@ def _read_annotations(pdf_path: Path) -> list[dict[str, Any]]:
     idx = 0
     with fitz.open(str(pdf_path)) as doc:
         if doc.needs_pass:
-            raise HTTPException(400, "PDF 已加密,請先解密再分析")
+            raise HTTPException(400, "PDF 已加密，請先解密再分析")
         for pno in range(doc.page_count):
             page = doc[pno]
             for a in page.annots() or []:

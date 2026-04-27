@@ -26,9 +26,9 @@
 {% endblock %}
 {% block content %}
 <h1>{{ icon('layers', size=22) }} 註解固定化</h1>
-<p class="muted">把 PDF 中的註解(螢光筆 / 文字註解 / 圖章 / 自由文字 …)燒進頁面內容流。視覺上完全一樣,但<b>收件方無法移除、無法另存</b>,適合對外定稿前的最後一步。</p>
+<p class="muted">把 PDF 中的註解(螢光筆 / 文字註解 / 圖章 / 自由文字 …)燒進頁面內容流。視覺上完全一樣，但<b>收件方無法移除、無法另存</b>，適合對外定稿前的最後一步。</p>
 <div class="af-info">
-  表單欄位 (AcroForm widgets) 不會被固定化,使用者收到後仍可填表。
+  表單欄位 (AcroForm widgets) 不會被固定化，使用者收到後仍可填表。
 </div>
 
 <div class="panel">
@@ -54,7 +54,7 @@
     <span id="flatStatus" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
   </div>
   <div class="af-warn" style="margin-top:10px;">
-    <b>不可逆</b>:輸出檔的註解已變成頁面像素,無法再透過 PDF 工具編輯或移除。建議保留原檔。
+    <b>不可逆</b>:輸出檔的註解已變成頁面像素，無法再透過 PDF 工具編輯或移除。建議保留原檔。
   </div>
 </div>
 
@@ -116,7 +116,7 @@ function render(r) {
   ).join("");
 
   if (r.total === 0) {
-    $("afError").textContent = "⚠ 此 PDF 沒有偵測到註解,固定化會直接輸出原檔副本(不會出錯)。";
+    $("afError").textContent = "⚠ 此 PDF 沒有偵測到註解，固定化會直接輸出原檔副本(不會出錯)。";
     $("afError").hidden = false;
   } else {
     $("afError").hidden = true;
@@ -126,7 +126,7 @@ function render(r) {
 $("btnFlatten").addEventListener("click", async () => {
   if (!lastFile) return;
   if (lastResult && lastResult.total > 0) {
-    if (!confirm(`即將把 ${lastResult.total} 條註解燒進頁面,操作不可逆,要繼續?`)) return;
+    if (!confirm(`即將把 ${lastResult.total} 條註解燒進頁面，操作不可逆，要繼續?`)) return;
   }
   const fd = new FormData();
   fd.append("file", lastFile);
@@ -148,7 +148,7 @@ $("btnFlatten").addEventListener("click", async () => {
   a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
-  $("flatStatus").textContent = `完成,固定化了 ${baked} 條註解`;
+  $("flatStatus").textContent = `完成，固定化了 ${baked} 條註解`;
 });
 </script>
 {% endblock %}

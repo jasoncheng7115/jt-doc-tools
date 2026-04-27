@@ -73,7 +73,7 @@ async def flatten(file: UploadFile = File(...)):
     try:
         with fitz.open(str(src)) as doc:
             if doc.needs_pass:
-                raise HTTPException(400, "PDF 已加密,請先解密")
+                raise HTTPException(400, "PDF 已加密，請先解密")
             # Count annotations before baking — bake() destroys them.
             for p in doc:
                 baked += sum(1 for _ in (p.annots() or []))

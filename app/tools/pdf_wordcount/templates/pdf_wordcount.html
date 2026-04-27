@@ -79,13 +79,13 @@
 {% endblock %}
 {% block content %}
 <h1>{{ icon('chart-bar', size=22) }} 字數統計</h1>
-<p class="muted">統計 PDF 中的字數、字元、段落、句子,並繪製每頁字數直條圖、字元類型環圈、中文單字 / 中文雙字 / 英文 三類高頻詞圖表。</p>
+<p class="muted">統計 PDF 中的字數、字元、段落、句子，並繪製每頁字數直條圖、字元類型環圈、中文單字 / 中文雙字 / 英文 三類高頻詞圖表。</p>
 
 <div class="panel">
   <h2 style="margin-top:0;">1. 上傳 PDF</h2>
   {% with upload_id='wcUp', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
   <div id="wcLoading" class="muted" style="margin-top:10px; font-size:12.5px;" hidden>
-    {{ icon('refresh', size=14) }} 分析中,請稍候…
+    {{ icon('refresh', size=14) }} 分析中，請稍候…
   </div>
   <div id="wcError" class="wc-warn" hidden></div>
 </div>

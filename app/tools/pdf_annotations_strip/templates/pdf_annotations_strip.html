@@ -33,7 +33,7 @@
 {% endblock %}
 {% block content %}
 <h1>{{ icon('trash', size=22) }} 註解清除</h1>
-<p class="muted">把 PDF 中的註解全部刪掉,或依作者 / 類型篩選後刪除。產出新的 PDF 副本(原檔不動)。</p>
+<p class="muted">把 PDF 中的註解全部刪掉，或依作者 / 類型篩選後刪除。產出新的 PDF 副本(原檔不動)。</p>
 <div class="as-warn">
   <b>注意</b>:這是<b>不可逆</b>操作 — 刪除的註解資訊不會留在輸出檔內。建議保留原始檔案。
 </div>
@@ -189,7 +189,7 @@ $("btnStrip").addEventListener("click", async () => {
     return;
   }
   if (mode === "all" && lastResult && lastResult.total > 0) {
-    if (!confirm(`即將刪除全部 ${lastResult.total} 條註解,要繼續?`)) return;
+    if (!confirm(`即將刪除全部 ${lastResult.total} 條註解，要繼續?`)) return;
   }
   const fd = new FormData();
   fd.append("file", lastFile);
@@ -214,7 +214,7 @@ $("btnStrip").addEventListener("click", async () => {
   a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
-  $("stripStatus").textContent = `完成,刪除了 ${removed} 條註解`;
+  $("stripStatus").textContent = `完成，刪除了 ${removed} 條註解`;
 });
 </script>
 {% endblock %}
