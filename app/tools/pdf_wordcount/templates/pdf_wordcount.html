@@ -3,17 +3,32 @@
 {% block title %}字數統計 · {{ app_name }}{% endblock %}
 {% block head %}
 <style>
-.wc-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+.wc-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px; margin-top: 12px; }
-.wc-stat { background: linear-gradient(135deg,#f8fafc 0%,#eef2ff 100%);
-  border:1px solid #e0e7ff; border-radius:10px; padding: 12px 14px; }
-.wc-stat .lbl { color:#64748b; font-size: 12px; font-weight:500; }
+.wc-stat { border-radius:10px; padding: 12px 14px; border:1px solid; position: relative; overflow: hidden; }
+.wc-stat .lbl { font-size: 12px; font-weight:500; opacity: 0.85; }
 .wc-stat .val { color:#0f172a; font-size: 22px; font-weight: 700;
-  margin-top: 2px; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.wc-stat .sub { color:#94a3b8; font-size: 11.5px; margin-top: 2px; }
-.wc-stat.accent { background: linear-gradient(135deg,#dbeafe 0%,#c7d2fe 100%);
-  border-color:#a5b4fc; }
-.wc-stat.accent .val { color:#1e3a8a; }
+  margin-top: 2px; line-height: 1.2; font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wc-stat .sub { font-size: 11.5px; margin-top: 2px; opacity: 0.7; }
+
+/* Per-card color themes (8 distinct hues, all light to keep text dark + readable) */
+.wc-stat-1 { background:linear-gradient(135deg,#dbeafe 0%,#bfdbfe 100%); border-color:#93c5fd; color:#1e40af; }
+.wc-stat-1 .val { color:#1e3a8a; }
+.wc-stat-2 { background:linear-gradient(135deg,#cffafe 0%,#a5f3fc 100%); border-color:#67e8f9; color:#155e75; }
+.wc-stat-2 .val { color:#0e7490; }
+.wc-stat-3 { background:linear-gradient(135deg,#dcfce7 0%,#bbf7d0 100%); border-color:#86efac; color:#166534; }
+.wc-stat-3 .val { color:#14532d; }
+.wc-stat-4 { background:linear-gradient(135deg,#ede9fe 0%,#ddd6fe 100%); border-color:#c4b5fd; color:#5b21b6; }
+.wc-stat-4 .val { color:#4c1d95; }
+.wc-stat-5 { background:linear-gradient(135deg,#ffedd5 0%,#fed7aa 100%); border-color:#fdba74; color:#9a3412; }
+.wc-stat-5 .val { color:#7c2d12; }
+.wc-stat-6 { background:linear-gradient(135deg,#fce7f3 0%,#fbcfe8 100%); border-color:#f9a8d4; color:#9d174d; }
+.wc-stat-6 .val { color:#831843; }
+.wc-stat-7 { background:linear-gradient(135deg,#fef9c3 0%,#fef08a 100%); border-color:#fde047; color:#854d0e; }
+.wc-stat-7 .val { color:#713f12; }
+.wc-stat-8 { background:linear-gradient(135deg,#fee2e2 0%,#fecaca 100%); border-color:#fca5a5; color:#991b1b; }
+.wc-stat-8 .val { color:#7f1d1d; }
 
 .wc-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; margin-top: 14px; }
 @media (max-width: 900px) { .wc-grid { grid-template-columns: 1fr; } }
@@ -54,6 +69,10 @@
 .wc-export .btn { font-size: 12.5px; padding: 5px 12px; }
 
 .wc-empty { text-align:center; padding: 30px 10px; color:#94a3b8; font-size: 13px; }
+#wcResults { margin-top: 16px; }
+#wcResults > .panel + .panel,
+#wcResults > .wc-grid,
+#wcResults > .wc-grid-bot { margin-top: 14px; }
 .wc-warn { background:#fef3c7; border:1px solid #fde68a; color:#78350f;
   padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-top: 10px; }
 </style>
@@ -77,39 +96,42 @@
   <h2 style="margin-top:0;">統計總覽 <span class="muted" style="font-size:13px; font-weight:400; margin-left:8px;" id="wcFile"></span></h2>
 
   <div class="wc-stats">
-    <div class="wc-stat accent">
+    <div class="wc-stat wc-stat-1">
       <div class="lbl">總字數</div>
       <div class="val" id="sWordTotal">—</div>
       <div class="sub">CJK 字 + 英文 word</div>
     </div>
-    <div class="wc-stat">
+    <div class="wc-stat wc-stat-2">
       <div class="lbl">頁數</div>
       <div class="val" id="sPages">—</div>
       <div class="sub" id="sAvgPage"></div>
     </div>
-    <div class="wc-stat">
+    <div class="wc-stat wc-stat-3">
       <div class="lbl">中文字</div>
       <div class="val" id="sCjk">—</div>
+      <div class="sub">CJK 單字</div>
     </div>
-    <div class="wc-stat">
+    <div class="wc-stat wc-stat-4">
       <div class="lbl">英文字</div>
       <div class="val" id="sEn">—</div>
+      <div class="sub">英文 word</div>
     </div>
-    <div class="wc-stat">
+    <div class="wc-stat wc-stat-5">
       <div class="lbl">段落 / 句子</div>
       <div class="val" id="sParaSent">—</div>
+      <div class="sub">paragraphs / sentences</div>
     </div>
-    <div class="wc-stat">
+    <div class="wc-stat wc-stat-6">
       <div class="lbl">字元數 (含空白)</div>
       <div class="val" id="sChars">—</div>
       <div class="sub" id="sCharsNoWs"></div>
     </div>
-    <div class="wc-stat">
+    <div class="wc-stat wc-stat-7">
       <div class="lbl">平均句長</div>
       <div class="val" id="sAvgSent">—</div>
       <div class="sub">字元/句</div>
     </div>
-    <div class="wc-stat accent">
+    <div class="wc-stat wc-stat-8">
       <div class="lbl">預估閱讀</div>
       <div class="val" id="sRead">—</div>
       <div class="sub">中 300/分 · 英 200/分</div>
