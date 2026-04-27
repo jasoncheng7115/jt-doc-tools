@@ -47,7 +47,7 @@ def client():
 def test_index_renders(client):
     r = client.get("/tools/pdf-annotations-flatten/")
     assert r.status_code == 200
-    assert "註解固定化" in r.text
+    assert "註解平面化" in r.text
 
 
 def test_analyze_returns_total_and_widget_flag(client):
@@ -62,7 +62,7 @@ def test_analyze_returns_total_and_widget_flag(client):
     assert j["has_widgets"] is False
 
 
-def test_flatten_bakes_all_annotations(client):
+def test_flatten_returns_baked_uid_and_metadata(client):
     pdf = _make_pdf_with_annots()
     assert _count_annots(pdf) == 2
     r = client.post(
@@ -70,10 +70,69 @@ def test_flatten_bakes_all_annotations(client):
         files={"file": ("doc.pdf", pdf, "application/pdf")},
     )
     assert r.status_code == 200
-    assert r.headers.get("x-annotations-baked") == "2"
-    # All annotation objects are gone after baking — visuals are now in
-    # the page content stream.
-    assert _count_annots(r.content) == 0
+    j = r.json()
+    assert j["baked_count"] == 2
+    assert j["page_count"] == 1
+    assert len(j["baked_uid"]) == 32
+
+
+def test_baked_download_returns_pdf_with_zero_annots(client):
+    """Download the flattened PDF and confirm annotations are baked away."""
+    r = client.post(
+        "/tools/pdf-annotations-flatten/flatten",
+        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
+    )
+    uid = r.json()["baked_uid"]
+    r2 = client.get(f"/tools/pdf-annotations-flatten/baked-download/{uid}")
+    assert r2.status_code == 200
+    assert r2.headers["content-type"] == "application/pdf"
+    # Annotations were baked into the content stream — annot list is empty.
+    assert _count_annots(r2.content) == 0
+
+
+def test_baked_preview_returns_png(client):
+    r = client.post(
+        "/tools/pdf-annotations-flatten/flatten",
+        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
+    )
+    uid = r.json()["baked_uid"]
+    p = client.get(f"/tools/pdf-annotations-flatten/baked-preview/{uid}/1")
+    assert p.status_code == 200
+    assert p.headers["content-type"] == "image/png"
+    assert p.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_baked_preview_invalid_uid_returns_400(client):
+    r = client.get("/tools/pdf-annotations-flatten/baked-preview/not-hex/1")
+    assert r.status_code == 400
+
+
+def test_baked_preview_expired_uid_returns_410(client):
+    r = client.get(f"/tools/pdf-annotations-flatten/baked-preview/{'0'*32}/1")
+    assert r.status_code == 410
+
+
+def test_baked_preview_out_of_range_page_returns_404(client):
+    r = client.post(
+        "/tools/pdf-annotations-flatten/flatten",
+        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
+    )
+    uid = r.json()["baked_uid"]
+    p = client.get(f"/tools/pdf-annotations-flatten/baked-preview/{uid}/999")
+    assert p.status_code == 404
+
+
+def test_baked_download_filename_handles_cjk(client):
+    pdf = _make_pdf_with_annots()
+    r = client.post(
+        "/tools/pdf-annotations-flatten/flatten",
+        files={"file": ("中文.pdf", pdf, "application/pdf")},
+    )
+    uid = r.json()["baked_uid"]
+    r2 = client.get(f"/tools/pdf-annotations-flatten/baked-download/{uid}")
+    assert r2.status_code == 200
+    cd = r2.headers.get("content-disposition", "")
+    assert "filename*=" in cd or "filename=" in cd
 
 
 def test_flatten_blank_pdf_succeeds_with_zero(client):
@@ -82,8 +141,7 @@ def test_flatten_blank_pdf_succeeds_with_zero(client):
         files={"file": ("blank.pdf", _make_blank_pdf(), "application/pdf")},
     )
     assert r.status_code == 200
-    assert r.headers.get("x-annotations-baked") == "0"
-    assert _count_annots(r.content) == 0
+    assert r.json()["baked_count"] == 0
 
 
 def test_flatten_rejects_non_pdf(client):
@@ -94,22 +152,13 @@ def test_flatten_rejects_non_pdf(client):
     assert r.status_code == 400
 
 
-def test_flatten_filename_handles_cjk(client):
-    pdf = _make_pdf_with_annots()
-    r = client.post(
-        "/tools/pdf-annotations-flatten/flatten",
-        files={"file": ("中文.pdf", pdf, "application/pdf")},
-    )
-    assert r.status_code == 200
-    cd = r.headers.get("content-disposition", "")
-    assert "filename*=" in cd or "filename=" in cd
-
-
-def test_api_alias_works(client):
+def test_api_alias_returns_pdf_directly(client):
+    """The public API endpoint still streams the PDF in one shot (no preview)."""
     pdf = _make_pdf_with_annots()
     r = client.post(
         "/tools/pdf-annotations-flatten/api/pdf-annotations-flatten",
         files={"file": ("doc.pdf", pdf, "application/pdf")},
     )
     assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
     assert _count_annots(r.content) == 0

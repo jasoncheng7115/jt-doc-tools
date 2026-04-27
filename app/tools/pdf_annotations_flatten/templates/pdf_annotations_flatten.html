@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
-{% block title %}註解固定化 · {{ app_name }}{% endblock %}
+{% block title %}註解平面化 · {{ app_name }}{% endblock %}
 {% block head %}
 <style>
 .af-stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr));
@@ -22,13 +22,36 @@
 .af-info { background:#eff6ff; border:1px solid #bfdbfe; color:#1e3a8a;
   padding:10px 12px; border-radius:8px; font-size:13px; margin-top:10px; }
 #afResults { margin-top:16px; }
+
+/* spinner used while a button is processing */
+@keyframes af-spin { to { transform: rotate(360deg); } }
+.af-spinner { display:inline-block; width:14px; height:14px;
+  border:2px solid currentColor; border-right-color: transparent;
+  border-radius:50%; animation: af-spin 0.7s linear infinite;
+  vertical-align: -3px; margin-right: 6px; }
+.btn:disabled, .btn[disabled] { opacity: 0.6; cursor: not-allowed; pointer-events: none; }
+
+/* baked-result preview grid */
+.af-preview { display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px; margin-top: 14px; }
+.af-preview .thumb { border:1px solid #cbd5e1; border-radius: 6px; overflow:hidden;
+  background: #f8fafc; }
+.af-preview .thumb img { width: 100%; height: auto; display: block; cursor: zoom-in;
+  min-height: 100px; }
+.af-preview .thumb img.loading { opacity: 0.4; }
+.af-preview .thumb .cap { background:#1e3a8a; color:#fff; font-size:11px;
+  text-align:center; padding: 3px 0; font-weight: 600; }
+.af-lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999; cursor: zoom-out; }
+.af-lightbox img { max-width: 92vw; max-height: 92vh; box-shadow: 0 8px 40px rgba(0,0,0,0.6); }
 </style>
 {% endblock %}
 {% block content %}
-<h1>{{ icon('layers', size=22) }} 註解固定化</h1>
+<h1>{{ icon('layers', size=22) }} 註解平面化</h1>
 <p class="muted">把 PDF 中的註解(螢光筆 / 文字註解 / 圖章 / 自由文字 …)燒進頁面內容流。視覺上完全一樣，但<b>收件方無法移除、無法另存</b>，適合對外定稿前的最後一步。</p>
 <div class="af-info">
-  表單欄位 (AcroForm widgets) 不會被固定化，使用者收到後仍可填表。
+  表單欄位 (AcroForm widgets) 不會被平面化，使用者收到後仍可填表。
 </div>
 
 <div class="panel">
@@ -50,11 +73,20 @@
   <div class="af-types" id="afTypes"></div>
 
   <div style="margin-top:14px;">
-    <button class="btn btn-primary" id="btnFlatten">{{ icon('layers', size=14) }} 固定化並下載</button>
+    <button class="btn btn-primary" id="btnFlatten">{{ icon('layers', size=14) }} 執行平面化</button>
     <span id="flatStatus" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
   </div>
   <div class="af-warn" style="margin-top:10px;">
-    <b>不可逆</b>:輸出檔的註解已變成頁面像素，無法再透過 PDF 工具編輯或移除。建議保留原檔。
+    <b>不可逆</b>：輸出檔的註解已寫入頁面內容流，無法再透過 PDF 工具編輯或移除。建議保留原檔。
+  </div>
+</div>
+
+<div class="panel" id="bakedPanel" hidden>
+  <h2 style="margin-top:0;">平面化結果預覽 <span class="muted" style="font-size:13px; font-weight:400; margin-left:8px;" id="bakedSummary"></span></h2>
+  <p class="muted" style="font-size:12.5px; margin: 0 0 6px;">點任一頁可放大查看。確認結果無誤後，按下方按鈕下載。</p>
+  <div class="af-preview" id="bakedGrid"></div>
+  <div style="margin-top:14px;">
+    <button class="btn btn-primary" id="btnDownload">{{ icon('download', size=14) }} 下載平面化後的 PDF</button>
   </div>
 </div>
 
@@ -116,39 +148,111 @@ function render(r) {
   ).join("");
 
   if (r.total === 0) {
-    $("afError").textContent = "⚠ 此 PDF 沒有偵測到註解，固定化會直接輸出原檔副本(不會出錯)。";
+    $("afError").textContent = "⚠ 此 PDF 沒有偵測到註解，平面化會直接輸出原檔副本(不會出錯)。";
     $("afError").hidden = false;
   } else {
     $("afError").hidden = true;
   }
 }
 
+let bakedUid = null;
+
+function _setBusy(btn, busy, busyLabel) {
+  if (busy) {
+    btn.dataset.origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="af-spinner"></span>${busyLabel}`;
+  } else {
+    btn.disabled = false;
+    if (btn.dataset.origHtml) btn.innerHTML = btn.dataset.origHtml;
+  }
+}
+
 $("btnFlatten").addEventListener("click", async () => {
   if (!lastFile) return;
   if (lastResult && lastResult.total > 0) {
-    if (!confirm(`即將把 ${lastResult.total} 條註解燒進頁面，操作不可逆，要繼續?`)) return;
+    if (!confirm(`即將把 ${lastResult.total} 條註解寫入頁面內容流，操作不可逆，要繼續？`)) return;
   }
+  const btn = $("btnFlatten");
+  _setBusy(btn, true, "處理中…");
+  $("flatStatus").textContent = "";
+  $("bakedPanel").hidden = true;
+  $("bakedGrid").innerHTML = "";
+
   const fd = new FormData();
   fd.append("file", lastFile);
-  $("flatStatus").textContent = "處理中…";
-  const r = await fetch("/tools/pdf-annotations-flatten/flatten", { method: "POST", body: fd });
-  if (!r.ok) {
-    let msg = "HTTP " + r.status;
-    try { msg = (await r.json()).detail || msg; } catch (e) {}
-    $("flatStatus").textContent = "失敗:" + msg;
+  let resp;
+  try {
+    resp = await fetch("/tools/pdf-annotations-flatten/flatten", { method: "POST", body: fd });
+  } catch (err) {
+    _setBusy(btn, false);
+    $("flatStatus").textContent = "網路錯誤：" + err.message;
     return;
   }
-  const baked = r.headers.get("X-Annotations-Baked") || "?";
-  const blob = await r.blob();
-  const cd = r.headers.get("Content-Disposition") || "";
-  let name = "flattened.pdf";
-  const m = cd.match(/filename\*=UTF-8''([^;]+)/i) || cd.match(/filename="?([^";]+)"?/i);
-  if (m) try { name = decodeURIComponent(m[1]); } catch (e) { name = m[1]; }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = name;
-  document.body.appendChild(a); a.click();
-  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
-  $("flatStatus").textContent = `完成，固定化了 ${baked} 條註解`;
+  if (!resp.ok) {
+    let msg = "HTTP " + resp.status;
+    try { msg = (await resp.json()).detail || msg; } catch (e) {}
+    _setBusy(btn, false);
+    $("flatStatus").textContent = "失敗：" + msg;
+    return;
+  }
+  const result = await resp.json();
+  bakedUid = result.baked_uid;
+  _setBusy(btn, false);
+  $("flatStatus").textContent = `完成,平面化 ${result.baked_count} 條註解,結果預覽如下`;
+  _renderBakedGrid(result);
+});
+
+function _renderBakedGrid(r) {
+  $("bakedSummary").textContent = `${r.filename || ""} · 共 ${fmt(r.page_count)} 頁`;
+  let html = "";
+  for (let p = 1; p <= r.page_count; p++) {
+    html += `<div class="thumb">`;
+    html += `<img loading="lazy" class="loading" src="/tools/pdf-annotations-flatten/baked-preview/${r.baked_uid}/${p}" alt="第 ${p} 頁" data-page="${p}" onload="this.classList.remove('loading')">`;
+    html += `<div class="cap">第 ${p} 頁</div>`;
+    html += `</div>`;
+  }
+  $("bakedGrid").innerHTML = html;
+  $("bakedPanel").hidden = false;
+  $("bakedPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// click thumbnail → lightbox
+$("bakedGrid").addEventListener("click", (e) => {
+  const t = e.target;
+  if (t.tagName === "IMG" && t.dataset.page) {
+    const lb = document.createElement("div");
+    lb.className = "af-lightbox";
+    lb.innerHTML = `<img src="${t.src}" alt="">`;
+    lb.addEventListener("click", () => lb.remove());
+    document.body.appendChild(lb);
+  }
+});
+
+$("btnDownload").addEventListener("click", async () => {
+  if (!bakedUid) return;
+  const btn = $("btnDownload");
+  _setBusy(btn, true, "下載中…");
+  try {
+    const r = await fetch(`/tools/pdf-annotations-flatten/baked-download/${bakedUid}`);
+    if (!r.ok) {
+      let msg = "HTTP " + r.status;
+      try { msg = (await r.json()).detail || msg; } catch (e) {}
+      alert("下載失敗：" + msg);
+      return;
+    }
+    const blob = await r.blob();
+    const cd = r.headers.get("Content-Disposition") || "";
+    let name = "flattened.pdf";
+    const m = cd.match(/filename\*=UTF-8''([^;]+)/i) || cd.match(/filename="?([^";]+)"?/i);
+    if (m) try { name = decodeURIComponent(m[1]); } catch (e) { name = m[1]; }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+  } finally {
+    _setBusy(btn, false);
+  }
 });
 </script>
 {% endblock %}
