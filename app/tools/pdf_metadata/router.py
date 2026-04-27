@@ -1,4 +1,4 @@
-"""Endpoints for Metadata 清除."""
+"""Endpoints for 中繼資料清除."""
 from __future__ import annotations
 
 import uuid

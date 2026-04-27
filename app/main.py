@@ -73,7 +73,7 @@ _TOOL_ALIASES = {
     "doc-deident":        "deident deidentify de-identification redact redaction mask masking anonymize anonymise pii personal data privacy gdpr 個資 個人資料 去識別化 敏感資料 編修 不可逆遮蔽 資料遮罩 遮蔽 塗黑 脫敏 脫敏化 匿名 身分證 手機 Email 統編 信用卡 車牌 地址",
     "pdf-encrypt":        "encrypt password protect lock aes permission restrict owner user 加密 密碼 保護 權限 禁列印 禁複製 禁編輯 AES",
     "pdf-decrypt":        "decrypt unlock remove password 解鎖 解密 解除 密碼 移除密碼",
-    "pdf-metadata":       "metadata xmp author title strip clean remove producer creator 修訂歷史 去識別 metadata 清除 作者 標題 標籤 XMP",
+    "pdf-metadata":       "metadata xmp author title strip clean remove producer creator 中繼資料 中繼 修訂歷史 去識別 metadata 清除 作者 標題 標籤 XMP",
     "pdf-hidden-scan":    "hidden content javascript js embedded launch uri whitetext offpage scan remove 隱藏 掃描 JavaScript 嵌入檔 白字 頁面外 外部連結 啟動 風險 資安",
     "pdf-attachments":    "attachment attachments embedded file extract pdf paperclip 附件 嵌入檔 萃取 取出 EmbeddedFiles",
     "pdf-diff":           "diff compare comparison difference changes contract audit review 差異 比對 比較 合約審閱 變更 改版",
