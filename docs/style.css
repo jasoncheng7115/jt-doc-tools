@@ -326,6 +326,52 @@ code {
   .why-grid { grid-template-columns: 1fr; }
 }
 
+/* ===== Office engine callout ===== */
+.ofc-callout {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #fcd34d;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin: 18px auto 28px;
+  max-width: 920px;
+  text-align: left;
+  color: #78350f;
+  font-size: 14px;
+  line-height: 1.65;
+}
+.ofc-callout-ic {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  background: #f59e0b;
+  color: #fff;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ofc-callout-ic svg { width: 20px; height: 20px; }
+.ofc-callout-body b { color: #78350f; }
+
+/* Inline tool-name marker for "needs Office engine" */
+.ofc-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: #fde68a;
+  color: #b45309;
+  border: 1px solid #fcd34d;
+  border-radius: 5px;
+  vertical-align: -3px;
+  margin-left: 5px;
+}
+.ofc-mark svg { width: 11px; height: 11px; }
+
 /* ===== Features grid ===== */
 .feat-grid {
   display: grid;
