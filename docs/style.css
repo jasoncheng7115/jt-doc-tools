@@ -52,6 +52,8 @@ body {
 img { max-width: 100%; display: block; }
 a { color: var(--indigo); text-decoration: none; transition: color 0.15s; }
 a:hover { color: var(--indigo-dark); }
+a[href], a[href] * { cursor: pointer; }
+button, [role="button"] { cursor: pointer; }
 code {
   font-family: var(--font-mono);
   font-size: 0.85em;
