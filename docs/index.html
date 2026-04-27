@@ -620,12 +620,14 @@
       </div>
       <div>
         <strong>升級 / 移除</strong>
-        <table class="cmd-table">
-          <tr><th>升級</th><td>Linux / macOS</td><td><code>sudo jtdt update</code></td></tr>
-          <tr><th></th>     <td>Windows</td>      <td><code>jtdt update</code>（以系統管理員執行 PowerShell）</td></tr>
-          <tr><th>移除</th> <td>Linux / macOS</td><td><code>sudo jtdt uninstall</code></td></tr>
-          <tr><th></th>     <td>Windows</td>      <td><code>jtdt uninstall</code>（以系統管理員執行 PowerShell）</td></tr>
-        </table>
+        <div class="cmd-block">
+          <div class="cmd-os">Linux / macOS</div>
+          <div><code>sudo jtdt update</code></div>
+          <div><code>sudo jtdt uninstall</code></div>
+          <div class="cmd-os">Windows<span class="cmd-note">（以系統管理員身分執行 PowerShell）</span></div>
+          <div><code>jtdt update</code></div>
+          <div><code>jtdt uninstall</code></div>
+        </div>
         加 <code>--purge</code> 連同資料一起刪。
       </div>
       <div>
