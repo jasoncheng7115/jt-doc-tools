@@ -168,7 +168,7 @@ $f="$env:TEMP\jtdt-install.ps1"; [Net.ServicePointManager]::SecurityProtocol='Tl
 | `jtdt logs -f`       | 即時看 log |
 | `jtdt open`          | 用瀏覽器開啟介面 |
 | `sudo jtdt update`<sup>†</sup>   | 升級到最新版（會自動備份資料） |
-| `sudo jtdt uninstall`<sup>†</sup> | 解除安裝（資料保留），加 `--purge` 連同資料一起刪 |
+| `sudo jtdt uninstall`<sup>†</sup> | 移除（資料保留），加 `--purge` 連同資料一起刪 |
 
 <sup>†</sup> Linux / macOS 用 `sudo`；Windows 沒有 `sudo`，請改成「以系統管理員身分執行 PowerShell」後跑 `jtdt update` / `jtdt uninstall`。
 
