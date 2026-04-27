@@ -1,13 +1,5 @@
-﻿$ErrorActionPreference = 'Stop'
-$ProgressPreference    = 'SilentlyContinue'   # 加快 Invoke-WebRequest
-
-# Force UTF-8 in console so 中文 doesn't render as ?
-# (PS 5.1 預設 console codepage 是 cp950 / cp936，會吃掉非系統 codepage 的字元)
-try {
-    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
-    $OutputEncoding = [System.Text.UTF8Encoding]::new()
-    chcp 65001 > $null 2>&1
-} catch { }
+$ErrorActionPreference = 'Stop'
+$ProgressPreference    = 'SilentlyContinue'
 
 $RepoUrl     = 'https://github.com/jasoncheng7115/jt-doc-tools'
 $RepoBranch  = 'main'
@@ -24,16 +16,16 @@ function Die  ($m) {
     throw $m
 }
 
-# --------------------------------------------------------------- 管理員檢查
+# Admin check
 $ident = [Security.Principal.WindowsIdentity]::GetCurrent()
 $prin  = New-Object Security.Principal.WindowsPrincipal($ident)
 if (-not $prin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Die "需要系統管理員權限。請以「以系統管理員身分執行」開啟 PowerShell 後再跑。"
+    Die "Administrator privileges required. Please run PowerShell as Administrator and try again."
 }
 
-# --------------------------------------------------------------- 平台
+# Platform
 $Arch = if ([Environment]::Is64BitOperatingSystem) { 'x86_64' } else { 'x86' }
-if ($Arch -eq 'x86') { Die "本程式不支援 32-bit Windows。" }
+if ($Arch -eq 'x86') { Die "32-bit Windows is not supported." }
 
 $ProgFiles  = ${env:ProgramFiles}
 $ProgData   = ${env:ProgramData}
@@ -45,9 +37,8 @@ $NssmExe    = Join-Path $BinDir 'nssm.exe'
 $UvExe      = Join-Path $BinDir 'uv.exe'
 $CliShim    = Join-Path $InstallDir 'jtdt.cmd'
 
-# --------------------------------------------------------------- Office 偵測
+# Office detection
 function Test-Office {
-    # OxOffice / LibreOffice 的常見安裝路徑
     $paths = @(
         "${env:ProgramFiles}\OxOffice\program\soffice.exe",
         "${env:ProgramFiles}\LibreOffice\program\soffice.exe",
@@ -59,78 +50,76 @@ function Test-Office {
 }
 
 function Install-OxOffice {
-    Log "嘗試從 GitHub 下載並安裝 OxOffice ..."
+    Log "Trying OxOffice from GitHub release ..."
     try {
         $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/OSSII/OxOffice/releases/latest' -Headers @{ 'User-Agent' = 'jt-doc-tools-installer' }
         $asset = $rel.assets | Where-Object { $_.name -match '\.msi$' -and ($_.name -match 'win|Windows|x64') } | Select-Object -First 1
-        if (-not $asset) { Warn "找不到 OxOffice 的 Windows MSI 安裝檔"; return $false }
+        if (-not $asset) { Warn "No Windows MSI asset found for OxOffice"; return $false }
         $tmp = Join-Path $env:TEMP "oxoffice-$(Get-Date -Format yyyyMMddHHmmss).msi"
-        Log "下載 $($asset.browser_download_url)"
+        Log "Downloading $($asset.browser_download_url)"
         Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmp
-        Log "安裝 OxOffice (silent) ..."
+        Log "Installing OxOffice (silent) ..."
         $proc = Start-Process msiexec.exe -ArgumentList "/i `"$tmp`" /qn /norestart" -Wait -PassThru
         Remove-Item $tmp -Force -ErrorAction SilentlyContinue
-        if ($proc.ExitCode -ne 0) { Warn "OxOffice MSI 安裝回傳 exit code $($proc.ExitCode)"; return $false }
+        if ($proc.ExitCode -ne 0) { Warn "OxOffice MSI exit code $($proc.ExitCode)"; return $false }
         return Test-Office
     } catch {
-        Warn "OxOffice 安裝失敗：$_"
+        Warn "OxOffice install failed: $_"
         return $false
     }
 }
 
 function Install-LibreOffice {
-    Log "改用 LibreOffice (透過官方下載 LATEST 鏈結) ..."
+    Log "Falling back to LibreOffice via winget ..."
     try {
-        # LibreOffice 官方下載頁的「latest stable」MSI 鏡像（透過 download.documentfoundation.org/.../LibreOffice_x.y.z_Win_x86-64.msi）
-        # 這裡用 winget 比較穩，沒有 winget 才 fallback。
         if (Get-Command winget -ErrorAction SilentlyContinue) {
             $proc = Start-Process winget -ArgumentList "install --id TheDocumentFoundation.LibreOffice -e --silent --accept-package-agreements --accept-source-agreements" -Wait -PassThru -NoNewWindow
             if ($proc.ExitCode -eq 0) { return Test-Office }
         }
-        Warn "未安裝 winget 或 winget 安裝失敗"
+        Warn "winget not available or install failed"
         return $false
     } catch {
-        Warn "LibreOffice 安裝失敗：$_"
+        Warn "LibreOffice install failed: $_"
         return $false
     }
 }
 
 function Ensure-Office {
-    if (Test-Office) { Ok "已偵測到 Office 引擎"; return }
-    Log "未偵測到 OxOffice / LibreOffice"
-    if (Install-OxOffice) { Ok "OxOffice 安裝完成"; return }
-    if (Install-LibreOffice) { Ok "LibreOffice 安裝完成"; return }
+    if (Test-Office) { Ok "Office engine detected"; return }
+    Log "No OxOffice / LibreOffice detected"
+    if (Install-OxOffice) { Ok "OxOffice installed"; return }
+    if (Install-LibreOffice) { Ok "LibreOffice installed"; return }
     Write-Host ""
-    Warn "OxOffice 與 LibreOffice 都自動安裝失敗。請手動安裝後再重跑這支腳本："
-    Warn "  • OxOffice：    https://github.com/OSSII/OxOffice/releases"
-    Warn "  • LibreOffice： https://www.libreoffice.org/download/"
+    Warn "Neither OxOffice nor LibreOffice could be installed automatically."
+    Warn "Please install manually and re-run this script:"
+    Warn "  - OxOffice:    https://github.com/OSSII/OxOffice/releases"
+    Warn "  - LibreOffice: https://www.libreoffice.org/download/"
     Start-Process 'https://github.com/OSSII/OxOffice/releases'
     exit 1
 }
 
-# --------------------------------------------------------------- uv
+# uv
 function Install-Uv {
-    if (Test-Path $UvExe) { Ok "uv 已存在"; return }
-    Log "下載 uv ..."
+    if (Test-Path $UvExe) { Ok "uv already present"; return }
+    Log "Downloading uv ..."
     New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
-    # uv 官方 PowerShell 安裝腳本，限定安裝目錄
     $env:UV_INSTALL_DIR = $BinDir
     $env:UV_NO_MODIFY_PATH = '1'
-    # 注意：astral.sh/uv/install.ps1 走 application/octet-stream，PS 5.1 的
-    # iwr.Content 會回 byte[]，iex 會炸 "無法將 byte[] 轉換為 String"。
-    # 用 irm (Invoke-RestMethod) 才會自動 UTF-8 解碼成 string。
+    # Note: astral.sh/uv/install.ps1 serves application/octet-stream;
+    # PS 5.1 iwr.Content returns byte[] which iex cannot consume.
+    # irm (Invoke-RestMethod) auto-decodes UTF-8 to string.
     Invoke-Expression (Invoke-RestMethod -Uri 'https://astral.sh/uv/install.ps1')
-    if (-not (Test-Path $UvExe)) { Die "uv 安裝失敗" }
-    Ok "uv 安裝在 $UvExe"
+    if (-not (Test-Path $UvExe)) { Die "uv install failed" }
+    Ok "uv installed at $UvExe"
 }
 
-# --------------------------------------------------------------- NSSM (Windows Service wrapper)
+# NSSM (Windows Service wrapper)
 function Install-Nssm {
-    if (Test-Path $NssmExe) { Ok "nssm 已存在"; return }
-    Log "下載 NSSM (Windows Service wrapper) ..."
+    if (Test-Path $NssmExe) { Ok "nssm already present"; return }
+    Log "Downloading NSSM (Windows Service wrapper) ..."
     New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
     $tmp = Join-Path $env:TEMP "nssm.zip"
-    # NSSM 2.24 是最後正式版。nssm.cc 偶爾 503，準備多個 mirror。
+    # NSSM 2.24 is the last stable release. nssm.cc returns 503 intermittently, try mirrors.
     $urls = @(
         'https://nssm.cc/release/nssm-2.24.zip',
         'https://web.archive.org/web/2024/https://nssm.cc/release/nssm-2.24.zip',
@@ -138,31 +127,31 @@ function Install-Nssm {
     )
     $ok = $false
     foreach ($url in $urls) {
-        Log "  嘗試 $url"
+        Log "  Trying $url"
         for ($i = 0; $i -lt 3; $i++) {
             try {
                 (New-Object Net.WebClient).DownloadFile($url, $tmp)
                 if ((Get-Item $tmp).Length -gt 100000) { $ok = $true; break }
             } catch {
-                Warn "    第 $($i+1) 次失敗：$($_.Exception.Message.Split([Environment]::NewLine)[0])"
+                Warn "    Attempt $($i+1) failed: $($_.Exception.Message.Split([Environment]::NewLine)[0])"
                 Start-Sleep -Seconds 2
             }
         }
-        if ($ok) { Ok "  下載成功"; break }
+        if ($ok) { Ok "  Download succeeded"; break }
     }
-    if (-not $ok) { Die "NSSM 下載失敗（所有 mirror 都連不上）。請稍後重試，或手動下載 nssm-2.24.zip 放到 $tmp 後再跑一次。" }
+    if (-not $ok) { Die "NSSM download failed (all mirrors unreachable). Retry later, or place nssm-2.24.zip at $tmp manually and re-run." }
     $extractDir = Join-Path $env:TEMP "nssm-extract"
     if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
     Expand-Archive -Path $tmp -DestinationPath $extractDir -Force
     Copy-Item -Path (Join-Path $extractDir 'nssm-2.24\win64\nssm.exe') -Destination $NssmExe -Force
     Remove-Item $tmp, $extractDir -Recurse -Force -ErrorAction SilentlyContinue
-    Ok "nssm 安裝在 $NssmExe"
+    Ok "nssm installed at $NssmExe"
 }
 
-# --------------------------------------------------------------- 程式碼
+# Source code
 function Fetch-Code {
     if (Test-Path (Join-Path $InstallDir '.git')) {
-        Log "已存在安裝，更新 git 內容 ..."
+        Log "Existing install detected, updating via git ..."
         Push-Location $InstallDir
         try {
             git fetch --depth=1 origin $RepoBranch
@@ -171,17 +160,17 @@ function Fetch-Code {
         return
     }
     if ((Test-Path $InstallDir) -and (Get-ChildItem $InstallDir -Force | Where-Object { $_.Name -ne 'bin' }) ) {
-        # 通常是上一次失敗的半成品。bin/ 留著（uv/nssm 已裝），其他清掉重來。
-        # 不動 $DataDir（在另一個路徑），所以使用者資料安全。
-        Warn "$InstallDir 已存在但不是 git repo（多半是上次失敗殘留），自動清理重來..."
+        # Stale install dir from a previous failed run. Keep bin/ (uv/nssm), wipe the rest.
+        # $DataDir is at a different path so user data is safe.
+        Warn "$InstallDir exists but is not a git repo (likely failed-install leftover); auto-cleaning ..."
         Get-ChildItem $InstallDir -Force | Where-Object { $_.Name -ne 'bin' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     }
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     if (Get-Command git -ErrorAction SilentlyContinue) {
-        Log "從 $RepoUrl clone 程式碼 ..."
+        Log "Cloning code from $RepoUrl ..."
         git clone --depth=1 --branch $RepoBranch $RepoUrl $InstallDir
     } else {
-        Log "git 未安裝，改用 tarball 下載 ..."
+        Log "git not installed, falling back to tarball download ..."
         $tmp = Join-Path $env:TEMP "jtdt-src.zip"
         Invoke-WebRequest -Uri "$RepoUrl/archive/refs/heads/$RepoBranch.zip" -OutFile $tmp
         $extractDir = Join-Path $env:TEMP "jtdt-extract"
@@ -194,27 +183,27 @@ function Fetch-Code {
 }
 
 function Setup-Python {
-    Log "建立獨立 Python 環境並安裝依賴 (uv sync) ..."
-    # 強制 uv 用自己 managed 的 Python，避開 Microsoft Store 的 python.exe stub
-    # (Store stub 不是真 Python，會跳開 Store 視窗，uv 跑會炸)
+    Log "Setting up isolated Python environment (uv sync) ..."
+    # Force uv to use its own managed Python; avoid Microsoft Store python.exe stub
+    # (the Store stub is not a real Python, it pops the Store and uv crashes).
     $env:UV_PYTHON_PREFERENCE = 'only-managed'
     Push-Location $InstallDir
     try {
         & $UvExe python install 3.12
-        if ($LASTEXITCODE -ne 0) { Die "uv python install 3.12 失敗" }
+        if ($LASTEXITCODE -ne 0) { Die "uv python install 3.12 failed" }
         & $UvExe sync --frozen --python 3.12
         if ($LASTEXITCODE -ne 0) { & $UvExe sync --python 3.12 }
-        if ($LASTEXITCODE -ne 0) { Die "uv sync 失敗" }
+        if ($LASTEXITCODE -ne 0) { Die "uv sync failed" }
     } finally { Pop-Location }
     if (-not (Test-Path (Join-Path $InstallDir '.venv\Scripts\python.exe'))) {
-        Die "Python venv 建立失敗"
+        Die "Python venv creation failed"
     }
-    Ok "Python 環境就緒：$InstallDir\.venv"
+    Ok "Python environment ready: $InstallDir\.venv"
 }
 
-# --------------------------------------------------------------- 資料
+# Data
 function Prepare-Data {
-    Log "準備資料目錄 $DataDir ..."
+    Log "Preparing data directory $DataDir ..."
     New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
     New-Item -ItemType Directory -Force -Path $LogDir  | Out-Null
     $seed = Join-Path $InstallDir 'data'
@@ -223,10 +212,10 @@ function Prepare-Data {
     }
 }
 
-# --------------------------------------------------------------- 服務
+# Service
 function Install-Service {
-    Log "安裝 Windows Service (透過 NSSM) ..."
-    # 砍掉舊的（如果有）
+    Log "Installing Windows Service (via NSSM) ..."
+    # Remove old service if exists
     $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
     if ($existing) {
         & $NssmExe stop $ServiceName confirm | Out-Null
@@ -241,51 +230,51 @@ function Install-Service {
     & $NssmExe set $ServiceName AppRotateFiles 1 | Out-Null
     & $NssmExe set $ServiceName AppRotateBytes 5242880 | Out-Null
     & $NssmExe set $ServiceName Start SERVICE_AUTO_START | Out-Null
-    & $NssmExe set $ServiceName Description "Jason Tools 文件工具箱 — PDF / Office 文件處理平台" | Out-Null
+    & $NssmExe set $ServiceName Description "Jason Tools Document Toolbox - PDF / Office processing" | Out-Null
     & $NssmExe start $ServiceName | Out-Null
-    Ok "Windows Service '$ServiceName' 已安裝並啟動，開機自動啟動"
+    Ok "Windows Service '$ServiceName' installed and started, autostart enabled"
 }
 
-# --------------------------------------------------------------- jtdt CLI shim
+# jtdt CLI shim
 function Install-Cli {
-    Log "建立 jtdt 指令 ..."
+    Log "Creating jtdt command ..."
     $py = Join-Path $InstallDir '.venv\Scripts\python.exe'
     $content = @"
 @echo off
 "$py" -m app.cli %*
 "@
     Set-Content -Path $CliShim -Value $content -Encoding ASCII
-    # 加入 PATH（系統等級，需要管理員）
+    # Add to system PATH (machine scope, requires admin)
     $sysPath = [Environment]::GetEnvironmentVariable('Path','Machine')
     if ($sysPath -notmatch [regex]::Escape($InstallDir)) {
         [Environment]::SetEnvironmentVariable('Path', "$sysPath;$InstallDir", 'Machine')
-        Ok "已加入系統 PATH（重開新的 terminal 才會生效）"
+        Ok "Added to system PATH (open a new terminal for it to take effect)"
     }
-    Ok "jtdt 指令：$CliShim"
+    Ok "jtdt command: $CliShim"
 }
 
-# --------------------------------------------------------------- 健康檢查
+# Health check
 function Health-Check {
-    Log "等待服務啟動 ..."
+    Log "Waiting for service to come up ..."
     for ($i = 0; $i -lt 30; $i++) {
         try {
             $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8765/healthz' -UseBasicParsing -TimeoutSec 2
             if ($r.StatusCode -eq 200) {
-                Ok "服務已上線：http://127.0.0.1:8765/"
+                Ok "Service online: http://127.0.0.1:8765/"
                 return
             }
         } catch {}
         Start-Sleep -Seconds 1
     }
-    Warn "30 秒內未通過健康檢查，請執行：jtdt logs"
+    Warn "Health check did not pass within 30s. Run: jtdt logs"
 }
 
-# --------------------------------------------------------------- 主流程
+# Main
 Write-Host ""
-Log "Jason Tools 文件工具箱 — Windows 系統安裝"
-Log "平台：Windows ($Arch)"
-Log "程式：$InstallDir"
-Log "資料：$DataDir"
+Log "Jason Tools Document Toolbox - Windows installer"
+Log "Platform: Windows ($Arch)"
+Log "Program:  $InstallDir"
+Log "Data:     $DataDir"
 Write-Host ""
 
 Ensure-Office
@@ -299,27 +288,27 @@ Install-Cli
 Health-Check
 
 Write-Host ""
-Ok "安裝完成！"
+Ok "Install complete!"
 Write-Host ""
-Write-Host "  介面：    http://127.0.0.1:8765/"
-Write-Host "  狀態：    jtdt status"
-Write-Host "  Log：     jtdt logs -f"
-Write-Host "  升級：    jtdt update    （需以系統管理員身分跑 PowerShell）"
-Write-Host "  解除：    jtdt uninstall （加 --purge 連同資料一起刪）"
+Write-Host "  Web UI:    http://127.0.0.1:8765/"
+Write-Host "  Status:    jtdt status"
+Write-Host "  Logs:      jtdt logs -f"
+Write-Host "  Update:    jtdt update     (run PowerShell as Administrator)"
+Write-Host "  Uninstall: jtdt uninstall  (--purge to also remove user data)"
 Write-Host ""
 
-# 自動開瀏覽器到介面（單機模式 user 體驗）
+# Auto-open browser to UI
 try {
     Start-Process 'http://127.0.0.1:8765/'
-    Ok "已自動開啟瀏覽器"
+    Ok "Browser opened automatically"
 } catch {
-    Warn "無法自動開啟瀏覽器，請手動前往 http://127.0.0.1:8765/"
+    Warn "Could not open browser automatically. Visit: http://127.0.0.1:8765/"
 }
 
-# 不要讓 PowerShell 視窗自動關掉（user 看不到上面訊息）
+# Keep window open
 Write-Host ""
 Write-Host "==================================================" -ForegroundColor Cyan
-Write-Host "  按 Enter 鍵關閉此視窗"                             -ForegroundColor Cyan
+Write-Host "  Press Enter to close this window"                  -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
 try { Read-Host | Out-Null } catch { Start-Sleep -Seconds 30 }
 Write-Host ""
