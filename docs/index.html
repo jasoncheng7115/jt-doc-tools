@@ -619,9 +619,14 @@
         <b>不需預裝 Python</b>（uv 自動下載獨立 3.12）。
       </div>
       <div>
-        <strong>升級 / 解除安裝</strong>
-        Linux / macOS：<code>sudo jtdt update</code>　Windows：以系統管理員身分執行 <code>jtdt update</code><br>
-        卸載：<code>sudo jtdt uninstall</code>（Windows 同樣以系統管理員執行）；加 <code>--purge</code> 連同資料一起刪
+        <strong>升級 / 移除</strong>
+        <table class="cmd-table">
+          <tr><th>升級</th><td>Linux / macOS</td><td><code>sudo jtdt update</code></td></tr>
+          <tr><th></th>     <td>Windows</td>      <td><code>jtdt update</code>（以系統管理員執行 PowerShell）</td></tr>
+          <tr><th>移除</th> <td>Linux / macOS</td><td><code>sudo jtdt uninstall</code></td></tr>
+          <tr><th></th>     <td>Windows</td>      <td><code>jtdt uninstall</code>（以系統管理員執行 PowerShell）</td></tr>
+        </table>
+        加 <code>--purge</code> 連同資料一起刪。
       </div>
       <div>
         <strong>反向代理</strong>

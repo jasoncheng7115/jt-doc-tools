@@ -328,6 +328,12 @@ code {
   .why-grid { grid-template-columns: 1fr; }
 }
 
+/* ===== Command reference table (in install spec block) ===== */
+.cmd-table { border-collapse: collapse; margin: 6px 0 8px; font-size: 13.5px; line-height: 1.6; }
+.cmd-table th, .cmd-table td { padding: 3px 12px 3px 0; vertical-align: top; text-align: left; font-weight: 500; white-space: nowrap; }
+.cmd-table th { color: var(--text); font-weight: 700; min-width: 56px; }
+.cmd-table td:first-of-type { color: var(--muted); font-size: 12.5px; }
+
 /* ===== Office engine callout ===== */
 .ofc-callout {
   display: flex;
