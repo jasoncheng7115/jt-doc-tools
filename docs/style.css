@@ -383,10 +383,24 @@ code {
   color: var(--text-2);
 }
 .feat-list li {
-  padding: 8px 0;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 9px 0;
   border-top: 1px dashed var(--border);
 }
 .feat-list li:first-child { border-top: 0; padding-top: 0; }
+.feat-list .fl-ic {
+  flex: 0 0 22px;
+  width: 22px; height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  margin-top: 2px;
+}
+.feat-list .fl-ic svg { width: 18px; height: 18px; }
+.feat-list .fl-text { flex: 1; min-width: 0; }
 .feat-list .fn {
   display: block;
   color: var(--text);
@@ -403,6 +417,7 @@ code {
 .feat-card.feat-card-accent .feat-list li { border-top-color: rgba(255,255,255,0.15); }
 .feat-card.feat-card-accent .feat-list .fn { color: #fff; }
 .feat-card.feat-card-accent .feat-list .fd { color: #cbd5e1; }
+.feat-card.feat-card-accent .feat-list .fl-ic { color: #93c5fd; }
 @media (max-width: 1024px) {
   .feat-grid { grid-template-columns: repeat(2, 1fr); }
 }
