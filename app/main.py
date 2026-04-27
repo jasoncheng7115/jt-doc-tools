@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.1.47"
+VERSION = "1.1.48"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -189,7 +189,7 @@ templates.env.globals["nav_settings"] = [
     {"icon": "upload", "name": "上傳檔案記錄", "description": "誰上傳了什麼檔案到哪個工具",
      "url": "/admin/uploads", "requires_auth": True,
      "keywords": "uploads files history audit 上傳 檔案 記錄 歷史"},
-    {"icon": "gear", "name": "Log 轉發", "description": "將稽核轉發到外部 syslog / CEF / GELF",
+    {"icon": "gear", "name": "記錄轉送", "description": "將稽核轉發到外部 syslog / CEF / GELF",
      "url": "/admin/log-forward", "requires_auth": True,
      "keywords": "syslog cef gelf forward log siem splunk graylog 轉發"},
     {"icon": "archive", "name": "檔案保留 / 清理", "description": "歷史檔案保留天數與自動清理",
