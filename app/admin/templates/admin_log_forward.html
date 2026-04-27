@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
-{% block title %}Log 轉發 · {{ app_name }}{% endblock %}
+{% block title %}記錄轉送 · {{ app_name }}{% endblock %}
 {% block content %}
-<h1>{{ icon('gear', size=22) }} Log 轉發</h1>
+<h1>{{ icon('gear', size=22) }} 記錄轉送</h1>
 <p class="muted">把稽核記錄轉發到外部 log server (Splunk / Graylog / SIEM…)。
 支援 syslog / CEF / GELF 三種格式，多個 destination 可以同時啟用。
 失敗會 retry 3 次後放棄並寫入本地稽核（<code>audit_forward_failed</code>）。</p>

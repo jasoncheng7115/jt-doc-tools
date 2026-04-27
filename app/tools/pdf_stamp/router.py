@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
@@ -179,7 +180,9 @@ async def tool_preview(upload_id: str):
 
 @router.post("/preview")
 async def preview(file: UploadFile = File(...)):
-    """Render the first page of an uploaded PDF to PNG so it can be used as the editor background."""
+    """Render the first page of an uploaded PDF to PNG. Also returns per-page
+    dimensions so the editor mode can offer page navigation (lazy-rendered via
+    /preview-bg/{upload_id}/{page_idx})."""
     data = await file.read()
     if not data:
         raise HTTPException(400, "empty file")
@@ -187,21 +190,46 @@ async def preview(file: UploadFile = File(...)):
     src = settings.temp_dir / f"{upload_id}.pdf"
     src.write_bytes(data)
     png = settings.temp_dir / f"{upload_id}_p1.png"
-    pdf_preview.render_page_png(src, png, 0, dpi=110)
+    await asyncio.to_thread(pdf_preview.render_page_png, src, png, 0, 110)
 
     import fitz
+    from ...core.unit_convert import pt_to_mm
     with fitz.open(str(src)) as doc:
-        r = doc[0].rect
-        from ...core.unit_convert import pt_to_mm
-        w_mm = pt_to_mm(r.width)
-        h_mm = pt_to_mm(r.height)
+        page_count = doc.page_count
+        pages_dims = [
+            {"w_mm": round(pt_to_mm(doc[i].rect.width), 2),
+             "h_mm": round(pt_to_mm(doc[i].rect.height), 2)}
+            for i in range(page_count)
+        ]
 
     return {
         "upload_id": upload_id,
         "preview_url": f"/tools/pdf-stamp/preview/{upload_id}_p1.png",
-        "paper_w_mm": round(w_mm, 2),
-        "paper_h_mm": round(h_mm, 2),
+        "paper_w_mm": pages_dims[0]["w_mm"],
+        "paper_h_mm": pages_dims[0]["h_mm"],
+        "page_count": page_count,
+        "pages_dims": pages_dims,
     }
+
+
+@router.get("/preview-bg/{upload_id}/{page_idx}")
+async def preview_bg(upload_id: str, page_idx: int):
+    """Lazily render any page of a previously-uploaded PDF (from /preview)
+    so the editor mode can switch its background between pages."""
+    if not upload_id.replace("_", "").isalnum():
+        raise HTTPException(400, "bad upload_id")
+    src = settings.temp_dir / f"{upload_id}.pdf"
+    if not src.exists():
+        raise HTTPException(404, "upload expired")
+    if page_idx < 0:
+        raise HTTPException(400, "bad page index")
+    png = settings.temp_dir / f"{upload_id}_p{page_idx + 1}.png"
+    if not png.exists():
+        try:
+            await asyncio.to_thread(pdf_preview.render_page_png, src, png, page_idx, 110)
+        except IndexError:
+            raise HTTPException(404, "page out of range")
+    return {"preview_url": f"/tools/pdf-stamp/preview/{png.name}"}
 
 
 @router.post("/preview-all-pages")

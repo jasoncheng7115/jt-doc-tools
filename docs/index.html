@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台。22 個工具一站處理：表單填寫、用印簽名、浮水印、敏感資料去識別化、PDF 加密、隱藏內容掃描、差異比對等。可選 LDAP / AD 認證、角色權限、稽核、Log 轉發。不上雲，資料留在自己內網。">
+<meta name="description" content="Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台。22 個工具一站處理：表單填寫、用印簽名、浮水印、敏感資料去識別化、PDF 加密、隱藏內容掃描、差異比對等。可選 LDAP / AD 認證、角色權限、稽核、記錄轉送。不上雲，資料留在自己內網。">
 <title>Jason Tools 文件工具箱 — PDF / Office 整合式文件處理平台</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -49,7 +49,7 @@
     </h1>
     <p class="hero-lead">
       表單自動填寫、用印與簽名、浮水印、敏感資料去識別化、PDF 加密、Metadata 清除、隱藏內容掃描、差異比對、頁面編輯…
-      可選 LDAP / AD 認證、角色權限、稽核、Log 轉發。<br>
+      可選 LDAP / AD 認證、角色權限、稽核、記錄轉送。<br>
       <b>所有檔案處理只發生在你的伺服器，原始碼公開。</b>
     </p>
     <div class="hero-cta">
@@ -185,11 +185,11 @@
         <div class="feat-ic feat-ic-6">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </div>
-        <h3>多人 / 企業</h3>
+        <h3>團隊 / 企業</h3>
         <ul class="feat-list">
           <li><span class="fn">多領域認證</span><span class="fd">本機 / LDAP / AD，同名帳號可分屬不同領域 (<code>username@realm</code>)</span></li>
           <li><span class="fn">角色與權限矩陣 (RBAC)</span><span class="fd">6 內建角色 + 自訂，支援使用者 / 群組 / OU</span></li>
-          <li><span class="fn">稽核記錄 + Log 轉發</span><span class="fd">syslog / CEF / GELF，可接 SIEM</span></li>
+          <li><span class="fn">稽核記錄 + 記錄轉送</span><span class="fd">syslog / CEF / GELF，可接 SIEM</span></li>
           <li><span class="fn">API tokens · 字型管理 · 檔案保留</span><span class="fd">完整管理介面</span></li>
         </ul>
       </article>
@@ -407,7 +407,7 @@
 
       <div class="ent-card">
         <div class="ent-num">D</div>
-        <h3>Log 轉發</h3>
+        <h3>記錄轉送</h3>
         <p>支援三種格式：<b>syslog</b> (RFC 5424 UDP/TCP)、<b>CEF</b> (ArcSight)、<b>GELF</b> (Graylog)。多目的地並行，失敗 retry 3 次後降級為本地稽核事件。可接 Splunk / Graylog / ArcSight / SIEM 系統。</p>
       </div>
 
@@ -471,8 +471,8 @@
         <div class="mode-band-d">安裝完直接用 — <b>預設不啟用認證</b>，所有人開瀏覽器到 <code>127.0.0.1:8765</code> 都能用。適合 1 人桌面工作流。</div>
       </div>
       <div class="mode-band-card">
-        <div class="mode-band-h">🏢 伺服器模式（多人 / 企業）</div>
-        <div class="mode-band-d">部署到 Linux server，到「認證設定」啟用<b>本機帳號 / LDAP / AD</b>，搭配角色與權限矩陣 + 稽核 + Log 轉發。內網多人共用，可控管。</div>
+        <div class="mode-band-h">🏢 伺服器模式（團隊 / 企業）</div>
+        <div class="mode-band-d">部署到 Linux server，到「認證設定」啟用<b>本機帳號 / LDAP / AD</b>，搭配角色與權限矩陣 + 稽核 + 記錄轉送。內網多人共用，可控管。</div>
       </div>
     </div>
 
@@ -581,7 +581,7 @@
     <div class="footer-col">
       <div class="footer-h">作者</div>
       <p>
-        <strong>Jason Cheng</strong> (Jason Tools)<br>
+        <strong>Jason Cheng</strong> (<a href="https://www.jason.tools" target="_blank" rel="noopener">Jason Tools</a>)<br>
         <a href="mailto:jason@jason.tools">jason@jason.tools</a>
       </p>
     </div>

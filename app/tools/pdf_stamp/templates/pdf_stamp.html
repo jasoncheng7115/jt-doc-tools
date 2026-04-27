@@ -55,10 +55,16 @@
     <span id="sim-status" class="muted" style="font-size:12px;"></span>
   </div>
   <p class="muted" style="font-size:12px; margin:6px 0;">
-    <b>編輯模式</b>：在 PDF 上拖曳藍框調整位置 / 大小 / 旋轉（只顯示第一頁）。
+    <b>編輯模式</b>：在 PDF 上拖曳藍框調整位置 / 大小 / 旋轉。可切換頁面驗證印章位置在每一頁都不衝突。
     <b>合成模式</b>：列出實際蓋章後的<strong>每一頁</strong>，所見即所得。
     任何調整只套用到這一次，不會改到印章預設值。
   </p>
+  <div id="edit-page-nav" hidden style="display:flex; gap:8px; align-items:center; justify-content:center; margin:6px 0 10px;">
+    <button class="btn btn-small" type="button" id="edit-prev">‹ 上一頁</button>
+    <span id="edit-page-info" style="font-size:13px; color:#475569; font-family: ui-monospace, monospace;">— / —</span>
+    <button class="btn btn-small" type="button" id="edit-next">下一頁 ›</button>
+    <span style="margin-left:14px; font-size:11.5px; color:#94a3b8;">或左右鍵切換</span>
+  </div>
   <div id="edit-mode" style="margin-top:8px;">
     {% set editor_id='stampOverride' %}
     {% include "components/drag_position_editor.html" %}
@@ -159,10 +165,12 @@ async function loadPreview() {
   const r = await fu.upload('/tools/pdf-stamp/preview', fd, {processingLabel: '產生預覽中…'});
   if (!r.ok) return null;
   previewInfo = await r.json();
+  editPageIdx = 0;
   if (editor) {
     editor.setPaper(previewInfo.paper_w_mm, previewInfo.paper_h_mm);
     editor.setBackground(previewInfo.preview_url);
   }
+  _updateEditPageNav();
   return previewInfo;
 }
 
@@ -266,12 +274,53 @@ async function refreshSim() {
 
 document.getElementById('sim-prev').addEventListener('click', () => { simPageIdx--; _renderSimPage(); });
 document.getElementById('sim-next').addEventListener('click', () => { simPageIdx++; _renderSimPage(); });
+
+// ===== Edit-mode page navigation =====
+let editPageIdx = 0;
+
+function _updateEditPageNav() {
+  const nav = document.getElementById('edit-page-nav');
+  const cnt = previewInfo?.page_count || 0;
+  if (cnt <= 1) { nav.hidden = true; return; }
+  nav.hidden = false;
+  document.getElementById('edit-page-info').textContent = (editPageIdx + 1) + ' / ' + cnt;
+  document.getElementById('edit-prev').disabled = editPageIdx === 0;
+  document.getElementById('edit-next').disabled = editPageIdx >= cnt - 1;
+}
+
+async function _switchEditPage(idx) {
+  if (!previewInfo || !previewInfo.upload_id) return;
+  const cnt = previewInfo.page_count || 0;
+  if (idx < 0 || idx >= cnt) return;
+  editPageIdx = idx;
+  try {
+    const r = await fetch(`/tools/pdf-stamp/preview-bg/${previewInfo.upload_id}/${idx}`);
+    if (!r.ok) return;
+    const j = await r.json();
+    if (editor) {
+      const dim = previewInfo.pages_dims?.[idx];
+      if (dim) editor.setPaper(dim.w_mm, dim.h_mm);
+      editor.setBackground(j.preview_url + '?t=' + Date.now());
+    }
+    _updateEditPageNav();
+  } catch (_) { /* ignore */ }
+}
+
+document.getElementById('edit-prev').addEventListener('click', () => _switchEditPage(editPageIdx - 1));
+document.getElementById('edit-next').addEventListener('click', () => _switchEditPage(editPageIdx + 1));
+
 document.addEventListener('keydown', (e) => {
-  // Only react when composite mode is visible
-  if (document.getElementById('composite-mode').hidden) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-  if (e.key === 'ArrowLeft' && simPageIdx > 0) { simPageIdx--; _renderSimPage(); e.preventDefault(); }
-  else if (e.key === 'ArrowRight' && simPageIdx < simPages.length - 1) { simPageIdx++; _renderSimPage(); e.preventDefault(); }
+  const compositeOn = !document.getElementById('composite-mode').hidden;
+  const editOn = !document.getElementById('edit-mode').hidden && !document.getElementById('preview-panel').hidden;
+  if (compositeOn) {
+    if (e.key === 'ArrowLeft' && simPageIdx > 0) { simPageIdx--; _renderSimPage(); e.preventDefault(); }
+    else if (e.key === 'ArrowRight' && simPageIdx < simPages.length - 1) { simPageIdx++; _renderSimPage(); e.preventDefault(); }
+  } else if (editOn) {
+    const cnt = previewInfo?.page_count || 0;
+    if (e.key === 'ArrowLeft' && editPageIdx > 0) { _switchEditPage(editPageIdx - 1); e.preventDefault(); }
+    else if (e.key === 'ArrowRight' && editPageIdx < cnt - 1) { _switchEditPage(editPageIdx + 1); e.preventDefault(); }
+  }
 });
 
 // Re-run sim on stamp selection or page mode change. When the stamp
