@@ -1,0 +1,571 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}字數統計 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.wc-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px; margin-top: 12px; }
+.wc-stat { background: linear-gradient(135deg,#f8fafc 0%,#eef2ff 100%);
+  border:1px solid #e0e7ff; border-radius:10px; padding: 12px 14px; }
+.wc-stat .lbl { color:#64748b; font-size: 12px; font-weight:500; }
+.wc-stat .val { color:#0f172a; font-size: 22px; font-weight: 700;
+  margin-top: 2px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.wc-stat .sub { color:#94a3b8; font-size: 11.5px; margin-top: 2px; }
+.wc-stat.accent { background: linear-gradient(135deg,#dbeafe 0%,#c7d2fe 100%);
+  border-color:#a5b4fc; }
+.wc-stat.accent .val { color:#1e3a8a; }
+
+.wc-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; margin-top: 14px; }
+@media (max-width: 900px) { .wc-grid { grid-template-columns: 1fr; } }
+.wc-grid-bot { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+@media (max-width: 900px) { .wc-grid-bot { grid-template-columns: 1fr; } }
+
+.wc-card { background:#fff; border:1px solid #e5e7eb; border-radius:10px;
+  padding: 14px 16px; }
+.wc-card h3 { margin: 0 0 10px; font-size: 14.5px; color:#0f172a;
+  display:flex; align-items:center; gap: 6px; }
+.wc-card .hint { font-size: 11.5px; color:#94a3b8; font-weight:400; margin-left:auto; }
+
+.wc-chart { width: 100%; }
+.wc-chart .bar-rect { transition: opacity .15s; cursor: pointer; }
+.wc-chart .bar-rect:hover { opacity: .82; }
+.wc-chart .axis { stroke:#cbd5e1; stroke-width: 1; }
+.wc-chart .grid-line { stroke:#f1f5f9; stroke-width: 1; }
+.wc-chart .tick { fill:#94a3b8; font-size: 10px;
+  font-family: ui-sans-serif, system-ui; }
+.wc-chart .label { fill:#475569; font-size: 11.5px;
+  font-family: ui-sans-serif, system-ui; }
+.wc-chart .val-label { fill:#0f172a; font-size: 11px; font-weight: 600;
+  font-family: ui-sans-serif, system-ui; }
+
+.wc-tt { position: fixed; pointer-events: none; background: rgba(15,23,42,0.94);
+  color:#fff; padding: 6px 10px; border-radius: 6px; font-size: 12px;
+  z-index: 9999; opacity: 0; transition: opacity .12s;
+  font-family: ui-sans-serif, system-ui; }
+.wc-tt.show { opacity: 1; }
+
+.wc-legend { display:flex; flex-wrap:wrap; gap: 8px 14px; margin-top: 10px;
+  font-size: 12px; color:#475569; }
+.wc-legend .sw { display:inline-block; width: 12px; height: 12px;
+  border-radius: 3px; margin-right: 5px; vertical-align: middle; }
+
+.wc-tabs { display:flex; gap: 4px; margin-bottom: 8px; }
+.wc-tab { background:#f1f5f9; border:0; padding: 5px 12px; border-radius: 6px;
+  font-size: 12.5px; cursor: pointer; color:#475569; }
+.wc-tab.active { background: #1e40af; color: #fff; }
+
+.wc-export { display:flex; gap: 8px; flex-wrap:wrap; margin-top: 10px; }
+.wc-export .btn { font-size: 12.5px; padding: 5px 12px; }
+
+.wc-empty { text-align:center; padding: 30px 10px; color:#94a3b8; font-size: 13px; }
+.wc-warn { background:#fef3c7; border:1px solid #fde68a; color:#78350f;
+  padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-top: 10px; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('chart-bar', size=22) }} 字數統計</h1>
+<p class="muted">統計 PDF 中的字數、字元、段落、句子,並繪製每頁字數、字元類型分布、高頻詞、頁長累積等四種圖表。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳 PDF</h2>
+  {% with upload_id='wcUp', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+  <div id="wcLoading" class="muted" style="margin-top:10px; font-size:12.5px;" hidden>
+    {{ icon('refresh', size=14) }} 分析中,請稍候…
+  </div>
+  <div id="wcError" class="wc-warn" hidden></div>
+</div>
+
+<div id="wcResults" hidden>
+
+<div class="panel">
+  <h2 style="margin-top:0;">統計總覽 <span class="muted" style="font-size:13px; font-weight:400; margin-left:8px;" id="wcFile"></span></h2>
+
+  <div class="wc-stats">
+    <div class="wc-stat accent">
+      <div class="lbl">總字數</div>
+      <div class="val" id="sWordTotal">—</div>
+      <div class="sub">CJK 字 + 英文 word</div>
+    </div>
+    <div class="wc-stat">
+      <div class="lbl">頁數</div>
+      <div class="val" id="sPages">—</div>
+      <div class="sub" id="sAvgPage"></div>
+    </div>
+    <div class="wc-stat">
+      <div class="lbl">中文字</div>
+      <div class="val" id="sCjk">—</div>
+    </div>
+    <div class="wc-stat">
+      <div class="lbl">英文字</div>
+      <div class="val" id="sEn">—</div>
+    </div>
+    <div class="wc-stat">
+      <div class="lbl">段落 / 句子</div>
+      <div class="val" id="sParaSent">—</div>
+    </div>
+    <div class="wc-stat">
+      <div class="lbl">字元數 (含空白)</div>
+      <div class="val" id="sChars">—</div>
+      <div class="sub" id="sCharsNoWs"></div>
+    </div>
+    <div class="wc-stat">
+      <div class="lbl">平均句長</div>
+      <div class="val" id="sAvgSent">—</div>
+      <div class="sub">字元/句</div>
+    </div>
+    <div class="wc-stat accent">
+      <div class="lbl">預估閱讀</div>
+      <div class="val" id="sRead">—</div>
+      <div class="sub">中 300/分 · 英 200/分</div>
+    </div>
+  </div>
+
+  <div class="wc-export">
+    <button class="btn" id="btnCsv">{{ icon('download', size=12) }} 每頁明細 CSV</button>
+    <button class="btn" id="btnJson">{{ icon('download', size=12) }} 完整 JSON</button>
+    <button class="btn" id="btnMd">{{ icon('download', size=12) }} Markdown 報表</button>
+  </div>
+</div>
+
+<div class="wc-grid">
+  <div class="wc-card">
+    <h3>{{ icon('chart-bar', size=14) }} 每頁字數
+      <span class="hint" id="ppgHint"></span>
+    </h3>
+    <svg class="wc-chart" id="chartPerPage" viewBox="0 0 600 240" preserveAspectRatio="none"></svg>
+  </div>
+
+  <div class="wc-card">
+    <h3>{{ icon('paragraph', size=14) }} 字元類型分布</h3>
+    <svg class="wc-chart" id="chartDonut" viewBox="0 0 320 240"></svg>
+    <div class="wc-legend" id="donutLegend"></div>
+  </div>
+</div>
+
+<div class="wc-grid-bot">
+  <div class="wc-card">
+    <h3>{{ icon('hash', size=14) }} 高頻詞 Top 20
+      <span class="hint">
+        <button class="wc-tab active" data-mode="cjk_chars">中文單字</button>
+        <button class="wc-tab" data-mode="cjk_bigrams">中文雙字</button>
+        <button class="wc-tab" data-mode="en_words">英文</button>
+      </span>
+    </h3>
+    <svg class="wc-chart" id="chartFreq" viewBox="0 0 600 480"></svg>
+    <div id="freqEmpty" class="wc-empty" hidden>無符合資料</div>
+  </div>
+
+  <div class="wc-card">
+    <h3>{{ icon('text', size=14) }} 累積字數曲線
+      <span class="hint">看內容密度趨勢</span>
+    </h3>
+    <svg class="wc-chart" id="chartCum" viewBox="0 0 600 280"></svg>
+  </div>
+</div>
+
+</div>
+
+<div id="wcTooltip" class="wc-tt"></div>
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let lastResult = null;
+let lastFile = null;
+
+const TT = $('wcTooltip');
+function showTT(evt, html) {
+  TT.innerHTML = html;
+  TT.classList.add('show');
+  TT.style.left = (evt.clientX + 12) + 'px';
+  TT.style.top  = (evt.clientY + 12) + 'px';
+}
+function hideTT() { TT.classList.remove('show'); }
+
+function fmt(n) { return (n || 0).toLocaleString(); }
+
+const fu = new FileUpload($('wcUp'), async (f) => {
+  if (!f) return;
+  lastFile = f;
+  $('wcResults').hidden = true;
+  $('wcError').hidden = true;
+  $('wcLoading').hidden = false;
+
+  const fd = new FormData();
+  fd.append('file', f);
+  let resp;
+  try {
+    resp = await fetch('/tools/pdf-wordcount/analyze', { method: 'POST', body: fd });
+  } catch (err) {
+    $('wcLoading').hidden = true;
+    $('wcError').textContent = '網路錯誤:' + err.message;
+    $('wcError').hidden = false;
+    return;
+  }
+  $('wcLoading').hidden = true;
+  if (!resp.ok) {
+    let msg = 'HTTP ' + resp.status;
+    try { msg = (await resp.json()).detail || msg; } catch (e) {}
+    $('wcError').textContent = '分析失敗:' + msg;
+    $('wcError').hidden = false;
+    return;
+  }
+  lastResult = await resp.json();
+  render(lastResult);
+});
+
+function render(r) {
+  $('wcResults').hidden = false;
+  $('wcFile').textContent = r.filename || '';
+
+  const s = r.summary;
+  $('sWordTotal').textContent = fmt(s.word_total);
+  $('sPages').textContent     = fmt(r.page_count);
+  $('sAvgPage').textContent   = '平均 ' + fmt(s.avg_per_page) + ' 字/頁';
+  $('sCjk').textContent       = fmt(s.cjk_chars);
+  $('sEn').textContent        = fmt(s.en_words);
+  $('sParaSent').textContent  = fmt(s.paragraphs) + ' / ' + fmt(s.sentences);
+  $('sChars').textContent     = fmt(s.char_total);
+  $('sCharsNoWs').textContent = '不含空白 ' + fmt(s.char_no_ws);
+  $('sAvgSent').textContent   = fmt(s.avg_sent_len);
+  const m = s.reading_min;
+  $('sRead').textContent = m < 1 ? '<1 分' : (m >= 60 ? (Math.floor(m/60)+'時'+Math.round(m%60)+'分') : (m + ' 分'));
+
+  if (!s.has_text) {
+    $('wcError').textContent = '⚠ 此 PDF 沒有可擷取的文字層 (可能是掃描檔)。請先用 OCR 工具處理後再分析。';
+    $('wcError').hidden = false;
+  } else {
+    $('wcError').hidden = true;
+  }
+
+  drawPerPage(r.pages);
+  drawDonut(r.char_breakdown);
+  drawCumulative(r.pages);
+  drawFreq('cjk_chars', r.freq);
+}
+
+// ---- Chart 1: per-page bar chart ----
+function drawPerPage(pages) {
+  const svg = $('chartPerPage');
+  svg.innerHTML = '';
+  const W = 600, H = 240;
+  const padL = 40, padR = 12, padT = 14, padB = 28;
+  const cw = W - padL - padR;
+  const ch = H - padT - padB;
+  const maxV = Math.max(1, ...pages.map(p => p.word_total));
+  $('ppgHint').textContent = pages.length + ' 頁 · 最高 ' + fmt(maxV) + ' 字';
+
+  // grid lines + Y ticks (5 levels)
+  const ticks = 5;
+  for (let i = 0; i <= ticks; i++) {
+    const y = padT + ch * (1 - i / ticks);
+    const v = Math.round(maxV * i / ticks);
+    svg.insertAdjacentHTML('beforeend',
+      `<line class="grid-line" x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}"/>` +
+      `<text class="tick" x="${padL-6}" y="${y+3}" text-anchor="end">${fmt(v)}</text>`);
+  }
+  // axis
+  svg.insertAdjacentHTML('beforeend',
+    `<line class="axis" x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+ch}"/>` +
+    `<line class="axis" x1="${padL}" y1="${padT+ch}" x2="${W-padR}" y2="${padT+ch}"/>`);
+
+  // bars
+  const n = pages.length;
+  const gap = Math.max(1, Math.min(4, cw / n * 0.15));
+  const bw = Math.max(1, (cw - gap*(n-1)) / n);
+  const grad = `<defs><linearGradient id="gradBar" x1="0" y1="0" x2="0" y2="1">` +
+    `<stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#1e40af"/>` +
+    `</linearGradient></defs>`;
+  svg.insertAdjacentHTML('beforeend', grad);
+
+  pages.forEach((p, i) => {
+    const x = padL + i * (bw + gap);
+    const h = ch * (p.word_total / maxV);
+    const y = padT + ch - h;
+    svg.insertAdjacentHTML('beforeend',
+      `<rect class="bar-rect" x="${x.toFixed(1)}" y="${y.toFixed(1)}" ` +
+      `width="${bw.toFixed(1)}" height="${Math.max(1,h).toFixed(1)}" ` +
+      `fill="url(#gradBar)" rx="${Math.min(2, bw/3).toFixed(1)}" ` +
+      `data-p="${p.page}" data-v="${p.word_total}"/>`);
+  });
+
+  // X axis labels — show first / last / mid markers
+  const xticks = n <= 10 ? pages.map((_, i) => i) :
+    [0, Math.floor(n*0.25), Math.floor(n*0.5), Math.floor(n*0.75), n-1];
+  xticks.forEach(i => {
+    const x = padL + i * (bw + gap) + bw/2;
+    svg.insertAdjacentHTML('beforeend',
+      `<text class="tick" x="${x.toFixed(1)}" y="${H-padB+14}" text-anchor="middle">${pages[i].page}</text>`);
+  });
+
+  svg.querySelectorAll('rect.bar-rect').forEach(el => {
+    el.addEventListener('mousemove', (e) =>
+      showTT(e, `<b>第 ${el.dataset.p} 頁</b><br>${fmt(el.dataset.v)} 字`));
+    el.addEventListener('mouseleave', hideTT);
+  });
+}
+
+// ---- Chart 2: donut ----
+const DONUT_COLORS = {
+  cjk:        '#3b82f6',  // blue
+  en_letter:  '#10b981',  // emerald
+  digit:      '#f59e0b',  // amber
+  punct:      '#a855f7',  // purple
+  whitespace: '#94a3b8',  // slate
+  other:      '#ef4444',  // red
+};
+const DONUT_LABELS = {
+  cjk: '中文字', en_letter: '英文字母', digit: '數字',
+  punct: '標點符號', whitespace: '空白', other: '其他',
+};
+function drawDonut(b) {
+  const svg = $('chartDonut');
+  svg.innerHTML = '';
+  const cx = 130, cy = 120, r = 86, rin = 56;
+  const total = Object.values(b).reduce((a, x) => a + x, 0) || 1;
+
+  let startA = -Math.PI / 2;
+  Object.entries(b).forEach(([k, v]) => {
+    if (v <= 0) return;
+    const angle = (v / total) * Math.PI * 2;
+    const endA = startA + angle;
+    const large = angle > Math.PI ? 1 : 0;
+    const x1 = cx + r * Math.cos(startA);
+    const y1 = cy + r * Math.sin(startA);
+    const x2 = cx + r * Math.cos(endA);
+    const y2 = cy + r * Math.sin(endA);
+    const x3 = cx + rin * Math.cos(endA);
+    const y3 = cy + rin * Math.sin(endA);
+    const x4 = cx + rin * Math.cos(startA);
+    const y4 = cy + rin * Math.sin(startA);
+    const d = `M ${x1.toFixed(2)} ${y1.toFixed(2)} ` +
+              `A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} ` +
+              `L ${x3.toFixed(2)} ${y3.toFixed(2)} ` +
+              `A ${rin} ${rin} 0 ${large} 0 ${x4.toFixed(2)} ${y4.toFixed(2)} Z`;
+    const pct = (v/total*100).toFixed(1);
+    svg.insertAdjacentHTML('beforeend',
+      `<path d="${d}" fill="${DONUT_COLORS[k]}" class="bar-rect" ` +
+      `data-k="${DONUT_LABELS[k]}" data-v="${v}" data-p="${pct}"/>`);
+    startA = endA;
+  });
+
+  // center text
+  svg.insertAdjacentHTML('beforeend',
+    `<text x="${cx}" y="${cy-4}" text-anchor="middle" ` +
+    `style="fill:#0f172a;font-size:18px;font-weight:700;font-family:ui-sans-serif;">${fmt(total)}</text>` +
+    `<text x="${cx}" y="${cy+14}" text-anchor="middle" ` +
+    `style="fill:#94a3b8;font-size:11px;font-family:ui-sans-serif;">字元數</text>`);
+
+  // legend
+  const lg = $('donutLegend');
+  lg.innerHTML = '';
+  Object.entries(b).forEach(([k, v]) => {
+    if (v <= 0) return;
+    const pct = (v/total*100).toFixed(1);
+    lg.insertAdjacentHTML('beforeend',
+      `<span><span class="sw" style="background:${DONUT_COLORS[k]}"></span>` +
+      `${DONUT_LABELS[k]} <b>${pct}%</b> <span style="color:#94a3b8;">(${fmt(v)})</span></span>`);
+  });
+
+  svg.querySelectorAll('path.bar-rect').forEach(el => {
+    el.addEventListener('mousemove', (e) =>
+      showTT(e, `<b>${el.dataset.k}</b><br>${fmt(el.dataset.v)} (${el.dataset.p}%)`));
+    el.addEventListener('mouseleave', hideTT);
+  });
+}
+
+// ---- Chart 3: top frequency horizontal bar ----
+function drawFreq(mode, freq) {
+  const svg = $('chartFreq');
+  svg.innerHTML = '';
+  const data = (freq[mode] || []).slice(0, 20);
+  $('freqEmpty').hidden = data.length > 0;
+  if (!data.length) return;
+  const W = 600, padL = 90, padR = 50, padT = 10, padB = 10;
+  const rowH = 22;
+  const H = padT + padB + data.length * rowH;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const maxV = Math.max(1, ...data.map(d => d.count));
+  const barW = W - padL - padR;
+
+  const grad = `<defs><linearGradient id="gradFreq" x1="0" y1="0" x2="1" y2="0">` +
+    `<stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#0d9488"/>` +
+    `</linearGradient></defs>`;
+  svg.insertAdjacentHTML('beforeend', grad);
+
+  data.forEach((d, i) => {
+    const y = padT + i * rowH + 3;
+    const w = barW * (d.count / maxV);
+    svg.insertAdjacentHTML('beforeend',
+      `<text class="label" x="${padL-8}" y="${y+12}" text-anchor="end">${escapeXml(d.term)}</text>` +
+      `<rect class="bar-rect" x="${padL}" y="${y}" width="${w.toFixed(1)}" ` +
+      `height="${rowH-6}" fill="url(#gradFreq)" rx="3" data-t="${escapeXml(d.term)}" data-v="${d.count}"/>` +
+      `<text class="val-label" x="${padL+w+5}" y="${y+13}">${fmt(d.count)}</text>`);
+  });
+
+  svg.querySelectorAll('rect.bar-rect').forEach(el => {
+    el.addEventListener('mousemove', (e) =>
+      showTT(e, `<b>${el.dataset.t}</b><br>${fmt(el.dataset.v)} 次`));
+    el.addEventListener('mouseleave', hideTT);
+  });
+}
+function escapeXml(s) {
+  return String(s).replace(/[<>&"']/g, c =>
+    ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]));
+}
+
+document.querySelectorAll('.wc-tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.wc-tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    if (lastResult) drawFreq(t.dataset.mode, lastResult.freq);
+  });
+});
+
+// ---- Chart 4: cumulative line ----
+function drawCumulative(pages) {
+  const svg = $('chartCum');
+  svg.innerHTML = '';
+  const W = 600, H = 280;
+  const padL = 50, padR = 20, padT = 14, padB = 28;
+  const cw = W - padL - padR;
+  const ch = H - padT - padB;
+
+  let cum = 0;
+  const cumPts = pages.map(p => { cum += p.word_total; return cum; });
+  const maxV = Math.max(1, cumPts[cumPts.length - 1]);
+
+  // grid + Y ticks
+  const ticks = 5;
+  for (let i = 0; i <= ticks; i++) {
+    const y = padT + ch * (1 - i / ticks);
+    const v = Math.round(maxV * i / ticks);
+    svg.insertAdjacentHTML('beforeend',
+      `<line class="grid-line" x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}"/>` +
+      `<text class="tick" x="${padL-6}" y="${y+3}" text-anchor="end">${fmt(v)}</text>`);
+  }
+  svg.insertAdjacentHTML('beforeend',
+    `<line class="axis" x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+ch}"/>` +
+    `<line class="axis" x1="${padL}" y1="${padT+ch}" x2="${W-padR}" y2="${padT+ch}"/>`);
+
+  const n = pages.length;
+  const xAt = i => padL + (n === 1 ? cw/2 : (cw * i / (n - 1)));
+  const yAt = v => padT + ch * (1 - v / maxV);
+
+  // area fill
+  const grad = `<defs><linearGradient id="gradArea" x1="0" y1="0" x2="0" y2="1">` +
+    `<stop offset="0%" stop-color="#a855f7" stop-opacity="0.4"/>` +
+    `<stop offset="100%" stop-color="#a855f7" stop-opacity="0.02"/></linearGradient></defs>`;
+  svg.insertAdjacentHTML('beforeend', grad);
+
+  let area = `M ${xAt(0).toFixed(1)} ${(padT+ch).toFixed(1)}`;
+  cumPts.forEach((v, i) => { area += ` L ${xAt(i).toFixed(1)} ${yAt(v).toFixed(1)}`; });
+  area += ` L ${xAt(n-1).toFixed(1)} ${(padT+ch).toFixed(1)} Z`;
+  svg.insertAdjacentHTML('beforeend',
+    `<path d="${area}" fill="url(#gradArea)"/>`);
+
+  // line
+  let line = '';
+  cumPts.forEach((v, i) => {
+    line += (i === 0 ? 'M ' : ' L ') + xAt(i).toFixed(1) + ' ' + yAt(v).toFixed(1);
+  });
+  svg.insertAdjacentHTML('beforeend',
+    `<path d="${line}" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linejoin="round"/>`);
+
+  // dots (skip if too many pages)
+  if (n <= 50) {
+    cumPts.forEach((v, i) => {
+      svg.insertAdjacentHTML('beforeend',
+        `<circle class="bar-rect" cx="${xAt(i).toFixed(1)}" cy="${yAt(v).toFixed(1)}" ` +
+        `r="3" fill="#7c3aed" stroke="#fff" stroke-width="1.5" ` +
+        `data-p="${pages[i].page}" data-c="${v}" data-v="${pages[i].word_total}"/>`);
+    });
+  }
+
+  // X labels
+  const xticks = n <= 10 ? pages.map((_, i) => i) :
+    [0, Math.floor(n*0.25), Math.floor(n*0.5), Math.floor(n*0.75), n-1];
+  xticks.forEach(i => {
+    svg.insertAdjacentHTML('beforeend',
+      `<text class="tick" x="${xAt(i).toFixed(1)}" y="${H-padB+14}" text-anchor="middle">${pages[i].page}</text>`);
+  });
+
+  svg.querySelectorAll('circle.bar-rect').forEach(el => {
+    el.addEventListener('mousemove', (e) =>
+      showTT(e, `<b>第 ${el.dataset.p} 頁</b><br>累計 ${fmt(el.dataset.c)} 字<br>本頁 ${fmt(el.dataset.v)} 字`));
+    el.addEventListener('mouseleave', hideTT);
+  });
+}
+
+// ---- exports ----
+function download(name, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+}
+
+$('btnCsv').addEventListener('click', async () => {
+  if (!lastFile) return;
+  const fd = new FormData();
+  fd.append('file', lastFile);
+  const r = await fetch('/tools/pdf-wordcount/export-csv', { method: 'POST', body: fd });
+  if (!r.ok) { alert('CSV 下載失敗'); return; }
+  const blob = await r.blob();
+  const cd = r.headers.get('Content-Disposition') || '';
+  let name = 'wordcount.csv';
+  const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i);
+  if (m) name = decodeURIComponent(m[1]);
+  download(name, blob, 'text/csv');
+});
+
+$('btnJson').addEventListener('click', () => {
+  if (!lastResult) return;
+  const base = (lastResult.filename || 'document').replace(/\.pdf$/i, '');
+  download(base + '_wordcount.json',
+    JSON.stringify(lastResult, null, 2), 'application/json');
+});
+
+$('btnMd').addEventListener('click', () => {
+  if (!lastResult) return;
+  const r = lastResult, s = r.summary;
+  const lines = [
+    '# 字數統計報表 — ' + (r.filename || ''),
+    '',
+    '## 總覽',
+    '',
+    '| 項目 | 數值 |',
+    '|---|---|',
+    '| 總頁數 | ' + r.page_count + ' |',
+    '| 總字數 | ' + s.word_total + ' |',
+    '| 中文字 | ' + s.cjk_chars + ' |',
+    '| 英文字 | ' + s.en_words + ' |',
+    '| 字元數 (含空白) | ' + s.char_total + ' |',
+    '| 字元數 (不含空白) | ' + s.char_no_ws + ' |',
+    '| 段落數 | ' + s.paragraphs + ' |',
+    '| 句子數 | ' + s.sentences + ' |',
+    '| 平均每頁字數 | ' + s.avg_per_page + ' |',
+    '| 平均句長 | ' + s.avg_sent_len + ' |',
+    '| 預估閱讀時間 | ' + s.reading_min + ' 分 |',
+    '',
+    '## 高頻詞 Top 20',
+    '',
+    '### 中文單字',
+    r.freq.cjk_chars.map(d => `- ${d.term}: ${d.count}`).join('\n') || '(無)',
+    '',
+    '### 中文雙字',
+    r.freq.cjk_bigrams.map(d => `- ${d.term}: ${d.count}`).join('\n') || '(無)',
+    '',
+    '### 英文',
+    r.freq.en_words.map(d => `- ${d.term}: ${d.count}`).join('\n') || '(無)',
+    '',
+  ];
+  const base = (r.filename || 'document').replace(/\.pdf$/i, '');
+  download(base + '_wordcount.md', lines.join('\n'), 'text/markdown');
+});
+</script>
+{% endblock %}
