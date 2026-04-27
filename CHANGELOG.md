@@ -4,6 +4,17 @@
 
 ---
 
+## [1.1.56] - 2026-04-28
+
+### 變更（pdf-annotations-flatten 改名 + 預覽 + spinner）
+
+- **「註解固定化」改名為「註解平面化」**：與 Adobe Acrobat 繁中正式翻譯一致（「平面化圖層 / 平面化透明度」）。`固定化` 太像直譯日文/中文不夠在地。route id `pdf-annotations-flatten` 不變。
+- **平面化結果預覽**：`/flatten` 不再立刻回傳 PDF，而是回 `{baked_uid, page_count, baked_count}`；UI 顯示每頁縮圖（lazy-load via `/baked-preview/{uid}/{page}`），點縮圖開 lightbox 看大圖；確認後才按下「下載平面化後的 PDF」呼叫 `/baked-download/{uid}`。
+- **按鈕處理中 disable + spinner**：「執行平面化」「下載」按鈕在處理時變成 disabled、顯示旋轉的 spinner、文字改成「處理中… / 下載中…」；完成後還原。
+- **API endpoint 維持原行為**：`POST /api/pdf-annotations-flatten` 公開 API 仍直接回 PDF（不走預覽流程），對外接口不破壞。
+
+---
+
 ## [1.1.55] - 2026-04-28
 
 ### 變更（pdf-annotations 大改 + 網站文案修正）
@@ -48,7 +59,7 @@
   - 螢光筆 / 底線等 content 通常為空，本工具會用 quad rect 從原文 reverse 出實際標註的文字
   - 類型 / 作者 chip 篩選，可即時 redraw 預覽列表
 - **註解清除 `pdf-annotations-strip`**(資安處理):刪除 PDF 中的註解。兩種模式 — 全部刪除或依類型 / 作者篩選刪除;輸出乾淨副本。
-- **註解固定化 `pdf-annotations-flatten`**(檔案編輯):用 PyMuPDF `doc.bake(annots=True, widgets=False)` 把註解燒進頁面內容流，收件方無法移除或編輯。表單欄位 (AcroForm widgets) 保留可填。
+- **註解平面化 `pdf-annotations-flatten`**(檔案編輯):用 PyMuPDF `doc.bake(annots=True, widgets=False)` 把註解燒進頁面內容流，收件方無法移除或編輯。表單欄位 (AcroForm widgets) 保留可填。
 - 共 32 條 pytest:類型 / 作者篩選、CJK 檔名、empty PDF、API endpoint、bake 後 annot count = 0 等。
 - 新加 `sticky-note` 與 `layers` 兩個 SVG icon。
 
