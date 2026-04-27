@@ -166,9 +166,14 @@ function Fetch-Code {
         Get-ChildItem $InstallDir -Force | Where-Object { $_.Name -ne 'bin' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     }
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+    # Clone or download into a temp dir, then copy contents in. We can't clone
+    # directly into $InstallDir because it already has bin/ (uv + nssm just
+    # got installed there) and git clone refuses non-empty destinations.
+    $stage = Join-Path $env:TEMP ("jtdt-src-" + [guid]::NewGuid().ToString('N'))
     if (Get-Command git -ErrorAction SilentlyContinue) {
         Log "Cloning code from $RepoUrl ..."
-        git clone --depth=1 --branch $RepoBranch $RepoUrl $InstallDir
+        git clone --depth=1 --branch $RepoBranch $RepoUrl $stage
+        if ($LASTEXITCODE -ne 0) { Die "git clone failed" }
     } else {
         Log "git not installed, falling back to tarball download ..."
         $tmp = Join-Path $env:TEMP "jtdt-src.zip"
@@ -177,8 +182,17 @@ function Fetch-Code {
         if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
         Expand-Archive -Path $tmp -DestinationPath $extractDir -Force
         $first = Get-ChildItem $extractDir -Directory | Select-Object -First 1
-        Copy-Item "$($first.FullName)\*" $InstallDir -Recurse -Force
+        New-Item -ItemType Directory -Force -Path $stage | Out-Null
+        Copy-Item "$($first.FullName)\*" $stage -Recurse -Force
         Remove-Item $tmp, $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    # Merge stage into $InstallDir (preserves existing bin/ subdir)
+    Get-ChildItem $stage -Force | ForEach-Object {
+        Copy-Item $_.FullName -Destination $InstallDir -Recurse -Force
+    }
+    Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not (Test-Path (Join-Path $InstallDir 'pyproject.toml'))) {
+        Die "Source fetch failed: pyproject.toml not found in $InstallDir"
     }
 }
 
