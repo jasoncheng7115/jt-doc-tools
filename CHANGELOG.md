@@ -4,6 +4,19 @@
 
 ---
 
+## [1.1.55] - 2026-04-28
+
+### 變更（pdf-annotations 大改 + 網站文案修正）
+
+- **每頁預覽縮圖**：註解明細列表每筆左側顯示該頁 PNG 縮圖（lazy-load，PyMuPDF 渲染時自動把註解烤上去），點縮圖開 lightbox 看完整大圖。靠新 endpoint `GET /preview/{upload_id}/{page}` 按需渲染。
+- **下載速度大幅提升**：原本每按一次「下載 CSV / JSON / 待辦」都要重新上傳 + 重跑全文 highlight text recovery（大 PDF 等很久）。改成 analyze 階段把分析結果寫成 sidecar JSON（`annot_{uid}_data.json`），下載時按 `upload_id` 直接取快取，秒回。
+- **修 export 端點 signature 漏接 bug**：`_save_upload` 從 2-tuple 改成 3-tuple 時，4 個 export 端點的呼叫端沒同步更新，造成「按下載沒反應」。
+- **網站「伺服器模式」加 `jtdt bind 0.0.0.0` 說明**：之前面板只說 127.0.0.1，沒交代怎麼對外開放。
+- **網站 / README 區分 `sudo`（Linux/macOS）vs「以系統管理員身分執行」（Windows）**：原本一律寫 `sudo jtdt update / uninstall`，Windows 沒 `sudo`。
+- **網站移除 Windows「⚠ 尚未完整測試」徽章**：客戶機與 192.168.1.154 多次驗證 OK，可拿掉警告。
+
+---
+
 ## [1.1.54] - 2026-04-28
 
 ### 變更（install.ps1 借鑑客戶 self-fix 重構）

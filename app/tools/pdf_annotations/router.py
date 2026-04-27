@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import uuid
 from collections import Counter
 from pathlib import Path
@@ -15,6 +16,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from ...config import settings
 from ...core.http_utils import content_disposition
+
+_UPLOAD_ID_RE = re.compile(r"^[a-f0-9]{32}$")
 
 
 router = APIRouter()
@@ -202,15 +205,39 @@ def _render_todo_csv(annots: list[dict[str, Any]]) -> bytes:
 
 # ---------- helpers ----------
 
-async def _save_upload(file: UploadFile) -> tuple[Path, str]:
+async def _save_upload(file: UploadFile) -> tuple[Path, str, str]:
+    """Save the upload to a uuid-keyed temp path. Returns (path, filename, upload_id)."""
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF")
     data = await file.read()
     if not data:
         raise HTTPException(400, "empty file")
-    src = settings.temp_dir / f"annot_{uuid.uuid4().hex}_in.pdf"
+    upload_id = uuid.uuid4().hex
+    src = settings.temp_dir / f"annot_{upload_id}_in.pdf"
     src.write_bytes(data)
-    return src, file.filename or "document.pdf"
+    return src, file.filename or "document.pdf", upload_id
+
+
+def _validate_upload_id(upload_id: str) -> None:
+    if not _UPLOAD_ID_RE.match(upload_id or ""):
+        raise HTTPException(400, "invalid upload_id")
+
+
+def _cached_paths(upload_id: str) -> tuple[Path, Path]:
+    """Return (pdf_path, sidecar_json_path). No existence check."""
+    return (
+        settings.temp_dir / f"annot_{upload_id}_in.pdf",
+        settings.temp_dir / f"annot_{upload_id}_data.json",
+    )
+
+
+def _load_cached(upload_id: str) -> dict[str, Any]:
+    """Load analyzed payload from sidecar JSON. Raises 410 if expired."""
+    _validate_upload_id(upload_id)
+    _, sidecar = _cached_paths(upload_id)
+    if not sidecar.exists():
+        raise HTTPException(410, "上傳已過期，請重新分析")
+    return json.loads(sidecar.read_text(encoding="utf-8"))
 
 
 # ---------- routes ----------
@@ -223,19 +250,31 @@ async def index(request: Request):
 
 @router.post("/analyze")
 async def analyze(file: UploadFile = File(...)):
-    src, fname = await _save_upload(file)
-    try:
-        with fitz.open(str(src)) as doc:
-            pc = doc.page_count
-        annots = _read_annotations(src)
-        return JSONResponse({
-            "filename":   fname,
-            "page_count": pc,
-            "summary":    _summarize(annots, pc),
-            "annots":     annots,
-        })
-    finally:
-        src.unlink(missing_ok=True)
+    """Analyze the upload and persist results.
+
+    The PDF is kept at ``annot_{uid}_in.pdf`` and a JSON sidecar at
+    ``annot_{uid}_data.json`` so that subsequent exports + page previews
+    can reuse the analysis without re-parsing the PDF (which is slow on
+    large files because of highlight-text recovery).
+
+    Both files get cleaned by the data-retention scheduler (2-hour TTL on
+    temp uploads).
+    """
+    src, fname, upload_id = await _save_upload(file)
+    with fitz.open(str(src)) as doc:
+        pc = doc.page_count
+    annots = _read_annotations(src)
+    payload = {
+        "filename":   fname,
+        "upload_id":  upload_id,
+        "page_count": pc,
+        "summary":    _summarize(annots, pc),
+        "annots":     annots,
+    }
+    # Save sidecar; PDF stays for /preview thumbnails.
+    _, sidecar = _cached_paths(upload_id)
+    sidecar.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return JSONResponse(payload)
 
 
 @router.post("/api/pdf-annotations")
@@ -249,95 +288,101 @@ def _parse_csv_list(s: str | None) -> list[str]:
     return [t.strip() for t in s.split(",") if t.strip()]
 
 
+@router.get("/preview/{upload_id}/{page}")
+async def preview(upload_id: str, page: int):
+    """Render one page (with annotations baked in by the renderer) as a thumbnail PNG."""
+    _validate_upload_id(upload_id)
+    if page < 1:
+        raise HTTPException(400, "invalid page")
+    src, _ = _cached_paths(upload_id)
+    if not src.exists():
+        raise HTTPException(410, "上傳已過期，請重新分析")
+    with fitz.open(str(src)) as doc:
+        if page > doc.page_count:
+            raise HTTPException(404, "page out of range")
+        # ~100 DPI thumbnail; PyMuPDF renders annotations onto the pixmap by default.
+        mat = fitz.Matrix(1.4, 1.4)
+        pix = doc[page - 1].get_pixmap(matrix=mat, alpha=False)
+        png = pix.tobytes("png")
+    return Response(png, media_type="image/png",
+                    headers={"Cache-Control": "private, max-age=600"})
+
+
 @router.post("/export-csv")
 async def export_csv(
-    file: UploadFile = File(...),
+    upload_id: str = Form(...),
     types: str = Form(""),
     authors: str = Form(""),
 ):
-    src, fname = await _save_upload(file)
-    try:
-        annots = _filter_annots(_read_annotations(src),
-                                _parse_csv_list(types),
-                                _parse_csv_list(authors))
-        body = _render_csv(annots)
-        base = Path(fname).stem
-        return Response(body, media_type="text/csv; charset=utf-8",
-                        headers={"Content-Disposition":
-                                 content_disposition(f"{base}_annotations.csv")})
-    finally:
-        src.unlink(missing_ok=True)
+    cached = _load_cached(upload_id)
+    annots = _filter_annots(cached["annots"],
+                            _parse_csv_list(types),
+                            _parse_csv_list(authors))
+    body = _render_csv(annots)
+    base = Path(cached["filename"]).stem
+    return Response(body, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition":
+                             content_disposition(f"{base}_annotations.csv")})
 
 
 @router.post("/export-review")
 async def export_review(
-    file: UploadFile = File(...),
+    upload_id: str = Form(...),
     types: str = Form(""),
     authors: str = Form(""),
     group_by: str = Form("page"),
 ):
-    src, fname = await _save_upload(file)
-    try:
-        annots = _filter_annots(_read_annotations(src),
-                                _parse_csv_list(types),
-                                _parse_csv_list(authors))
-        body = _render_review_md(annots, group_by, fname)
-        base = Path(fname).stem
-        return Response(body, media_type="text/markdown; charset=utf-8",
-                        headers={"Content-Disposition":
-                                 content_disposition(f"{base}_review.md")})
-    finally:
-        src.unlink(missing_ok=True)
+    cached = _load_cached(upload_id)
+    annots = _filter_annots(cached["annots"],
+                            _parse_csv_list(types),
+                            _parse_csv_list(authors))
+    body = _render_review_md(annots, group_by, cached["filename"])
+    base = Path(cached["filename"]).stem
+    return Response(body, media_type="text/markdown; charset=utf-8",
+                    headers={"Content-Disposition":
+                             content_disposition(f"{base}_review.md")})
 
 
 @router.post("/export-todo")
 async def export_todo(
-    file: UploadFile = File(...),
+    upload_id: str = Form(...),
     types: str = Form(""),
     authors: str = Form(""),
     fmt: str = Form("md"),
 ):
-    src, fname = await _save_upload(file)
-    try:
-        annots = _filter_annots(_read_annotations(src),
-                                _parse_csv_list(types),
-                                _parse_csv_list(authors))
-        base = Path(fname).stem
-        if fmt == "csv":
-            body = _render_todo_csv(annots)
-            return Response(body, media_type="text/csv; charset=utf-8",
-                            headers={"Content-Disposition":
-                                     content_disposition(f"{base}_todo.csv")})
-        body = _render_todo_md(annots, fname)
-        return Response(body, media_type="text/markdown; charset=utf-8",
+    cached = _load_cached(upload_id)
+    annots = _filter_annots(cached["annots"],
+                            _parse_csv_list(types),
+                            _parse_csv_list(authors))
+    base = Path(cached["filename"]).stem
+    if fmt == "csv":
+        body = _render_todo_csv(annots)
+        return Response(body, media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition":
-                                 content_disposition(f"{base}_todo.md")})
-    finally:
-        src.unlink(missing_ok=True)
+                                 content_disposition(f"{base}_todo.csv")})
+    body = _render_todo_md(annots, cached["filename"])
+    return Response(body, media_type="text/markdown; charset=utf-8",
+                    headers={"Content-Disposition":
+                             content_disposition(f"{base}_todo.md")})
 
 
 @router.post("/export-json")
 async def export_json(
-    file: UploadFile = File(...),
+    upload_id: str = Form(...),
     types: str = Form(""),
     authors: str = Form(""),
 ):
-    src, fname = await _save_upload(file)
-    try:
-        with fitz.open(str(src)) as doc:
-            pc = doc.page_count
-        annots = _filter_annots(_read_annotations(src),
-                                _parse_csv_list(types),
-                                _parse_csv_list(authors))
-        body = json.dumps({
-            "filename":   fname,
-            "page_count": pc,
-            "summary":    _summarize(annots, pc),
-            "annots":     annots,
-        }, ensure_ascii=False, indent=2).encode("utf-8")
-        base = Path(fname).stem
-        return Response(body, media_type="application/json; charset=utf-8",
-                        headers={"Content-Disposition":
-                                 content_disposition(f"{base}_annotations.json")})
-    finally:
-        src.unlink(missing_ok=True)
+    cached = _load_cached(upload_id)
+    annots = _filter_annots(cached["annots"],
+                            _parse_csv_list(types),
+                            _parse_csv_list(authors))
+    body = json.dumps({
+        "filename":   cached["filename"],
+        "page_count": cached["page_count"],
+        "summary":    _summarize(annots, cached["page_count"]),
+        "annots":     annots,
+    }, ensure_ascii=False, indent=2).encode("utf-8")
+    base = Path(cached["filename"]).stem
+    return Response(body, media_type="application/json; charset=utf-8",
+                    headers={"Content-Disposition":
+                             content_disposition(f"{base}_annotations.json")})

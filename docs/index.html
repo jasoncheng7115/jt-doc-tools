@@ -559,7 +559,7 @@
       </div>
       <div class="mode-band-card">
         <div class="mode-band-h">🏢 伺服器模式（團隊 / 企業）</div>
-        <div class="mode-band-d">部署到 Linux server，到「認證設定」啟用<b>本機帳號 / LDAP / AD</b>，搭配角色與權限矩陣 + 稽核 + 記錄轉送。內網多人共用，可控管。</div>
+        <div class="mode-band-d">部署到 Linux server，到「認證設定」啟用<b>本機帳號 / LDAP / AD</b>，搭配角色與權限矩陣 + 稽核 + 記錄轉送。內網多人共用，可控管。<br><br>預設只聽 <code>127.0.0.1:8765</code>，要對外（內網其他電腦）開放，安裝完跑 <code>jtdt bind 0.0.0.0</code> 即可（會改 systemd / launchd / Windows Service 設定並重啟）；要綁特定 port 例 <code>jtdt bind 0.0.0.0:9999</code>。Linux / macOS 前面加 <code>sudo</code>，Windows 以系統管理員身分執行 PowerShell。</div>
       </div>
     </div>
 
@@ -594,11 +594,10 @@
         </div>
       </div>
 
-      <div class="install-card install-card-warn">
+      <div class="install-card">
         <div class="install-os">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M0 3.45L9.75 2.1v9.45H0M10.95 1.95L24 0v11.55H10.95M0 12.6h9.75v9.45L0 20.7M10.95 12.6H24V24l-12.95-1.85"/></svg>
           Windows
-          <span class="install-warn-badge">⚠ 尚未完整測試</span>
         </div>
         <div class="install-cmd-wrap">
           <pre><code id="cmd-win">$f="$env:TEMP\jtdt-install.ps1"; [Net.ServicePointManager]::SecurityProtocol='Tls12'; (New-Object Net.WebClient).DownloadFile('https://cdn.jsdelivr.net/gh/jasoncheng7115/jt-doc-tools@main/install.ps1',$f); powershell -NoProfile -ExecutionPolicy Bypass -File $f; Read-Host '安裝結束，按 Enter 關閉'</code></pre>
@@ -607,7 +606,7 @@
             <span class="copy-label">複製</span>
           </button>
         </div>
-        <div class="install-warn-note">10 / 11（以系統管理員身分執行 PowerShell）<br>Windows 平台目前驗證進度有限，遇到問題歡迎於 Issues 回報。</div>
+        <div class="install-note">10 / 11（以系統管理員身分執行 PowerShell）</div>
       </div>
     </div>
 
@@ -621,8 +620,8 @@
       </div>
       <div>
         <strong>升級 / 解除安裝</strong>
-        <code>sudo jtdt update</code>（自動備份 + 健康檢查）<br>
-        <code>sudo jtdt uninstall</code>（資料保留，加 <code>--purge</code> 一併刪）
+        Linux / macOS：<code>sudo jtdt update</code>　Windows：以系統管理員身分執行 <code>jtdt update</code><br>
+        卸載：<code>sudo jtdt uninstall</code>（Windows 同樣以系統管理員執行）；加 <code>--purge</code> 連同資料一起刪
       </div>
       <div>
         <strong>反向代理</strong>

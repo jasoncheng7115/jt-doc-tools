@@ -54,6 +54,18 @@ def client():
     return TestClient(app)
 
 
+def _analyze(client, pdf_bytes: bytes = None, name: str = "doc.pdf") -> str:
+    """Helper: upload + analyze, return upload_id."""
+    if pdf_bytes is None:
+        pdf_bytes = _make_pdf_with_annots()
+    r = client.post(
+        "/tools/pdf-annotations/analyze",
+        files={"file": (name, pdf_bytes, "application/pdf")},
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["upload_id"]
+
+
 # ---------- index ----------
 
 def test_index_renders(client):
@@ -73,6 +85,8 @@ def test_analyze_returns_summary_and_annots(client):
     j = r.json()
     assert j["page_count"] == 3
     assert j["filename"] == "doc.pdf"
+    assert "upload_id" in j
+    assert len(j["upload_id"]) == 32
     assert j["summary"]["total"] == 3            # 2 text annots + 1 highlight
     assert j["summary"]["pages_with_annot"] == 2
     authors = {x["author"] for x in j["summary"]["by_author"]}
@@ -134,10 +148,8 @@ def test_api_alias_works(client):
 # ---------- export-csv ----------
 
 def test_export_csv_full(client):
-    r = client.post(
-        "/tools/pdf-annotations/export-csv",
-        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
-    )
+    uid = _analyze(client)
+    r = client.post("/tools/pdf-annotations/export-csv", data={"upload_id": uid})
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
     text = r.content.decode("utf-8-sig")
@@ -147,11 +159,9 @@ def test_export_csv_full(client):
 
 
 def test_export_csv_filter_by_author(client):
-    r = client.post(
-        "/tools/pdf-annotations/export-csv",
-        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
-        data={"authors": "Mary"},
-    )
+    uid = _analyze(client)
+    r = client.post("/tools/pdf-annotations/export-csv",
+                    data={"upload_id": uid, "authors": "Mary"})
     assert r.status_code == 200
     text = r.content.decode("utf-8-sig")
     rows = [ln for ln in text.splitlines() if ln.strip()]
@@ -160,11 +170,9 @@ def test_export_csv_filter_by_author(client):
 
 
 def test_export_csv_filter_by_type(client):
-    r = client.post(
-        "/tools/pdf-annotations/export-csv",
-        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
-        data={"types": "Text"},  # exclude highlight
-    )
+    uid = _analyze(client)
+    r = client.post("/tools/pdf-annotations/export-csv",
+                    data={"upload_id": uid, "types": "Text"})  # exclude highlight
     assert r.status_code == 200
     text = r.content.decode("utf-8-sig")
     rows = [ln for ln in text.splitlines() if ln.strip()]
@@ -173,23 +181,31 @@ def test_export_csv_filter_by_type(client):
 
 
 def test_export_csv_filename_handles_cjk(client):
-    r = client.post(
-        "/tools/pdf-annotations/export-csv",
-        files={"file": ("中文檔名.pdf", _make_pdf_with_annots(), "application/pdf")},
-    )
+    uid = _analyze(client, name="中文檔名.pdf")
+    r = client.post("/tools/pdf-annotations/export-csv", data={"upload_id": uid})
     assert r.status_code == 200
     cd = r.headers.get("content-disposition", "")
     assert "filename*=" in cd or "filename=" in cd
 
 
+def test_export_csv_invalid_upload_id_returns_400(client):
+    r = client.post("/tools/pdf-annotations/export-csv",
+                    data={"upload_id": "not-hex"})
+    assert r.status_code == 400
+
+
+def test_export_csv_expired_upload_id_returns_410(client):
+    r = client.post("/tools/pdf-annotations/export-csv",
+                    data={"upload_id": "0" * 32})
+    assert r.status_code == 410
+
+
 # ---------- export-review (Markdown) ----------
 
 def test_export_review_groups_by_page(client):
-    r = client.post(
-        "/tools/pdf-annotations/export-review",
-        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
-        data={"group_by": "page"},
-    )
+    uid = _analyze(client)
+    r = client.post("/tools/pdf-annotations/export-review",
+                    data={"upload_id": uid, "group_by": "page"})
     assert r.status_code == 200
     md = r.content.decode("utf-8")
     assert "# 註解審閱報告" in md
@@ -198,11 +214,9 @@ def test_export_review_groups_by_page(client):
 
 
 def test_export_review_groups_by_author(client):
-    r = client.post(
-        "/tools/pdf-annotations/export-review",
-        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
-        data={"group_by": "author"},
-    )
+    uid = _analyze(client)
+    r = client.post("/tools/pdf-annotations/export-review",
+                    data={"upload_id": uid, "group_by": "author"})
     assert r.status_code == 200
     md = r.content.decode("utf-8")
     assert "## Jason" in md
@@ -212,11 +226,9 @@ def test_export_review_groups_by_author(client):
 # ---------- export-todo ----------
 
 def test_export_todo_markdown_has_checkboxes(client):
-    r = client.post(
-        "/tools/pdf-annotations/export-todo",
-        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
-        data={"fmt": "md"},
-    )
+    uid = _analyze(client)
+    r = client.post("/tools/pdf-annotations/export-todo",
+                    data={"upload_id": uid, "fmt": "md"})
     assert r.status_code == 200
     md = r.content.decode("utf-8")
     assert "# 待辦清單" in md
@@ -226,11 +238,9 @@ def test_export_todo_markdown_has_checkboxes(client):
 
 
 def test_export_todo_csv(client):
-    r = client.post(
-        "/tools/pdf-annotations/export-todo",
-        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
-        data={"fmt": "csv"},
-    )
+    uid = _analyze(client)
+    r = client.post("/tools/pdf-annotations/export-todo",
+                    data={"upload_id": uid, "fmt": "csv"})
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
     text = r.content.decode("utf-8-sig")
@@ -239,13 +249,38 @@ def test_export_todo_csv(client):
     assert len(rows) == 1 + 3
 
 
+# ---------- preview thumbnails ----------
+
+def test_preview_returns_png(client):
+    uid = _analyze(client)
+    r = client.get(f"/tools/pdf-annotations/preview/{uid}/1")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/png"
+    # PNG magic bytes
+    assert r.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_preview_invalid_upload_id_returns_400(client):
+    r = client.get("/tools/pdf-annotations/preview/not-hex/1")
+    assert r.status_code == 400
+
+
+def test_preview_out_of_range_page_returns_404(client):
+    uid = _analyze(client)
+    r = client.get(f"/tools/pdf-annotations/preview/{uid}/9999")
+    assert r.status_code == 404
+
+
+def test_preview_expired_upload_id_returns_410(client):
+    r = client.get(f"/tools/pdf-annotations/preview/{'0'*32}/1")
+    assert r.status_code == 410
+
+
 # ---------- export-json ----------
 
 def test_export_json_returns_full_payload(client):
-    r = client.post(
-        "/tools/pdf-annotations/export-json",
-        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
-    )
+    uid = _analyze(client)
+    r = client.post("/tools/pdf-annotations/export-json", data={"upload_id": uid})
     assert r.status_code == 200
     j = json.loads(r.content.decode("utf-8"))
     assert j["page_count"] == 3

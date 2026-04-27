@@ -1,4 +1,4 @@
-# Jason Tools 文件工具箱 v1.1.54
+# Jason Tools 文件工具箱 v1.1.55
 
 > 整合式 PDF / Office 文件處理平台。包含 26 個工具：**表單自動填寫**、**用印與簽名**、**浮水印**、**N-up 多頁合併**、**檔案合併 / 分拆 / 轉向 / 頁面整理 / 頁碼**、**文書轉 PDF / 圖片**、**擷取文字 / 圖片 / 附件**、**字數統計**、**註解整理 / 清除 / 固定化**、**敏感資料去識別化**、**PDF 加密 / 解密**、**中繼資料清除**、**隱藏內容掃描**、**差異比對**、**頁面編輯器**、**壓縮**、**AES 加密壓縮檔**。
 >
@@ -167,8 +167,10 @@ $f="$env:TEMP\jtdt-install.ps1"; [Net.ServicePointManager]::SecurityProtocol='Tl
 | `jtdt restart`       | 重啟服務 |
 | `jtdt logs -f`       | 即時看 log |
 | `jtdt open`          | 用瀏覽器開啟介面 |
-| `sudo jtdt update`   | 升級到最新版（會自動備份資料） |
-| `sudo jtdt uninstall` | 解除安裝（資料保留），加 `--purge` 連同資料一起刪 |
+| `sudo jtdt update`<sup>†</sup>   | 升級到最新版（會自動備份資料） |
+| `sudo jtdt uninstall`<sup>†</sup> | 解除安裝（資料保留），加 `--purge` 連同資料一起刪 |
+
+<sup>†</sup> Linux / macOS 用 `sudo`；Windows 沒有 `sudo`，請改成「以系統管理員身分執行 PowerShell」後跑 `jtdt update` / `jtdt uninstall`。
 
 > **升級流程**：自動停服務 → 備份 `data/` → `git pull` → `uv sync` → 重啟 → 健康檢查。最近 3 份備份會自動保留。
 
