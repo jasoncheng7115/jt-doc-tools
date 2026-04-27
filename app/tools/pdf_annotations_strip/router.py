@@ -104,7 +104,7 @@ async def strip(
     try:
         with fitz.open(str(src)) as doc:
             if doc.needs_pass:
-                raise HTTPException(400, "PDF 已加密,請先解密")
+                raise HTTPException(400, "PDF 已加密，請先解密")
             for pno in range(doc.page_count):
                 page = doc[pno]
                 # Iterate to a list first — deleting while iterating page.annots()

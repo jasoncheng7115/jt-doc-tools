@@ -7,7 +7,7 @@ from .router import router
 metadata = ToolMetadata(
     id="pdf-annotations",
     name="註解整理",
-    description="擷取 PDF 註解,輸出完整清單 / 審閱報告 / 待辦清單(CSV / JSON / Markdown)。",
+    description="擷取 PDF 註解，輸出完整清單 / 審閱報告 / 待辦清單(CSV / JSON / Markdown)。",
     icon="sticky-note",
     category="內容擷取",
 )

@@ -501,7 +501,7 @@ def _maybe_run_llm_review(
         )
         return result.to_dict()
     except Exception as e:  # noqa: BLE001
-        # Never bubble up — LLM is附加功能, must not break core fill flow.
+        # Never bubble up — LLM is附加功能， must not break core fill flow.
         import logging
         logging.getLogger(__name__).warning("LLM review failed: %s", e)
         return {"skipped": f"LLM 校驗失敗：{e}"}

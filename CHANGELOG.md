@@ -4,18 +4,27 @@
 
 ---
 
+## [1.1.53] - 2026-04-27
+
+### 變更（UI 樣式 + 文字規範）
+
+- **網站連結 / 按鈕 cursor 修正**：`<a href>` 與 button hover 不會變成手指的問題，在 `style.css` 加 `a[href], a[href] * { cursor: pointer }` 與 `button { cursor: pointer }` 明確規則。
+- **中文字旁的逗號統一改全形「，」**：README、CHANGELOG、網站、UI templates、Python docstring 等共 27 個檔案，84 處半形 `,` （CJK 旁邊）替換成全形「，」，符合台灣繁體出版業標準。結構性的 CSV / URL / code syntax 維持半形不動。
+
+---
+
 ## [1.1.52] - 2026-04-27
 
 ### 新增(三個 PDF 註解相關工具)
 
-- **註解整理 `pdf-annotations`**(內容擷取):擷取 PDF 中所有註解(螢光筆 / 文字註解 / 圖章 / 自由文字 / 手繪 / 底線 / 刪除線 / 檔案附件等),提供三種輸出模式:
-  - **完整清單** — CSV / JSON,含頁碼、類型、作者、subject、內容、建立 / 修改時間、座標
-  - **審閱報告** — Markdown,可依頁碼 / 作者 / 類型分組(給主管 / 客戶 / 法務看)
+- **註解整理 `pdf-annotations`**(內容擷取):擷取 PDF 中所有註解(螢光筆 / 文字註解 / 圖章 / 自由文字 / 手繪 / 底線 / 刪除線 / 檔案附件等)，提供三種輸出模式:
+  - **完整清單** — CSV / JSON，含頁碼、類型、作者、subject、內容、建立 / 修改時間、座標
+  - **審閱報告** — Markdown，可依頁碼 / 作者 / 類型分組(給主管 / 客戶 / 法務看)
   - **待辦清單** — Markdown checkbox 或 CSV(status / page / todo / assignee / priority / type / notes)
-  - 螢光筆 / 底線等 content 通常為空,本工具會用 quad rect 從原文 reverse 出實際標註的文字
-  - 類型 / 作者 chip 篩選,可即時 redraw 預覽列表
+  - 螢光筆 / 底線等 content 通常為空，本工具會用 quad rect 從原文 reverse 出實際標註的文字
+  - 類型 / 作者 chip 篩選，可即時 redraw 預覽列表
 - **註解清除 `pdf-annotations-strip`**(資安處理):刪除 PDF 中的註解。兩種模式 — 全部刪除或依類型 / 作者篩選刪除;輸出乾淨副本。
-- **註解固定化 `pdf-annotations-flatten`**(檔案編輯):用 PyMuPDF `doc.bake(annots=True, widgets=False)` 把註解燒進頁面內容流,收件方無法移除或編輯。表單欄位 (AcroForm widgets) 保留可填。
+- **註解固定化 `pdf-annotations-flatten`**(檔案編輯):用 PyMuPDF `doc.bake(annots=True, widgets=False)` 把註解燒進頁面內容流，收件方無法移除或編輯。表單欄位 (AcroForm widgets) 保留可填。
 - 共 32 條 pytest:類型 / 作者篩選、CJK 檔名、empty PDF、API endpoint、bake 後 annot count = 0 等。
 - 新加 `sticky-note` 與 `layers` 兩個 SVG icon。
 
@@ -25,9 +34,9 @@
 
 ### 變更（pdf-wordcount UI 細修）
 
-- **統計總覽 8 張卡片各自配色**:之前全部一樣的灰藍很單調,改成 8 個獨立色系 (藍 / 青 / 綠 / 紫 / 橙 / 粉 / 黃 / 紅),一眼分得出每類數據。
-- **「段落 / 句子」值不再被斷行**:`349 / 1,526` 之類的值現在 `white-space: nowrap`,卡片寬度不夠時用省略號而不是換行。同時把 grid `minmax(140px → 160px)` 拓寬基本欄位寬度。
-- **上傳區與統計總覽間距修正**:`#wcResults` wrapper 把兩個 `.panel` 切斷了 sibling 鏈,全域 `.panel + .panel` 規則失效;加 explicit `margin-top` 修補。
+- **統計總覽 8 張卡片各自配色**:之前全部一樣的灰藍很單調，改成 8 個獨立色系 (藍 / 青 / 綠 / 紫 / 橙 / 粉 / 黃 / 紅)，一眼分得出每類數據。
+- **「段落 / 句子」值不再被斷行**:`349 / 1,526` 之類的值現在 `white-space: nowrap`，卡片寬度不夠時用省略號而不是換行。同時把 grid `minmax(140px → 160px)` 拓寬基本欄位寬度。
+- **上傳區與統計總覽間距修正**:`#wcResults` wrapper 把兩個 `.panel` 切斷了 sibling 鏈，全域 `.panel + .panel` 規則失效;加 explicit `margin-top` 修補。
 
 ---
 
@@ -35,9 +44,9 @@
 
 ### 變更（pdf-wordcount UX 改版）
 
-- **高頻詞改成三欄並列**:原本中文單字 / 中文雙字 / 英文 是 tab 切換,使用者抱怨切換不方便。改成三個獨立卡片並排,一次看完三類;螢幕窄時自動 collapse 成 2 欄 / 1 欄。每類各自配色:中文單字藍、中文雙字綠、英文紫,視覺好區分。
-- **移除「累積字數曲線」圖**:大多 PDF 每頁字數差不多,累積曲線就是一條斜直線,跟「每頁字數直條圖」資訊重複,沒提供新洞察。空間讓給三個高頻詞圖。
-- **空態提示**:純英文 PDF 會在中文卡片顯示「(此 PDF 無中文)」;純中文 PDF 在英文卡片顯示「(此 PDF 無英文)」,而非空白圖。
+- **高頻詞改成三欄並列**:原本中文單字 / 中文雙字 / 英文 是 tab 切換，使用者抱怨切換不方便。改成三個獨立卡片並排，一次看完三類;螢幕窄時自動 collapse 成 2 欄 / 1 欄。每類各自配色:中文單字藍、中文雙字綠、英文紫，視覺好區分。
+- **移除「累積字數曲線」圖**:大多 PDF 每頁字數差不多，累積曲線就是一條斜直線，跟「每頁字數直條圖」資訊重複，沒提供新洞察。空間讓給三個高頻詞圖。
+- **空態提示**:純英文 PDF 會在中文卡片顯示「(此 PDF 無中文)」;純中文 PDF 在英文卡片顯示「(此 PDF 無英文)」，而非空白圖。
 
 ---
 
@@ -46,20 +55,20 @@
 ### 新增（pdf-wordcount 字數統計工具）
 
 - **新工具：字數統計**（`/tools/pdf-wordcount/`，分類為「內容擷取」）。上傳 PDF 即得：總頁數、總字數、CJK 中文字、英文 word、字元含/不含空白、段落、句子、平均每頁字數、平均句長、預估閱讀時間（中 300 字/分、英 200 word/分）。
-- **四張精緻互動圖表**：每頁字數直條圖（漸層 + hover tooltip）、字元類型環圈圖（CJK / 英文 / 數字 / 標點 / 空白 / 其他）、Top 20 高頻詞水平條圖（中文單字 / 中文雙字 bigram / 英文三種模式可切換,英文有 stopwords 過濾）、累積字數面積線圖。全部 inline SVG 自繪,零依賴 / air-gap 友善。
+- **四張精緻互動圖表**：每頁字數直條圖（漸層 + hover tooltip）、字元類型環圈圖（CJK / 英文 / 數字 / 標點 / 空白 / 其他）、Top 20 高頻詞水平條圖（中文單字 / 中文雙字 bigram / 英文三種模式可切換，英文有 stopwords 過濾）、累積字數面積線圖。全部 inline SVG 自繪，零依賴 / air-gap 友善。
 - **匯出**：每頁明細 CSV（UTF-8 BOM,Excel 友善）、完整 JSON、Markdown 報表。
-- **公開 API endpoint**：`POST /tools/pdf-wordcount/api/pdf-wordcount` 回 JSON,符合「所有功能必須有 API」規矩。
+- **公開 API endpoint**：`POST /tools/pdf-wordcount/api/pdf-wordcount` 回 JSON，符合「所有功能必須有 API」規矩。
 - **掃描檔友善提示**：偵測無文字層 PDF 時顯示 banner 提示先做 OCR。
 - **測試**：14 條 pytest 案例(分類器/字數統計/句子切分/閱讀時間/詞頻 stopwords + bigram / 4 endpoint / CJK 檔名 RFC 5987)。
 
 ### 文件
 
-- **README + 介紹網站新增 Office 引擎相依說明**：標 🔧 的工具(文書轉 PDF / 文書轉圖片 / 表單自動填寫 / 文件去識別化 / 擷取文字)需要 OxOffice 或 LibreOffice;其餘 17 個工具只處理 PDF,不需 Office 引擎。安裝腳本本來就會自動偵測 / 補裝 OxOffice,但之前文件沒寫清楚哪些工具會用到。
+- **README + 介紹網站新增 Office 引擎相依說明**：標 🔧 的工具(文書轉 PDF / 文書轉圖片 / 表單自動填寫 / 文件去識別化 / 擷取文字)需要 OxOffice 或 LibreOffice;其餘 17 個工具只處理 PDF，不需 Office 引擎。安裝腳本本來就會自動偵測 / 補裝 OxOffice，但之前文件沒寫清楚哪些工具會用到。
 
 ### 修正
 
-- **`app/tools/__init__.py` 被誤覆蓋導致 linux 服務無法啟動**:之前 deploy 用 `cp -r app/tools/pdf_metadata/ /dest/app/tools/` 模式,結尾 `/` 讓 cp 把 pdf_metadata 自己的 `__init__.py` 倒進 `app/tools/__init__.py`,變成 `from ..base import` 指向不存在的 `app/base`,服務無法啟動。修復檔案 + 加 memory 規則永遠不再用該模式。
-- **Windows 安裝腳本: 已存在 `bin/` 子目錄時 `git clone` 失敗**:install.ps1 在已裝 uv/nssm 後 `bin/` 已存在,但 `git clone` 要求目標必須是空目錄,導致 `fatal: destination path ... already exists and is not an empty directory` + 後續 `uv sync` 找不到 `pyproject.toml`。改成 clone 到 temp 目錄再合併進 `$InstallDir`,保留 `bin/`。
+- **`app/tools/__init__.py` 被誤覆蓋導致 linux 服務無法啟動**:之前 deploy 用 `cp -r app/tools/pdf_metadata/ /dest/app/tools/` 模式，結尾 `/` 讓 cp 把 pdf_metadata 自己的 `__init__.py` 倒進 `app/tools/__init__.py`，變成 `from ..base import` 指向不存在的 `app/base`，服務無法啟動。修復檔案 + 加 memory 規則永遠不再用該模式。
+- **Windows 安裝腳本: 已存在 `bin/` 子目錄時 `git clone` 失敗**:install.ps1 在已裝 uv/nssm 後 `bin/` 已存在，但 `git clone` 要求目標必須是空目錄，導致 `fatal: destination path ... already exists and is not an empty directory` + 後續 `uv sync` 找不到 `pyproject.toml`。改成 clone 到 temp 目錄再合併進 `$InstallDir`，保留 `bin/`。
 
 ---
 
