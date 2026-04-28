@@ -23,6 +23,33 @@ if (-not $prin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))
     Die "Administrator privileges required. Please run PowerShell as Administrator and try again."
 }
 
+# Network preflight — fail fast if no internet (VPN off, firewall, DNS, etc.).
+# Without this, downloads of uv / python / git tarball / OxOffice silently
+# stall for a couple of minutes each before timing out.
+function Test-Internet {
+    $hosts = @('github.com', 'cdn.jsdelivr.net', 'astral.sh')
+    foreach ($h in $hosts) {
+        try {
+            $r = Invoke-WebRequest -Uri "https://$h" -Method Head `
+                -UseBasicParsing -TimeoutSec 8 -ErrorAction Stop
+            if ($r.StatusCode -ge 200) { return $true }
+        } catch { }
+    }
+    return $false
+}
+Log "Checking network ..."
+if (-not (Test-Internet)) {
+    Die @"
+Cannot reach the internet (github.com / cdn.jsdelivr.net / astral.sh all unreachable).
+Please check:
+  1) VPN / proxy connectivity
+  2) Firewall outbound rules (port 443)
+  3) DNS resolution
+Then re-run the installer.
+"@
+}
+Ok "Network reachable"
+
 # Platform
 $Arch = if ([Environment]::Is64BitOperatingSystem) { 'x86_64' } else { 'x86' }
 if ($Arch -eq 'x86') { Die "32-bit Windows is not supported." }

@@ -25,23 +25,61 @@
   font-size:12.5px; cursor:pointer; user-select:none; color:#334155; }
 .as-chip.on { background:#b91c1c; border-color:#b91c1c; color:#fff; }
 .as-chip .ct { font-size:11px; opacity:0.7; }
+.as-chip.on .ct { opacity:0.9; }
 
 .as-warn { background:#fef2f2; border:1px solid #fca5a5; color:#7f1d1d;
   padding:10px 12px; border-radius:8px; font-size:13px; margin-top:10px; }
+
+/* annotation list — same structure as pdf-annotations 註解整理 */
+.as-list { margin-top:14px; max-height:600px; overflow-y:auto;
+  border:1px solid #e5e7eb; border-radius:8px; padding:4px; }
+.as-group { margin-bottom:4px; }
+.as-group-h { background:#f8fafc; padding:8px 12px; font-weight:600;
+  font-size:13px; color:#334155; border-bottom:1px solid #e2e8f0; position:sticky; top:0; }
+.as-row { display:flex; gap:12px; padding:10px 12px;
+  border-bottom:1px dashed #e5e7eb; font-size:13px; align-items:flex-start; }
+.as-row:last-child { border-bottom:0; }
+.as-row .thumb { flex:0 0 90px; width:90px; }
+.as-row .thumb img { width:100%; height:auto; display:block;
+  border:1px solid #cbd5e1; border-radius:4px; cursor:zoom-in;
+  background:#f8fafc; min-height:60px; }
+.as-row .thumb img.loading { opacity:0.4; }
+.as-row .meta { flex:0 0 130px; color:#64748b; font-size:12px; }
+.as-row .meta b { color:#0f172a; font-weight:600; }
+.as-row .body { flex:1; min-width:0; color:#0f172a; }
+.as-type-pill { display:inline-block; padding:1px 7px; border-radius:4px;
+  font-size:11px; background:#fee2e2; color:#7f1d1d; }
+.as-row.will-remove { background:#fef2f2; }
+.as-row.will-remove .meta b { color:#7f1d1d; }
+
+.as-lightbox { position:fixed; inset:0; background:rgba(0,0,0,0.85);
+  display:flex; align-items:center; justify-content:center; z-index:9999; cursor:zoom-out; }
+.as-lightbox img { max-width:92vw; max-height:92vh; box-shadow:0 8px 40px rgba(0,0,0,0.6); }
+
+.as-empty { text-align:center; padding:36px 12px; color:#94a3b8; font-size:13.5px; }
 #asResults { margin-top:16px; }
+#asResults > .panel + .panel { margin-top:14px; }
+
+.af-spinner { display:inline-block; width:14px; height:14px;
+  border:2px solid currentColor; border-right-color:transparent;
+  border-radius:50%; animation:af-spin 0.7s linear infinite;
+  vertical-align:-2px; margin-right:6px; }
+@keyframes af-spin { to { transform:rotate(360deg); } }
 </style>
 {% endblock %}
 {% block content %}
 <h1>{{ icon('trash', size=22) }} 註解清除</h1>
-<p class="muted">把 PDF 中的註解全部刪掉，或依作者 / 類型篩選後刪除。產出新的 PDF 副本(原檔不動)。</p>
+<p class="muted">把 PDF 中的註解全部刪掉，或依作者 / 類型篩選後刪除。產出新的 PDF 副本（原檔不動）。</p>
 <div class="as-warn">
-  <b>注意</b>:這是<b>不可逆</b>操作 — 刪除的註解資訊不會留在輸出檔內。建議保留原始檔案。
+  <b>注意</b>：這是<b>不可逆</b>操作 — 刪除的註解資訊不會留在輸出檔內。建議保留原始檔案。
 </div>
 
 <div class="panel">
   <h2 style="margin-top:0;">1. 上傳 PDF</h2>
   {% with upload_id='asUp', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
-  <div id="asLoading" class="muted" style="margin-top:10px; font-size:12.5px;" hidden>分析中…</div>
+  <div id="asLoading" class="muted" style="margin-top:10px; font-size:12.5px;" hidden>
+    {{ icon('refresh', size=14) }} 分析中…
+  </div>
   <div id="asError" class="as-warn" hidden></div>
 </div>
 
@@ -80,6 +118,15 @@
   </div>
 </div>
 
+<div class="panel">
+  <h2 style="margin-top:0;">註解明細
+    <span class="muted" style="font-size:13px; font-weight:400; margin-left:8px;" id="asListCount"></span>
+  </h2>
+  <p class="muted" style="font-size:12.5px; margin:0;">紅底標記的就是按下「刪除並下載」會被刪掉的註解。</p>
+  <div id="asList" class="as-list"></div>
+  <div id="asListEmpty" class="as-empty" hidden>沒有可刪除的註解</div>
+</div>
+
 </div>
 
 {% endblock %}
@@ -88,7 +135,6 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let lastResult = null;
-let lastFile   = null;
 let mode = "all";
 const stripState = { types: new Set(), authors: new Set() };
 
@@ -97,10 +143,22 @@ function escapeHtml(s) {
   return String(s == null ? "" : s).replace(/[<>&"']/g, c =>
     ({"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&#39;"}[c]));
 }
+function _setBusy(btn, busy, busyLabel) {
+  if (busy) {
+    if (!btn.dataset.origHtml) btn.dataset.origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="af-spinner"></span>${busyLabel}`;
+  } else {
+    btn.disabled = false;
+    if (btn.dataset.origHtml) {
+      btn.innerHTML = btn.dataset.origHtml;
+      btn.dataset.origHtml = "";
+    }
+  }
+}
 
 const fu = new FileUpload($("asUp"), async (f) => {
   if (!f) return;
-  lastFile = f;
   $("asResults").hidden = true;
   $("asError").hidden = true;
   $("asLoading").hidden = false;
@@ -111,10 +169,10 @@ const fu = new FileUpload($("asUp"), async (f) => {
   fd.append("file", f);
   let resp;
   try {
-    resp = await fetch("/tools/pdf-annotations-strip/analyze", { method: "POST", body: fd });
+    resp = await fetch("/tools/pdf-annotations-strip/analyze", { method:"POST", body:fd });
   } catch (err) {
     $("asLoading").hidden = true;
-    $("asError").textContent = "網路錯誤:" + err.message;
+    $("asError").textContent = "網路錯誤：" + err.message;
     $("asError").hidden = false;
     return;
   }
@@ -122,7 +180,7 @@ const fu = new FileUpload($("asUp"), async (f) => {
   if (!resp.ok) {
     let msg = "HTTP " + resp.status;
     try { msg = (await resp.json()).detail || msg; } catch (e) {}
-    $("asError").textContent = "分析失敗:" + msg;
+    $("asError").textContent = "分析失敗：" + msg;
     $("asError").hidden = false;
     return;
   }
@@ -137,24 +195,24 @@ function render(r) {
   $("aPages").textContent = fmt(r.page_count);
 
   $("filterTypes").innerHTML = "";
-  for (const t of r.by_type) {
+  for (const t of (r.by_type || [])) {
     const chip = document.createElement("span");
     chip.className = "as-chip";
     chip.dataset.label   = t.label;
     chip.dataset.english = t.type;
     chip.dataset.kind    = "type";
     chip.innerHTML = escapeHtml(t.label) + ' <span class="ct">' + fmt(t.count) + '</span>';
-    chip.addEventListener("click", () => toggleChip(chip));
+    chip.addEventListener("click", () => { toggleChip(chip); redrawList(); });
     $("filterTypes").appendChild(chip);
   }
   $("filterAuthors").innerHTML = "";
-  for (const a of r.by_author) {
+  for (const a of (r.by_author || [])) {
     const chip = document.createElement("span");
     chip.className = "as-chip";
     chip.dataset.label = a.author;
     chip.dataset.kind  = "author";
     chip.innerHTML = escapeHtml(a.author) + ' <span class="ct">' + fmt(a.count) + '</span>';
-    chip.addEventListener("click", () => toggleChip(chip));
+    chip.addEventListener("click", () => { toggleChip(chip); redrawList(); });
     $("filterAuthors").appendChild(chip);
   }
 
@@ -164,7 +222,65 @@ function render(r) {
   } else {
     $("asError").hidden = true;
   }
+  redrawList();
 }
+
+function _willRemove(a) {
+  if (mode === "all") return true;
+  if (stripState.types.has(a.type)) return true;
+  const who = a.author || "(未署名)";
+  if (stripState.authors.has(who)) return true;
+  return false;
+}
+
+function redrawList() {
+  if (!lastResult) return;
+  const annots = lastResult.annots || [];
+  $("asListCount").textContent = `(${fmt(annots.length)} 條)`;
+  $("asListEmpty").hidden = annots.length > 0;
+  if (!annots.length) { $("asList").innerHTML = ""; return; }
+
+  // group by page
+  const buckets = new Map();
+  for (const a of annots) {
+    const k = `第 ${a.page} 頁`;
+    if (!buckets.has(k)) buckets.set(k, []);
+    buckets.get(k).push(a);
+  }
+
+  let html = "";
+  for (const [k, items] of buckets) {
+    html += `<div class="as-group">`;
+    html += `<div class="as-group-h">${escapeHtml(k)} <span style="opacity:.6;font-weight:400;">(${items.length})</span></div>`;
+    for (const a of items) {
+      const who = a.author || "(未署名)";
+      const body = a.content || a.subject || "<em style='color:#94a3b8'>(無文字內容)</em>";
+      const willRemove = _willRemove(a);
+      const thumb = lastResult.upload_id
+        ? `<div class="thumb"><img loading="lazy" class="loading" src="/tools/pdf-annotations-strip/preview/${lastResult.upload_id}/${a.page}" alt="第 ${a.page} 頁預覽" data-page="${a.page}" onload="this.classList.remove('loading')"></div>`
+        : "";
+      html += `<div class="as-row${willRemove ? ' will-remove' : ''}">`;
+      html += thumb;
+      html += `<div class="meta"><b>第 ${a.page} 頁</b><br>${escapeHtml(who)}<br><span class="as-type-pill">${escapeHtml(a.type_label)}</span></div>`;
+      html += `<div class="body">${escapeHtml(body).replace(/\n/g, "<br>")}</div>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+  $("asList").innerHTML = html;
+}
+
+// click thumbnail → lightbox
+document.addEventListener("click", (e) => {
+  const t = e.target;
+  if (t.tagName === "IMG" && t.dataset.page && t.closest("#asList")) {
+    const lb = document.createElement("div");
+    lb.className = "as-lightbox";
+    lb.innerHTML = `<img src="${t.src}" alt="">`;
+    lb.addEventListener("click", () => lb.remove());
+    document.body.appendChild(lb);
+  }
+});
 
 function toggleChip(chip) {
   chip.classList.toggle("on");
@@ -179,29 +295,40 @@ document.querySelectorAll(".as-mode").forEach(b => {
     b.classList.add("active");
     mode = b.dataset.mode;
     $("asFilterPanel").hidden = mode !== "filter";
+    redrawList();
   });
 });
 
 $("btnStrip").addEventListener("click", async () => {
-  if (!lastFile) return;
+  if (!lastResult || !lastResult.upload_id) { alert("請先上傳並分析 PDF"); return; }
   if (mode === "filter" && stripState.types.size === 0 && stripState.authors.size === 0) {
     alert("請至少勾選一個類型或作者");
     return;
   }
-  if (mode === "all" && lastResult && lastResult.total > 0) {
-    if (!confirm(`即將刪除全部 ${lastResult.total} 條註解，要繼續?`)) return;
+  if (mode === "all" && lastResult.total > 0) {
+    if (!confirm(`即將刪除全部 ${lastResult.total} 條註解，要繼續？`)) return;
   }
   const fd = new FormData();
-  fd.append("file", lastFile);
+  fd.append("upload_id", lastResult.upload_id);
   fd.append("mode", mode);
   fd.append("types",   Array.from(stripState.types).join(","));
   fd.append("authors", Array.from(stripState.authors).join(","));
-  $("stripStatus").textContent = "處理中…";
-  const r = await fetch("/tools/pdf-annotations-strip/strip", { method: "POST", body: fd });
+  const btn = $("btnStrip");
+  _setBusy(btn, true, "處理中…");
+  $("stripStatus").textContent = "";
+  let r;
+  try {
+    r = await fetch("/tools/pdf-annotations-strip/strip", { method:"POST", body:fd });
+  } catch (err) {
+    _setBusy(btn, false);
+    $("stripStatus").textContent = "失敗：" + err.message;
+    return;
+  }
   if (!r.ok) {
     let msg = "HTTP " + r.status;
     try { msg = (await r.json()).detail || msg; } catch (e) {}
-    $("stripStatus").textContent = "失敗:" + msg;
+    _setBusy(btn, false);
+    $("stripStatus").textContent = "失敗：" + msg;
     return;
   }
   const removed = r.headers.get("X-Annotations-Removed") || "?";
@@ -214,6 +341,7 @@ $("btnStrip").addEventListener("click", async () => {
   a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+  _setBusy(btn, false);
   $("stripStatus").textContent = `完成，刪除了 ${removed} 條註解`;
 });
 </script>

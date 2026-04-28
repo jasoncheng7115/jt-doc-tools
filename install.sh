@@ -88,6 +88,21 @@ if [ "$(id -u)" -ne 0 ]; then
     die "需要系統管理員權限，請改用：  sudo bash install.sh"
 fi
 
+# ----------------------------------------------------------------- 網路檢查
+# 沒網路（VPN 沒開、防火牆擋、DNS 壞）就馬上喊，不要等 uv / python / git
+# tarball 各自慢慢 timeout 才知道。
+log "檢查網路連線 ..."
+NET_OK=0
+for host in github.com cdn.jsdelivr.net astral.sh; do
+    if curl -fsS --max-time 8 -o /dev/null -I "https://$host/" 2>/dev/null; then
+        NET_OK=1; break
+    fi
+done
+if [ "$NET_OK" -ne 1 ]; then
+    die "連不上網路（github.com / cdn.jsdelivr.net / astral.sh 都不通）。請檢查 VPN / 防火牆 / DNS 後再重跑。"
+fi
+ok "網路 OK"
+
 # --------------------------------------------------------------------- 路徑
 
 if [ "$PLATFORM" = "linux" ]; then
