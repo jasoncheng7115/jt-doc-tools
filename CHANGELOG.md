@@ -4,11 +4,35 @@
 
 ---
 
+## [1.1.58] - 2026-04-28
+
+### 變更（安裝腳本網路 fail-fast）
+
+- **Windows 一行安裝指令改用 `Invoke-WebRequest`**：原本 `(New-Object Net.WebClient).DownloadFile(...)` 沒預設 timeout，網路不通會卡 2 分鐘以上才出錯（VPN 沒開連到內網的情境踩到）；新版 `Invoke-WebRequest -TimeoutSec 15` 加 try/catch，連不上 15 秒內紅字喊「下載安裝腳本失敗」+ 故障排除提示（VPN？防火牆？DNS？）。
+- **`install.ps1` / `install.sh` 開頭加網路 preflight**：跑任何下載動作之前先 HEAD `github.com` / `cdn.jsdelivr.net` / `astral.sh` 三個 host，全失敗就在 8 秒內 die，避免後面 uv / python / git tarball / OxOffice 各自慢慢 timeout。
+- **修復 `docs/index.html` 內 `<pre><code>` 區塊被全形標點轉換誤傷**：先前的全形化 script 沒避開 `<pre>` / `<code>`，把安裝指令的 `;` `()` 都吃掉了；補上 reverse pass。
+- **修復 markdown link 語法 `](url)` 的 `()` 被誤轉成全形**：`[Keep a Changelog]（https://...)` 這類連結還原成半形。
+
+---
+
+## [1.1.57] - 2026-04-28
+
+### 變更（pdf-annotations-strip 加上註解明細預覽）
+
+- **「註解清除」上傳後立即列出每一條註解**：跟「註解整理」一樣顯示頁碼、作者、類型、內容與該頁縮圖；點縮圖可放大。原本只顯示總數 / 頁數兩個數字，使用者要刪之前完全看不到內容。
+- **紅底高亮標記「會被刪掉的註解」**：模式 = 全部刪除時整份標紅；模式 = 依篩選刪除時跟著勾選的類型 / 作者即時更新，下手前一目了然。
+- **改走 analyze + strip 兩段式**：`/analyze` 會把 PDF 暫存 + 寫 sidecar JSON，`/strip` 用 `upload_id` 取快取，不需要重新 upload；和「註解整理」採同一 pattern。
+- **按鈕處理中 disable + spinner**：與其他長操作按鈕一致。
+- **README + 文案標點全形化**：README、CHANGELOG 中文相鄰的逗號 / 句號 / 括號統一全形（先前漏網的 `,` `(` `)` 約 30 處）。
+- **API endpoint 維持原行為**：`POST /api/pdf-annotations-strip` 公開 API 仍是單次 upload + 直接回 PDF，對外接口不破壞。
+
+---
+
 ## [1.1.56] - 2026-04-28
 
 ### 變更（pdf-annotations-flatten 改名 + 預覽 + spinner）
 
-- **「註解固定化」改名為「註解平面化」**：與 Adobe Acrobat 繁中正式翻譯一致（「平面化圖層 / 平面化透明度」）。`固定化` 太像直譯日文/中文不夠在地。route id `pdf-annotations-flatten` 不變。
+- **「註解固定化」改名為「註解平面化」**：與 Adobe Acrobat 繁中正式翻譯一致（「平面化圖層 / 平面化透明度」）。`固定化` 太像直譯日文/中文不夠在地.route id `pdf-annotations-flatten` 不變。
 - **平面化結果預覽**：`/flatten` 不再立刻回傳 PDF，而是回 `{baked_uid, page_count, baked_count}`；UI 顯示每頁縮圖（lazy-load via `/baked-preview/{uid}/{page}`），點縮圖開 lightbox 看大圖；確認後才按下「下載平面化後的 PDF」呼叫 `/baked-download/{uid}`。
 - **按鈕處理中 disable + spinner**：「執行平面化」「下載」按鈕在處理時變成 disabled、顯示旋轉的 spinner、文字改成「處理中… / 下載中…」；完成後還原。
 - **API endpoint 維持原行為**：`POST /api/pdf-annotations-flatten` 公開 API 仍直接回 PDF（不走預覽流程），對外接口不破壞。
@@ -24,7 +48,7 @@
 - **修 export 端點 signature 漏接 bug**：`_save_upload` 從 2-tuple 改成 3-tuple 時，4 個 export 端點的呼叫端沒同步更新，造成「按下載沒反應」。
 - **網站「伺服器模式」加 `jtdt bind 0.0.0.0` 說明**：之前面板只說 127.0.0.1，沒交代怎麼對外開放。
 - **網站 / README 區分 `sudo`（Linux/macOS）vs「以系統管理員身分執行」（Windows）**：原本一律寫 `sudo jtdt update / uninstall`，Windows 沒 `sudo`。
-- **網站移除 Windows「⚠ 尚未完整測試」徽章**：客戶機與 192.168.1.154 多次驗證 OK，可拿掉警告。
+- **網站移除 Windows「⚠ 尚未完整測試」徽章**：客戶端 + 內部 Win11 x64 測試機多次驗證 OK，可拿掉警告。
 
 ---
 
@@ -35,7 +59,7 @@
 - **`git fetch` / `git reset` 加 `$LASTEXITCODE` 檢查**：升級流程任一指令失敗會立刻 `Die`，錯誤訊息更清楚而不是默默繼續到下一步才崩。
 - **tarball fallback 流程少一次拷貝**：原本「解壓 → 複製到 stage → 再 merge 到 InstallDir」兩跳，改成「解壓 → 直接複製到 InstallDir」一跳。
 - **auto-clean 條件移除**：原本只在「有 bin 以外的子項」才清，現在無條件清非 bin 檔；本來 gate 條件就是冗餘（無項目時也是 no-op）。
-- 已在 192.168.1.154 (Win11 x64) 重現「`bin/` 既存、無 .git」失敗情境並驗證新版可成功安裝。
+- 已在內部 Win11 x64 測試機重現「`bin/` 既存、無 .git」失敗情境並驗證新版可成功安裝。
 
 ---
 
@@ -50,17 +74,17 @@
 
 ## [1.1.52] - 2026-04-27
 
-### 新增(三個 PDF 註解相關工具)
+### 新增（三個 PDF 註解相關工具）
 
-- **註解整理 `pdf-annotations`**(內容擷取):擷取 PDF 中所有註解(螢光筆 / 文字註解 / 圖章 / 自由文字 / 手繪 / 底線 / 刪除線 / 檔案附件等)，提供三種輸出模式:
+- **註解整理 `pdf-annotations`**（內容擷取）：擷取 PDF 中所有註解（螢光筆 / 文字註解 / 圖章 / 自由文字 / 手繪 / 底線 / 刪除線 / 檔案附件等），提供三種輸出模式：
   - **完整清單** — CSV / JSON，含頁碼、類型、作者、subject、內容、建立 / 修改時間、座標
-  - **審閱報告** — Markdown，可依頁碼 / 作者 / 類型分組(給主管 / 客戶 / 法務看)
-  - **待辦清單** — Markdown checkbox 或 CSV(status / page / todo / assignee / priority / type / notes)
+  - **審閱報告** — Markdown，可依頁碼 / 作者 / 類型分組（給主管 / 客戶 / 法務看）
+  - **待辦清單** — Markdown checkbox 或 CSV（status / page / todo / assignee / priority / type / notes）
   - 螢光筆 / 底線等 content 通常為空，本工具會用 quad rect 從原文 reverse 出實際標註的文字
   - 類型 / 作者 chip 篩選，可即時 redraw 預覽列表
-- **註解清除 `pdf-annotations-strip`**(資安處理):刪除 PDF 中的註解。兩種模式 — 全部刪除或依類型 / 作者篩選刪除;輸出乾淨副本。
-- **註解平面化 `pdf-annotations-flatten`**(檔案編輯):用 PyMuPDF `doc.bake(annots=True, widgets=False)` 把註解燒進頁面內容流，收件方無法移除或編輯。表單欄位 (AcroForm widgets) 保留可填。
-- 共 32 條 pytest:類型 / 作者篩選、CJK 檔名、empty PDF、API endpoint、bake 後 annot count = 0 等。
+- **註解清除 `pdf-annotations-strip`**（資安處理）：刪除 PDF 中的註解。兩種模式 — 全部刪除或依類型 / 作者篩選刪除；輸出乾淨副本。
+- **註解平面化 `pdf-annotations-flatten`**（檔案編輯）：用 PyMuPDF `doc.bake(annots=True, widgets=False)` 把註解燒進頁面內容流，收件方無法移除或編輯。表單欄位 （AcroForm widgets） 保留可填。
+- 共 32 條 pytest：類型 / 作者篩選、CJK 檔名、empty PDF、API endpoint、bake 後 annot count = 0 等。
 - 新加 `sticky-note` 與 `layers` 兩個 SVG icon。
 
 ---
@@ -69,9 +93,9 @@
 
 ### 變更（pdf-wordcount UI 細修）
 
-- **統計總覽 8 張卡片各自配色**:之前全部一樣的灰藍很單調，改成 8 個獨立色系 (藍 / 青 / 綠 / 紫 / 橙 / 粉 / 黃 / 紅)，一眼分得出每類數據。
-- **「段落 / 句子」值不再被斷行**:`349 / 1,526` 之類的值現在 `white-space: nowrap`，卡片寬度不夠時用省略號而不是換行。同時把 grid `minmax(140px → 160px)` 拓寬基本欄位寬度。
-- **上傳區與統計總覽間距修正**:`#wcResults` wrapper 把兩個 `.panel` 切斷了 sibling 鏈，全域 `.panel + .panel` 規則失效;加 explicit `margin-top` 修補。
+- **統計總覽 8 張卡片各自配色**：之前全部一樣的灰藍很單調，改成 8 個獨立色系 （藍 / 青 / 綠 / 紫 / 橙 / 粉 / 黃 / 紅），一眼分得出每類數據。
+- **「段落 / 句子」值不再被斷行**：`349 / 1,526` 之類的值現在 `white-space: nowrap`，卡片寬度不夠時用省略號而不是換行。同時把 grid `minmax(140px → 160px)` 拓寬基本欄位寬度。
+- **上傳區與統計總覽間距修正**：`#wcResults` wrapper 把兩個 `.panel` 切斷了 sibling 鏈，全域 `.panel + .panel` 規則失效；加 explicit `margin-top` 修補。
 
 ---
 
@@ -79,9 +103,9 @@
 
 ### 變更（pdf-wordcount UX 改版）
 
-- **高頻詞改成三欄並列**:原本中文單字 / 中文雙字 / 英文 是 tab 切換，使用者抱怨切換不方便。改成三個獨立卡片並排，一次看完三類;螢幕窄時自動 collapse 成 2 欄 / 1 欄。每類各自配色:中文單字藍、中文雙字綠、英文紫，視覺好區分。
-- **移除「累積字數曲線」圖**:大多 PDF 每頁字數差不多，累積曲線就是一條斜直線，跟「每頁字數直條圖」資訊重複，沒提供新洞察。空間讓給三個高頻詞圖。
-- **空態提示**:純英文 PDF 會在中文卡片顯示「(此 PDF 無中文)」;純中文 PDF 在英文卡片顯示「(此 PDF 無英文)」，而非空白圖。
+- **高頻詞改成三欄並列**：原本中文單字 / 中文雙字 / 英文 是 tab 切換，使用者抱怨切換不方便。改成三個獨立卡片並排，一次看完三類；螢幕窄時自動 collapse 成 2 欄 / 1 欄。每類各自配色：中文單字藍、中文雙字綠、英文紫，視覺好區分。
+- **移除「累積字數曲線」圖**：大多 PDF 每頁字數差不多，累積曲線就是一條斜直線，跟「每頁字數直條圖」資訊重複，沒提供新洞察。空間讓給三個高頻詞圖。
+- **空態提示**：純英文 PDF 會在中文卡片顯示「（此 PDF 無中文）」；純中文 PDF 在英文卡片顯示「（此 PDF 無英文）」，而非空白圖。
 
 ---
 
@@ -91,19 +115,19 @@
 
 - **新工具：字數統計**（`/tools/pdf-wordcount/`，分類為「內容擷取」）。上傳 PDF 即得：總頁數、總字數、CJK 中文字、英文 word、字元含/不含空白、段落、句子、平均每頁字數、平均句長、預估閱讀時間（中 300 字/分、英 200 word/分）。
 - **四張精緻互動圖表**：每頁字數直條圖（漸層 + hover tooltip）、字元類型環圈圖（CJK / 英文 / 數字 / 標點 / 空白 / 其他）、Top 20 高頻詞水平條圖（中文單字 / 中文雙字 bigram / 英文三種模式可切換，英文有 stopwords 過濾）、累積字數面積線圖。全部 inline SVG 自繪，零依賴 / air-gap 友善。
-- **匯出**：每頁明細 CSV（UTF-8 BOM,Excel 友善）、完整 JSON、Markdown 報表。
+- **匯出**：每頁明細 CSV（UTF-8 BOM，Excel 友善）、完整 JSON、Markdown 報表。
 - **公開 API endpoint**：`POST /tools/pdf-wordcount/api/pdf-wordcount` 回 JSON，符合「所有功能必須有 API」規矩。
 - **掃描檔友善提示**：偵測無文字層 PDF 時顯示 banner 提示先做 OCR。
-- **測試**：14 條 pytest 案例(分類器/字數統計/句子切分/閱讀時間/詞頻 stopwords + bigram / 4 endpoint / CJK 檔名 RFC 5987)。
+- **測試**：14 條 pytest 案例（分類器/字數統計/句子切分/閱讀時間/詞頻 stopwords + bigram / 4 endpoint / CJK 檔名 RFC 5987）。
 
 ### 文件
 
-- **README + 介紹網站新增 Office 引擎相依說明**：標 🔧 的工具(文書轉 PDF / 文書轉圖片 / 表單自動填寫 / 文件去識別化 / 擷取文字)需要 OxOffice 或 LibreOffice;其餘 17 個工具只處理 PDF，不需 Office 引擎。安裝腳本本來就會自動偵測 / 補裝 OxOffice，但之前文件沒寫清楚哪些工具會用到。
+- **README + 介紹網站新增 Office 引擎相依說明**：標 🔧 的工具（文書轉 PDF / 文書轉圖片 / 表單自動填寫 / 文件去識別化 / 擷取文字）需要 OxOffice 或 LibreOffice；其餘 17 個工具只處理 PDF，不需 Office 引擎。安裝腳本本來就會自動偵測 / 補裝 OxOffice，但之前文件沒寫清楚哪些工具會用到。
 
 ### 修正
 
-- **`app/tools/__init__.py` 被誤覆蓋導致 linux 服務無法啟動**:之前 deploy 用 `cp -r app/tools/pdf_metadata/ /dest/app/tools/` 模式，結尾 `/` 讓 cp 把 pdf_metadata 自己的 `__init__.py` 倒進 `app/tools/__init__.py`，變成 `from ..base import` 指向不存在的 `app/base`，服務無法啟動。修復檔案 + 加 memory 規則永遠不再用該模式。
-- **Windows 安裝腳本: 已存在 `bin/` 子目錄時 `git clone` 失敗**:install.ps1 在已裝 uv/nssm 後 `bin/` 已存在，但 `git clone` 要求目標必須是空目錄，導致 `fatal: destination path ... already exists and is not an empty directory` + 後續 `uv sync` 找不到 `pyproject.toml`。改成 clone 到 temp 目錄再合併進 `$InstallDir`，保留 `bin/`。
+- **`app/tools/__init__.py` 被誤覆蓋導致 linux 服務無法啟動**：之前 deploy 用 `cp -r app/tools/pdf_metadata/ /dest/app/tools/` 模式，結尾 `/` 讓 cp 把 pdf_metadata 自己的 `__init__.py` 倒進 `app/tools/__init__.py`，變成 `from ..base import` 指向不存在的 `app/base`，服務無法啟動。修復檔案 + 加 memory 規則永遠不再用該模式。
+- **Windows 安裝腳本： 已存在 `bin/` 子目錄時 `git clone` 失敗**：install.ps1 在已裝 uv/nssm 後 `bin/` 已存在，但 `git clone` 要求目標必須是空目錄，導致 `fatal: destination path ... already exists and is not an empty directory` + 後續 `uv sync` 找不到 `pyproject.toml`。改成 clone 到 temp 目錄再合併進 `$InstallDir`，保留 `bin/`。
 
 ---
 
@@ -127,7 +151,7 @@
 
 ### 修正
 
-- **擷取圖片卡片左上勾選 / 右上下載按鈕看不清楚**：之前白底淺紫邊在綠色 picked halo 上太淡，幾乎隱形。改成深底高對比 — 勾選預設白底深灰邊，picked 後變實心綠 + 白勾；下載按鈕改深色 (#0f172a) 背景 + 白色 icon，hover 變紫色。z-index:2 確保穩定在最上層。
+- **擷取圖片卡片左上勾選 / 右上下載按鈕看不清楚**：之前白底淺紫邊在綠色 picked halo 上太淡，幾乎隱形。改成深底高對比 — 勾選預設白底深灰邊，picked 後變實心綠 + 白勾；下載按鈕改深色 （#0f172a） 背景 + 白色 icon，hover 變紫色.z-index:2 確保穩定在最上層。
 
 ---
 
@@ -137,7 +161,7 @@
 
 - **預覽從垂直堆疊改成單頁切換式**：頁面太多時垂直堆疊難看（捲半天），改成「單頁顯示 + ‹ 上一頁 / 下一頁 › + 鍵盤左右鍵切換」。caption 標明「第 N / 共 X 頁」+「已蓋章 / 此頁未蓋章」。
 - **切換模式時保留當前頁碼**：如果目前看的頁仍存在就保留，否則跳到第一個有蓋章的頁（比固定回第 1 頁更實用）。
-- **強化 override 同步**：refreshSim() 每次都拿 `editor.getValue()` 最新值送給後端，注解清楚說明為何不快取。
+- **強化 override 同步**：refreshSim（） 每次都拿 `editor.getValue()` 最新值送給後端，注解清楚說明為何不快取。
 
 ---
 
@@ -145,7 +169,7 @@
 
 ### 變更（剩餘工具全切換到 fu.upload）
 
-- 把以下 17 個工具的 `fetch(url, {method:'POST', body:fd})` 替換為 `fu.upload(url, fd)`：aes_zip、doc_deident、office_to_pdf、pdf_attachments、pdf_compress、pdf_decrypt、pdf_diff、pdf_editor、pdf_encrypt、pdf_fill、pdf_hidden_scan、pdf_merge、pdf_metadata、pdf_nup、pdf_pageno (3 處)、pdf_pages (2 處)、pdf_rotate (2 處)、pdf_split、pdf_stamp (3 處)、pdf_watermark (3 處)。
+- 把以下 17 個工具的 `fetch(url, {method:'POST', body:fd})` 替換為 `fu.upload(url, fd)`：aes_zip、doc_deident、office_to_pdf、pdf_attachments、pdf_compress、pdf_decrypt、pdf_diff、pdf_editor、pdf_encrypt、pdf_fill、pdf_hidden_scan、pdf_merge、pdf_metadata、pdf_nup、pdf_pageno （3 處）、pdf_pages （2 處）、pdf_rotate （2 處）、pdf_split、pdf_stamp （3 處）、pdf_watermark （3 處）。
 - 每個都帶上對應 `processingLabel`（「排隊加密中…」「掃描附件中…」「產生預覽中…」等），上傳階段顯示真實 byte 進度條，100% 後切到紫藍 stripes 動畫表示「伺服器處理中…」。
 - 至此 22 個工具的上傳流程全部有真實上傳進度 + 處理中視覺回饋。
 
@@ -155,7 +179,7 @@
 
 ### 新增（共用上傳進度 helper）
 
-- **`fu.upload(url, fd)` 加進 `FileUpload` class**：自動在 drop-zone 底部 render 進度條 overlay (label + bar + %)，上傳階段顯示 byte-level 進度，100% 後切換到 indeterminate 紫藍 stripes 動畫表示「伺服器處理中…」。
+- **`fu.upload(url, fd)` 加進 `FileUpload` class**：自動在 drop-zone 底部 render 進度條 overlay （label + bar + %），上傳階段顯示 byte-level 進度，100% 後切換到 indeterminate 紫藍 stripes 動畫表示「伺服器處理中…」。
 - **CSS `.fu-progress`**：進度條 overlay 樣式（白底 + 圓角 + label/bar/% 三段）+ `jtdt-stripes` 動畫。
 - **pdf-extract-text 改用 `fu.upload(...)`** 取代 fetch — 上傳大 PDF 看得到實際 byte 進度。
 - **pdf-extract-images 改用 `fu.upload(...)`**。
@@ -169,12 +193,12 @@
 ### 新增（上傳檔案記錄頁）
 
 - **新設定頁 `/admin/uploads`**：列出所有透過工具上傳的檔案 — 從 `audit_events` 表 SELECT `event_type='tool_invoke' AND details_json LIKE '%filename%'` 過濾出來（不另外建表）。
-- **欄位**：時間 (yyyy/MM/dd HH:mm:ss) / 使用者 / IP / 工具 (pill) / 檔名 (📄 icon + action) / 大小 (KB/MB/GB human-formatted, 右對齊) / 狀態 (HTTP code 著色：2xx 綠 / 4xx-5xx 紅)。
+- **欄位**：時間 （yyyy/MM/dd HH:mm:ss） / 使用者 / IP / 工具 （pill） / 檔名 （📄 icon + action） / 大小 （KB/MB/GB human-formatted， 右對齊） / 狀態 （HTTP code 著色：2xx 綠 / 4xx-5xx 紅）。
 - **篩選**：使用者下拉、工具下拉、檔名包含關鍵字、起訖時間範圍。共筆數 + 本頁總大小顯示。
 - **保留**：跟稽核記錄共用 `audit_events` 表，90 天自動清除（在「檔案保留 / 清理」可調）。
 - Sidebar 加 nav 項目「上傳檔案記錄」（icon=upload，需 auth）。
 
-至此 4 大要求 (#1-#4) 中：
+至此 4 大要求 （#1-#4） 中：
   - #1 ✓ 上傳檔案清單頁
   - #2 ✓ 全部工具 thread pool 改完
   - #3 ✓ middleware 自動撈 filename
@@ -203,7 +227,7 @@
 - **pdf_attachments / scan**：`fitz.open` + `embfile_names` 移到 `asyncio.to_thread`
 - **pdf_diff / compare**：兩份 PDF 開啟 + 全頁 diff 計算移到 thread
 - **pdf_hidden_scan / scan**：JS / 嵌入檔 / 隱藏內容掃描移到 thread
-- **pdf_nup / preview, generate**：`impose()` 整段（PyMuPDF 排版）移到 thread
+- **pdf_nup / preview， generate**：`impose()` 整段（PyMuPDF 排版）移到 thread
 
 剩 pdf_editor / pdf_metadata/clean / pdf_hidden_scan/clean / aes_zip 還沒包，下次 batch。
 
@@ -222,7 +246,7 @@
 
 ### 新增
 
-- **Filename middleware（自動）**：新加 `_capture_upload_filename` middleware 攔截所有 `/tools/*` 的 multipart POST，sniff 前 16KB 找 `filename="..."`，自動塞 `request.state.upload_filename` / `upload_filenames` / `upload_count`。所有 19 個有 upload 的工具一次受惠，audit / GELF / syslog message 都會帶上實際檔名，不需各自改 router。content-length > 500MB 跳過避免吞 RAM。
+- **Filename middleware（自動）**：新加 `_capture_upload_filename` middleware 攔截所有 `/tools/*` 的 multipart POST，sniff 前 16KB 找 `filename="..."`，自動塞 `request.state.upload_filename` / `upload_filenames` / `upload_count`。所有 19 個有 upload 的工具一次受惠，audit / GELF / syslog message 都會帶上實際檔名，不需各自改 router.content-length > 500MB 跳過避免吞 RAM。
 - 之前 v1.1.39 在 pdf-to-image / pdf-extract-text / pdf-extract-images 手動加的 `request.state.upload_filename = ...` 還在當 fallback，跟 middleware 並存無衝突。
 
 ---
@@ -253,7 +277,7 @@
 
 ### 變更
 
-- **「高清」→「高畫質」**：「高清」是中國用語，台灣 HD 用「高畫質」。pdf-to-image DPI 200 預設選項的副標改為「螢幕高畫質 · 預設」。Taiwan terminology memory 補一條。
+- **「高清」→「高畫質」**：「高清」是中國用語，台灣 HD 用「高畫質」.pdf-to-image DPI 200 預設選項的副標改為「螢幕高畫質 · 預設」。Taiwan terminology memory 補一條。
 
 ---
 
@@ -320,7 +344,7 @@
 
 ### 釐清
 
-- **向量圖出來是 PNG**：是。PyMuPDF `page.get_images()` 只回傳 PDF 內的 raster Image XObject。即使原始 image stream 是向量 (PDF Form XObject)，本工具透過 `Pixmap.tobytes("png")` rasterize 後存成 PNG。**純向量繪圖（paths / strokes，不是 Image XObject）這個工具完全抓不到**，那需要另寫 SVG 抽取邏輯。
+- **向量圖出來是 PNG**：是。PyMuPDF `page.get_images()` 只回傳 PDF 內的 raster Image XObject。即使原始 image stream 是向量 （PDF Form XObject），本工具透過 `Pixmap.tobytes("png")` rasterize 後存成 PNG。**純向量繪圖（paths / strokes，不是 Image XObject）這個工具完全抓不到**，那需要另寫 SVG 抽取邏輯。
 
 ---
 
@@ -339,7 +363,7 @@
 
 ### 修正
 
-- **pdf-to-image convert 同樣 block 整站**：`office_convert.convert_to_pdf` (subprocess wait) + `pdf_preview.render_page_png` (PyMuPDF) 全部 sync。改用 `asyncio.to_thread`。
+- **pdf-to-image convert 同樣 block 整站**：`office_convert.convert_to_pdf` （subprocess wait） + `pdf_preview.render_page_png` （PyMuPDF） 全部 sync。改用 `asyncio.to_thread`。
   - 副作用：之前如果 server 卡住，pdf-to-image 拖檔表面像「沒反應」其實是 fetch 一直在 queue。現在 server 不卡了，drag-drop 會正常觸發。
 
 ### 新增
@@ -406,7 +430,7 @@
 
 ### 變更（使用者清單欄位顯示）
 
-- **「最後登入」改人類可讀格式**：原本是 raw unix timestamp（`1777176362`），改成 `2026-04-26 10:42` + 第二行 `5 分鐘前 / 2 小時前 / 3 天前`；從未登入顯示「從未登入」。client-side JS 算（用瀏覽器時區）。
+- **「最後登入」改人類可讀格式**：原本是 raw unix timestamp（`1777176362`），改成 `2026-04-26 10:42` + 第二行 `5 分鐘前 / 2 小時前 / 3 天前`；從未登入顯示「從未登入」.client-side JS 算（用瀏覽器時區）。
 - **「角色」改顯示中文 + chip**：原本是 `default-user` slug，現在顯示 `一般使用者` 並用淺灰 pill 包，hover tooltip 顯示原 id slug 給管理員辨識；多角色會自動斷行。後端 `users_page` 多帶 `roles_display` 欄位（不動原 `roles` slug list 的 backend 契約）。
 
 ---
@@ -415,7 +439,7 @@
 
 ### 修正
 
-- **編輯使用者 modal picker 名稱仍被 `…` 截掉**：把 `.picker-name` 從 `nowrap + ellipsis` 改成 `word-break:break-word`，名字長就 wrap 到第二行（每筆稍高一點）但保證看得完整；checkbox 用 `align-items:flex-start` 對齊頂部。modal max-width 從 520px 拉到 600px 給更多橫向空間。
+- **編輯使用者 modal picker 名稱仍被 `…` 截掉**：把 `.picker-name` 從 `nowrap + ellipsis` 改成 `word-break:break-word`，名字長就 wrap 到第二行（每筆稍高一點）但保證看得完整；checkbox 用 `align-items:flex-start` 對齊頂部.modal max-width 從 520px 拉到 600px 給更多橫向空間。
 
 ---
 
@@ -457,7 +481,7 @@
 
 ### 變更
 
-- **認證設定頁四個分區改用 `<fieldset>` 卡片**：Backend 模式 / 連線 / 搜尋 / 屬性對應 各自獨立的圓角白卡，標題用淺紫底色 pill (`legend`) 嵌在卡片邊框上 — 視覺一眼分得清。
+- **認證設定頁四個分區改用 `<fieldset>` 卡片**：Backend 模式 / 連線 / 搜尋 / 屬性對應 各自獨立的圓角白卡，標題用淺紫底色 pill （`legend`） 嵌在卡片邊框上 — 視覺一眼分得清。
 - **「試登入」→「測試登入」**：跟「測試伺服器連線」用詞一致。
 
 ---
@@ -477,9 +501,9 @@
 
 ### 變更（認證設定頁排版整理）
 
-- **Backend 卡片重做**：改用獨立 `.backend-card` (CSS Grid `auto-fit, minmax(220px,1fr)`)，不再借用工具用的 `.option-cards` flex 結構，文字不會被切。每張卡 icon + 中文名 + 英文 sub。
+- **Backend 卡片重做**：改用獨立 `.backend-card` （CSS Grid `auto-fit, minmax(220px,1fr)`），不再借用工具用的 `.option-cards` flex 結構，文字不會被切。每張卡 icon + 中文名 + 英文 sub。
 - **filter 範例改 `<details>` 收合 + table**：原本一大坨 6-7 行範例平鋪展開，現在改成依當前 backend 顯示對應 backend 的範例 table（左欄場景、右欄 filter），預設收合，要看才展開。
-- **驗證測試分兩張卡**：`.test-grid` (auto-fit 320px+) 並排顯示「連線測試」「帳號測試」兩張獨立面板，各有自己的 header / 說明 / 操作區。
+- **驗證測試分兩張卡**：`.test-grid` （auto-fit 320px+） 並排顯示「連線測試」「帳號測試」兩張獨立面板，各有自己的 header / 說明 / 操作區。
 - **頂部說明縮短**：4 句話的 wall of text 壓成 2 句重點。
 
 ---
@@ -488,7 +512,7 @@
 
 ### 修正
 
-- **LDAP 登入 500 (KeyError: 'id')**：v1.1.13 重構 `_sync_user` 把 return dict key 統一成 `user_id`，但 `authenticate()` 還在用 `user_row["id"]`。改成 `user_row["user_id"]` 與其他呼叫者一致。新增一個鎖契約的 regression test：`_sync_user` 必須 return `user_id` 且**不能**有 `id`，這樣未來改 key 會在 CI 立刻爆而不是 runtime 才發現。
+- **LDAP 登入 500 （KeyError: 'id'）**：v1.1.13 重構 `_sync_user` 把 return dict key 統一成 `user_id`，但 `authenticate()` 還在用 `user_row["id"]`。改成 `user_row["user_id"]` 與其他呼叫者一致。新增一個鎖契約的 regression test：`_sync_user` 必須 return `user_id` 且**不能**有 `id`，這樣未來改 key 會在 CI 立刻爆而不是 runtime 才發現。
 
 ---
 
@@ -516,7 +540,7 @@
 
 ### 修正
 
-- **LDAP 登入時若同名 local 帳號已存在會 500 (UNIQUE constraint failed: users.username)**：`auth_ldap._sync_user()` INSERT 前先檢查同名衝突，碰到 local 帳號 → `AuthError("本機已有同名帳號「X」...")`；碰到不同 LDAP DN 同名 → 拒絕避免身分覆蓋。新增 4 個直接呼叫測試（first-time / same-DN-update / local-collision / cross-DN-collision），不需真 LDAP 伺服器。
+- **LDAP 登入時若同名 local 帳號已存在會 500 （UNIQUE constraint failed: users.username）**：`auth_ldap._sync_user()` INSERT 前先檢查同名衝突，碰到 local 帳號 → `AuthError("本機已有同名帳號「X」...")`；碰到不同 LDAP DN 同名 → 拒絕避免身分覆蓋。新增 4 個直接呼叫測試（first-time / same-DN-update / local-collision / cross-DN-collision），不需真 LDAP 伺服器。
 
 ---
 
@@ -557,7 +581,7 @@
 
 ### 測試
 
-- **`test_smoke_routes.py` 從 registry 動態列出所有工具**：寫死清單時新工具加進來會漏掉（這次 pdf-extract-text 就是這樣破）。改成 `for t in app_main.tools` 自動產生 `/tools/<id>/` 路徑。共 19 個工具 + 10 個 admin 頁全測 GET 200。
+- **`test_smoke_routes.py` 從 registry 動態列出所有工具**：寫死清單時新工具加進來會漏掉（這次 pdf-extract-text 就是這樣破）。改成 `for t in app_main.tools` 自動產生 `/tools/<id>/` 路徑。共 19 個工具 + 10 個 admin 頁全測 GET 200.
 - **總 test：177 → all green**。
 
 ---
@@ -629,8 +653,8 @@
 - **`jtdt reset-password <username>`**：管理員忘記密碼時的緊急救援指令。在主機上跑 `sudo jtdt reset-password jtdt-admin` 互動輸入新密碼，會直接更新 DB、重設 lockout 計數、清掉所有 session。LDAP/AD 使用者拒絕（密碼由目錄端管）。
 - **登入頁認證領域選擇**：啟用 LDAP/AD 後，本機帳號仍能登入（rescue path）。登入頁多一個下拉選單，預設選外部目錄，使用者可切「本機帳號」用本機密碼登入（jtdt-admin 永遠走得通）。
 - **左上角顯示登入帳號 + 登出按鈕**：base.html sidebar 頂端，登入後就出現使用者名稱 + 一鍵登出。
-- **使用者管理：搜尋框 + In-page 編輯 modal + 重設密碼 modal**：取代瀏覽器 prompt。編輯 modal 含顯示名稱、啟用、角色多選 (checkboxes)、群組多選。
-- **內建管理員 (jtdt-admin / `is_admin_seed=1`) 不可被編輯角色或停用**：UI 隱藏編輯按鈕、顯示 🔒 內建標記，後端也 raise 拒絕。
+- **使用者管理：搜尋框 + In-page 編輯 modal + 重設密碼 modal**：取代瀏覽器 prompt。編輯 modal 含顯示名稱、啟用、角色多選 （checkboxes）、群組多選。
+- **內建管理員 （jtdt-admin / `is_admin_seed=1`） 不可被編輯角色或停用**：UI 隱藏編輯按鈕、顯示 🔒 內建標記，後端也 raise 拒絕。
 
 ### 修正
 
@@ -644,8 +668,8 @@
 
 ### 修正
 
-- v1.1.0 新增的 11 個 admin 頁的 `<input>` / `<select>` 沒有套上 `class="field"`，造成沒有邊框、沒有樣式（plain HTML）。批次補上 (admin_users / groups / roles / permissions / audit / log_forward / retention / history / auth_settings)。
-- 主要動作按鈕（編輯 / 重設密碼 / 刪除 / 成員 / 角色 / 儲存 / 清除 / 原檔 / 結果）補上對應 icon (edit / lock / trash / user / shield / save / back / download)，跟既有頁面風格一致。
+- v1.1.0 新增的 11 個 admin 頁的 `<input>` / `<select>` 沒有套上 `class="field"`，造成沒有邊框、沒有樣式（plain HTML）。批次補上 （admin_users / groups / roles / permissions / audit / log_forward / retention / history / auth_settings）。
+- 主要動作按鈕（編輯 / 重設密碼 / 刪除 / 成員 / 角色 / 儲存 / 清除 / 原檔 / 結果）補上對應 icon （edit / lock / trash / user / shield / save / back / download），跟既有頁面風格一致。
 
 ---
 
@@ -655,7 +679,7 @@
 
 ### 新增
 
-#### 認證 (auth)
+#### 認證 （auth）
 - **三種 backend**：`local`（本機帳號 + scrypt 密碼）、`ldap`、`ad`（簡單 bind 驗證 + 屬性同步）
 - 第一次啟用走 `/setup-admin` 表單建立 jtdt-admin
 - Cookie session：7 天，「30 天免登入」可選
@@ -663,28 +687,28 @@
 - 帳號 / 密碼錯誤訊息一致（防 username enumeration），timing-uniform 驗證
 - Session token 存 sha256 不存 raw（DB 洩漏不會直接被冒名）
 
-#### 權限 (permissions)
+#### 權限 （permissions）
 - 6 個內建角色：`admin` / `default-user` / `clerk` / `finance` / `sales` / `legal-sec`，新使用者預設 `default-user`（除 pdf-fill / pdf-stamp 外的工具都能用）
 - 三種 subject：user / group / OU（OU 從 AD/LDAP DN 自動推導所有上層）
-- 純白名單，無 deny；effective = union(直接 grant + 各 role grant)
+- 純白名單，無 deny；effective = union（直接 grant + 各 role grant）
 - admin role short-circuit 到 ALL
 - middleware 統一 gating（路徑 `/tools/<tool_id>/*` 自動檢查），403 帶友善訊息
 - in-memory cache + 變更時 invalidate
 
-#### 稽核 (audit)
+#### 稽核 （audit）
 - `audit_events` 表存 login / logout / 帳號 CRUD / 群組 CRUD / 角色變更 / 權限變更 / 工具呼叫 / 設定變更 / log 轉發失敗
 - async 寫入 queue（1000 events/0.06s 實測），不阻塞 request
 - `/admin/audit` 分頁列表 + 篩選（user / event_type / 時間）+ CSV 匯出（UTF-8 BOM）
 - 預設保留 90 天，超過 5GB banner 提醒
 
 #### Log 轉發
-- 多 destination 並行：`syslog` (RFC 5424) / `cef` (ArcSight) / `gelf` (Graylog) over UDP/TCP
+- 多 destination 並行：`syslog` （RFC 5424） / `cef` （ArcSight） / `gelf` （Graylog） over UDP/TCP
 - 失敗 retry 3 次後寫 `audit_forward_failed` 進本機 audit
 - 背景 worker bookmark 保證不漏不重複
 
 #### 歷史 + 自動清理
 - pdf-fill 既有歷史 + 新增 pdf-stamp / pdf-watermark history
-- 三種歷史 admin 頁 (`/admin/history/{fill,stamp,watermark}`)
+- 三種歷史 admin 頁 （`/admin/history/{fill,stamp,watermark}`）
 - 6 種清理項目（fill_history / stamp_history / watermark_history / temp / jobs / audit）獨立保留設定，預設 365 天（audit 90 天）
 - `-1` = 永久保留
 - 背景 scheduler：啟動時 + 每 6 小時跑一次
@@ -697,8 +721,8 @@
 - 沒指派 owner 的 token 在 auth on 時直接 403
 
 ### 內部
-- 新增 SQLite 層 (`app/core/db.py`)：WAL + busy_timeout + foreign_keys + 短交易 helper + migrate by user_version
-- 兩個 DB：`auth.sqlite` (users / groups / roles / permissions / sessions / lockouts) + `audit.sqlite` (audit_events / forward_state)
+- 新增 SQLite 層 （`app/core/db.py`）：WAL + busy_timeout + foreign_keys + 短交易 helper + migrate by user_version
+- 兩個 DB：`auth.sqlite` （users / groups / roles / permissions / sessions / lockouts） + `audit.sqlite` （audit_events / forward_state）
 - 73 個新 pytest 涵蓋 db / passwords / sessions / auth_local / auth_routes / auth_middleware
 - 33 個新 pytest 涵蓋 roles / user_manager / group_manager / permissions
 - 全測試 146 pass
@@ -749,7 +773,7 @@
   - **匯入（取代）**：清掉現有所有資產（含 PNG 檔），整個換成 ZIP 內容（不可還原，有確認對話框）
   - API：`GET /admin/assets/export`、`POST /admin/assets/import` (form: `file`, `mode=merge|replace`)
 - **去識別化支援英文公司名 / 英文人名**：
-  - 公司：`RE_COMPANY` 加入英文後綴匹配 `Co., Ltd. / Co.,Ltd. / Inc. / LLC / Corp(oration). / Limited / Company`，能抓到「(vendor) Co., Ltd.」「Apple Inc.」「Acme Corporation」等
+  - 公司：`RE_COMPANY` 加入英文後綴匹配 `Co., Ltd. / Co.,Ltd. / Inc. / LLC / Corp(oration). / Limited / Company`，能抓到「(vendor) Co。， Ltd。」「Apple Inc。」「Acme Corporation」等
   - 人名：`RE_PERSON` 的 label 加上英文版（Name / Contact / Owner / Manager / Sales Rep / Signed by …），value 也支援英文姓名（首字大寫的 2-4 個詞）。Label 用 `(?i:...)` inline flag 設為 case-insensitive，但 value 仍要求首字大寫（避免 "name: john doe" 這類日常字串誤觸）。
 
 ---
@@ -763,7 +787,7 @@
   - **匯入（合併）**：保留現有條目，新檔案的 key 補上去；同 key 兩邊的同義詞做聯集（不丟資料）
   - **匯入（取代）**：清掉現有所有同義詞、整個換成匯入檔內容（不可還原，有確認對話框）
 - API endpoints：`GET /admin/synonyms/export`、`POST /admin/synonyms/import` (form: `file`, `mode=merge|replace`)
-- 匯入 endpoint 同時支援兩種格式：(1) 我們自己的匯出格式，(2) 直接給 `{key: [同義詞...]}` 的最小 dict（手寫 / 從別處來的）
+- 匯入 endpoint 同時支援兩種格式：（1） 我們自己的匯出格式，（2） 直接給 `{key: [同義詞...]}` 的最小 dict（手寫 / 從別處來的）
 
 ---
 
@@ -828,7 +852,7 @@
 - **install.sh 加入監聽位址 / port 的可設定性**：
   - CLI flag：`--bind <addr>` / `--port <port>`，例如 `sudo bash install.sh --bind 0.0.0.0`
   - 環境變數：`JTDT_HOST=0.0.0.0 sudo bash install.sh`（適合 `curl ... | sudo JTDT_HOST=0.0.0.0 bash`）
-  - 互動式：終端機跑 `sudo bash install.sh` 會跳選單問「1) 127.0.0.1 / 2) 0.0.0.0 / 3) 自訂」
+  - 互動式：終端機跑 `sudo bash install.sh` 會跳選單問「1） 127.0.0.1 / 2） 0.0.0.0 / 3） 自訂」
   - `--no-prompt` / `-y`：強制走預設不問
   - `--help` 顯示完整用法
 - 安裝完成提示的 URL 改顯示**機器實際 IP**（用 `hostname -I`），而非 `0.0.0.0`（後者讓人看不懂要連哪裡）
@@ -899,7 +923,7 @@
 
 - **22 個工具**，分為 5 大類：
   - **填單與用印**：表單自動填寫 / 用印與簽名 / 浮水印
-  - **檔案編輯**：PDF 編輯器 / 多頁合併 (N-up) / 壓縮 / 合併 / 分拆 / 轉向（含鏡射）/ 頁面整理 / 插入頁碼
+  - **檔案編輯**：PDF 編輯器 / 多頁合併 （N-up） / 壓縮 / 合併 / 分拆 / 轉向（含鏡射）/ 頁面整理 / 插入頁碼
   - **內容擷取**：擷取文字（可選 LLM 重排）/ 擷取圖片 / PDF 附件萃取
   - **格式轉換**：文書轉 PDF / 文書轉圖片
   - **資安處理**：文件去識別化 / PDF 密碼保護 / 解除 / Metadata 清除 / 隱藏內容掃描 / 差異比對
@@ -908,7 +932,7 @@
 - **`jtdt` CLI**：start / stop / restart / status / logs / open / update / uninstall
 - **自動升級**：`jtdt update` 自動備份資料、git pull、uv sync、健康檢查
 - **獨立 Python 環境**：透過 uv 管理，完全不影響使用者系統 Python
-- **服務化運行**：systemd / launchd LaunchDaemon / Windows Service (NSSM)
+- **服務化運行**：systemd / launchd LaunchDaemon / Windows Service （NSSM）
 - **多使用者安全**：上傳檔 UUID 隔離、temp dir 2h TTL 自動清理
 - **可選 LLM 整合**：預設關閉的視覺 LLM 校驗附加功能（Ollama / 自架）
 - **API 全覆蓋**：每個工具都有對應的 REST endpoint，可程式化呼叫

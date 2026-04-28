@@ -1,8 +1,8 @@
-# Jason Tools 文件工具箱 v1.1.56
+# Jason Tools 文件工具箱 v1.1.58
 
 > 整合式 PDF / Office 文件處理平台。包含 26 個工具：**表單自動填寫**、**用印與簽名**、**浮水印**、**N-up 多頁合併**、**檔案合併 / 分拆 / 轉向 / 頁面整理 / 頁碼**、**文書轉 PDF / 圖片**、**擷取文字 / 圖片 / 附件**、**字數統計**、**註解整理 / 清除 / 平面化**、**敏感資料去識別化**、**PDF 加密 / 解密**、**中繼資料清除**、**隱藏內容掃描**、**差異比對**、**頁面編輯器**、**壓縮**、**AES 加密壓縮檔**。
 >
-> 企業管理功能：可選 **本機 / LDAP / AD 多領域認證**（同名帳號可分屬不同領域 `username@realm`）、**角色與權限矩陣 (RBAC)**、**稽核記錄**、**記錄轉送**（syslog / CEF / GELF）、**字型管理**、**API tokens**。
+> 企業管理功能：可選 **本機 / LDAP / AD 多領域認證**（同名帳號可分屬不同領域 `username@realm`）、**角色與權限矩陣 （RBAC）**、**稽核記錄**、**記錄轉送**（syslog / CEF / GELF）、**字型管理**、**API tokens**。
 >
 > **不上雲，資料留在自己手中。** 可在 Linux 架站給內網多人使用，所有檔案處理只發生在你的伺服器，不外傳任何雲端。
 
@@ -25,14 +25,14 @@
 - **多頁合併（N-up）**：把 2/4/6/8/9/16 頁 PDF 合併到一張紙；自訂版面、間距、邊框、頁碼
 - **檔案合併**：把多份 PDF 依上傳順序合併為一份
 - **分拆 / 轉向 / 頁面整理 / 插入頁碼**：基本 PDF 操作
-- **註解平面化**：把 PDF 註解燒進頁面內容流，收件方無法移除;表單欄位保留可填，適合對外定稿前最後一步
+- **註解平面化**：把 PDF 註解燒進頁面內容流，收件方無法移除；表單欄位保留可填，適合對外定稿前最後一步
 
 ### 內容擷取
 - **擷取文字** 🔧：輸出 TXT / Markdown / Word / ODT；可選交給 LLM 重排被 PDF 版面切斷的段落（輸出 Word/ODT 時需 OxOffice/LibreOffice）
 - **擷取圖片**：把 PDF 中所有嵌入的圖片擷取出來，xref 自動 dedupe，可勾選下載成 ZIP 或單張下載
 - **PDF 附件萃取**：列出並取出 PDF 中嵌入的檔案（EmbeddedFiles）
-- **字數統計**：總字數、字元、段落、句子、預估閱讀時間，含每頁字數直條圖、字元類型環圈、中文單字 / 中文雙字 / 英文 三類高頻詞圖表;可匯出 CSV / JSON / Markdown 報表
-- **註解整理**：擷取 PDF 所有註解(螢光筆 / 文字註解 / 圖章 / 自由文字 / 手繪 / 底線 / 刪除線 / 檔案附件等)，三種輸出 — 完整清單(CSV/JSON)、審閱報告(Markdown，可依頁碼/作者/類型分組)、待辦清單(Markdown checkbox 或 CSV);可依類型 / 作者篩選
+- **字數統計**：總字數、字元、段落、句子、預估閱讀時間，含每頁字數直條圖、字元類型環圈、中文單字 / 中文雙字 / 英文 三類高頻詞圖表；可匯出 CSV / JSON / Markdown 報表
+- **註解整理**：擷取 PDF 所有註解（螢光筆 / 文字註解 / 圖章 / 自由文字 / 手繪 / 底線 / 刪除線 / 檔案附件等），三種輸出 — 完整清單（CSV/JSON）、審閱報告（Markdown，可依頁碼/作者/類型分組）、待辦清單（Markdown checkbox 或 CSV）；可依類型 / 作者篩選
 
 ### 格式轉換
 - **文書轉 PDF** 🔧：Word / Excel / PowerPoint / ODF 批次轉 PDF
@@ -43,15 +43,15 @@
 - **PDF 密碼保護 / 解除**：AES-256 加密、權限控制
 - **AES 加密壓縮檔**：把多份檔案打包成密碼保護的 zip，可寄信附件
 - **中繼資料清除**：作者 / 標題 / XMP / 修訂歷史
-- **註解清除**：刪除 PDF 中的註解(全部 / 依作者 / 依類型篩選)，產出乾淨副本
+- **註解清除**：刪除 PDF 中的註解（全部 / 依作者 / 依類型篩選），產出乾淨副本
 - **隱藏內容掃描**：JavaScript / 嵌入檔 / 隱藏文字 / 外部連結等風險，一鍵清除
 - **差異比對**：兩份 PDF 逐頁並排比對，文字差異標紅
 
 ### 團隊 / 企業環境
 - **多領域認證**：本機帳號 / LDAP / Active Directory；同名帳號可在不同領域並存（如 `jason@local` + `jason@ldap`），以 `username@realm` 區分
-- **角色與權限矩陣 (RBAC)**：6 個內建角色（管理員 / 一般使用者 / 文管 / 財務 / 業務 / 法務資安）+ 自訂角色；可指派工具使用權限到使用者 / 群組 / OU
+- **角色與權限矩陣 （RBAC）**：6 個內建角色（管理員 / 一般使用者 / 文管 / 財務 / 業務 / 法務資安）+ 自訂角色；可指派工具使用權限到使用者 / 群組 / OU
 - **稽核記錄**：登入 / 操作 / 設定變更 / 工具呼叫（含上傳檔名）全部記下；async 寫入不影響服務效能；可篩選 / 匯出 CSV
-- **記錄轉送**：syslog (RFC 5424 UDP/TCP) / CEF (ArcSight) / GELF (Graylog)，多目的地並行；失敗 retry + 寫本地稽核
+- **記錄轉送**：syslog （RFC 5424 UDP/TCP） / CEF （ArcSight） / GELF （Graylog），多目的地並行；失敗 retry + 寫本地稽核
 - **檔案保留 / 自動清理**：表單填寫 / 用印簽名 / 浮水印歷史 / 暫存檔 / Job 結果 / 稽核 各類獨立保留天數；排程清理
 - **API tokens**：對外呼叫 `/api/*` 的 bearer token；歸屬到使用者，視同該使用者權限
 - **字型管理**：標準 14 字型 + 內建思源黑體 / 宋體繁中 + 系統字型 + 自訂上傳
@@ -61,12 +61,12 @@
 > 標 🔧 的工具會用到 **OxOffice** 或 **LibreOffice**（OxOffice 優先，OSSII 維護的台灣本地化 fork，CJK 支援更好）：
 >
 > - **文書轉 PDF**、**文書轉圖片** — 永遠需要
-> - **表單自動填寫**、**文件去識別化** — 輸入是 Word / Excel / PowerPoint / ODF 時需要;PDF 輸入則不需要
-> - **擷取文字** — 輸出選 Word（.docx）/ ODT 時需要;輸出 TXT / Markdown 不需要
+> - **表單自動填寫**、**文件去識別化** — 輸入是 Word / Excel / PowerPoint / ODF 時需要；PDF 輸入則不需要
+> - **擷取文字** — 輸出選 Word（.docx）/ ODT 時需要；輸出 TXT / Markdown 不需要
 >
-> 其他 17 個工具（合併、分拆、N-up、浮水印、用印、編輯器、壓縮、加密 …）只處理 PDF,**不需要 Office 引擎**。
+> 其他 17 個工具（合併、分拆、N-up、浮水印、用印、編輯器、壓縮、加密 …）只處理 PDF，**不需要 Office 引擎**。
 >
-> 安裝腳本會自動偵測 / 安裝 OxOffice;若失敗會 fallback 到系統的 LibreOffice。
+> 安裝腳本會自動偵測 / 安裝 OxOffice；若失敗會 fallback 到系統的 LibreOffice。
 
 ---
 
@@ -142,10 +142,12 @@ winget install --id Git.Git -e --accept-package-agreements --accept-source-agree
 以<b>「以系統管理員身分執行」</b>開啟 PowerShell（右鍵 PowerShell 圖示 → 系統管理員），貼：
 
 ```powershell
-$f="$env:TEMP\jtdt-install.ps1"; [Net.ServicePointManager]::SecurityProtocol='Tls12'; (New-Object Net.WebClient).DownloadFile('https://cdn.jsdelivr.net/gh/jasoncheng7115/jt-doc-tools@main/install.ps1',$f); powershell -NoProfile -ExecutionPolicy Bypass -File $f; Read-Host '安裝結束，按 Enter 關閉'
+$f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.net/gh/jasoncheng7115/jt-doc-tools@main/install.ps1' -OutFile $f -UseBasicParsing -TimeoutSec 15 -ErrorAction Stop; powershell -NoProfile -ExecutionPolicy Bypass -File $f } catch { Write-Host "[X] 下載安裝腳本失敗：$($_.Exception.Message)" -ForegroundColor Red; Write-Host "請檢查網路（VPN？防火牆？DNS？）後重試。" -ForegroundColor Yellow }; Read-Host '按 Enter 關閉'
 ```
 
 > **為什麼用 jsdelivr 不用 raw.githubusercontent.com？** GitHub raw 的 Fastly cache 不認 query string 當 cache key，安裝腳本更新後最久要等 5 分鐘才生效。jsdelivr 的 CDN 對 GitHub repo 更新反應快得多，幾秒就同步。
+>
+> **連線失敗會 15 秒內 fail-fast**：用 `Invoke-WebRequest -TimeoutSec 15`（不像舊版 `Net.WebClient.DownloadFile()` 會卡 2 分鐘），網路不通馬上紅字提示。
 >
 > 安裝腳本本身已是純 ASCII，不需要任何 BOM 或編碼處理；用**子 PowerShell** 執行（子行程退出不殺父視窗），最後父 shell `Read-Host` 等按 Enter。整段貼進「以系統管理員身分執行」的 PowerShell 就行。
 
@@ -288,7 +290,7 @@ Apache License 2.0 — 詳見 [LICENSE](LICENSE)。
 
 ## 免責聲明
 
-本軟體依「現狀」(AS IS) 提供，**不附任何明示或暗示之保證**，包含但不限於商業適售性、特定用途之適用性、不侵權之保證。
+本軟體依「現狀」（AS IS） 提供，**不附任何明示或暗示之保證**，包含但不限於商業適售性、特定用途之適用性、不侵權之保證。
 
 - 使用者應**自行承擔**使用本軟體之全部風險
 - 對於本軟體導致之任何**直接、間接、附帶、衍生性或懲罰性損害**（含資料毀損、商業中斷、收益損失、商譽損害等），作者與貢獻者**概不負責**

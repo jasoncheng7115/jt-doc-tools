@@ -42,6 +42,16 @@ def client():
     return TestClient(app)
 
 
+def _analyze(client, pdf=None, name="doc.pdf"):
+    pdf = pdf if pdf is not None else _make_pdf_with_annots()
+    r = client.post(
+        "/tools/pdf-annotations-strip/analyze",
+        files={"file": (name, pdf, "application/pdf")},
+    )
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
 def test_index_renders(client):
     r = client.get("/tools/pdf-annotations-strip/")
     assert r.status_code == 200
@@ -49,13 +59,10 @@ def test_index_renders(client):
 
 
 def test_analyze_lists_types_and_authors(client):
-    r = client.post(
-        "/tools/pdf-annotations-strip/analyze",
-        files={"file": ("doc.pdf", _make_pdf_with_annots(), "application/pdf")},
-    )
-    assert r.status_code == 200
-    j = r.json()
+    j = _analyze(client)
     assert j["total"] == 3
+    assert j["upload_id"] and len(j["upload_id"]) == 32
+    assert isinstance(j.get("annots"), list) and len(j["annots"]) == 3
     types = {x["label"]: x["type"] for x in j["by_type"]}
     assert "文字註解" in types
     assert types["文字註解"] == "Text"
@@ -63,13 +70,17 @@ def test_analyze_lists_types_and_authors(client):
     assert authors == {"Jason", "Mary"}
 
 
+def test_analyze_annots_have_page_and_type(client):
+    j = _analyze(client)
+    a0 = j["annots"][0]
+    assert "page" in a0 and "type" in a0 and "type_label" in a0 and "author" in a0
+
+
 def test_strip_all_removes_every_annotation(client):
-    pdf = _make_pdf_with_annots()
-    assert _count_annots(pdf) == 3
+    j = _analyze(client)
     r = client.post(
         "/tools/pdf-annotations-strip/strip",
-        files={"file": ("doc.pdf", pdf, "application/pdf")},
-        data={"mode": "all"},
+        data={"upload_id": j["upload_id"], "mode": "all"},
     )
     assert r.status_code == 200
     assert r.headers.get("x-annotations-removed") == "3"
@@ -77,56 +88,75 @@ def test_strip_all_removes_every_annotation(client):
 
 
 def test_strip_filter_by_author_keeps_others(client):
-    pdf = _make_pdf_with_annots()
+    j = _analyze(client)
     r = client.post(
         "/tools/pdf-annotations-strip/strip",
-        files={"file": ("doc.pdf", pdf, "application/pdf")},
-        data={"mode": "filter", "authors": "Jason"},
+        data={"upload_id": j["upload_id"], "mode": "filter", "authors": "Jason"},
     )
     assert r.status_code == 200
-    # Both of Jason's annots gone, Mary's stays
     assert r.headers.get("x-annotations-removed") == "2"
     assert _count_annots(r.content) == 1
 
 
 def test_strip_filter_by_type_keeps_others(client):
-    pdf = _make_pdf_with_annots()
+    j = _analyze(client)
     r = client.post(
         "/tools/pdf-annotations-strip/strip",
-        files={"file": ("doc.pdf", pdf, "application/pdf")},
-        data={"mode": "filter", "types": "Highlight"},
+        data={"upload_id": j["upload_id"], "mode": "filter", "types": "Highlight"},
     )
     assert r.status_code == 200
-    # Only the highlight is removed
     assert r.headers.get("x-annotations-removed") == "1"
     assert _count_annots(r.content) == 2
 
 
 def test_strip_filter_empty_selection_returns_400(client):
-    pdf = _make_pdf_with_annots()
+    j = _analyze(client)
     r = client.post(
         "/tools/pdf-annotations-strip/strip",
-        files={"file": ("doc.pdf", pdf, "application/pdf")},
-        data={"mode": "filter"},
+        data={"upload_id": j["upload_id"], "mode": "filter"},
     )
     assert r.status_code == 400
 
 
-def test_strip_rejects_non_pdf(client):
+def test_strip_invalid_upload_id_returns_400(client):
     r = client.post(
         "/tools/pdf-annotations-strip/strip",
-        files={"file": ("note.txt", b"hi", "text/plain")},
-        data={"mode": "all"},
+        data={"upload_id": "not-hex", "mode": "all"},
     )
     assert r.status_code == 400
+
+
+def test_strip_expired_upload_id_returns_410(client):
+    r = client.post(
+        "/tools/pdf-annotations-strip/strip",
+        data={"upload_id": "0" * 32, "mode": "all"},
+    )
+    assert r.status_code == 410
+
+
+def test_preview_returns_png(client):
+    j = _analyze(client)
+    r = client.get(f"/tools/pdf-annotations-strip/preview/{j['upload_id']}/1")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/png"
+    assert r.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_preview_invalid_upload_id_400(client):
+    r = client.get("/tools/pdf-annotations-strip/preview/bad/1")
+    assert r.status_code == 400
+
+
+def test_preview_expired_upload_id_410(client):
+    r = client.get("/tools/pdf-annotations-strip/preview/" + "a" * 32 + "/1")
+    assert r.status_code == 410
 
 
 def test_strip_filename_handles_cjk(client):
-    pdf = _make_pdf_with_annots()
+    j = _analyze(client, name="中文.pdf")
     r = client.post(
         "/tools/pdf-annotations-strip/strip",
-        files={"file": ("中文.pdf", pdf, "application/pdf")},
-        data={"mode": "all"},
+        data={"upload_id": j["upload_id"], "mode": "all"},
     )
     assert r.status_code == 200
     cd = r.headers.get("content-disposition", "")
@@ -142,3 +172,22 @@ def test_api_alias_works(client):
     )
     assert r.status_code == 200
     assert _count_annots(r.content) == 0
+
+
+def test_api_alias_rejects_non_pdf(client):
+    r = client.post(
+        "/tools/pdf-annotations-strip/api/pdf-annotations-strip",
+        files={"file": ("note.txt", b"hi", "text/plain")},
+        data={"mode": "all"},
+    )
+    assert r.status_code == 400
+
+
+def test_api_alias_filter_empty_400(client):
+    pdf = _make_pdf_with_annots()
+    r = client.post(
+        "/tools/pdf-annotations-strip/api/pdf-annotations-strip",
+        files={"file": ("doc.pdf", pdf, "application/pdf")},
+        data={"mode": "filter"},
+    )
+    assert r.status_code == 400
