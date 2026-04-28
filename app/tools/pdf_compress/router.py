@@ -110,6 +110,7 @@ def _image_downsample_and_recompress(
     recompressed = 0
     bytes_before = 0
     bytes_after = 0
+    skipped_smask = 0  # images with soft masks are skipped to preserve transparency
 
     # Collect (xref, first_page) pairs — xrefs are doc-global, so we only
     # replace each once but need a page to call replace_image on.
@@ -144,6 +145,20 @@ def _image_downsample_and_recompress(
         if progress_cb:
             try: progress_cb(done, total)
             except Exception: pass
+        # Skip images with soft masks (SMask). The SMask is a separate
+        # xref carrying alpha; `fitz.Pixmap(doc, xref)` returns only the
+        # RGB base, so re-encoding would silently flatten transparency
+        # (transparent regions render as black or white). Worse,
+        # `page.replace_image` doesn't touch the SMask, leaving a stale
+        # alpha map referenced by the new bytes.
+        try:
+            img_info = doc.extract_image(xref) or {}
+        except Exception:
+            img_info = {}
+        if img_info.get("smask"):
+            skipped_smask += 1
+            continue
+
         try:
             pix = fitz.Pixmap(doc, xref)
         except Exception:
@@ -227,6 +242,7 @@ def _image_downsample_and_recompress(
         "bytes_after": bytes_after,
         "images_resampled": resampled,
         "images_recompressed": recompressed,
+        "skipped_smask": skipped_smask,
         "skipped_no_pil": False,
     }
 
