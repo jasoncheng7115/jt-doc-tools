@@ -4,6 +4,17 @@
 
 ---
 
+## [1.1.59] - 2026-04-28
+
+### 修正（pdf-compress 把透明背景變黑）
+
+- **PDF 壓縮會把透明 PNG 變黑底的 bug**：原本 `fitz.Pixmap(doc, xref)` 只抓到圖片的 RGB base，**不會帶 PDF 內獨立 xref 的 SMask（alpha mask）**。所以 `pix.alpha` 是 0、被當成不透明圖重編成 JPEG → 透明區整個變黑。更糟的是 `replace_image` 只換 base，原本的 SMask 還在繼續被 reader 套用，size 跟新圖不一定 match。
+- **修法**：在 recompress 前用 `doc.extract_image(xref)` 偵測 SMask，有的就 **直接跳過** 那張圖（保住資料完整性，不冒險合成 RGBA + 改寫 SMask 引用）。純 RGB 圖照壓不受影響。
+- **stats 多回 `skipped_smask` 欄位**：admin 與 UI 可看到「有幾張因為含透明所以沒壓」。
+- 新增 3 條 pytest 防回歸（含透明 PNG 的 PDF 跑 compress + analyze + 驗 SMask 仍存活）。
+
+---
+
 ## [1.1.58] - 2026-04-28
 
 ### 變更（安裝腳本網路 fail-fast）
