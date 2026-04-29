@@ -36,7 +36,7 @@ _NON_ADMIN_TOOL_IDS = [
     "pdf-extract-text", "pdf-extract-images", "pdf-attachments",
     "office-to-pdf", "pdf-to-image",
     "pdf-encrypt", "pdf-decrypt", "pdf-metadata",
-    "pdf-hidden-scan", "doc-diff", "doc-deident", "pdf-editor",
+    "pdf-hidden-scan", "doc-diff", "text-diff", "doc-deident", "pdf-editor",
     # Sensitive — not in default-user; granted explicitly by finance/sales.
     # "pdf-fill", "pdf-stamp",
 ]

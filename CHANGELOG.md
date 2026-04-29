@@ -4,6 +4,17 @@
 
 ---
 
+## [1.1.63] - 2026-04-29
+
+### 變更（doc-diff 加字數統計 + 新工具 text-diff）
+
+- **doc-diff 統計區塊新增「字數差異」**：除原本的頁數 / 行數統計，再加一組 — 舊版總字、新版總字、差 ±N 字、新增字、刪除字、修改字。`replace` opcode 內部再跑一輪 char-level SequenceMatcher 算 edit distance，所以 1 字微調不會跟整段重寫顯示同一數字。
+- **新工具：文字差異比對 `text-diff`**：直接貼兩塊文字立即比對，不用上傳檔案。給 log 片段、code 片段、改稿前後段落的快速 diff 用。共用 doc-diff 的 SequenceMatcher pipeline 確保結果一致；行數 + 字數雙重統計；含交換左右、清空、行數即時計數；單側 1 MiB 上限。
+- **工具總數 26 → 27**：text-diff 列入 default-user 預設角色（非 Office 工具，不需 OxOffice）。
+- 新增 8 條 pytest（text-diff 完整 endpoint + 邊界）。
+
+---
+
 ## [1.1.62] - 2026-04-29
 
 ### 修正（v1.1.61 改名 doc-diff 留下的 4 個漏網之雷）
