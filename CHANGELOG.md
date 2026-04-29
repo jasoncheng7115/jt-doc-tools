@@ -4,6 +4,17 @@
 
 ---
 
+## [1.1.60] - 2026-04-29
+
+### 修正（三個 Windows 端 bug）
+
+- **`jtdt uninstall --purge` 結尾出現「找不到批次檔。」**：原本 `shutil.rmtree(InstallDir)` 把 `jtdt.cmd` 當場砍掉，但 cmd.exe 還在執行那個 .cmd，下一行讀不到就吐錯。功能其實成功，只是噪音。改成 Windows 上發 detached cleanup 子行程（`timeout /t 2` 後再 `rd /s /q`），讓 cmd.exe 先正常結束。
+- **浮水印中文顯示成方框（Windows）**：原本 `_load_font` 不檢查字型是否真的有 CJK glyph，使用者選 Helvetica / Arial 之類純英文字型畫中文 watermark 時 Pillow 直接畫 .notdef（豆腐）。新增 `_has_cjk()` + `_font_covers_cjk()` 檢查；CJK 文字會自動 fallback 到 CJK 字型清單（Windows: msjh / mingliu）。
+- **Ghostscript 提示語太像錯誤**：「本機未偵測到 Ghostscript — Mac brew install...」字面看起來像壞了。改成「**選用：**裝了 Ghostscript 可再多擠 20–50% 壓縮率（內建 PyMuPDF 已可用，本選項非必要）」+ 直接附 Windows 下載連結 `ghostscript.com/releases/gsdnld.html`。
+- 新增 watermark CJK fallback 4 條 pytest 防回歸。
+
+---
+
 ## [1.1.59] - 2026-04-28
 
 ### 修正（pdf-compress 把透明背景變黑）

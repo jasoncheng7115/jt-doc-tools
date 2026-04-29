@@ -95,12 +95,60 @@ _CJK_FONT_LISTS = {
 }
 
 
+def _has_cjk(text: str) -> bool:
+    """Return True if the string contains any CJK ideograph or kana."""
+    for ch in text or "":
+        c = ord(ch)
+        # CJK Unified, Extension A, Hangul, Kana, fullwidth — covers all East Asian
+        if (0x3040 <= c <= 0x30FF or  # Kana
+            0x3400 <= c <= 0x4DBF or  # CJK Ext A
+            0x4E00 <= c <= 0x9FFF or  # CJK Unified
+            0xAC00 <= c <= 0xD7AF or  # Hangul
+            0xF900 <= c <= 0xFAFF or  # CJK Compat
+            0xFF00 <= c <= 0xFFEF):   # Halfwidth & Fullwidth
+            return True
+    return False
+
+
+def _font_covers_cjk(font: ImageFont.FreeTypeFont) -> bool:
+    """Test whether the loaded face actually has glyphs for a representative
+    CJK char. Pillow happily loads non-CJK fonts (Helvetica, Arial) and renders
+    missing chars as the .notdef glyph (a hollow rectangle / tofu).
+
+    We check via the font's underlying TT cmap when possible; fall back to
+    measuring `getbbox("中")` width — for missing glyph the width tends to
+    be 0 or oddly small."""
+    try:
+        # Fast path: ask freetype for the glyph index of '中'. 0 = .notdef.
+        gid = font.getmask("中").size
+        if gid == (0, 0):
+            return False
+    except Exception:
+        pass
+    try:
+        bbox = font.getbbox("中")
+        # Real CJK glyph is roughly square; missing glyph is usually width=0
+        # or just a thin rectangle outline.
+        return bbox[2] - bbox[0] > 4
+    except Exception:
+        return True  # don't reject if we can't measure
+
+
 def _load_font(
-    font_path: str, size_px: int, bold: bool = False, italic: bool = False
+    font_path: str, size_px: int, bold: bool = False, italic: bool = False,
+    text: str = "",
 ) -> ImageFont.FreeTypeFont:
+    """Load a font. If `text` contains CJK chars, the returned font is
+    guaranteed (best-effort) to actually render those — Pillow doesn't
+    auto-fallback so we have to walk the candidate list ourselves."""
+    needs_cjk = _has_cjk(text)
+    # First try the user-specified font. If text is CJK and it lacks CJK
+    # glyphs, ignore it and walk the CJK fallback list.
     if font_path:
         try:
-            return ImageFont.truetype(font_path, size_px)
+            f = ImageFont.truetype(font_path, size_px)
+            if not needs_cjk or _font_covers_cjk(f):
+                return f
         except Exception:
             pass
     keys: list[str] = []
@@ -111,9 +159,17 @@ def _load_font(
     for k in keys:
         for cand in _CJK_FONT_LISTS.get(k, []):
             try:
-                return ImageFont.truetype(cand, size_px)
+                f = ImageFont.truetype(cand, size_px)
+                if not needs_cjk or _font_covers_cjk(f):
+                    return f
             except Exception:
                 continue
+    # Last-resort: even if it can't render CJK, return something usable.
+    if font_path:
+        try:
+            return ImageFont.truetype(font_path, size_px)
+        except Exception:
+            pass
     return ImageFont.load_default()
 
 
@@ -137,7 +193,7 @@ def _render_text_png(
     # Convert pt → px at a high render DPI for crispness, then scale via mm.
     render_dpi = 300
     size_px = max(8, int(round(size_pt * render_dpi / 72.0)))
-    font = _load_font(font_path, size_px, bold=bold, italic=italic)
+    font = _load_font(font_path, size_px, bold=bold, italic=italic, text=text)
     # Measure first.
     tmp = Image.new("RGBA", (10, 10))
     d = ImageDraw.Draw(tmp)
