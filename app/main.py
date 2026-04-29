@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.1.61"
+VERSION = "1.1.62"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -511,12 +511,20 @@ async def _api_token_gate(request: Request, call_next):
 
 
 # ---- Legacy redirects (renamed tools) ----
-@app.get("/tools/pdf-diff")
-@app.get("/tools/pdf-diff/")
-async def _redirect_pdf_diff():
+@app.api_route("/tools/pdf-diff", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"])
+@app.api_route("/tools/pdf-diff/", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"])
+@app.api_route("/tools/pdf-diff/{rest:path}",
+               methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"])
+async def _redirect_pdf_diff(rest: str = ""):
     """`pdf-diff` was renamed to `doc-diff` in v1.1.61 (now also handles
-    Office / ODF). Keep the old URL working for bookmarks + legacy clients."""
-    return RedirectResponse("/tools/doc-diff/", status_code=301)
+    Office / ODF). Catch every sub-path and method so:
+      - bookmarks (GET /tools/pdf-diff/) still land on the new page,
+      - legacy API callers (POST /tools/pdf-diff/compare) keep working.
+
+    Use 308 — unlike 301/302, RFC 7538 says 308 MUST preserve method + body
+    so a POST stays a POST instead of becoming a GET on the new URL."""
+    target = "/tools/doc-diff/" + rest if rest else "/tools/doc-diff/"
+    return RedirectResponse(target, status_code=308)
 
 
 # ---- Shared API: job status + result download ----

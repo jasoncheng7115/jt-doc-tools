@@ -183,7 +183,33 @@ def _m2_username_source_unique(conn: sqlite3.Connection) -> None:
     """)
 
 
-MIGRATIONS = [_m1_initial, _m2_username_source_unique]
+def _m3_rename_pdf_diff_to_doc_diff(conn: sqlite3.Connection) -> None:
+    """v3: rename `pdf-diff` → `doc-diff` in role_perms and subject_perms.
+
+    The tool was renamed (and gained Office / ODF support) in v1.1.61.
+    Without this migration, existing installs would keep granting access to
+    the now-non-existent `pdf-diff` tool id and would NOT grant access to
+    the new `doc-diff` — meaning users would silently lose the tool after
+    upgrade.
+
+    `INSERT OR IGNORE` shape avoids dupe-key errors if (somehow) both rows
+    already exist for the same role/subject (e.g. admin manually granted
+    `doc-diff` first); the old row is then dropped by the DELETE.
+    """
+    conn.executescript("""
+    INSERT OR IGNORE INTO role_perms(role_id, tool_id)
+        SELECT role_id, 'doc-diff' FROM role_perms WHERE tool_id = 'pdf-diff';
+    DELETE FROM role_perms WHERE tool_id = 'pdf-diff';
+
+    INSERT OR IGNORE INTO subject_perms(subject_type, subject_key, tool_id)
+        SELECT subject_type, subject_key, 'doc-diff'
+        FROM subject_perms WHERE tool_id = 'pdf-diff';
+    DELETE FROM subject_perms WHERE tool_id = 'pdf-diff';
+    """)
+
+
+MIGRATIONS = [_m1_initial, _m2_username_source_unique,
+              _m3_rename_pdf_diff_to_doc_diff]
 
 
 def auth_db_path() -> Path:

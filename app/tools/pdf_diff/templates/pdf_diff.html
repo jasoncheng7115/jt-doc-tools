@@ -93,7 +93,7 @@ $('btnCompare').addEventListener('click', async () => {
   $('resultPanel').hidden = true;
   const fd = new FormData();
   fd.append('file_a', fileA); fd.append('file_b', fileB);
-  const r = await fuA.upload('/tools/pdf-diff/compare', fd, {processingLabel: '比對中…'});
+  const r = await fuA.upload('/tools/doc-diff/compare', fd, {processingLabel: '比對中…'});
   if (!r.ok) { $('status').textContent = '失敗：' + await r.text(); return; }
   const d = await r.json();
   $('status').textContent = '完成';
