@@ -29,17 +29,25 @@
 
 .td-page { border:1px solid #e5e7eb; border-radius:8px; margin-top: 10px;
   overflow: hidden; background:#fff; }
-.td-cols { display: grid; grid-template-columns: 1fr 1fr;
+/* Row-paired grid: each diff line is a single 2-column grid row, so the
+   row height is determined by the taller side and the two columns stay
+   aligned even when one side wraps to multiple visual lines. */
+.td-rows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12.5px; line-height: 1.55; }
-.td-col { background:#fff; }
-.td-col.left { border-right: 1px solid #e5e7eb; }
-.td-col .ln { padding: 1px 12px; white-space: pre-wrap; min-height: 1.55em; }
-.td-col .ln.equal   { color:#475569; }
-.td-col .ln.delete  { background: #fee2e2; color:#991b1b; }
-.td-col .ln.insert  { background: #dcfce7; color:#166534; }
-.td-col .ln.replace { background: #fef3c7; color:#92400e; }
-.td-col .ln.blank   { background: #f1f5f9; color:#94a3b8; }
+  font-size: 12.5px; line-height: 1.55;
+}
+.td-rows .ln {
+  padding: 1px 12px; white-space: pre-wrap; word-break: break-word;
+  min-height: 1.55em;
+}
+.td-rows .ln.left  { border-right: 1px solid #e5e7eb; }
+.td-rows .ln.equal   { color:#475569; }
+.td-rows .ln.delete  { background: #fee2e2; color:#991b1b; }
+.td-rows .ln.insert  { background: #dcfce7; color:#166534; }
+.td-rows .ln.replace { background: #fef3c7; color:#92400e; }
+.td-rows .ln.blank   { background: #f1f5f9; color:#94a3b8; }
 
 .td-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .td-btn-mini { font-size: 11.5px; padding: 3px 8px; background:#f1f5f9;
@@ -55,7 +63,7 @@
   <h2 style="margin-top:0;">1. 貼上兩組文字</h2>
   <div class="td-pastes">
     <div class="td-paste-slot">
-      <h3>📝 舊版 (左)</h3>
+      <h3>{{ icon('edit', size=14) }} 舊版 (左)</h3>
       <textarea class="td-paste" id="textA" spellcheck="false" placeholder="貼上舊版文字…"></textarea>
       <div class="td-paste-meta">
         <span id="metaA">0 行 · 0 字</span>
@@ -65,13 +73,13 @@
       </div>
     </div>
     <div class="td-paste-slot">
-      <h3>📝 新版 (右)</h3>
+      <h3>{{ icon('edit', size=14) }} 新版 (右)</h3>
       <textarea class="td-paste" id="textB" spellcheck="false" placeholder="貼上新版文字…"></textarea>
       <div class="td-paste-meta">
         <span id="metaB">0 行 · 0 字</span>
         <span class="td-actions">
           <button type="button" class="td-btn-mini" data-clear="textB">清空</button>
-          <button type="button" class="td-btn-mini" id="btnSwap">⇄ 交換左右</button>
+          <button type="button" class="td-btn-mini" id="btnSwap">{{ icon('swap', size=12) }} 交換左右</button>
         </span>
       </div>
     </div>
@@ -177,18 +185,20 @@ function renderResult(d) {
       </div>
     </div>`;
 
-  // Single virtual page for paste mode.
+  // Single virtual page for paste mode. Render as paired rows so the
+  // row height is always max(left, right) — when a long line wraps on
+  // one side the other side stays aligned via the grid auto-row.
   const p = (d.pages && d.pages[0]) || null;
   if (!p) { $('diffBox').innerHTML = ''; return; }
-  const aLines = p.diff.a.map(r => `<div class="ln ${r.tag}">${esc(r.text || ' ')}</div>`).join('');
-  const bLines = p.diff.b.map(r => `<div class="ln ${r.tag}">${esc(r.text || ' ')}</div>`).join('');
-  $('diffBox').innerHTML = `
-    <div class="td-page">
-      <div class="td-cols">
-        <div class="td-col left">${aLines}</div>
-        <div class="td-col right">${bLines}</div>
-      </div>
-    </div>`;
+  const n = Math.max(p.diff.a.length, p.diff.b.length);
+  let rows = '';
+  for (let i = 0; i < n; i++) {
+    const ra = p.diff.a[i] || {text: '', tag: 'blank'};
+    const rb = p.diff.b[i] || {text: '', tag: 'blank'};
+    rows += `<div class="ln left ${ra.tag}">${esc(ra.text || ' ')}</div>` +
+            `<div class="ln right ${rb.tag}">${esc(rb.text || ' ')}</div>`;
+  }
+  $('diffBox').innerHTML = `<div class="td-page"><div class="td-rows">${rows}</div></div>`;
 }
 </script>
 {% endblock %}

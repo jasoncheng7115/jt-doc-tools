@@ -4,6 +4,15 @@
 
 ---
 
+## [1.1.64] - 2026-04-29
+
+### 修正（diff 對齊 + emoji → icon）
+
+- **左右兩欄文字對齊壞掉**：text-diff / doc-diff 兩邊原本是獨立的 `.df-col`，當一邊文字長到換行（visual wrap）時，另一邊的對應行高度沒跟著漲，後面整段就垂直歪掉。改用「整個 diff 是一張 2-column grid，每行 = grid 的一個 row」結構，row height 自動取 max(left, right)，wrap 後仍對齊。
+- **emoji 換成 SVG icon**：`📝 / 📄 / ⇄` 改成 icon macro `edit / page / swap`。`swap` 是新加的 icon，雙箭頭 left↔right。
+
+---
+
 ## [1.1.63] - 2026-04-29
 
 ### 變更（doc-diff 加字數統計 + 新工具 text-diff）
