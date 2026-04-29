@@ -12,7 +12,11 @@
   border: 1px solid #cbd5e1; border-radius: 8px;
   padding: 10px 12px; resize: vertical; box-sizing: border-box; }
 .td-paste:focus { outline: 2px solid #93c5fd; outline-offset: 1px; }
-.td-paste-meta { font-size: 11.5px; color:#64748b; margin-top: 4px; display: flex; gap: 12px; }
+.td-paste.drop-hover { outline: 2px dashed #2563eb; outline-offset: -2px;
+  background: #eff6ff; }
+.td-paste-meta { font-size: 11.5px; color:#64748b; margin-top: 4px;
+  display: flex; gap: 12px; align-items: center; }
+.td-paste-meta .err { color:#b91c1c; }
 
 .df-summary { display: flex; flex-direction: column; font-size: 13px; gap: 0; padding: 10px 0; }
 .df-summary .stat-group { margin-bottom: 10px; }
@@ -64,7 +68,7 @@
   <div class="td-pastes">
     <div class="td-paste-slot">
       <h3>{{ icon('edit', size=14) }} 舊版 (左)</h3>
-      <textarea class="td-paste" id="textA" spellcheck="false" placeholder="貼上舊版文字…"></textarea>
+      <textarea class="td-paste" id="textA" spellcheck="false" placeholder="貼上舊版文字，或把 .txt / .csv / .md / .log / .json / 程式碼 等文字檔拖進這裡…"></textarea>
       <div class="td-paste-meta">
         <span id="metaA">0 行 · 0 字</span>
         <span class="td-actions">
@@ -74,7 +78,7 @@
     </div>
     <div class="td-paste-slot">
       <h3>{{ icon('edit', size=14) }} 新版 (右)</h3>
-      <textarea class="td-paste" id="textB" spellcheck="false" placeholder="貼上新版文字…"></textarea>
+      <textarea class="td-paste" id="textB" spellcheck="false" placeholder="貼上新版文字，或把 .txt / .csv / .md / .log / .json / 程式碼 等文字檔拖進這裡…"></textarea>
       <div class="td-paste-meta">
         <span id="metaB">0 行 · 0 字</span>
         <span class="td-actions">
@@ -112,6 +116,74 @@ function updateMeta(textareaId, metaId) {
 }
 $('textA').addEventListener('input', () => updateMeta('textA', 'metaA'));
 $('textB').addEventListener('input', () => updateMeta('textB', 'metaB'));
+
+// Drag-drop text files into a textarea — read as UTF-8 and stuff into the
+// box. We don't whitelist by extension because "text file" on the web is
+// fundamentally a content question, not a filename one (people drag .conf,
+// .env, .gitignore, no-extension files all the time). Instead we cap the
+// file size and detect binary content via a NUL-byte heuristic.
+const DROP_MAX_BYTES = 1_000_000;  // 1 MB matches server-side cap
+
+function _looksBinary(text) {
+  // The standard "is this binary?" heuristic: a UTF-8 text file should
+  // never contain a literal NUL. Sample the first 8 KB so we don't walk
+  // huge strings.
+  const head = text.slice(0, 8192);
+  return head.indexOf("\0") !== -1;
+}
+
+function _wireDrop(textareaId, metaId) {
+  const ta = $(textareaId);
+  let dragDepth = 0;  // counter so child enter/leave doesn't flicker the highlight
+
+  ta.addEventListener('dragenter', e => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes('Files')) return;
+    e.preventDefault();
+    dragDepth++;
+    ta.classList.add('drop-hover');
+  });
+  ta.addEventListener('dragover', e => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+  ta.addEventListener('dragleave', e => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) ta.classList.remove('drop-hover');
+  });
+  ta.addEventListener('drop', e => {
+    if (!e.dataTransfer || e.dataTransfer.files.length === 0) return;
+    e.preventDefault();
+    dragDepth = 0;
+    ta.classList.remove('drop-hover');
+
+    const file = e.dataTransfer.files[0];  // single-file UI; ignore extras
+    const meta = $(metaId);
+    if (file.size > DROP_MAX_BYTES) {
+      meta.innerHTML = `<span class="err">檔案太大（${(file.size/1024).toFixed(0)} KB）— 上限 ${DROP_MAX_BYTES/1024} KB</span>`;
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = reader.result || "";
+      if (_looksBinary(text)) {
+        meta.innerHTML = `<span class="err">看起來是二進位檔（含 NUL）— 拒絕載入</span>`;
+        return;
+      }
+      ta.value = text;
+      updateMeta(textareaId, metaId);
+      // Keep the filename visible so the user knows what was loaded.
+      const m = meta.querySelector('span:first-child') || meta;
+      m.textContent = `${m.textContent}　·　已載入 ${file.name}`;
+    };
+    reader.onerror = () => {
+      meta.innerHTML = `<span class="err">讀檔失敗：${reader.error?.message || 'unknown'}</span>`;
+    };
+    reader.readAsText(file, 'utf-8');
+  });
+}
+_wireDrop('textA', 'metaA');
+_wireDrop('textB', 'metaB');
 
 document.querySelectorAll('[data-clear]').forEach(btn => {
   btn.addEventListener('click', () => {
