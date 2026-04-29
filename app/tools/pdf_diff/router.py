@@ -101,21 +101,31 @@ def _diff_pages(a_lines: list[str], b_lines: list[str]) -> dict:
     a_out: list[dict] = []
     b_out: list[dict] = []
     added = removed = changed = 0
+    # Char-level deltas alongside the line-level counts. Useful when the
+    # line counts look small but each line has a lot of changed text.
+    chars_added = chars_removed = chars_changed = 0
+    chars_a = chars_b = 0
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
         if tag == "equal":
             for k in range(i1, i2):
                 a_out.append({"text": a_lines[k], "tag": "equal"})
                 b_out.append({"text": b_lines[j1 + (k - i1)], "tag": "equal"})
+                chars_a += len(a_lines[k])
+                chars_b += len(b_lines[j1 + (k - i1)])
         elif tag == "delete":
             for k in range(i1, i2):
                 a_out.append({"text": a_lines[k], "tag": "delete"})
                 b_out.append({"text": "", "tag": "blank"})
                 removed += 1
+                chars_removed += len(a_lines[k])
+                chars_a += len(a_lines[k])
         elif tag == "insert":
             for k in range(j1, j2):
                 a_out.append({"text": "", "tag": "blank"})
                 b_out.append({"text": b_lines[k], "tag": "insert"})
                 added += 1
+                chars_added += len(b_lines[k])
+                chars_b += len(b_lines[k])
         elif tag == "replace":
             la = i2 - i1
             lb = j2 - j1
@@ -124,18 +134,42 @@ def _diff_pages(a_lines: list[str], b_lines: list[str]) -> dict:
             for k in range(rows):
                 ai = i1 + k if k < la else None
                 bi = j1 + k if k < lb else None
-                a_out.append({"text": a_lines[ai] if ai is not None else "",
+                a_text = a_lines[ai] if ai is not None else ""
+                b_text = b_lines[bi] if bi is not None else ""
+                a_out.append({"text": a_text,
                               "tag": "replace" if ai is not None else "blank"})
-                b_out.append({"text": b_lines[bi] if bi is not None else "",
+                b_out.append({"text": b_text,
                               "tag": "replace" if bi is not None else "blank"})
+                chars_a += len(a_text)
+                chars_b += len(b_text)
                 if ai is not None and bi is not None:
                     changed += 1
+                    # On a paired replace, count the per-char edit distance
+                    # between the two lines so a 1-char tweak doesn't show
+                    # up the same as a fully-rewritten paragraph.
+                    s = difflib.SequenceMatcher(None, a_text, b_text,
+                                                autojunk=False)
+                    for t2, ai2, ai3, bi2, bi3 in s.get_opcodes():
+                        if t2 == "equal":
+                            continue
+                        if t2 == "delete":
+                            chars_removed += ai3 - ai2
+                        elif t2 == "insert":
+                            chars_added += bi3 - bi2
+                        elif t2 == "replace":
+                            chars_changed += max(ai3 - ai2, bi3 - bi2)
                 elif ai is not None:
                     removed += 1
+                    chars_removed += len(a_text)
                 else:
                     added += 1
+                    chars_added += len(b_text)
     return {"a": a_out, "b": b_out,
-            "added": added, "removed": removed, "changed": changed}
+            "added": added, "removed": removed, "changed": changed,
+            "chars_added": chars_added,
+            "chars_removed": chars_removed,
+            "chars_changed": chars_changed,
+            "chars_a": chars_a, "chars_b": chars_b}
 
 
 def _metadata_diff(a_meta: dict, b_meta: dict) -> list[dict]:
@@ -175,14 +209,17 @@ async def compare(
             b_page_count = db.page_count
         page_count = max(a_page_count, b_page_count)
         pages_out = []
-        totals = {"added": 0, "removed": 0, "changed": 0}
+        totals = {
+            "added": 0, "removed": 0, "changed": 0,
+            "chars_added": 0, "chars_removed": 0, "chars_changed": 0,
+            "chars_a": 0, "chars_b": 0,
+        }
         for i in range(page_count):
             ap = a_pages[i] if i < a_page_count else []
             bp = b_pages[i] if i < b_page_count else []
             d = _diff_pages(ap, bp)
-            totals["added"]   += d["added"]
-            totals["removed"] += d["removed"]
-            totals["changed"] += d["changed"]
+            for k in totals:
+                totals[k] += d.get(k, 0)
             pages_out.append({
                 "index": i + 1,
                 "a_exists": i < a_page_count,

@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}文字差異比對 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.td-pastes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 800px) { .td-pastes { grid-template-columns: 1fr; } }
+.td-paste-slot h3 { margin: 0 0 6px; font-size: 13px; color:#475569; }
+.td-paste { width: 100%; min-height: 220px; max-height: 480px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.45;
+  border: 1px solid #cbd5e1; border-radius: 8px;
+  padding: 10px 12px; resize: vertical; box-sizing: border-box; }
+.td-paste:focus { outline: 2px solid #93c5fd; outline-offset: 1px; }
+.td-paste-meta { font-size: 11.5px; color:#64748b; margin-top: 4px; display: flex; gap: 12px; }
+
+.df-summary { display: flex; flex-direction: column; font-size: 13px; gap: 0; padding: 10px 0; }
+.df-summary .stat-group { margin-bottom: 10px; }
+.df-summary .stat-group:last-child { margin-bottom: 0; }
+.df-summary .stat-group-title { font-size: 12px; font-weight: 600;
+  color:#64748b; margin-bottom: 4px; }
+.df-summary .stat-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.df-summary .stat { background:#f8fafc; border:1px solid #e5e7eb;
+  padding: 4px 10px; border-radius: 6px; }
+.df-summary .stat b { font-size: 16px; }
+.df-summary .add { color:#059669; }
+.df-summary .rem { color:#dc2626; }
+.df-summary .chg { color:#d97706; }
+
+.td-page { border:1px solid #e5e7eb; border-radius:8px; margin-top: 10px;
+  overflow: hidden; background:#fff; }
+.td-cols { display: grid; grid-template-columns: 1fr 1fr;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.55; }
+.td-col { background:#fff; }
+.td-col.left { border-right: 1px solid #e5e7eb; }
+.td-col .ln { padding: 1px 12px; white-space: pre-wrap; min-height: 1.55em; }
+.td-col .ln.equal   { color:#475569; }
+.td-col .ln.delete  { background: #fee2e2; color:#991b1b; }
+.td-col .ln.insert  { background: #dcfce7; color:#166534; }
+.td-col .ln.replace { background: #fef3c7; color:#92400e; }
+.td-col .ln.blank   { background: #f1f5f9; color:#94a3b8; }
+
+.td-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.td-btn-mini { font-size: 11.5px; padding: 3px 8px; background:#f1f5f9;
+  border:1px solid #e2e8f0; border-radius: 4px; color:#475569; cursor: pointer; }
+.td-btn-mini:hover { background:#e2e8f0; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('diff', size=22) }} 文字差異比對</h1>
+<p class="muted">直接貼上兩組文字，立即並排比對 — 不用存檔上傳。適合 log 片段、code 片段、段落改稿前後的快速 diff。紅 = 被刪 / 綠 = 新增 / 黃 = 修改。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 貼上兩組文字</h2>
+  <div class="td-pastes">
+    <div class="td-paste-slot">
+      <h3>📝 舊版 (左)</h3>
+      <textarea class="td-paste" id="textA" spellcheck="false" placeholder="貼上舊版文字…"></textarea>
+      <div class="td-paste-meta">
+        <span id="metaA">0 行 · 0 字</span>
+        <span class="td-actions">
+          <button type="button" class="td-btn-mini" data-clear="textA">清空</button>
+        </span>
+      </div>
+    </div>
+    <div class="td-paste-slot">
+      <h3>📝 新版 (右)</h3>
+      <textarea class="td-paste" id="textB" spellcheck="false" placeholder="貼上新版文字…"></textarea>
+      <div class="td-paste-meta">
+        <span id="metaB">0 行 · 0 字</span>
+        <span class="td-actions">
+          <button type="button" class="td-btn-mini" data-clear="textB">清空</button>
+          <button type="button" class="td-btn-mini" id="btnSwap">⇄ 交換左右</button>
+        </span>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:12px;">
+    <button class="btn btn-primary" id="btnCompare">{{ icon('diff', size=14) }} 開始比對</button>
+    <span id="status" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
+  </div>
+</div>
+
+<div class="panel" id="resultPanel" hidden>
+  <h2 style="margin-top:0;">2. 比對結果</h2>
+  <div id="sumBox" class="df-summary"></div>
+  <div id="diffBox"></div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const $ = id => document.getElementById(id);
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[<>&"']/g, c =>
+    ({"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&#39;"}[c]));
+}
+function updateMeta(textareaId, metaId) {
+  const v = $(textareaId).value || "";
+  const lines = v ? v.split(/\r?\n/).length : 0;
+  const chars = v.length;
+  $(metaId).textContent = `${lines.toLocaleString()} 行 · ${chars.toLocaleString()} 字`;
+}
+$('textA').addEventListener('input', () => updateMeta('textA', 'metaA'));
+$('textB').addEventListener('input', () => updateMeta('textB', 'metaB'));
+
+document.querySelectorAll('[data-clear]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const id = btn.dataset.clear;
+    $(id).value = "";
+    updateMeta(id, id === "textA" ? "metaA" : "metaB");
+  });
+});
+
+$('btnSwap').addEventListener('click', () => {
+  const a = $('textA').value, b = $('textB').value;
+  $('textA').value = b; $('textB').value = a;
+  updateMeta('textA', 'metaA'); updateMeta('textB', 'metaB');
+});
+
+$('btnCompare').addEventListener('click', async () => {
+  const a = $('textA').value, b = $('textB').value;
+  if (!a && !b) { $('status').textContent = '請至少在一邊貼上文字'; return; }
+  const btn = $('btnCompare');
+  btn.disabled = true;
+  $('status').textContent = '比對中…';
+  let r;
+  try {
+    r = await fetch('/tools/text-diff/compare', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text_a: a, text_b: b}),
+    });
+  } catch (e) {
+    $('status').textContent = '網路錯誤：' + e.message;
+    btn.disabled = false;
+    return;
+  }
+  if (!r.ok) {
+    let msg = 'HTTP ' + r.status;
+    try { msg = (await r.json()).detail || msg; } catch (_) {}
+    $('status').textContent = '失敗：' + msg;
+    btn.disabled = false;
+    return;
+  }
+  const d = await r.json();
+  renderResult(d);
+  $('status').textContent = '完成';
+  btn.disabled = false;
+});
+
+function renderResult(d) {
+  $('resultPanel').hidden = false;
+  const t = d.totals || {};
+  const ca = t.chars_a || 0, cb = t.chars_b || 0;
+  const delta = cb - ca;
+  const deltaStr = (delta > 0 ? '+' : '') + delta.toLocaleString();
+  $('sumBox').innerHTML = `
+    <div class="stat-group">
+      <div class="stat-group-title muted">行數</div>
+      <div class="stat-row">
+        <div class="stat add">新增行 <b>${(t.added || 0).toLocaleString()}</b></div>
+        <div class="stat rem">刪除行 <b>${(t.removed || 0).toLocaleString()}</b></div>
+        <div class="stat chg">修改行 <b>${(t.changed || 0).toLocaleString()}</b></div>
+      </div>
+    </div>
+    <div class="stat-group">
+      <div class="stat-group-title muted">字數差異</div>
+      <div class="stat-row">
+        <div class="stat">舊版 <b>${ca.toLocaleString()}</b> 字</div>
+        <div class="stat">新版 <b>${cb.toLocaleString()}</b> 字</div>
+        <div class="stat ${delta >= 0 ? 'add' : 'rem'}">差 <b>${deltaStr}</b> 字</div>
+        <div class="stat add">新增字 <b>${(t.chars_added || 0).toLocaleString()}</b></div>
+        <div class="stat rem">刪除字 <b>${(t.chars_removed || 0).toLocaleString()}</b></div>
+        <div class="stat chg">修改字 <b>${(t.chars_changed || 0).toLocaleString()}</b></div>
+      </div>
+    </div>`;
+
+  // Single virtual page for paste mode.
+  const p = (d.pages && d.pages[0]) || null;
+  if (!p) { $('diffBox').innerHTML = ''; return; }
+  const aLines = p.diff.a.map(r => `<div class="ln ${r.tag}">${esc(r.text || ' ')}</div>`).join('');
+  const bLines = p.diff.b.map(r => `<div class="ln ${r.tag}">${esc(r.text || ' ')}</div>`).join('');
+  $('diffBox').innerHTML = `
+    <div class="td-page">
+      <div class="td-cols">
+        <div class="td-col left">${aLines}</div>
+        <div class="td-col right">${bLines}</div>
+      </div>
+    </div>`;
+}
+</script>
+{% endblock %}
