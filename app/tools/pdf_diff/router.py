@@ -1,4 +1,9 @@
-"""Endpoints for PDF 差異比對."""
+"""Endpoints for 文件差異比對 (formerly PDF 差異比對).
+
+Accepts PDF directly, or Word / Excel / PowerPoint / ODF — non-PDF inputs
+are first converted to PDF via the shared OxOffice / LibreOffice helper,
+then the same line-level diff runs against the rendered text.
+"""
 from __future__ import annotations
 
 import difflib
@@ -10,6 +15,7 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 
 from ...config import settings
+from ...core import office_convert
 
 
 router = APIRouter()
@@ -19,6 +25,52 @@ router = APIRouter()
 async def index(request: Request):
     templates = request.app.state.templates
     return templates.TemplateResponse("pdf_diff.html", {"request": request})
+
+
+def _ensure_pdf(upload: UploadFile, data: bytes, uid: str, slot: str) -> Path:
+    """Persist `data` and return a Path to a PDF representation of it.
+
+    PDFs pass through unchanged; Office / ODF inputs are converted via
+    soffice. Raises HTTPException(400) for unsupported types and
+    HTTPException(500) if soffice itself fails or isn't installed.
+    """
+    name = (upload.filename or "").lower()
+    is_pdf = name.endswith(".pdf")
+    is_office = office_convert.is_office_file(name)
+    if not (is_pdf or is_office):
+        raise HTTPException(
+            400,
+            f"不支援的檔案類型：{upload.filename}（只接受 PDF / Word / Excel / "
+            "PowerPoint / ODT / ODS / ODP）",
+        )
+    if is_pdf:
+        out = settings.temp_dir / f"diff_{uid}_{slot}.pdf"
+        out.write_bytes(data)
+        return out
+    # Office / ODF → write source, convert to PDF.
+    suffix = Path(upload.filename or "in.bin").suffix or ".bin"
+    src = settings.temp_dir / f"diff_{uid}_{slot}_src{suffix}"
+    out = settings.temp_dir / f"diff_{uid}_{slot}.pdf"
+    src.write_bytes(data)
+    try:
+        office_convert.convert_to_pdf(src, out)
+    except FileNotFoundError as e:
+        raise HTTPException(
+            500,
+            "找不到 Office 引擎（OxOffice / LibreOffice）— Office / ODF 檔案"
+            "需要 soffice 才能轉成 PDF 後比對。",
+        ) from e
+    except Exception as e:
+        raise HTTPException(
+            500,
+            f"Office 檔轉 PDF 失敗：{upload.filename}（{e}）",
+        ) from e
+    finally:
+        # source bytes no longer needed
+        src.unlink(missing_ok=True)
+    if not out.exists() or out.stat().st_size == 0:
+        raise HTTPException(500, f"Office 檔轉 PDF 後檔案為空：{upload.filename}")
+    return out
 
 
 def _page_lines(doc: "fitz.Document") -> list[list[str]]:
@@ -103,19 +155,14 @@ async def compare(
     file_a: UploadFile = File(...),
     file_b: UploadFile = File(...),
 ):
-    for f in (file_a, file_b):
-        if not (f.filename or "").lower().endswith(".pdf"):
-            raise HTTPException(400, f"只支援 PDF：{f.filename}")
     data_a = await file_a.read()
     data_b = await file_b.read()
     if not data_a or not data_b:
         raise HTTPException(400, "empty file")
 
     uid = uuid.uuid4().hex
-    pa = settings.temp_dir / f"diff_{uid}_a.pdf"
-    pb = settings.temp_dir / f"diff_{uid}_b.pdf"
-    pa.write_bytes(data_a)
-    pb.write_bytes(data_b)
+    pa = _ensure_pdf(file_a, data_a, uid, "a")
+    pb = _ensure_pdf(file_b, data_b, uid, "b")
 
     import asyncio as _asyncio
     def _do_diff():
