@@ -26,17 +26,23 @@
   overflow: hidden; }
 .df-page-head { background:#f8fafc; padding: 6px 12px; font-weight: 600;
   font-size: 13px; display:flex; justify-content:space-between; align-items:center; }
-.df-cols { display: grid; grid-template-columns: 1fr 1fr;
+/* Row-paired grid: each diff line is a single 2-column grid row, so the
+   row height is determined by the taller side and the two columns stay
+   aligned even when one side wraps to multiple visual lines. */
+.df-rows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px; line-height: 1.55; }
-.df-col { background:#fff; }
-.df-col.left { border-right: 1px solid #e5e7eb; }
-.df-col .ln { padding: 1px 12px; white-space: pre-wrap; min-height: 1.55em; }
-.df-col .ln.equal   { color:#475569; }
-.df-col .ln.delete  { background: #fee2e2; color:#991b1b; }
-.df-col .ln.insert  { background: #dcfce7; color:#166534; }
-.df-col .ln.replace { background: #fef3c7; color:#92400e; }
-.df-col .ln.blank   { background: repeating-linear-gradient(45deg,#fafafa,#fafafa 4px,#f0f0f0 4px,#f0f0f0 8px); min-height: 1.55em; }
+  font-size: 12px; line-height: 1.55;
+}
+.df-rows .ln { padding: 1px 12px; white-space: pre-wrap; word-break: break-word;
+  min-height: 1.55em; }
+.df-rows .ln.left  { border-right: 1px solid #e5e7eb; }
+.df-rows .ln.equal   { color:#475569; }
+.df-rows .ln.delete  { background: #fee2e2; color:#991b1b; }
+.df-rows .ln.insert  { background: #dcfce7; color:#166534; }
+.df-rows .ln.replace { background: #fef3c7; color:#92400e; }
+.df-rows .ln.blank   { background: repeating-linear-gradient(45deg,#fafafa,#fafafa 4px,#f0f0f0 4px,#f0f0f0 8px); }
 
 .df-meta table { width:100%; border-collapse: collapse; font-size: 13px; }
 .df-meta th, .df-meta td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9;
@@ -54,11 +60,11 @@
   <h2 style="margin-top:0;">1. 上傳兩份文件</h2>
   <div class="df-uploads">
     <div class="df-upload-slot">
-      <h3>📄 舊版 (左)</h3>
+      <h3>{{ icon('page', size=14) }} 舊版 (左)</h3>
       {% with upload_id='dfA', accept='.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp' %}{% include "components/file_upload.html" %}{% endwith %}
     </div>
     <div class="df-upload-slot">
-      <h3>📄 新版 (右)</h3>
+      <h3>{{ icon('page', size=14) }} 新版 (右)</h3>
       {% with upload_id='dfB', accept='.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp' %}{% include "components/file_upload.html" %}{% endwith %}
     </div>
   </div>
@@ -143,8 +149,14 @@ function renderResult(d) {
     $('metaBox').hidden = true;
   }
   $('diffBox').innerHTML = d.pages.map(p => {
-    const aLines = p.diff.a.map(r => `<div class="ln ${r.tag}">${esc(r.text || ' ')}</div>`).join('');
-    const bLines = p.diff.b.map(r => `<div class="ln ${r.tag}">${esc(r.text || ' ')}</div>`).join('');
+    const n = Math.max(p.diff.a.length, p.diff.b.length);
+    let rows = '';
+    for (let i = 0; i < n; i++) {
+      const ra = p.diff.a[i] || {text: '', tag: 'blank'};
+      const rb = p.diff.b[i] || {text: '', tag: 'blank'};
+      rows += `<div class="ln left ${ra.tag}">${esc(ra.text || ' ')}</div>` +
+              `<div class="ln right ${rb.tag}">${esc(rb.text || ' ')}</div>`;
+    }
     const nChanges = p.diff.added + p.diff.removed + p.diff.changed;
     return `<div class="df-page">
       <div class="df-page-head">
@@ -156,10 +168,7 @@ function renderResult(d) {
           ${nChanges === 0 ? '　· 無差異' : ''}
         </span>
       </div>
-      <div class="df-cols">
-        <div class="df-col left">${aLines}</div>
-        <div class="df-col right">${bLines}</div>
-      </div>
+      <div class="df-rows">${rows}</div>
     </div>`;
   }).join('');
   $('resultPanel').hidden = false;
