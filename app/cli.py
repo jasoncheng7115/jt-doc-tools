@@ -441,7 +441,29 @@ def svc_uninstall(purge: bool) -> int:
                 pass
 
     print(f"移除程式：{root}")
-    shutil.rmtree(root, ignore_errors=True)
+    if _is_windows():
+        # We're running from a Python interpreter inside `root` (launched via
+        # `jtdt.cmd` shim that also lives in `root`). If we rmtree it now,
+        # cmd.exe will print "找不到批次檔。" because it tries to read the
+        # next line from the now-deleted .cmd. Defer the deletion to a
+        # detached helper that fires AFTER we exit.
+        helper = Path(os.environ.get("TEMP") or os.environ.get("TMP") or r"C:\Windows\Temp") \
+                 / f"jtdt-cleanup-{os.getpid()}.cmd"
+        helper.write_text(
+            "@echo off\r\n"
+            "timeout /t 2 /nobreak >nul\r\n"
+            f'rd /s /q "{root}"\r\n'
+            'del /q "%~f0"\r\n',
+            encoding="ascii",
+        )
+        # DETACHED_PROCESS = 0x00000008, CREATE_NEW_PROCESS_GROUP = 0x00000200
+        subprocess.Popen(
+            ["cmd.exe", "/c", "start", "", "/B", str(helper)],
+            creationflags=0x00000008 | 0x00000200,
+            close_fds=True,
+        )
+    else:
+        shutil.rmtree(root, ignore_errors=True)
 
     # Clean up macOS log files
     if _is_macos():

@@ -151,11 +151,11 @@
     <span class="muted">Ghostscript 常比 PyMuPDF 再擠出 20–50%；若最終反而變大會自動保留 PyMuPDF 版本。</span>
   </div>
   {% else %}
-  <div class="cmp-gs-row" style="opacity:.7;">
+  <div class="cmp-gs-row" style="opacity:.85;">
     <span class="muted">
-      本機未偵測到 Ghostscript — Mac <code>brew install ghostscript</code>，
-      Linux <code>apt install ghostscript</code>，
-      Windows 到 ghostscript.com 下載 gs 安裝。
+      <b>選用：</b>裝了 Ghostscript 可再多擠 20–50% 壓縮率（內建 PyMuPDF 壓縮已可用，本選項非必要）。<br>
+      安裝方式：macOS <code>brew install ghostscript</code>；Linux <code>sudo apt install ghostscript</code>；Windows 到
+      <a href="https://www.ghostscript.com/releases/gsdnld.html" target="_blank" rel="noopener noreferrer">ghostscript.com 下載 64-bit AGPL Release</a>。
     </span>
   </div>
   {% endif %}
