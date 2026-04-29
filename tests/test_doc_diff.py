@@ -38,13 +38,30 @@ def test_index_renders_new_name(client):
 
 
 def test_legacy_pdf_diff_url_redirects(client):
-    """Bookmarks pointing at /tools/pdf-diff/ must keep working (301 → doc-diff)."""
+    """Bookmarks pointing at /tools/pdf-diff/ must keep working (308 → doc-diff).
+
+    308 is used (not 301/302) so the method + body are preserved on POST —
+    legacy API callers hitting /tools/pdf-diff/compare keep working without
+    silently downgrading to GET.
+    """
     r = client.get("/tools/pdf-diff/", follow_redirects=False)
-    assert r.status_code == 301
+    assert r.status_code == 308
     assert r.headers["location"].endswith("/tools/doc-diff/")
-    # And without trailing slash
+    # Without trailing slash
     r = client.get("/tools/pdf-diff", follow_redirects=False)
-    assert r.status_code == 301
+    assert r.status_code == 308
+    # Sub-path: a POST to the old /compare path must redirect (and the
+    # client following it should land on the new compare endpoint).
+    a = _pdf_with_text(["x"]); b = _pdf_with_text(["y"])
+    r = client.post(
+        "/tools/pdf-diff/compare", follow_redirects=False,
+        files={
+            "file_a": ("a.pdf", a, "application/pdf"),
+            "file_b": ("b.pdf", b, "application/pdf"),
+        },
+    )
+    assert r.status_code == 308
+    assert r.headers["location"].endswith("/tools/doc-diff/compare")
 
 
 def test_compare_two_pdfs_returns_diff(client):
@@ -107,3 +124,78 @@ def test_compare_office_to_pdf_works(client):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["page_count_a"] >= 1 and body["page_count_b"] == 1
+
+
+def test_migration_renames_pdf_diff_to_doc_diff(tmp_path):
+    """`_m3_rename_pdf_diff_to_doc_diff` must rewrite role_perms +
+    subject_perms rows on existing installs so users don't silently lose
+    access to the renamed tool after upgrade."""
+    import sqlite3
+    from app.core.auth_db import _m1_initial, _m2_username_source_unique, \
+        _m3_rename_pdf_diff_to_doc_diff
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    _m1_initial(conn)
+    _m2_username_source_unique(conn)
+
+    # Pre-populate with the OLD tool id, mimicking a v1.1.60-or-earlier install.
+    import time
+    now = time.time()
+    conn.execute(
+        "INSERT INTO roles(id, display_name, description, is_builtin, is_protected, created_at) "
+        "VALUES (?,?,?,?,?,?)",
+        ("legal-sec", "法務資安", "", 1, 0, now),
+    )
+    conn.execute("INSERT INTO role_perms(role_id, tool_id) VALUES (?, ?)",
+                 ("legal-sec", "pdf-diff"))
+    conn.execute(
+        "INSERT INTO subject_perms(subject_type, subject_key, tool_id) "
+        "VALUES (?, ?, ?)",
+        ("user", "alice@local", "pdf-diff"),
+    )
+    conn.commit()
+
+    # Apply the new migration.
+    _m3_rename_pdf_diff_to_doc_diff(conn)
+
+    # Old rows should be gone, new rows in their place.
+    rp = conn.execute(
+        "SELECT tool_id FROM role_perms WHERE role_id='legal-sec'").fetchall()
+    assert {r["tool_id"] for r in rp} == {"doc-diff"}
+    sp = conn.execute(
+        "SELECT tool_id FROM subject_perms WHERE subject_key='alice@local'").fetchall()
+    assert {r["tool_id"] for r in sp} == {"doc-diff"}
+
+
+def test_migration_idempotent_when_doc_diff_already_exists(tmp_path):
+    """If admin manually pre-granted `doc-diff` (e.g. on v1.1.61 with no upgrade),
+    re-running the migration must not blow up on the unique constraint."""
+    import sqlite3
+    from app.core.auth_db import _m1_initial, _m2_username_source_unique, \
+        _m3_rename_pdf_diff_to_doc_diff
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    _m1_initial(conn)
+    _m2_username_source_unique(conn)
+
+    import time
+    now = time.time()
+    conn.execute(
+        "INSERT INTO roles(id, display_name, description, is_builtin, is_protected, created_at) "
+        "VALUES (?,?,?,?,?,?)",
+        ("legal-sec", "法務資安", "", 1, 0, now),
+    )
+    # Both old and new exist for the same role
+    conn.executemany(
+        "INSERT INTO role_perms(role_id, tool_id) VALUES (?, ?)",
+        [("legal-sec", "pdf-diff"), ("legal-sec", "doc-diff")],
+    )
+    conn.commit()
+
+    _m3_rename_pdf_diff_to_doc_diff(conn)  # must not raise
+
+    rp = conn.execute(
+        "SELECT tool_id FROM role_perms WHERE role_id='legal-sec'").fetchall()
+    assert {r["tool_id"] for r in rp} == {"doc-diff"}

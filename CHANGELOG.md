@@ -4,6 +4,19 @@
 
 ---
 
+## [1.1.62] - 2026-04-29
+
+### 修正（v1.1.61 改名 doc-diff 留下的 4 個漏網之雷）
+
+- **template JS 還寫死 `/tools/pdf-diff/compare`**：使用者按「開始比對」直接 404 `{"detail":"Not Found"}`。改成 `/tools/doc-diff/compare`。
+- **`app/core/roles.py` 內建角色定義裡還是 `pdf-diff`**：原本只改了 metadata、route、JS，role seed 表沒改，**新使用者建出來的角色完全沒有 doc-diff 權限**。default-user / legal-sec 兩個內建角色都修正。
+- **DB migration 補上**：v3 `_m3_rename_pdf_diff_to_doc_diff` — 既有安裝升級時自動把 `role_perms` / `subject_perms` 表內 `pdf-diff` 改成 `doc-diff`。沒這條 migration 老用戶升級後會**失去工具存取權**（admin-edited 的角色也保住）。`INSERT OR IGNORE … DELETE` 寫法保證 idempotent。
+- **redirect 改 308 + 包所有方法 + 包子路徑**：原本 301 + 只接 GET，POST 到 `/tools/pdf-diff/compare` 的舊 API 客戶端會 404。改成 308 + `api_route` + `{rest:path}` wildcard，整個 `/tools/pdf-diff/*` 全部轉。308 不像 301 會把 POST 降級成 GET。
+- **`CLAUDE.md` 法務資安角色表 + `TEST_PLAN.md` 標題改 doc-diff**。
+- 新增 2 條 pytest（migration 改名 / migration idempotent 含預先存在 doc-diff 的情境）。
+
+---
+
 ## [1.1.61] - 2026-04-29
 
 ### 變更（PDF 差異比對 → 文件差異比對，加 Office / ODF 支援）
