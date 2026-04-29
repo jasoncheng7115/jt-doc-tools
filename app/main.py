@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.1.60"
+VERSION = "1.1.61"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -80,7 +80,7 @@ _TOOL_ALIASES = {
     "pdf-annotations":    "annotations annotation comments comment markup highlight underline strikeout sticky-note review todo extract export 註解 批註 標註 螢光筆 底線 刪除線 文字註解 圖章 自由文字 手繪 審閱 待辦 校稿 合約 修訂",
     "pdf-annotations-strip":   "strip remove delete clean annotations comments markup 註解 批註 移除 刪除 清除 清除註解 移除註解 校稿後清除",
     "pdf-annotations-flatten": "flatten bake burn annotations comments markup permanent lock final 平面化 扁平化 燒入 鎖定 定稿 收件方無法移除",
-    "pdf-diff":           "diff compare comparison difference changes contract audit review 差異 比對 比較 合約審閱 變更 改版",
+    "doc-diff":           "diff compare comparison difference changes contract audit review pdf word excel powerpoint odf odt ods odp office document 差異 比對 比較 合約審閱 變更 改版 文件 PDF Word Excel PowerPoint ODF",
     "aes-zip":            "zip aes encrypt archive password email attachment winzip 7zip keka archive utility 加密 壓縮檔 密碼保護 AES 寄信 附件 打包",
     "pdf-nup":            "nup n-up multiple pages per sheet imposition 2up 4up 6up 8up tile tiled layout grid imposition 多頁合併 多合一 拼貼 省紙 N合一 2合1 4合1 講義 草稿 版面",
 }
@@ -508,6 +508,15 @@ async def _api_token_gate(request: Request, call_next):
             "source": urow["source"],
         }
     return await call_next(request)
+
+
+# ---- Legacy redirects (renamed tools) ----
+@app.get("/tools/pdf-diff")
+@app.get("/tools/pdf-diff/")
+async def _redirect_pdf_diff():
+    """`pdf-diff` was renamed to `doc-diff` in v1.1.61 (now also handles
+    Office / ODF). Keep the old URL working for bookmarks + legacy clients."""
+    return RedirectResponse("/tools/doc-diff/", status_code=301)
 
 
 # ---- Shared API: job status + result download ----

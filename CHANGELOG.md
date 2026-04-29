@@ -4,6 +4,19 @@
 
 ---
 
+## [1.1.61] - 2026-04-29
+
+### 變更（PDF 差異比對 → 文件差異比對，加 Office / ODF 支援）
+
+- **`pdf-diff` 重新命名為 `doc-diff`，顯示名稱「文件差異比對」**：因為現在不只能比 PDF。route id 跟著改 `/tools/pdf-diff` → `/tools/doc-diff`。
+- **接受 Office / ODF 檔案**：除 PDF 外也吃 `.doc / .docx / .xls / .xlsx / .ppt / .pptx / .odt / .ods / .odp`。非 PDF 檔會在比對前先用 OxOffice / LibreOffice 轉成 PDF（共用 `office_to_pdf` 既有 helper）。失敗會 500 + 「找不到 Office 引擎」訊息。
+- **舊網址 301 redirect**：`/tools/pdf-diff` 跟 `/tools/pdf-diff/` 自動轉新網址，舊書籤 / 舊 API 呼叫不會 404。
+- **template 上傳元件 accept 屬性更新**：`.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp` 一次列上去，瀏覽器選檔器自動過濾。
+- **搜尋關鍵字補上 Office / Word / Excel / PowerPoint / ODF**：sidebar 搜尋這些字也找得到此工具。
+- 新增 5 條 pytest（PDF×PDF / Office×PDF / 不支援副檔名 / 舊網址 redirect / 新名稱出現於頁面）。
+
+---
+
 ## [1.1.60] - 2026-04-29
 
 ### 修正（三個 Windows 端 bug）

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
-{% block title %}PDF 差異比對 · {{ app_name }}{% endblock %}
+{% block title %}文件差異比對 · {{ app_name }}{% endblock %}
 {% block head %}
 <style>
 .df-uploads { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -42,19 +42,19 @@
 </style>
 {% endblock %}
 {% block content %}
-<h1>{{ icon('diff', size=22) }} PDF 差異比對</h1>
-<p class="muted">上傳兩份 PDF，並排顯示文字差異。紅 = 被刪 / 綠 = 新增 / 黃 = 修改。同時顯示 metadata 差異。</p>
+<h1>{{ icon('diff', size=22) }} 文件差異比對</h1>
+<p class="muted">上傳兩份文件並排顯示文字差異 — 支援 <b>PDF</b>、<b>Word</b>、<b>Excel</b>、<b>PowerPoint</b>、<b>ODT / ODS / ODP</b>。非 PDF 檔會自動先轉成 PDF 再比對（需 OxOffice / LibreOffice）。紅 = 被刪 / 綠 = 新增 / 黃 = 修改。同時顯示 metadata 差異。</p>
 
 <div class="panel">
-  <h2 style="margin-top:0;">1. 上傳兩份 PDF</h2>
+  <h2 style="margin-top:0;">1. 上傳兩份文件</h2>
   <div class="df-uploads">
     <div class="df-upload-slot">
       <h3>📄 舊版 (左)</h3>
-      {% with upload_id='dfA', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+      {% with upload_id='dfA', accept='.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp' %}{% include "components/file_upload.html" %}{% endwith %}
     </div>
     <div class="df-upload-slot">
       <h3>📄 新版 (右)</h3>
-      {% with upload_id='dfB', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+      {% with upload_id='dfB', accept='.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp' %}{% include "components/file_upload.html" %}{% endwith %}
     </div>
   </div>
   <div style="margin-top:12px;">
