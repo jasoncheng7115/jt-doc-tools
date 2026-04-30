@@ -1,13 +1,11 @@
 @echo off
-REM Pure cmd batch script — set up Python venv via uv. We use this instead
-REM of doing it inline in install.ps1 because PowerShell's native-command
-REM error handling (especially under elevated `Start-Process -Verb RunAs`
-REM with `*>&1 | Out-File` redirect) is unreliable: it swallows our debug
-REM messages, treats uv's stderr writes as fatal, and reuses `$Args`-style
-REM variables in confusing ways.
+REM Pure cmd batch script - set up Python venv via uv.
+REM Used by install.ps1 to avoid PowerShell native-command quirks under
+REM elevated Start-Process + redirect (Args is a reserved var, Out-Host
+REM swallows output, EAP=Stop turns stderr into fatal, etc).
 REM
-REM Usage:  setup-python.cmd <install_dir>
-REM Output: stdout/stderr in normal cmd format. Exit code:
+REM Usage:  setup-python.cmd ^<install_dir^>
+REM Exit codes:
 REM   0 = success
 REM   2 = uv venv failed
 REM   3 = uv sync failed
@@ -27,7 +25,8 @@ if not exist "%UV_EXE%" (
     exit /b 1
 )
 
-REM uv 對「已裝過」回 exit 1，是正常訊息不算錯
+REM uv may exit 1 saying "already installed" when Python 3.12 is present.
+REM That's not an error, ignore.
 echo ==^> Installing managed Python 3.12 via uv ...
 set UV_PYTHON_PREFERENCE=only-managed
 "%UV_EXE%" python install 3.12
@@ -38,13 +37,13 @@ pushd "%INSTALL_DIR%"
 "%UV_EXE%" venv --python 3.12 .venv
 set VENV_RC=!ERRORLEVEL!
 echo [debug] uv venv exit=!VENV_RC!
-if not !VENV_RC! equ 0 ( popd & exit /b 2 )
+if not !VENV_RC! equ 0 ( popd ^& exit /b 2 )
 
 echo ==^> Installing dependencies via uv sync ...
 "%UV_EXE%" sync --python 3.12
 set SYNC_RC=!ERRORLEVEL!
 echo [debug] uv sync exit=!SYNC_RC!
-if not !SYNC_RC! equ 0 ( popd & exit /b 3 )
+if not !SYNC_RC! equ 0 ( popd ^& exit /b 3 )
 popd
 
 echo ==^> Verifying critical imports ...

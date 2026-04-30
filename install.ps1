@@ -262,11 +262,16 @@ function Setup-Python {
     # PowerShell 的 native-command 處理在 elevated session + *>&1 redirect
     # 環境下有太多怪行為（Args 自動變數、Out-Host 吞輸出、Stop 把 stderr
     # 當 fatal 等等），不如直接交給 cmd 跑。
-    $setupBat = Join-Path $InstallDir 'setup-python.cmd'
+    # 明確走 script scope 取 InstallDir（function scope 在某些路徑下取不到）
+    $myInstallDir = $Script:InstallDir
+    if (-not $myInstallDir) { $myInstallDir = $InstallDir }
+    Write-Output "[debug] InstallDir=$myInstallDir"
+    $setupBat = Join-Path $myInstallDir 'setup-python.cmd'
+    Write-Output "[debug] setupBat=$setupBat"
     if (-not (Test-Path $setupBat)) {
-        Die "setup-python.cmd not found at $setupBat"
+        Die "setup-python.cmd not found at $setupBat (run install.sh / install.ps1 again to fetch latest source)"
     }
-    cmd /c "`"$setupBat`" `"$InstallDir`" 2>&1" | ForEach-Object { Write-Output $_ }
+    cmd /c "`"$setupBat`" `"$myInstallDir`" 2>&1" | ForEach-Object { Write-Output $_ }
     $rc = $LASTEXITCODE
     if ($rc -ne 0) {
         switch ($rc) {
@@ -276,7 +281,7 @@ function Setup-Python {
             default { Die "Setup-Python failed (exit $rc)" }
         }
     }
-    Ok "Python environment ready: $InstallDir\.venv"
+    Ok "Python environment ready: $myInstallDir\.venv"
 }
 
 # Data
