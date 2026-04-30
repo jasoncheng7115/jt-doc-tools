@@ -4,6 +4,31 @@
 
 ---
 
+## [1.1.68] - 2026-04-30
+
+### 修正（嚴重 — 客戶啟用 AD 後鎖死無法登入）
+
+- **uv.lock 漏 `ldap3` → 安裝後 LDAP/AD 認證壞掉**：v1.1.66 之前的 `uv.lock` 沒含 `ldap3`，但 `pyproject.toml` 有；安裝腳本用 `uv sync --frozen` 盲信 lockfile，回傳成功但實際少裝 `ldap3`。客戶啟用 AD 認證後，登入頁顯示「ldap3 套件未安裝；請聯絡管理員」整個系統鎖死。本版重新生成 `uv.lock`（含全部依賴），並把 `install.sh` / `install.ps1` / `jtdt update` 一律改成不用 `--frozen`，最後追加「驗 import」smoke test，少裝任何關鍵 package 就 fail-fast。
+- **`sudo jtdt update` 撞 git「dubious ownership」**：Linux install.sh 把 `/opt/jt-doc-tools` chown 給 `jtdt` 服務帳號；`sudo jtdt update` 以 root 跑 `git pull` 時，git 2.35.2+ 會拒絕操作非當前用戶擁有的 repo。本版在 update 流程加 `safe.directory=<root>` 環境變數讓 git 通過，並在 git pull / uv sync 完成後 `chown -R` 回原擁有者。
+- **新增 `jtdt auth` 子命令**：當 LDAP/AD 設定錯把自己鎖在外面時，可以用 CLI 緊急復原：
+  - `sudo jtdt auth show` — 看目前認證 backend
+  - `sudo jtdt auth disable` — 切回未啟用認證
+  - `sudo jtdt auth set-local` — 切回本機帳號
+  - 配合 `sudo jtdt reset-password jtdt-admin` 可重設管理員密碼
+
+### 影響範圍
+
+- v1.1.50 ~ v1.1.67 安裝 / 升級的所有 Linux + Windows 環境，啟用 LDAP / AD 認證會壞。
+- 已啟用認證鎖在外面的客戶，跑 `sudo jtdt auth disable` 即可解封。
+
+### 驗證
+- 在 Ubuntu 24.04 跑 `sudo bash install.sh` → 安裝後 `python -c "import ldap3"` 通過。
+- 啟用 AD 認證 → 登入頁不再顯示「ldap3 套件未安裝」。
+- `sudo jtdt update` 從 v1.1.65 升 v1.1.68 不再撞 dubious ownership。
+- `sudo jtdt auth disable` 切回 off backend，重啟後登入頁消失。
+
+---
+
 ## [1.1.67] - 2026-04-30
 
 ### 變更（「我的帳號」對話框排版）
