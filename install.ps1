@@ -258,19 +258,27 @@ function Setup-Python {
     # (the Store stub is not a real Python, it pops the Store and uv crashes).
     $env:UV_PYTHON_PREFERENCE = 'only-managed'
     Push-Location $InstallDir
+    # 重要：暫時把 $ErrorActionPreference 從 'Stop' 改成 'Continue'。
+    # 因為 uv 對「Python 3.12 已裝」的提示是寫到 stderr，搭配 'Stop' 會被當成
+    # terminating error 直接讓 install.ps1 在 setup_python 第一行就死掉、無 log。
+    # 同樣地 uv 在拉 packages 時也會大量寫進度訊息到 stderr。
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     try {
-        # uv python install 在較新版 uv 中對「已裝過」可能回 exit 1（"already installed"）。
-        # 我們只關心「最後 venv 能不能建起來」，所以這裡不 Die；真失敗會在 uv sync 時爆。
-        # 注意：別用 `| Out-Host` —— Start-Process -Verb RunAs 啟動的 elevated session
-        # 沒有附加 host，pipe 會吞掉輸出 + 可能 hang，導致 install.ps1 卡死無 log。
-        & $UvExe python install 3.12
-        $LASTEXITCODE = 0  # ignore "already installed" exit code
-        # NEVER use --frozen — it blindly trusts uv.lock. If lock is missing
-        # a dep (eg. ldap3 in v1.1.66 lock), uv "succeeds" but the missing
-        # package isn't installed and auth login fails at runtime.
-        & $UvExe sync --python 3.12
-        if ($LASTEXITCODE -ne 0) { Die "uv sync failed" }
-    } finally { Pop-Location }
+        # 把 stderr 合併到 stdout，避免 PowerShell 把 stderr 訊息當成 error
+        & $UvExe python install 3.12 2>&1 | ForEach-Object { Write-Host $_ }
+        # uv python install 對「已裝過」可能回 exit 1，這不是真失敗 — 不 Die
+        # NEVER use --frozen — 會盲信 uv.lock；缺 dep（如 v1.1.66 之前漏 ldap3）
+        # 仍「成功」但實際少裝 package。一律完整 reconcile。
+        & $UvExe sync --python 3.12 2>&1 | ForEach-Object { Write-Host $_ }
+        if ($LASTEXITCODE -ne 0) {
+            $ErrorActionPreference = $prevEAP
+            Die "uv sync failed (exit $LASTEXITCODE)"
+        }
+    } finally {
+        Pop-Location
+        $ErrorActionPreference = $prevEAP
+    }
     $venvPython = Join-Path $InstallDir '.venv\Scripts\python.exe'
     if (-not (Test-Path $venvPython)) {
         Die "Python venv creation failed"
