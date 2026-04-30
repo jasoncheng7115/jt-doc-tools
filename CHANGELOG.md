@@ -4,6 +4,16 @@
 
 ---
 
+## [1.1.66] - 2026-04-30
+
+### 修正（Windows ARM64 浮水印中文方框）
+
+- **`pdf-watermark` Windows CJK fallback 補 simsun**：v1.1.60 加了 CJK glyph 偵測，但 fallback 字型清單只列 `msjh.ttc / mingliu.ttc`，這兩個是繁中 Windows 才會內建的 Microsoft JhengHei / 細明體；簡中或國際版（含 Win11 ARM64）只有 `simsun.ttc`，結果仍 fall-through 到 Arial 變方框。本版把 `simsun.ttc / simhei.ttf / msyh.ttc / msyhbd.ttc` 一併加進 regular + bold 清單。
+- **影響範圍**：浮水印工具用「文字模式」打中文時。
+- **驗證**：在 Win11 ARM64（無 msjh）跑 `text-png?text=機密文件 RESTRICTED` 取得正常字體 PNG，不再 .notdef tofu。
+
+---
+
 ## [1.1.65] - 2026-04-29
 
 ### 變更（text-diff 加拖檔）

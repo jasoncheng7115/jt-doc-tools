@@ -72,6 +72,9 @@ _CJK_FONT_LISTS = {
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "C:/Windows/Fonts/msjh.ttc",
         "C:/Windows/Fonts/mingliu.ttc",
+        "C:/Windows/Fonts/simsun.ttc",
+        "C:/Windows/Fonts/simhei.ttf",
+        "C:/Windows/Fonts/msyh.ttc",
         "C:/Windows/Fonts/arialuni.ttf",
     ],
     "bold": [
@@ -82,6 +85,9 @@ _CJK_FONT_LISTS = {
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "C:/Windows/Fonts/msjhbd.ttc",
         "C:/Windows/Fonts/msjh.ttc",
+        "C:/Windows/Fonts/msyhbd.ttc",
+        "C:/Windows/Fonts/simhei.ttf",
+        "C:/Windows/Fonts/simsun.ttc",
         "C:/Windows/Fonts/arialbd.ttf",
     ],
     "italic": [
@@ -112,26 +118,30 @@ def _has_cjk(text: str) -> bool:
 
 def _font_covers_cjk(font: ImageFont.FreeTypeFont) -> bool:
     """Test whether the loaded face actually has glyphs for a representative
-    CJK char. Pillow happily loads non-CJK fonts (Helvetica, Arial) and renders
-    missing chars as the .notdef glyph (a hollow rectangle / tofu).
+    CJK char. Pillow happily loads non-CJK fonts (Helvetica, Arial, DejaVuSans)
+    and renders missing chars as the .notdef glyph (an empty square /「豆腐」).
 
-    We check via the font's underlying TT cmap when possible; fall back to
-    measuring `getbbox("中")` width — for missing glyph the width tends to
-    be 0 or oddly small."""
+    Cheap-and-correct trick: render two visually distinct CJK chars and
+    compare their pixel data. A real CJK font produces different masks for
+    different chars; a non-CJK font produces the *same* .notdef mask for
+    every missing glyph. Width / bbox heuristics don't work — .notdef has a
+    perfectly real bbox like (0, 45, 120, 221)."""
     try:
-        # Fast path: ask freetype for the glyph index of '中'. 0 = .notdef.
-        gid = font.getmask("中").size
-        if gid == (0, 0):
-            return False
-    except Exception:
-        pass
-    try:
-        bbox = font.getbbox("中")
-        # Real CJK glyph is roughly square; missing glyph is usually width=0
-        # or just a thin rectangle outline.
-        return bbox[2] - bbox[0] > 4
+        m1 = font.getmask("中")
+        m2 = font.getmask("永")
     except Exception:
         return True  # don't reject if we can't measure
+    # Different sizes → different glyphs → real CJK support
+    if m1.size != m2.size:
+        return True
+    try:
+        return bytes(m1) != bytes(m2)
+    except Exception:
+        # Some Pillow versions don't expose bytes() on Imaging objects
+        try:
+            return m1.tobytes() != m2.tobytes()
+        except Exception:
+            return True
 
 
 def _load_font(
