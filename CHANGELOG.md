@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.77] - 2026-04-30
+
+### 修正（install.ps1 改用 cmd /c 跳脫 PowerShell）
+
+- v1.1.66 起在 elevated `Start-Process -Verb RunAs` + `*>&1 | Out-File` redirect 環境下，PowerShell 的 native-command 處理機制怎麼改都不對：`& $UvExe`、`Start-Process` + `-RedirectStandardError`、`Write-Output`、`Write-Host` 全試過，連最簡單的 `Write-Output "==>"` 都印不到 log file。本版改成把 uv 路徑寫成一個 `.cmd` 批次檔，再用 `cmd /c batPath args 2>&1` 呼叫 — cmd 是純 shell，沒有 PowerShell 的 stderr-as-error 問題，輸出穩定可預測。
+
+---
+
 ## [1.1.76] - 2026-04-30
 
 ### 修正（install.ps1 inline + Write-Output 取代 Run-Uv 函式）
