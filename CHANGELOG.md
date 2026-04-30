@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.71] - 2026-04-30
+
+### 修正（v1.1.66 起一直存在的 Windows 重裝 bug）
+
+- **install.ps1 重裝前必須先停服務**：之前的安裝流程在「cleaning non-bin files」階段嘗試刪掉舊的 `.venv`，但服務若還在跑，`.venv\Scripts\python.exe` 是 file-locked 的，`Remove-Item -ErrorAction SilentlyContinue` 靜默失敗 → 殘留半個 `.venv`（沒 pyvenv.cfg / 沒 site-packages，只有 47KB shim python.exe）→ uv sync 看到「壞掉的 venv」既不重建也不報錯 → 結果 ldap3 沒裝、jt-doc-tools 自動 register 成 1.1.47 editable install。本版在 cleanup 前先 `Stop-Service jt-doc-tools` + 釋放 file handle 等 2 秒，並在 cleanup 後驗 `.venv` 真的不存在才往下走，確保 `Setup-Python` 從乾淨狀態建 venv，並且 `Install-Cli` 一定會跑到、`jtdt.cmd` 一定會被建立。
+
+---
+
 ## [1.1.70] - 2026-04-30
 
 ### 修正（v1.1.69 配套：Windows install.ps1 卡死）

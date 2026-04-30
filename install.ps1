@@ -193,10 +193,32 @@ function Fetch-Code {
     # clone into a temp dir and copy contents in. We can't clone directly
     # into $InstallDir because git refuses non-empty destinations.
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+    # IMPORTANT: stop the service first if it's running. Otherwise
+    # `.venv\Scripts\python.exe` is held open by the running process and
+    # `Remove-Item` silently fails (we use SilentlyContinue), leaving a
+    # corrupted `.venv` that uv sync won't recreate. End result is no real
+    # venv, no ldap3, jt-doc-tools registers as old version. v1.1.66~v1.1.69 bug.
+    $svc = Get-Service jt-doc-tools -ErrorAction SilentlyContinue
+    if ($svc -and $svc.Status -eq 'Running') {
+        Log "Stopping running service before refreshing files ..."
+        Stop-Service jt-doc-tools -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
     Warn "$InstallDir is not a git repo; cleaning non-bin files (keeping bin/uv.exe and bin/nssm.exe) ..."
     Get-ChildItem $InstallDir -Force |
         Where-Object { $_.Name -ne 'bin' } |
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    # Verify .venv actually went away — if not, the service stop above didn't
+    # release file handles in time, and uv sync will see "broken venv" and
+    # never regenerate it. Fail loud instead of silently producing a half-baked install.
+    if (Test-Path "$InstallDir\.venv") {
+        Warn ".venv still present after cleanup; force-removing again ..."
+        Start-Sleep -Seconds 2
+        Remove-Item "$InstallDir\.venv" -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path "$InstallDir\.venv") {
+            Die ".venv could not be removed (file locked). Run: Stop-Service jt-doc-tools -Force; then re-run installer."
+        }
+    }
 
     $tmpSrc = Join-Path $env:TEMP "jtdt-src-$(Get-Date -Format yyyyMMddHHmmss)"
     if (Test-Path $tmpSrc) {
