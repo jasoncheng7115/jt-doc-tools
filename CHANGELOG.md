@@ -4,6 +4,15 @@
 
 ---
 
+## [1.1.72] - 2026-04-30
+
+### 修正（install.ps1 sterr → fatal 真根因）
+
+- **`$ErrorActionPreference = 'Stop'` 把 uv 寫到 stderr 的訊息變成 fatal**：v1.1.66 起 install.ps1 在 setup_python 階段不管怎麼改都死，logs 結束在「Setting up isolated Python environment」之後；root cause 是 uv 對「Python 3.12 已裝」這類訊息寫 stderr，PowerShell 在 `Stop` 模式下會把任何 stderr 寫入當成 terminating error。本版在 setup_python 段暫時改成 `Continue` 並把 stderr 合併到 stdout，讓 uv 順利跑完，全套 venv / ldap3 / jtdt.cmd 才會建好。
+- 跑 `Setup-Python` 後立刻就會 `Install-Cli`，所以 `jtdt.cmd` 也會被建立。
+
+---
+
 ## [1.1.71] - 2026-04-30
 
 ### 修正（v1.1.66 起一直存在的 Windows 重裝 bug）
