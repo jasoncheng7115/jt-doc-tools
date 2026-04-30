@@ -18,4 +18,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Original / backup screenshots — local-only, not for publish
 docs/screenshots-backup/
