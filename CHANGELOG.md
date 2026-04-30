@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.78] - 2026-04-30
+
+### 修正（install.ps1 真正解：`$Args` 是 PowerShell 保留字）
+
+- v1.1.77 的 `Invoke-Uv` 函式 `param([string]$Args, ...)` 用了 PowerShell 自動變數 `$Args` 當 parameter 名，PS 會默默把它當外層 `$args` 吃掉，function body 內 `$Args` 始終為空 → cmd /c 跑了空指令 → 立刻 fall through 到 venv 檢查死掉，且我的 Write-Output 也根本沒執行（因為 PowerShell 在參數綁定時就出錯但靜默吞掉）。本版改名 `$UvArgs` 並用顯式 `-UvArgs/-Label` 命名引數呼叫。
+
+---
+
 ## [1.1.77] - 2026-04-30
 
 ### 修正（install.ps1 改用 cmd /c 跳脫 PowerShell）
