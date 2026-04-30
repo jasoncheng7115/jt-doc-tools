@@ -427,6 +427,15 @@ install_uv() {
 fetch_code() {
     if [ -d "$INSTALL_DIR/.git" ]; then
         log "已存在安裝，更新 git 內容 ..."
+        # 安裝後 install dir chown 給 SVC_USER (jtdt)，root 跑 git 會撞
+        # 「dubious ownership in repository」(git 2.35.2+ 安全機制)。
+        # 把 install dir 加進系統級 safe.directory 白名單，永久解決，
+        # 後續 `sudo jtdt update` 即使是舊版 cli.py 也能正常 git pull。
+        if [ $HAS_GIT -eq 1 ]; then
+            git config --system --add safe.directory "$INSTALL_DIR" 2>/dev/null \
+                || git config --global --add safe.directory "$INSTALL_DIR" 2>/dev/null \
+                || true
+        fi
         (cd "$INSTALL_DIR" && git fetch --depth=1 origin "$REPO_BRANCH" && git reset --hard "origin/$REPO_BRANCH")
         return 0
     fi
@@ -436,6 +445,10 @@ fetch_code() {
     mkdir -p "$INSTALL_DIR"
     if [ $HAS_GIT -eq 1 ]; then
         log "從 $REPO_URL clone 程式碼 ..."
+        # 預先設 safe.directory，新 install 下次 sudo jtdt update 也能用
+        git config --system --add safe.directory "$INSTALL_DIR" 2>/dev/null \
+            || git config --global --add safe.directory "$INSTALL_DIR" 2>/dev/null \
+            || true
         git clone --depth=1 --branch "$REPO_BRANCH" "$REPO_URL" "$INSTALL_DIR"
     else
         log "git 未安裝，改用 tarball 下載 ..."
