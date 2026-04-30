@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.76] - 2026-04-30
+
+### 修正（install.ps1 inline + Write-Output 取代 Run-Uv 函式）
+
+- v1.1.75 用 nested function `Run-Uv` 包 Start-Process，但 elevated session 的 `*>&1 | Out-File` redirect 對 `Write-Host` 的 information stream 捕捉不穩，連 `==> uv python install 3.12` 開頭訊息都印不出來，使我們完全看不到 install 在哪個步驟死。本版改成 inline 三段呼叫 + `Write-Output`（去 stdout 主流，必被 `*>&1` 捕捉），並印出每段 exit code，方便排查。
+
+---
+
 ## [1.1.75] - 2026-04-30
 
 ### 修正（install.ps1 改用 Start-Process 隔離 uv）
