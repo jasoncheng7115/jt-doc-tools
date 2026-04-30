@@ -258,35 +258,35 @@ function Setup-Python {
     # (the Store stub is not a real Python, it pops the Store and uv crashes).
     $env:UV_PYTHON_PREFERENCE = 'only-managed'
     Push-Location $InstallDir
-    # 重要：暫時把 $ErrorActionPreference 從 'Stop' 改成 'Continue'。
-    # 因為 uv 對「Python 3.12 已裝」的提示是寫到 stderr，搭配 'Stop' 會被當成
-    # terminating error 直接讓 install.ps1 在 setup_python 第一行就死掉、無 log。
-    # 同樣地 uv 在拉 packages 時也會大量寫進度訊息到 stderr。
-    $prevEAP = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
+    # 用 Start-Process 隔離 uv 子行程，避免 PowerShell 的 native-command 錯誤
+    # 處理（在 elevated session 對 `& $UvExe` + stderr 輸出會詭異地 throw）。
+    # 把 stdout / stderr 各自寫到 temp file，跑完後 Get-Content 印出來、把
+    # 退出碼 explicit 取。
+    function Run-Uv {
+        param([string[]]$ArgList, [string]$Label)
+        $stdoutTmp = Join-Path $env:TEMP "uv-out-$([guid]::NewGuid().ToString('N')).log"
+        $stderrTmp = Join-Path $env:TEMP "uv-err-$([guid]::NewGuid().ToString('N')).log"
+        Write-Host "==> $Label"
+        $p = Start-Process -FilePath $UvExe -ArgumentList $ArgList `
+            -NoNewWindow -Wait -PassThru `
+            -RedirectStandardOutput $stdoutTmp -RedirectStandardError $stderrTmp
+        if (Test-Path $stdoutTmp) { Get-Content $stdoutTmp | ForEach-Object { Write-Host $_ } }
+        if (Test-Path $stderrTmp) { Get-Content $stderrTmp | ForEach-Object { Write-Host $_ } }
+        Remove-Item $stdoutTmp, $stderrTmp -Force -ErrorAction SilentlyContinue
+        return $p.ExitCode
+    }
     try {
-        & $UvExe python install 3.12
-        # uv python install 對「已裝過」可能回 exit 1，這不是真失敗 — 不 Die
-        # 明確先建 venv：uv sync 在某些情境（含 elevated session 經 *>&1 redirect）
-        # 偶爾不會自動建立 .venv，導致後面整套失敗。直接 `uv venv` 強制建好，
-        # 再用 `uv sync` 把依賴塞進去。
-        Write-Host "==> Creating venv via uv venv ..."
-        & $UvExe venv --python 3.12 .venv
-        if ($LASTEXITCODE -ne 0) {
-            $ErrorActionPreference = $prevEAP
-            Die "uv venv failed (exit $LASTEXITCODE)"
-        }
+        # uv python install — exit 1 對「已裝過」算正常，忽略
+        Run-Uv @('python','install','3.12') 'uv python install 3.12' | Out-Null
+        # 顯式先建 .venv（避免某些情境 uv sync 不自動建）
+        $rc = Run-Uv @('venv','--python','3.12','.venv') 'uv venv --python 3.12 .venv'
+        if ($rc -ne 0) { Die "uv venv failed (exit $rc)" }
         # NEVER use --frozen — 會盲信 uv.lock；缺 dep（如 v1.1.66 之前漏 ldap3）
         # 仍「成功」但實際少裝 package。一律完整 reconcile。
-        Write-Host "==> Installing dependencies via uv sync ..."
-        & $UvExe sync --python 3.12
-        if ($LASTEXITCODE -ne 0) {
-            $ErrorActionPreference = $prevEAP
-            Die "uv sync failed (exit $LASTEXITCODE)"
-        }
+        $rc = Run-Uv @('sync','--python','3.12') 'uv sync --python 3.12'
+        if ($rc -ne 0) { Die "uv sync failed (exit $rc)" }
     } finally {
         Pop-Location
-        $ErrorActionPreference = $prevEAP
     }
     $venvPython = Join-Path $InstallDir '.venv\Scripts\python.exe'
     if (-not (Test-Path $venvPython)) {

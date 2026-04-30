@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.75] - 2026-04-30
+
+### 修正（install.ps1 改用 Start-Process 隔離 uv）
+
+- **uv 跑在 child process，徹底繞開 PowerShell native-command 詭異 throw**：v1.1.66~v1.1.74 一直在 `& $UvExe sync` 那行死，但任何 EAP / pipe / redirect 設定都救不了 — 真正原因是 PowerShell 在 elevated `Start-Process -Verb RunAs` 啟的 session 對 `&` 呼叫的 native command 寫 stderr 行為極端不可預期。本版改用 `Start-Process -NoNewWindow -Wait -PassThru -RedirectStandardError $tmp` 把 uv 完全隔離成 child process，stdout / stderr 各自寫到 temp file，跑完統一印 log + 看 ExitCode。最後 venv / ldap3 / jtdt.cmd 全部建好。
+
+---
+
 ## [1.1.74] - 2026-04-30
 
 ### 修正（install.ps1 強制 uv venv 建立 .venv）
