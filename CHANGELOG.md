@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.74] - 2026-04-30
+
+### 修正（install.ps1 強制 uv venv 建立 .venv）
+
+- **顯式呼叫 `uv venv` 強制建立 .venv**：v1.1.66 起 install.ps1 在 elevated + *>&1 redirect 環境下，`uv sync` 偶爾不會自動建立 `.venv`，導致後面整套失敗（沒 ldap3 / 沒 jtdt.cmd）。本版加一行 `& uv venv --python 3.12 .venv` 在 sync 之前先把 venv 鋼架建好，再讓 sync 填入依賴。
+
+---
+
 ## [1.1.73] - 2026-04-30
 
 ### 修正（install.ps1 真正最後一里）

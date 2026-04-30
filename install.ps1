@@ -265,13 +265,20 @@ function Setup-Python {
     $prevEAP = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        # 不要 pipe (`| ForEach`) 也不用 2>&1 redirect — 兩者都可能讓 uv 偵測到
-        # non-tty 後行為改變，導致 .venv 沒被建起來。直接呼叫，外層的
-        # `*>&1 | Out-File` 會捕捉所有輸出（含 stderr）。
         & $UvExe python install 3.12
         # uv python install 對「已裝過」可能回 exit 1，這不是真失敗 — 不 Die
+        # 明確先建 venv：uv sync 在某些情境（含 elevated session 經 *>&1 redirect）
+        # 偶爾不會自動建立 .venv，導致後面整套失敗。直接 `uv venv` 強制建好，
+        # 再用 `uv sync` 把依賴塞進去。
+        Write-Host "==> Creating venv via uv venv ..."
+        & $UvExe venv --python 3.12 .venv
+        if ($LASTEXITCODE -ne 0) {
+            $ErrorActionPreference = $prevEAP
+            Die "uv venv failed (exit $LASTEXITCODE)"
+        }
         # NEVER use --frozen — 會盲信 uv.lock；缺 dep（如 v1.1.66 之前漏 ldap3）
         # 仍「成功」但實際少裝 package。一律完整 reconcile。
+        Write-Host "==> Installing dependencies via uv sync ..."
         & $UvExe sync --python 3.12
         if ($LASTEXITCODE -ne 0) {
             $ErrorActionPreference = $prevEAP
