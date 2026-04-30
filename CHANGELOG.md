@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.73] - 2026-04-30
+
+### 修正（install.ps1 真正最後一里）
+
+- **不要對 uv 加 pipe / redirect**：v1.1.72 改成 `2>&1 | ForEach-Object { Write-Host $_ }` 反而觸發 uv 偵測 non-tty → 不建 .venv → install 死在「Python venv creation failed」。本版 setup_python 直接呼叫 `& $UvExe sync --python 3.12`，不加 pipe 也不加 redirect；外層 `*>&1 | Out-File` 已會捕捉所有輸出含 stderr。
+
+---
+
 ## [1.1.72] - 2026-04-30
 
 ### 修正（install.ps1 sterr → fatal 真根因）

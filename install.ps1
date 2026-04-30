@@ -265,12 +265,14 @@ function Setup-Python {
     $prevEAP = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        # 把 stderr 合併到 stdout，避免 PowerShell 把 stderr 訊息當成 error
-        & $UvExe python install 3.12 2>&1 | ForEach-Object { Write-Host $_ }
+        # 不要 pipe (`| ForEach`) 也不用 2>&1 redirect — 兩者都可能讓 uv 偵測到
+        # non-tty 後行為改變，導致 .venv 沒被建起來。直接呼叫，外層的
+        # `*>&1 | Out-File` 會捕捉所有輸出（含 stderr）。
+        & $UvExe python install 3.12
         # uv python install 對「已裝過」可能回 exit 1，這不是真失敗 — 不 Die
         # NEVER use --frozen — 會盲信 uv.lock；缺 dep（如 v1.1.66 之前漏 ldap3）
         # 仍「成功」但實際少裝 package。一律完整 reconcile。
-        & $UvExe sync --python 3.12 2>&1 | ForEach-Object { Write-Host $_ }
+        & $UvExe sync --python 3.12
         if ($LASTEXITCODE -ne 0) {
             $ErrorActionPreference = $prevEAP
             Die "uv sync failed (exit $LASTEXITCODE)"
