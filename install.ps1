@@ -257,51 +257,24 @@ function Setup-Python {
     # Force uv to use its own managed Python; avoid Microsoft Store python.exe stub
     # (the Store stub is not a real Python, it pops the Store and uv crashes).
     $env:UV_PYTHON_PREFERENCE = 'only-managed'
-    Push-Location $InstallDir
-    # 用 cmd /c 包裝 uv，跳開 PowerShell 對 native command stderr 的詭異處理。
-    # cmd 是純粹的 shell，stderr 不會被當成 throw。
-    # 把 uv 路徑寫進 .cmd 批次檔避開 quoting 噩夢。
-    $batPath = Join-Path $env:TEMP "jtdt-uv-runner.cmd"
-    @"
-@echo off
-"$UvExe" %*
-exit /b %ERRORLEVEL%
-"@ | Set-Content -Path $batPath -Encoding ASCII
-
-    # 注意：param 名不能用 $Args（PowerShell 自動變數），會被當外層 args 吃掉。
-    function Invoke-Uv {
-        param([string]$UvArgs, [string]$Label)
-        Write-Output "==> $Label"
-        $output = cmd /c "`"$batPath`" $UvArgs 2>&1"
-        $rc = $LASTEXITCODE
-        $output | Write-Output
-        Write-Output "[debug] exit=$rc"
-        return $rc
+    # 完全跳脫 PowerShell：把 venv 建立 / uv sync / smoke test 全寫成純
+    # cmd 批次檔（github/setup-python.cmd），這裡只負責 cmd /c 呼叫它。
+    # PowerShell 的 native-command 處理在 elevated session + *>&1 redirect
+    # 環境下有太多怪行為（Args 自動變數、Out-Host 吞輸出、Stop 把 stderr
+    # 當 fatal 等等），不如直接交給 cmd 跑。
+    $setupBat = Join-Path $InstallDir 'setup-python.cmd'
+    if (-not (Test-Path $setupBat)) {
+        Die "setup-python.cmd not found at $setupBat"
     }
-
-    try {
-        # uv python install — exit 1 對「已裝過」算正常，忽略
-        Invoke-Uv -UvArgs 'python install 3.12' -Label 'uv python install 3.12' | Out-Null
-
-        # 顯式建 venv
-        $rc = Invoke-Uv -UvArgs 'venv --python 3.12 .venv' -Label 'uv venv --python 3.12 .venv'
-        if ($rc -ne 0) { Die "uv venv failed (exit $rc)" }
-
-        # NEVER use --frozen — 會盲信 uv.lock；缺 dep 仍「成功」實際少裝。
-        $rc = Invoke-Uv -UvArgs 'sync --python 3.12' -Label 'uv sync --python 3.12'
-        if ($rc -ne 0) { Die "uv sync failed (exit $rc)" }
-    } finally {
-        Pop-Location
-        Remove-Item $batPath -Force -ErrorAction SilentlyContinue
-    }
-    $venvPython = Join-Path $InstallDir '.venv\Scripts\python.exe'
-    if (-not (Test-Path $venvPython)) {
-        Die "Python venv creation failed"
-    }
-    Log "Verifying critical imports ..."
-    & $venvPython -c "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx"
-    if ($LASTEXITCODE -ne 0) {
-        Die "Critical import smoke test failed - install incomplete"
+    cmd /c "`"$setupBat`" `"$InstallDir`" 2>&1" | ForEach-Object { Write-Output $_ }
+    $rc = $LASTEXITCODE
+    if ($rc -ne 0) {
+        switch ($rc) {
+            2 { Die "uv venv failed" }
+            3 { Die "uv sync failed" }
+            4 { Die "Critical import smoke test failed - install incomplete (deps not actually installed)" }
+            default { Die "Setup-Python failed (exit $rc)" }
+        }
     }
     Ok "Python environment ready: $InstallDir\.venv"
 }

@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.79] - 2026-04-30
+
+### 修正（install.ps1 完全棄用 PowerShell 跑 uv，改純 cmd 批次檔）
+
+- v1.1.66~v1.1.78 試了七種寫法都救不了 PowerShell 在 elevated `Start-Process -Verb RunAs` + `*>&1 | Out-File` redirect 環境下對 native command 的詭異行為（Out-Host 吞輸出、`$Args` 是保留字、`Stop` 把 stderr 當 fatal、`-RedirectStandardError` 不可靠等）。本版徹底投降：把 venv 建立 + uv sync + import smoke test 全部寫成純 cmd 批次檔 `setup-python.cmd`，install.ps1 只 `cmd /c` 呼叫它並把 exit code 對應到 Die 訊息。pure cmd shell 沒有 PowerShell 的奇怪行為，輸出穩定可預測。
+
+---
+
 ## [1.1.78] - 2026-04-30
 
 ### 修正（install.ps1 真正解：`$Args` 是 PowerShell 保留字）
