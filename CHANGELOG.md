@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.80] - 2026-04-30
+
+### 修正（setup-python.cmd 純 ASCII + CRLF）
+
+- 原本 setup-python.cmd 含 em-dash (`—`) UTF-8 字元，cmd.exe 解析時把 byte sequence `e2 80 94` 當成奇怪命令丟錯，setup_python 一進去就死 exit 255。本版重寫成純 ASCII（dash 用 `-`）+ Windows CRLF 行尾。同時 install.ps1 加 debug Write-Output 印 `$InstallDir` / `$setupBat`，方便客戶遇到問題時 attach log 給我們看。
+
+---
+
 ## [1.1.79] - 2026-04-30
 
 ### 修正（install.ps1 完全棄用 PowerShell 跑 uv，改純 cmd 批次檔）
