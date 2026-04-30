@@ -239,12 +239,20 @@ function Setup-Python {
     try {
         & $UvExe python install 3.12
         if ($LASTEXITCODE -ne 0) { Die "uv python install 3.12 failed" }
-        & $UvExe sync --frozen --python 3.12
-        if ($LASTEXITCODE -ne 0) { & $UvExe sync --python 3.12 }
+        # NEVER use --frozen — it blindly trusts uv.lock. If lock is missing
+        # a dep (eg. ldap3 in v1.1.66 lock), uv "succeeds" but the missing
+        # package isn't installed and auth login fails at runtime.
+        & $UvExe sync --python 3.12
         if ($LASTEXITCODE -ne 0) { Die "uv sync failed" }
     } finally { Pop-Location }
-    if (-not (Test-Path (Join-Path $InstallDir '.venv\Scripts\python.exe'))) {
+    $venvPython = Join-Path $InstallDir '.venv\Scripts\python.exe'
+    if (-not (Test-Path $venvPython)) {
         Die "Python venv creation failed"
+    }
+    Log "Verifying critical imports ..."
+    & $venvPython -c "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx"
+    if ($LASTEXITCODE -ne 0) {
+        Die "Critical import smoke test failed - install incomplete"
     }
     Ok "Python environment ready: $InstallDir\.venv"
 }

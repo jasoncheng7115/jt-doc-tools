@@ -1,4 +1,4 @@
-# Jason Tools 文件工具箱 v1.1.67
+# Jason Tools 文件工具箱 v1.1.68
 
 > 整合式 PDF / Office 文件處理平台。包含 27 個工具：**表單自動填寫**、**用印與簽名**、**浮水印**、**N-up 多頁合併**、**檔案合併 / 分拆 / 轉向 / 頁面整理 / 頁碼**、**文書轉 PDF / 圖片**、**擷取文字 / 圖片 / 附件**、**字數統計**、**註解整理 / 清除 / 平面化**、**敏感資料去識別化**、**PDF 加密 / 解密**、**中繼資料清除**、**隱藏內容掃描**、**文件差異比對**、**文字差異比對**、**頁面編輯器**、**壓縮**、**AES 加密壓縮檔**。
 >
@@ -176,6 +176,32 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 <sup>†</sup> Linux / macOS 用 `sudo`；Windows 沒有 `sudo`，請改成「以系統管理員身分執行 PowerShell」後跑 `jtdt update` / `jtdt uninstall`。
 
 > **升級流程**：自動停服務 → 備份 `data/` → `git pull` → `uv sync` → 重啟 → 健康檢查。最近 3 份備份會自動保留。
+
+---
+
+## 緊急復原（鎖在外面、忘密碼、認證設定錯）
+
+啟用 LDAP / AD 認證或本機認證後若不小心鎖死自己（例：AD 設定錯、admin 忘密碼、伺服器搬遷後 LDAP URI 對不上），全部可在伺服器命令列復原，**不需要重灌、不會掉資料**：
+
+```bash
+# 看目前認證狀態
+sudo jtdt auth show
+
+# 切回未啟用認證（最快解封；所有 session 失效）
+sudo jtdt auth disable
+sudo jtdt restart
+
+# 改用本機帳號模式（保留既有使用者）
+sudo jtdt auth set-local
+sudo jtdt restart
+
+# 重設管理員密碼（互動 prompt 輸入兩次新密碼）
+sudo jtdt reset-password jtdt-admin
+```
+
+> Windows 沒有 `sudo`，請以「系統管理員身分執行 PowerShell」後直接跑 `jtdt auth disable` / `jtdt reset-password jtdt-admin`。
+
+復原後若要重新啟用 LDAP / AD，可在 web 設定頁重新填一次參數，前述切換**不會清掉**舊的使用者 / 角色 / 權限資料（只清 session，所以舊 cookie 失效）。
 
 ---
 

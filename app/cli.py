@@ -288,6 +288,49 @@ def _is_admin() -> bool:
     return os.geteuid() == 0
 
 
+def _install_owner(root: Path) -> Optional[tuple[int, int]]:
+    """Return (uid, gid) that owns the install dir on Linux/macOS, None on Windows.
+
+    Used to restore ownership after `sudo jtdt update` writes new files as
+    root. Also tells us when to set `safe.directory` for git so it doesn't
+    refuse to operate on a differently-owned repo (git 2.35.2+ behaviour)."""
+    if _is_windows():
+        return None
+    try:
+        st = root.stat()
+        return (st.st_uid, st.st_gid)
+    except Exception:
+        return None
+
+
+def _git_env_for(root: Path) -> dict[str, str]:
+    """Return an env dict with `safe.directory=<root>` set so git won't
+    error out with `fatal: detected dubious ownership in repository`. This
+    happens when ``sudo jtdt update`` runs git as root against a repo
+    chowned to a service user (`jtdt` on Linux)."""
+    env = os.environ.copy()
+    if not _is_windows():
+        env["GIT_CONFIG_COUNT"] = "1"
+        env["GIT_CONFIG_KEY_0"] = "safe.directory"
+        env["GIT_CONFIG_VALUE_0"] = str(root)
+    return env
+
+
+def _restore_ownership(root: Path, owner: Optional[tuple[int, int]]) -> None:
+    """Recursively chown the install dir back to the original owner. Called
+    after git pull / uv sync on Linux when those ran as root but the install
+    dir is owned by the service user (so the service can keep reading)."""
+    if not owner or _is_windows():
+        return
+    uid, gid = owner
+    if uid == 0:
+        return  # Was root-owned to begin with, no need to restore
+    try:
+        subprocess.call(["chown", "-R", f"{uid}:{gid}", str(root)])
+    except Exception as exc:
+        print(f"警告：恢復 {root} 擁有者失敗：{exc}", file=sys.stderr)
+
+
 def svc_update() -> int:
     """Pull latest release and re-sync deps. Backups data dir first."""
     if not _is_admin():
@@ -299,6 +342,7 @@ def svc_update() -> int:
         return 1
 
     root = _install_root()
+    owner = _install_owner(root)
     if not (root / ".git").exists():
         print(f"安裝目錄 {root} 不是 git repo，無法 git pull", file=sys.stderr)
         print(f"請重新跑安裝腳本以升級", file=sys.stderr)
@@ -329,31 +373,58 @@ def svc_update() -> int:
             print(f"  清掉舊備份：{stale}")
             shutil.rmtree(stale, ignore_errors=True)
 
-    # 3. git pull
+    # 3. git pull (with safe.directory so it works on differently-owned repos)
     print("從 GitHub 拉新版 ...")
-    rc = _run(["git", "-C", str(root), "fetch", "--tags", "origin"])
+    git_env = _git_env_for(root)
+    rc = subprocess.call(
+        ["git", "-C", str(root), "fetch", "--tags", "origin"], env=git_env)
     if rc != 0:
         print("git fetch 失敗，回滾：啟動原服務", file=sys.stderr)
+        _restore_ownership(root, owner)
         svc_start()
         return rc
-    rc = _run(["git", "-C", str(root), "pull", "--ff-only", "origin", "main"])
+    rc = subprocess.call(
+        ["git", "-C", str(root), "pull", "--ff-only", "origin", "main"], env=git_env)
     if rc != 0:
         print("git pull 失敗（可能本地有未提交變更），回滾", file=sys.stderr)
+        _restore_ownership(root, owner)
         svc_start()
         return rc
 
-    # 4. uv sync
+    # 4. uv sync — never use --frozen, lockfile may be stale (see v1.1.68 fix).
+    # Always reconcile against pyproject.toml so missing deps (eg. ldap3 in
+    # uv.lock < 1.1.68) get installed.
     uv = shutil.which("uv") or str(root / "bin" / "uv")
     if not Path(uv).exists() and not shutil.which("uv"):
         print("找不到 uv 指令，無法同步依賴", file=sys.stderr)
+        _restore_ownership(root, owner)
         svc_start()
         return 1
     print("同步 Python 依賴（uv sync）...")
     rc = subprocess.call([uv, "sync"], cwd=str(root))
     if rc != 0:
         print("uv sync 失敗，回滾", file=sys.stderr)
+        _restore_ownership(root, owner)
         svc_start()
         return rc
+
+    # 4b. Smoke-test critical imports — catches the "uv said OK but actually
+    # didn't install some dep" class of bug that hit the v1.1.66 customer.
+    venv_py = root / ".venv" / "bin" / "python"
+    if not venv_py.exists() and _is_windows():
+        venv_py = root / ".venv" / "Scripts" / "python.exe"
+    if venv_py.exists():
+        print("驗證關鍵依賴 (fastapi / fitz / ldap3 / PIL / pdfplumber / docx / odf / pyzipper) ...")
+        rc = subprocess.call([str(venv_py), "-c",
+            "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx"])
+        if rc != 0:
+            print("依賴 import 失敗 — 升級可能不完整，回滾", file=sys.stderr)
+            _restore_ownership(root, owner)
+            svc_start()
+            return rc
+
+    # 5. Restore ownership so the service user can read the new files
+    _restore_ownership(root, owner)
 
     # 5. Restart
     print("啟動新版服務 ...")
@@ -704,6 +775,90 @@ print(f"   所有現有 session 已失效，鎖定計數已歸零。")
     return subprocess.call(cmd)
 
 
+# --------------------------------------------------------------------- auth recovery (offline)
+
+def _run_auth_helper(snippet: str) -> int:
+    """Run a Python snippet inside the install venv with the data-dir env
+    set up. Used for offline auth-recovery commands (disable-auth, show-auth)
+    so they don't require the web service to be running."""
+    install_root = _install_root()
+    venv_python = install_root / ".venv" / "bin" / "python"
+    if not venv_python.exists() and _is_windows():
+        venv_python = install_root / ".venv" / "Scripts" / "python.exe"
+    if not venv_python.exists():
+        print(f"找不到 venv python: {venv_python}", file=sys.stderr)
+        return 1
+    header = (
+        "import os, sys\n"
+        f"os.environ.setdefault('JTDT_DATA_DIR', {repr(str(_data_dir()))})\n"
+        f"sys.path.insert(0, {repr(str(install_root))})\n"
+    )
+    return subprocess.call([str(venv_python), "-c", header + snippet])
+
+
+def svc_auth_show() -> int:
+    """Print the current auth backend + brief settings (no secrets)."""
+    return _run_auth_helper(
+        "from app.core import auth_settings\n"
+        "s = auth_settings.get()\n"
+        "backend = s.get('backend', 'off')\n"
+        "labels = {'off': '未啟用', 'local': '本機帳號', 'ldap': 'LDAP', 'ad': 'Active Directory'}\n"
+        "print(f'認證 backend：{backend} ({labels.get(backend, backend)})')\n"
+        "if backend in ('ldap', 'ad'):\n"
+        "    d = s.get('directory', {}) or {}\n"
+        "    print(f'  伺服器 URI：{d.get(\"uri\", \"(未設)\")}')\n"
+        "    print(f'  Search Base：{d.get(\"user_search_base\", \"(未設)\")}')\n"
+        "    print(f'  Bind DN：{d.get(\"bind_dn\", \"(未設)\")}')\n"
+        "    print(f'  TLS：{d.get(\"use_tls\", False)}')\n"
+    )
+
+
+def svc_auth_disable() -> int:
+    """Switch auth backend to 'off'. Sessions wiped, user/perm rows kept
+    so re-enabling later doesn't lose setup. Use this when LDAP/AD config
+    locks you out and you can't login to fix it via the web UI."""
+    if not _is_admin():
+        print("變更認證設定需要系統管理員權限：sudo jtdt auth disable",
+              file=sys.stderr)
+        return 1
+    print("即將把認證 backend 切回「未啟用」（所有 session 失效）...")
+    return _run_auth_helper(
+        "from app.core import auth_settings\n"
+        "before = auth_settings.get_backend()\n"
+        "if before == 'off':\n"
+        "    print('目前已是未啟用狀態，無需變更。'); raise SystemExit(0)\n"
+        "auth_settings.disable_auth(actor='cli', ip='localhost')\n"
+        "print(f'✓ 已從 {before} 切回 off。請重啟服務：jtdt restart')\n"
+    )
+
+
+def svc_auth_set_local() -> int:
+    """Switch auth backend to 'local' (keeps existing local users). If no
+    local admin exists yet, you still need ``jtdt reset-password jtdt-admin``
+    to seed/recover the seed admin."""
+    if not _is_admin():
+        print("變更認證設定需要系統管理員權限：sudo jtdt auth set-local",
+              file=sys.stderr)
+        return 1
+    return _run_auth_helper(
+        "from app.core import auth_settings, auth_db\n"
+        "auth_db.init()\n"
+        "before = auth_settings.get_backend()\n"
+        "if before == 'local':\n"
+        "    print('目前已是 local backend。'); raise SystemExit(0)\n"
+        "s = auth_settings.get()\n"
+        "s['backend'] = 'local'\n"
+        "auth_settings.save(s)\n"
+        "# Wipe sessions so old LDAP/AD cookies don't carry over\n"
+        "from app.core import db\n"
+        "conn = auth_db.conn()\n"
+        "with db.tx(conn):\n"
+        "    conn.execute('DELETE FROM sessions')\n"
+        "print(f'✓ 已從 {before} 切到 local backend。請重啟：jtdt restart')\n"
+        "print('  若要重設 admin 密碼，請跑：sudo jtdt reset-password jtdt-admin')\n"
+    )
+
+
 # --------------------------------------------------------------------- argparse
 
 def main(argv: list[str] | None = None) -> int:
@@ -729,6 +884,12 @@ def main(argv: list[str] | None = None) -> int:
     p_rpw.add_argument("username", help="要重設的本機帳號")
     p_rpw.add_argument("--password", help="直接給新密碼（避免互動 prompt；不建議在共享機器用）")
 
+    p_auth = sub.add_parser("auth", help="認證設定（緊急復原用）")
+    auth_sub = p_auth.add_subparsers(dest="auth_cmd", required=True)
+    auth_sub.add_parser("show", help="顯示目前認證 backend")
+    auth_sub.add_parser("disable", help="把認證 backend 切回 off（解除登入封鎖）")
+    auth_sub.add_parser("set-local", help="把認證 backend 切到 local（本機帳號）")
+
     args = p.parse_args(argv)
     table = {
         "start": svc_start,
@@ -748,6 +909,14 @@ def main(argv: list[str] | None = None) -> int:
         return svc_bind(args.addr)
     if args.cmd == "reset-password":
         return svc_reset_password(args.username, args.password)
+    if args.cmd == "auth":
+        if args.auth_cmd == "show":
+            return svc_auth_show()
+        if args.auth_cmd == "disable":
+            return svc_auth_disable()
+        if args.auth_cmd == "set-local":
+            return svc_auth_set_local()
+        return 1
     return table[args.cmd]()
 
 

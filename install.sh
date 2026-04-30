@@ -453,8 +453,16 @@ fetch_code() {
 setup_python() {
     log "建立獨立 Python 環境並安裝依賴 (uv sync) ..."
     cd "$INSTALL_DIR"
-    "$INSTALL_DIR/bin/uv" sync --frozen 2>/dev/null || "$INSTALL_DIR/bin/uv" sync
+    # 注意：絕不能用 --frozen — 那會盲信 uv.lock，若 lockfile 漏了某個 dep
+    # （v1.1.66 之前的 uv.lock 漏 ldap3 就是這樣），uv 會「成功」回傳但實際
+    # 少裝套件，最後使用者啟認證後 ldap3 import 失敗無法登入。
+    # 一律走完整 reconcile，與 pyproject.toml 比對後實際補裝。
+    "$INSTALL_DIR/bin/uv" sync || die "uv sync 失敗"
     [ -x "$INSTALL_DIR/.venv/bin/python" ] || die "Python venv 建立失敗"
+    log "驗證關鍵依賴可正常 import ..."
+    "$INSTALL_DIR/.venv/bin/python" -c \
+        "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx" \
+        || die "依賴 import 失敗 — 安裝不完整，請查看上方錯誤"
     ok "Python 環境就緒：$INSTALL_DIR/.venv"
 }
 
