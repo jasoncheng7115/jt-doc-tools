@@ -239,7 +239,10 @@ function Setup-Python {
     try {
         # uv python install 在較新版 uv 中對「已裝過」可能回 exit 1（"already installed"）。
         # 我們只關心「最後 venv 能不能建起來」，所以這裡不 Die；真失敗會在 uv sync 時爆。
-        & $UvExe python install 3.12 2>&1 | Out-Host
+        # 注意：別用 `| Out-Host` —— Start-Process -Verb RunAs 啟動的 elevated session
+        # 沒有附加 host，pipe 會吞掉輸出 + 可能 hang，導致 install.ps1 卡死無 log。
+        & $UvExe python install 3.12
+        $LASTEXITCODE = 0  # ignore "already installed" exit code
         # NEVER use --frozen — it blindly trusts uv.lock. If lock is missing
         # a dep (eg. ldap3 in v1.1.66 lock), uv "succeeds" but the missing
         # package isn't installed and auth login fails at runtime.

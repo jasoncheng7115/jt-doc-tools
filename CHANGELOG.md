@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.70] - 2026-04-30
+
+### 修正（v1.1.69 配套：Windows install.ps1 卡死）
+
+- **install.ps1 不再因 `Out-Host` 卡死**：v1.1.69 引入的 `& uv python install 3.12 2>&1 | Out-Host` 在以「系統管理員身分」啟動的 elevated PowerShell session 沒有附加 host，pipe 會吞掉輸出 + 可能 hang，導致 install.ps1 在「Setting up isolated Python environment」之後沒任何 log 卡死，最後 venv 沒建好、ldap3 沒裝、jt-doc-tools 自動 register 成 1.1.47 editable install。本版改成不 pipe，直接呼叫 + 手動把 `$LASTEXITCODE` 歸零跳過「already installed」訊號。
+
+---
+
 ## [1.1.69] - 2026-04-30
 
 ### 修正（v1.1.68 配套：讓舊版客戶也能升級）
