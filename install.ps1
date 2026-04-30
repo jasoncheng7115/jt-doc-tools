@@ -268,10 +268,11 @@ function Setup-Python {
 exit /b %ERRORLEVEL%
 "@ | Set-Content -Path $batPath -Encoding ASCII
 
+    # 注意：param 名不能用 $Args（PowerShell 自動變數），會被當外層 args 吃掉。
     function Invoke-Uv {
-        param([string]$Args, [string]$Label)
+        param([string]$UvArgs, [string]$Label)
         Write-Output "==> $Label"
-        $output = cmd /c "`"$batPath`" $Args 2>&1"
+        $output = cmd /c "`"$batPath`" $UvArgs 2>&1"
         $rc = $LASTEXITCODE
         $output | Write-Output
         Write-Output "[debug] exit=$rc"
@@ -280,14 +281,14 @@ exit /b %ERRORLEVEL%
 
     try {
         # uv python install — exit 1 對「已裝過」算正常，忽略
-        Invoke-Uv 'python install 3.12' 'uv python install 3.12' | Out-Null
+        Invoke-Uv -UvArgs 'python install 3.12' -Label 'uv python install 3.12' | Out-Null
 
         # 顯式建 venv
-        $rc = Invoke-Uv 'venv --python 3.12 .venv' 'uv venv --python 3.12 .venv'
+        $rc = Invoke-Uv -UvArgs 'venv --python 3.12 .venv' -Label 'uv venv --python 3.12 .venv'
         if ($rc -ne 0) { Die "uv venv failed (exit $rc)" }
 
         # NEVER use --frozen — 會盲信 uv.lock；缺 dep 仍「成功」實際少裝。
-        $rc = Invoke-Uv 'sync --python 3.12' 'uv sync --python 3.12'
+        $rc = Invoke-Uv -UvArgs 'sync --python 3.12' -Label 'uv sync --python 3.12'
         if ($rc -ne 0) { Die "uv sync failed (exit $rc)" }
     } finally {
         Pop-Location
