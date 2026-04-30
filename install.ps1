@@ -237,8 +237,9 @@ function Setup-Python {
     $env:UV_PYTHON_PREFERENCE = 'only-managed'
     Push-Location $InstallDir
     try {
-        & $UvExe python install 3.12
-        if ($LASTEXITCODE -ne 0) { Die "uv python install 3.12 failed" }
+        # uv python install 在較新版 uv 中對「已裝過」可能回 exit 1（"already installed"）。
+        # 我們只關心「最後 venv 能不能建起來」，所以這裡不 Die；真失敗會在 uv sync 時爆。
+        & $UvExe python install 3.12 2>&1 | Out-Host
         # NEVER use --frozen — it blindly trusts uv.lock. If lock is missing
         # a dep (eg. ldap3 in v1.1.66 lock), uv "succeeds" but the missing
         # package isn't installed and auth login fails at runtime.

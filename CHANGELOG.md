@@ -4,6 +4,16 @@
 
 ---
 
+## [1.1.69] - 2026-04-30
+
+### 修正（v1.1.68 配套：讓舊版客戶也能升級）
+
+- **install.sh 在任何 git 操作前先設 `git config --system --add safe.directory /opt/jt-doc-tools`**：
+  v1.1.68 修了「新版 cli.py」的 update flow，但既有客戶用的還是舊版 cli.py — 跑 `sudo jtdt update` 仍會撞 dubious ownership 失敗，重跑一行 install.sh 也會在 `git fetch` 那行死。本版讓 install.sh 先把 install dir 加入 git 系統級白名單，新舊兩版的 update / re-install 都能通過。
+- 客戶若已被卡住，重跑一行 install.sh 即可一次解決所有問題（含 ldap3 補裝、cli.py 升 v1.1.68+、git safe.directory 設好）。
+
+---
+
 ## [1.1.68] - 2026-04-30
 
 ### 修正（嚴重 — 客戶啟用 AD 後鎖死無法登入）
