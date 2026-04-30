@@ -260,33 +260,41 @@ function Setup-Python {
     Push-Location $InstallDir
     # 用 Start-Process 隔離 uv 子行程，避免 PowerShell 的 native-command 錯誤
     # 處理（在 elevated session 對 `& $UvExe` + stderr 輸出會詭異地 throw）。
-    # 把 stdout / stderr 各自寫到 temp file，跑完後 Get-Content 印出來、把
-    # 退出碼 explicit 取。
-    function Run-Uv {
-        param([string[]]$ArgList, [string]$Label)
-        $stdoutTmp = Join-Path $env:TEMP "uv-out-$([guid]::NewGuid().ToString('N')).log"
-        $stderrTmp = Join-Path $env:TEMP "uv-err-$([guid]::NewGuid().ToString('N')).log"
-        Write-Host "==> $Label"
-        $p = Start-Process -FilePath $UvExe -ArgumentList $ArgList `
+    $stdoutTmp = Join-Path $env:TEMP "uv-out.log"
+    $stderrTmp = Join-Path $env:TEMP "uv-err.log"
+    try {
+        # ---- uv python install 3.12 ----
+        Write-Output "==> Installing managed Python 3.12 via uv ..."
+        $p = Start-Process -FilePath $UvExe -ArgumentList @('python','install','3.12') `
             -NoNewWindow -Wait -PassThru `
             -RedirectStandardOutput $stdoutTmp -RedirectStandardError $stderrTmp
-        if (Test-Path $stdoutTmp) { Get-Content $stdoutTmp | ForEach-Object { Write-Host $_ } }
-        if (Test-Path $stderrTmp) { Get-Content $stderrTmp | ForEach-Object { Write-Host $_ } }
-        Remove-Item $stdoutTmp, $stderrTmp -Force -ErrorAction SilentlyContinue
-        return $p.ExitCode
-    }
-    try {
-        # uv python install — exit 1 對「已裝過」算正常，忽略
-        Run-Uv @('python','install','3.12') 'uv python install 3.12' | Out-Null
-        # 顯式先建 .venv（避免某些情境 uv sync 不自動建）
-        $rc = Run-Uv @('venv','--python','3.12','.venv') 'uv venv --python 3.12 .venv'
-        if ($rc -ne 0) { Die "uv venv failed (exit $rc)" }
-        # NEVER use --frozen — 會盲信 uv.lock；缺 dep（如 v1.1.66 之前漏 ldap3）
-        # 仍「成功」但實際少裝 package。一律完整 reconcile。
-        $rc = Run-Uv @('sync','--python','3.12') 'uv sync --python 3.12'
-        if ($rc -ne 0) { Die "uv sync failed (exit $rc)" }
+        if (Test-Path $stdoutTmp) { Get-Content $stdoutTmp | Write-Output }
+        if (Test-Path $stderrTmp) { Get-Content $stderrTmp | Write-Output }
+        Write-Output "[debug] uv python install exit=$($p.ExitCode)"
+        # exit 1 對「已裝過」算正常，忽略
+
+        # ---- uv venv --python 3.12 .venv ----
+        Write-Output "==> Creating venv via uv venv ..."
+        $p = Start-Process -FilePath $UvExe -ArgumentList @('venv','--python','3.12','.venv') `
+            -NoNewWindow -Wait -PassThru `
+            -RedirectStandardOutput $stdoutTmp -RedirectStandardError $stderrTmp
+        if (Test-Path $stdoutTmp) { Get-Content $stdoutTmp | Write-Output }
+        if (Test-Path $stderrTmp) { Get-Content $stderrTmp | Write-Output }
+        Write-Output "[debug] uv venv exit=$($p.ExitCode)"
+        if ($p.ExitCode -ne 0) { Die "uv venv failed (exit $($p.ExitCode))" }
+
+        # ---- uv sync --python 3.12 ----
+        Write-Output "==> Installing dependencies via uv sync ..."
+        $p = Start-Process -FilePath $UvExe -ArgumentList @('sync','--python','3.12') `
+            -NoNewWindow -Wait -PassThru `
+            -RedirectStandardOutput $stdoutTmp -RedirectStandardError $stderrTmp
+        if (Test-Path $stdoutTmp) { Get-Content $stdoutTmp | Write-Output }
+        if (Test-Path $stderrTmp) { Get-Content $stderrTmp | Write-Output }
+        Write-Output "[debug] uv sync exit=$($p.ExitCode)"
+        if ($p.ExitCode -ne 0) { Die "uv sync failed (exit $($p.ExitCode))" }
     } finally {
         Pop-Location
+        Remove-Item $stdoutTmp, $stderrTmp -Force -ErrorAction SilentlyContinue
     }
     $venvPython = Join-Path $InstallDir '.venv\Scripts\python.exe'
     if (-not (Test-Path $venvPython)) {
