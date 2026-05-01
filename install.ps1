@@ -1,4 +1,7 @@
-$ErrorActionPreference = 'Stop'
+# 不能用 'Stop' — 會把 native command 寫 stderr 當成 terminating error，
+# 整個 install.ps1 會在 nssm / uv / git 任何寫一行 stderr 時就死。
+# 我們在 Cmdlet 失敗時用 try/catch 處理，native command 失敗用 $LASTEXITCODE 判斷。
+$ErrorActionPreference = 'Continue'
 $ProgressPreference    = 'SilentlyContinue'
 
 $RepoUrl     = 'https://github.com/jasoncheng7115/jt-doc-tools'
