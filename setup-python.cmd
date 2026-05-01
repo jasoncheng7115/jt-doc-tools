@@ -40,7 +40,13 @@ echo [debug] uv venv exit=!VENV_RC!
 if not !VENV_RC! equ 0 ( popd ^& exit /b 2 )
 
 echo ==^> Installing dependencies via uv sync ...
-"%UV_EXE%" sync --python 3.12
+REM Don't pass --python here. With --python uv may pick the BASE managed Python
+REM and install packages into Roaming\uv\python\Lib\site-packages instead of
+REM our .venv\Lib\site-packages, leaving the venv empty.
+REM --reinstall forces re-install of all deps even if uv thinks they're already
+REM satisfied via cache (which can be wrong if previous install polluted base
+REM Python with editable install).
+"%UV_EXE%" sync --reinstall
 set SYNC_RC=!ERRORLEVEL!
 echo [debug] uv sync exit=!SYNC_RC!
 if not !SYNC_RC! equ 0 ( popd ^& exit /b 3 )

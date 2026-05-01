@@ -4,6 +4,19 @@
 
 ---
 
+## [1.1.81] - 2026-05-01
+
+### 修正（install.ps1 Win11 全套通了）
+
+驗證在 Win11 x64 一行 install 從 0 到健康檢查全綠：service running、`jtdt.cmd` 建好、`.venv/pyvenv.cfg` 存在、ldap3 2.9.1 可 import、healthz `{"ok":true}`。
+
+- **`$ErrorActionPreference = 'Continue'`**：原本 'Stop' 會把 nssm / git / uv 任何寫一行 stderr 當成 fatal error 結束 install.ps1。改 Continue 後仍以 `$LASTEXITCODE` 顯式判斷失敗，但 stderr 寫入不再致死。
+- **`uv sync --reinstall`**：之前如果 base managed Python 因為其他安裝有殘留 `__editable__.jt_doc_tools.pth`，新 venv 跑 `uv sync` 會 cache hit 認為「已裝過」只裝 jt-doc-tools 本身、其他 44 個依賴一個都不裝。`--reinstall` 強制全重裝。
+- **`uv sync` 不要加 `--python 3.12`**：加了會讓 uv 挑 base managed Python 而非剛建的 .venv，所有 package 跑進 `Roaming\uv\python\Lib\site-packages` 導致 venv 空白。
+- **`setup-python.cmd` 純 ASCII + CRLF**：之前含 em-dash UTF-8 字元，cmd.exe 解析時把 byte sequence 當奇怪命令丟錯。
+
+---
+
 ## [1.1.80] - 2026-04-30
 
 ### 修正（setup-python.cmd 純 ASCII + CRLF）
