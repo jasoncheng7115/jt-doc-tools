@@ -41,30 +41,51 @@ def _ocr_bbox(page: "fitz.Page", bbox, lang: str = "chi_tra+eng") -> str:
     crashes, or the result is obviously empty / noise.
     """
     try:
-        import pytesseract  # noqa: F401  (optional dep)
+        import pytesseract
         from PIL import Image
     except ImportError:
         return ""
     try:
-        import pytesseract
-    except Exception:
-        return ""
-    try:
         x0, y0, x1, y1 = [float(v) for v in bbox]
-        rect = fitz.Rect(x0, y0, x1, y1)
-        # Render at 300 DPI for tesseract — printed text needs detail.
-        zoom = 300 / 72
-        matrix = fitz.Matrix(zoom, zoom)
+        bw = max(x1 - x0, 1.0)
+        bh = max(y1 - y0, 1.0)
+        # Padding strategy:
+        #  - Horizontal: tiny (2pt) — bigger pad caught adjacent spans on the
+        #    same line (e.g. "Proxmox VE" + "網路基本設定" sit next to each
+        #    other and got merged into "VE 網路基本設定").
+        #  - Vertical: small fraction (10% or 2pt min) — just enough for
+        #    descenders / accents but not enough to grab the underline below
+        #    a section heading (which OCR happily reads as "一").
+        pad_x = 2.0
+        pad_y = max(bh * 0.10, 2.0)
+        page_rect = page.rect
+        rect = fitz.Rect(
+            max(page_rect.x0, x0 - pad_x),
+            max(page_rect.y0, y0 - pad_y),
+            min(page_rect.x1, x1 + pad_x),
+            min(page_rect.y1, y1 + pad_y),
+        )
+        # 400 DPI for short titles (more pixels per glyph helps); 300 otherwise.
+        dpi = 400 if bh < 40 else 300
+        matrix = fitz.Matrix(dpi / 72, dpi / 72)
         pix = page.get_pixmap(matrix=matrix, clip=rect, alpha=False)
         img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-        # PSM 7 = single text line. Use 6 (uniform block) for taller boxes
-        # where multiple lines may fit.
-        aspect = (y1 - y0) / max((x1 - x0), 1)
-        psm = "6" if aspect > 0.5 else "7"
-        text = pytesseract.image_to_string(
-            img, lang=lang, config=f"--psm {psm}",
-        )
-        text = (text or "").strip()
+        # OCR for short CJK is finicky; right PSM varies by content. Try
+        # several modes and pick the longest sane result. PSM 7=single text
+        # line, 6=uniform block, 8=single word, 11=sparse text.
+        aspect = bh / bw
+        psms = ["7", "6", "8", "11"] if aspect <= 0.5 else ["6", "7", "11"]
+        text = ""
+        for psm in psms:
+            try:
+                cand = pytesseract.image_to_string(
+                    img, lang=lang, config=f"--psm {psm}",
+                )
+            except Exception:
+                continue
+            cand = (cand or "").strip()
+            if len(cand) > len(text):
+                text = cand
         # Strip OCR-flavored line noise: stray standalone punctuation, NBSP,
         # zero-width chars, control chars.
         text = "".join(

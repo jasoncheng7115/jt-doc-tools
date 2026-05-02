@@ -829,7 +829,7 @@ def build_router(templates) -> APIRouter:
         api_tokens.set_enforce(bool(body.get("enforce")))
         return {"ok": True, "enforce": api_tokens.is_enforced()}
 
-    # ---- 系統依賴檢查 -----------------------------------------------------
+    # ---- 系統相依套件檢查 -----------------------------------------------------
     @router.get("/sys-deps", response_class=HTMLResponse)
     async def sys_deps_page(request: Request):
         from ..core.sys_deps import collect_sys_deps

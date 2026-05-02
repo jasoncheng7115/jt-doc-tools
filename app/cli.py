@@ -400,11 +400,11 @@ def svc_update() -> int:
     # uv.lock < 1.1.68) get installed.
     uv = shutil.which("uv") or str(root / "bin" / "uv")
     if not Path(uv).exists() and not shutil.which("uv"):
-        print("找不到 uv 指令，無法同步依賴", file=sys.stderr)
+        print("找不到 uv 指令，無法同步相依", file=sys.stderr)
         _restore_ownership(root, owner)
         svc_start()
         return 1
-    print("同步 Python 依賴（uv sync）...")
+    print("同步 Python 相依套件（uv sync）...")
     rc = subprocess.call([uv, "sync"], cwd=str(root))
     if rc != 0:
         print("uv sync 失敗，還原", file=sys.stderr)
@@ -418,11 +418,11 @@ def svc_update() -> int:
     if not venv_py.exists() and _is_windows():
         venv_py = root / ".venv" / "Scripts" / "python.exe"
     if venv_py.exists():
-        print("驗證關鍵依賴 (fastapi / fitz / ldap3 / PIL / pdfplumber / docx / odf / pyzipper) ...")
+        print("驗證關鍵相依套件 (fastapi / fitz / ldap3 / PIL / pdfplumber / docx / odf / pyzipper) ...")
         rc = subprocess.call([str(venv_py), "-c",
             "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx"])
         if rc != 0:
-            print("依賴 import 失敗 — 升級可能不完整，還原", file=sys.stderr)
+            print("相依 import 失敗 — 升級可能不完整，還原", file=sys.stderr)
             _restore_ownership(root, owner)
             svc_start()
             return rc
@@ -461,7 +461,7 @@ def svc_update() -> int:
 
 
 def _print_system_deps_summary() -> None:
-    """升級後印「系統依賴狀態」表，缺的套件一目瞭然。
+    """升級後印「系統相依套件狀態」表，缺的套件一目瞭然。
 
     每個 entry：(顯示名, 偵測函式 → bool, 影響說明, 手動安裝指令 dict)
     """
@@ -491,7 +491,7 @@ def _print_system_deps_summary() -> None:
     if not missing:
         return
     print()
-    print("⚠ 系統依賴未就緒：")
+    print("⚠ 系統相依套件未就緒：")
     plat = "linux" if _is_linux() else ("macos" if _is_macos() else "windows")
     for name, _, impact, cmds in missing:
         print(f"  • {name}")
@@ -543,7 +543,7 @@ def _ensure_system_deps_for_update() -> None:
     任何錯誤都只 warn 不 raise — 升級流程不能因為某個 optional system 套件
     裝不起來就 abort。每個套件的安裝結果獨立判斷。
 
-    新加任何系統依賴時，請在這裡加一段 best-effort 安裝邏輯（並同步更新
+    新加任何系統相依套件時，請在這裡加一段 best-effort 安裝邏輯（並同步更新
     install.sh / install.ps1 對應段落）。
     """
     # tesseract OCR — pdf-editor 文字辨識 fallback (自 v1.2.2 起)
