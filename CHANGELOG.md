@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.91] - 2026-05-02
+
+### 修正（pdf-editor 下載真正觸發 save dialog）
+
+- v1.1.89/.90 用 fetch + blob + 動態 anchor click() 雖然 status 顯示「已下載」，但某些瀏覽器設定下 programmatic click 不會跳 save dialog，使用者沒拿到檔案。改用 hidden iframe `iframe.src = url`，靠後端 `Content-Disposition: attachment` header 觸發瀏覽器原生下載 dialog — 最穩、最少瀏覽器特殊處理。anchor href 也照樣設好給「右鍵另存」fallback 用。
+
+---
+
 ## [1.1.90] - 2026-05-02
 
 ### 修正（pdf-editor 真正根因 + undo BG 強制 refresh）
