@@ -4,6 +4,15 @@
 
 ---
 
+## [1.1.83] - 2026-05-02
+
+### 修正（v1.1.82 兩個按鈕位置撞到字）
+
+- **「收起」按鈕（‹）**：原本 absolute top-right 蓋到 brand 名稱與 v1.1.82 版本字。改放進 brand-block 的 flex row 內，brand 連結 `flex:1` 撐開，按鈕在右端不重疊。
+- **「展開」按鈕（☰）**：sidebar 收起後 main 沒留空間給左上的浮動按鈕，蓋到 h1 標題（如「文書轉圖片」）。改：`body.sidebar-collapsed .container.with-sidebar` 加 `padding-top:60px`，按鈕跟標題自然分開。
+
+---
+
 ## [1.1.82] - 2026-05-02
 
 ### 變更（側邊選單可手動收起 / 展開）
