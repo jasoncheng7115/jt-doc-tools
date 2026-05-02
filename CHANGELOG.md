@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.87] - 2026-05-02
+
+### 修正（pdf-editor 編輯既有文字後預覽顯示不完整）
+
+- **`text:editing:exited` 強制重算 IText 維度 + 觸發 auto-save**：擷取既有文字後在 IText 內直接雙擊編輯（典型情境：「客戶地址」改成「客戶地址測試」），blur 時 Fabric IText 內部 dirty 旗標 / width 沒主動 recompute，scheduleAutoSave 收到的 `o.text` 雖然正確、但 IText 的視覺 width / coords 還停在舊狀態，背景圖 re-render 完後 IText fade 到 0.01 opacity，使用者只看到「殘留視覺」覺得文字不見。本版加 `text:editing:exited` listener，blur 後立即 `_clearCache + initDimensions + setCoords` + 排隊 auto-save，preview 與下載結果一致。
+
+---
+
 ## [1.1.86] - 2026-05-02
 
 ### 修正（版本號回到 brand 文字右緣）

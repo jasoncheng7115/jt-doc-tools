@@ -602,6 +602,31 @@ function attachPageHandlers(fc) {
       scheduleAutoSave();
     });
   });
+  // 在原物件擷取的 IText 內直接編輯文字（雙擊進編輯模式 → 鍵盤輸入 → blur）後，
+  // Fabric IText 內部 dirty 旗標 + width 沒主動 recompute，造成 background image
+  // 重新 render 時用的是「舊的 text 值」或「舊的 width / coords」，編輯框視覺上
+  // 只剩部份字。`text:editing:exited` 觸發後強制重算 + 立即排隊 auto-save，
+  // 把使用者實際 typed 的最新字串送回 backend。
+  fc.on('text:editing:exited', (e) => {
+    const o = e && e.target;
+    if (!o) return;
+    if (o.type === 'i-text' || o.type === 'text' || o.type === 'textbox') {
+      try {
+        if (o._clearCache) o._clearCache();
+        if (typeof o.calcTextWidth === 'function') {
+          o.width = o.calcTextWidth() + (o.cursorWidth || 2);
+        }
+        if (typeof o.initDimensions === 'function') {
+          o.initDimensions();
+        }
+        o.dirty = true;
+        o.setCoords();
+        fc.requestRenderAll();
+      } catch (_) {}
+      if (!suppressHistory) snapshotHistory();
+      scheduleAutoSave();
+    }
+  });
 }
 
 function createObject(fc, p, tool) {
