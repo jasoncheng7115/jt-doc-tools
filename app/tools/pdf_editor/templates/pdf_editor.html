@@ -1468,14 +1468,38 @@ $('prefSnapDist').addEventListener('input', (e) => {
 
 // ============ Undo/Redo via snapshots ============
 function canvasSnapshot() {
-  return pageCanvases.map(c => c.toJSON(['_peType', '_assetId']));
+  // 把每一頁畫布內容 + deletedOrigs 一起存。後者是「使用者標記為刪除的
+  // 原 PDF 物件 bbox」，存檔時會被 redact，回 undo 時必須一起還原，否則
+  // 還原後 BG 重新渲染時還會把那些區塊 redact 掉、顯示空白。
+  return {
+    pages: pageCanvases.map(c => c.toJSON(['_peType', '_assetId', '_origBbox', '_existingSrc', '_peFont', '_noteText'])),
+    deletedOrigs: JSON.parse(JSON.stringify(deletedOrigs)),
+  };
 }
 function restoreSnapshot(snap) {
   suppressHistory = true;
-  snap.forEach((json, i) => {
+  // 兼容舊格式（純 array）+ 新格式（{pages, deletedOrigs}）
+  const pages = Array.isArray(snap) ? snap : snap.pages;
+  const dels  = Array.isArray(snap) ? {}   : (snap.deletedOrigs || {});
+  // 還原 deletedOrigs map（直接 assign 整個物件）
+  Object.keys(deletedOrigs).forEach(k => delete deletedOrigs[k]);
+  Object.assign(deletedOrigs, JSON.parse(JSON.stringify(dels)));
+  let pending = pages.length;
+  pages.forEach((json, i) => {
     const c = pageCanvases[i];
-    if (!c) return;
-    c.loadFromJSON(json, () => { c.requestRenderAll(); });
+    if (!c) { pending--; return; }
+    c.loadFromJSON(json, () => {
+      // Fabric.loadFromJSON 不會還原物件上的非 standard 屬性 — 我們在
+      // toJSON 時用 propertiesToInclude 帶出 _peType / _origBbox 等，
+      // loadFromJSON 會把它們塞回每個物件。但 _marker（Fabric Rect 引用）
+      // 沒辦法從 JSON 還原；存檔流程只用 _origBbox + deletedOrigs，所以
+      // marker 缺失不影響存檔正確性。
+      c.requestRenderAll();
+      if (--pending === 0) {
+        // 還原完，立刻觸發 auto-save 讓 backend 用「還原後狀態」重 render BG
+        scheduleAutoSave();
+      }
+    });
   });
   setTimeout(() => { suppressHistory = false; updateHistoryButtons(); }, 50);
 }
@@ -1579,10 +1603,13 @@ $('assetCancel').addEventListener('click', () => {
 });
 
 // Direct image upload (no asset-library round trip)
-$('apUploadInput').addEventListener('change', async () => {
-  const f = $('apUploadInput').files[0];
+async function _doImageUpload(f) {
   if (!f) return;
   const status = $('apUploadStatus');
+  if (!/^image\//.test(f.type)) {
+    status.textContent = `不支援的檔案類型：${f.type || '未知'}`;
+    return;
+  }
   status.textContent = `上傳中：${f.name} …`;
   const fd = new FormData();
   fd.append('upload_id', uploadId);
@@ -1601,10 +1628,63 @@ $('apUploadInput').addEventListener('change', async () => {
   } catch (e) {
     status.textContent = '上傳失敗：' + e.message;
   }
+}
+$('apUploadInput').addEventListener('change', () => {
+  _doImageUpload($('apUploadInput').files[0]);
 });
+// 拖曳圖片進上傳區
+(function(){
+  const dropZone = $('apTabUpload')?.querySelector('label');
+  if (!dropZone) return;
+  ['dragenter','dragover'].forEach(ev => {
+    dropZone.addEventListener(ev, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropZone.style.borderColor = '#3b82f6';
+      dropZone.style.background = '#eff6ff';
+    });
+  });
+  ['dragleave','drop'].forEach(ev => {
+    dropZone.addEventListener(ev, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropZone.style.borderColor = '#cbd5e1';
+      dropZone.style.background = '#f8fafc';
+    });
+  });
+  dropZone.addEventListener('drop', (e) => {
+    const f = e.dataTransfer?.files?.[0];
+    if (f) _doImageUpload(f);
+  });
+})();
 
 // ============ Save ============
 $('btnSave').addEventListener('click', () => savePdf(false));
+// 下載按鈕：用 fetch 抓 PDF blob 強制下載，避免 anchor href + download
+// 在某些情境（autosave URL 還沒 set / 瀏覽器擴充攔截 / safari quirks）下無效。
+$('btnDownload').addEventListener('click', async (e) => {
+  const dl = e.currentTarget;
+  const url = dl._downloadUrl || dl.getAttribute('href');
+  if (!url || url === '#') {
+    e.preventDefault();
+    setStatus('還沒儲存過，請先按「儲存並預覽」或編輯任何物件觸發自動儲存。');
+    return;
+  }
+  e.preventDefault();
+  setStatus('準備下載 …');
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = dl._downloadName || 'edited.pdf';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    setStatus('已下載：' + a.download);
+  } catch (err) {
+    setStatus('下載失敗：' + err.message);
+  }
+});
 
 // ============ Global font replace ============
 $('btnGlobalFont').addEventListener('click', () => {
@@ -1817,6 +1897,10 @@ async function savePdf(isAuto) {
       if (data.pages[i]) img.src = data.pages[i].preview_url + '?t=' + Date.now();
     });
     const dl = $('btnDownload');
+    // 直接記住 url，給 click handler 用（不靠 anchor href + download attr，
+    // 那組合在某些瀏覽器擴充 / autosave 環境下會被攔截不下載）。
+    dl._downloadUrl = data.download_url;
+    dl._downloadName = suggestedFilename();
     dl.href = data.download_url;
     dl.style.display = ''; dl.innerHTML = dl.innerHTML.includes('svg') ? dl.innerHTML : '下載 PDF';
     dl.setAttribute('download', suggestedFilename());

@@ -4,6 +4,17 @@
 
 ---
 
+## [1.1.89] - 2026-05-02
+
+### 修正（pdf-editor 三個 bug）
+
+- **Undo 回到開始 PDF 既有物件處變空白**：`canvasSnapshot()` 之前只存 fabric canvas JSON、沒存 `deletedOrigs`（標記為刪除的原物件 bbox 列表），undo 還原物件後 deletedOrigs 還停在「全部刪掉」的狀態，下一次 auto-save backend 還是把那些區塊 redact 掉，BG 重抓回來自然空白。本版 snapshot 同時存 `{pages, deletedOrigs}`，restoreSnapshot 還原時一併 restore + 立即 scheduleAutoSave 讓 BG 用還原後狀態重 render。propertiesToInclude 也補上 `_origBbox / _existingSrc / _peFont / _noteText`。
+- **下載按鈕按了不下載**：原本靠 `<a href="…" download="…">` anchor，但在某些情境（aut o-save URL 還沒 set / 瀏覽器擴充攔截 / Safari quirks）會失效。改用 fetch blob → `URL.createObjectURL` → 動態 click `<a>` 強制下載，並在 url 還空時跳提示。
+- **資產選擇器「上傳新圖片」拖放區無反應**：之前只綁了 `<input type=file>` 的 change，沒處理拖放。本版補上 `dragenter/over/leave/drop` 並 hover 時藍框視覺回饋，把 `dataTransfer.files[0]` 走原本的 `_doImageUpload()` 共用流程上傳。
+- 順便：之前部署 tarball 漏拷 `static/js/toast.js / job_progress.js`，rsync `--delete` 把線上版也清掉造成 console 兩條 404；本版補回。
+
+---
+
 ## [1.1.88] - 2026-05-02
 
 ### 修正（pdf-editor 擷取既有文字後 fade 害人錯亂）
