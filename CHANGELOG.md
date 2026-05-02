@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.92] - 2026-05-02
+
+### 修正（pdf-editor 下載 — 回到純 anchor 原生行為）
+
+- v1.1.89/.90/.91 加的下載 click handler（fetch + blob → iframe → window.location.href）反而都被 Chrome 安全機制 / 擴充功能攔掉，使用者只看到「已下載」訊息但實際沒下載。本版**徹底移除** click handler，回到 v1.1.88 之前最簡單的 design：純 `<a href="{download_url}" download="{filename}">` anchor。textBaseline typo 修掉後 save 流程正常 → savePdf() 完成自動 set anchor href + download attr → 點擊由瀏覽器原生處理，最穩。
+
+---
+
 ## [1.1.91] - 2026-05-02
 
 ### 修正（pdf-editor 下載真正觸發 save dialog）
