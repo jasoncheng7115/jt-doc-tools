@@ -1049,33 +1049,38 @@ def svc_auth_set_local() -> int:
 
 def _print_friendly_help() -> None:
     """Pretty grouped command list — beats argparse's cramped one-liner usage
-    that overflows on terminal widths < 100 cols."""
+    that overflows on terminal widths < 100 cols.
+
+    English-only on purpose: some server terminals (raw TTY, ssh into minimal
+    container, Windows console without UTF-8 codepage) can't render CJK and
+    show garbled text. CLI help should be readable everywhere.
+    """
     ver = _read_version()
-    print(f"jtdt — Jason Tools 文件工具箱 v{ver}")
+    print(f"jtdt — Jason Tools document toolbox v{ver}")
     print()
-    print("用法： jtdt <指令> [選項]")
+    print("Usage: jtdt <command> [options]")
     print()
-    print("服務控制：")
-    print("  start                   啟動服務")
-    print("  stop                    停止服務")
-    print("  restart                 重啟服務")
-    print("  status                  顯示狀態與設定")
-    print("  logs [-f]               顯示服務 log（-f 持續追蹤）")
-    print("  open                    用瀏覽器開啟介面")
+    print("Service control:")
+    print("  start                   Start the service")
+    print("  stop                    Stop the service")
+    print("  restart                 Restart the service")
+    print("  status                  Show status and settings")
+    print("  logs [-f]               Show service logs (-f to follow)")
+    print("  open                    Open the web UI in the default browser")
     print()
-    print("升級與維護：")
-    print("  update                  從 GitHub 拉新版並重啟")
-    print("  version                 顯示版本")
-    print("  bind <host:port>        變更服務監聽位址 / port（會自動重啟）")
-    print("  uninstall [--purge]     解除安裝（--purge 連同資料一起刪除）")
+    print("Upgrade and maintenance:")
+    print("  update                  Pull latest from GitHub and restart")
+    print("  version                 Print version")
+    print("  bind <host:port>        Change listen address / port (auto-restart)")
+    print("  uninstall [--purge]     Uninstall (--purge to also wipe data)")
     print()
-    print("緊急復原（auth 鎖死、忘記密碼時用）：")
-    print("  auth show               顯示目前認證 backend")
-    print("  auth disable            把認證 backend 切回 off（解除登入封鎖）")
-    print("  auth set-local          把認證 backend 切到 local（本機帳號）")
-    print("  reset-password <user>   重設使用者密碼")
+    print("Emergency recovery (auth locked out, forgotten password):")
+    print("  auth show               Show current auth backend")
+    print("  auth disable            Switch auth backend to off (unlock login)")
+    print("  auth set-local          Switch auth backend to local (built-in users)")
+    print("  reset-password <user>   Reset a local user's password")
     print()
-    print("詳細說明： jtdt <指令> --help")
+    print("Per-command help: jtdt <command> --help")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1089,8 +1094,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p = argparse.ArgumentParser(
         prog="jtdt",
-        description="Jason Tools 文件工具箱 — 'jtdt' (無參數) 看分組指令清單",
-        usage="jtdt <指令> [選項]   (執行 'jtdt' 看完整指令清單)",
+        description="Jason Tools document toolbox — run 'jtdt' (no args) for grouped command list",
+        usage="jtdt <command> [options]   (run 'jtdt' for the full command list)",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 

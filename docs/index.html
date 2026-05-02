@@ -50,7 +50,7 @@
     <p class="hero-lead">
       表單自動填寫、用印與簽名、浮水印、敏感資料去識別化、PDF 加密、中繼資料清除、隱藏內容掃描、差異比對、頁面編輯…
       可選 LDAP / AD 認證、角色權限、稽核、記錄轉送。<br>
-      <b>所有檔案處理只發生在你的伺服器，原始碼公開。</b>
+      <b>所有檔案處理只發生在你的伺服器，且原始碼完全公開。</b>
     </p>
     <div class="hero-cta">
       <a class="btn btn-primary btn-lg" href="#install">
@@ -570,11 +570,11 @@
 
     <div class="mode-band">
       <div class="mode-band-card">
-        <div class="mode-band-h">🏠 單機模式（個人用）</div>
+        <div class="mode-band-h">單機模式（個人用）</div>
         <div class="mode-band-d">安裝完直接用 — <b>預設不啟用認證</b>，所有人開瀏覽器到 <code>127.0.0.1:8765</code> 都能用。適合 1 人桌面工作流。</div>
       </div>
       <div class="mode-band-card">
-        <div class="mode-band-h">🏢 伺服器模式（團隊 / 企業）</div>
+        <div class="mode-band-h">伺服器模式（團隊 / 企業）</div>
         <div class="mode-band-d">部署到 Linux server，到「認證設定」啟用<b>本機帳號 / LDAP / AD</b>，搭配角色與權限矩陣 + 稽核 + 記錄轉送。內網多人共用，可控管。<br><br>預設只聽 <code>127.0.0.1:8765</code>，要對外（內網其他電腦）開放，安裝完跑 <code>jtdt bind 0.0.0.0</code> 即可（會改 systemd / launchd / Windows Service 設定並重啟）；要綁特定 port 例 <code>jtdt bind 0.0.0.0:9999</code>。Linux / macOS 前面加 <code>sudo</code>，Windows 以系統管理員身分執行 PowerShell。</div>
       </div>
     </div>

@@ -4,6 +4,18 @@
 
 ---
 
+## [1.3.7] - 2026-05-02
+
+### 變更（README / 公開文件 / CLI 文案調整）
+
+- **`jtdt` 無參數印的指令清單改用英文**：純文字 TTY / minimal container / Windows console 沒切 UTF-8 codepage 都渲染不出 CJK，CLI 訊息一律英文 ASCII 比較通用。argparse 的 description / usage 同步改英文。GUI / web UI 仍維持台灣繁中。
+- **README 新增「圖片轉 PDF」到「格式轉換」段**，並修正其他 22 個工具的計數 (原 21)。
+- **README 拿掉所有 emoji**：`🔧` 標記改成文字 `[需 OxOffice/LibreOffice]`，更明確且 grep 友善。Office 引擎相依說明的 `🔧` 同步移除。
+- **landing page (`docs/index.html`) 拿掉模式說明卡的 `🏠` / `🏢` emoji**。
+- **landing page 「自架」slogan 文案調整**：「所有檔案處理只發生在你的伺服器，原始碼公開」→「所有檔案處理只發生在你的伺服器，**且原始碼完全公開**」更強調。
+
+---
+
 ## [1.3.6] - 2026-05-02
 
 ### 改進（jtdt 無參數時印分組指令清單）
