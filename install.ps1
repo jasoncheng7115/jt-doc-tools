@@ -210,6 +210,44 @@ function Install-Nssm {
 }
 
 # Source code
+function Install-Git {
+    # Try to install Git if missing — git mode is required for `jtdt update`
+    # to work later. Falling through to tarball mode leaves customers stuck
+    # ("not a git repo, can't git pull") and they have to manually install
+    # git + re-run the installer. Better to install upfront.
+    # Soft-fail: if winget can't install git, fall through to tarball mode.
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        Ok "git already installed"
+        return
+    }
+    Log "git not found; trying to install via winget (required for jtdt update)..."
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Warn "winget not available; jtdt update will require manual git install later"
+        Warn "  Manual: https://git-scm.com/download/win  then re-run this installer"
+        return
+    }
+    try {
+        $proc = Start-Process winget `
+            -ArgumentList "install --id Git.Git -e --silent --accept-package-agreements --accept-source-agreements" `
+            -Wait -PassThru -NoNewWindow -ErrorAction SilentlyContinue
+        if ($proc.ExitCode -eq 0) {
+            # Refresh PATH so git is visible in this session (winget added
+            # it to system PATH but current shell hasn't reloaded).
+            $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                        [System.Environment]::GetEnvironmentVariable('Path', 'User')
+            if (Get-Command git -ErrorAction SilentlyContinue) {
+                Ok "git installed via winget"
+                return
+            }
+        }
+        Warn "git winget install completed but git command still not found"
+    } catch {
+        Warn "git install via winget failed: $_"
+    }
+    Warn "Falling through — installer will use tarball mode; jtdt update will not work until git is manually installed"
+}
+
+
 function Fetch-Code {
     if (Test-Path (Join-Path $InstallDir '.git')) {
         Log "Existing install detected, updating via git ..."
@@ -396,6 +434,7 @@ Write-Host ""
 
 Ensure-Office
 Install-Tesseract
+Install-Git
 Install-Uv
 Install-Nssm
 Fetch-Code

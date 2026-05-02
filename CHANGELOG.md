@@ -4,6 +4,14 @@
 
 ---
 
+## [1.3.11] - 2026-05-02
+
+### 新增（install.ps1：缺 git 自動 winget install）
+
+- Windows 沒裝 git 的客戶機之前 install.ps1 會 fallback 到 tarball 下載，沒 .git → 日後 `jtdt update` 直接 fail（「not a git repo, can't git pull」），客戶得手動裝 git + 重跑 installer。本版加 `Install-Git` 函式：偵測缺 git → 試 `winget install Git.Git -e --silent` → refresh PATH → 後續 `Fetch-Code` 走 git clone path → `.git` 就位 → 日後 `jtdt update` 直接可用。soft-fail：winget 不可用 / install 失敗只 warn，仍可走 tarball mode 完成首次安裝。
+
+---
+
 ## [1.3.10] - 2026-05-02
 
 ### 修正（jtdt update 結尾 bullet 字元 Win11 console 顯示亂碼）
