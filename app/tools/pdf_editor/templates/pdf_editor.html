@@ -858,6 +858,12 @@ async function pickExistingObject(fc, p) {
   const x_pt = p.x / PT2PX;
   const y_pt = p.y / PT2PX;
   setStatus('偵測中…');
+  // 若 detect-objects 在 500 ms 內沒回，幾乎一定是文字 span 撞到 OCR
+  // fallback (字型缺/壞 ToUnicode → render bbox + tesseract)，OCR 通常
+  // 要 1-2 秒。提前升級訊息讓使用者知道在做什麼，不會以為當掉。
+  const ocrHintTimer = setTimeout(() => {
+    setStatus('辨識中…（原文字字型無 Unicode 對應表，正在 OCR 重建文字）');
+  }, 500);
   try {
     const r = await fetch('/tools/pdf-editor/detect-objects', {
       method: 'POST',
@@ -868,6 +874,7 @@ async function pickExistingObject(fc, p) {
         x: x_pt, y: y_pt,
       }),
     });
+    clearTimeout(ocrHintTimer);
     const data = await r.json();
     if (!data || !data.kind) {
       setStatus('此位置沒有可選取的物件');
@@ -967,6 +974,7 @@ async function pickExistingObject(fc, p) {
       }, { crossOrigin: 'anonymous' });
     }
   } catch (e) {
+    clearTimeout(ocrHintTimer);
     setStatus('偵測失敗：' + e.message);
   }
   setTool('select');

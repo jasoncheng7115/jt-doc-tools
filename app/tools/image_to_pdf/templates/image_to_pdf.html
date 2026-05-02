@@ -151,21 +151,33 @@
 }
 .i2p-lightbox img { max-width: 95%; max-height: 95vh; box-shadow: 0 16px 48px rgba(0,0,0,0.5); border-radius: 4px; background: #fff; }
 
-/* 頁面設定區的 form-row 整齊化：label 一律對齊 field 第一行頂端，
-   不要因為某些 row 的 field 內含說明文字而把 label 推到中間。 */
+/* 頁面設定區的 form-row 整齊化：label 對齊 field 第一行頂端、help
+   text 緊貼其 select，row 之間有明顯間距，避免「說明文字到底是上面
+   還是下面那列的」歧義。 */
 #settings-panel .form-row {
   align-items: flex-start;
-  margin: 10px 0;
+  margin: 0;
+  padding: 10px 0 14px;
+  border-bottom: 1px solid #f1f5f9;   /* 列分隔線：清楚劃分每一列 */
 }
+#settings-panel .form-row:last-of-type { border-bottom: none; }
 #settings-panel .form-row label {
-  padding-top: 6px;  /* 與 select / input 第一行 baseline 對齊 */
+  padding-top: 6px;
   width: 96px;
+  font-weight: 500; color: #334155;   /* label 顏色加深，跟說明文字區別 */
 }
-#settings-panel .form-row .field { display: flex; flex-direction: column; gap: 4px; }
+#settings-panel .form-row .field {
+  display: flex; flex-direction: column; gap: 6px;
+}
 #settings-panel .form-row .field > select,
 #settings-panel .form-row .field > input[type=text],
 #settings-panel .form-row .field > input[type=color] {
   align-self: flex-start;
+}
+/* 列內說明文字：字級略小、灰色、緊貼上方 input；不要跑得太遠導致跟下一列混淆 */
+#settings-panel .form-row .field .muted {
+  margin: 0;
+  font-size: 11px; color: #94a3b8; line-height: 1.5;
 }
 /* 背景色那列 help text 是 inline，需要把 color picker 跟說明文字 wrap 在一行 */
 #settings-panel .field .inline-row {
