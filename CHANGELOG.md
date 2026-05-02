@@ -4,6 +4,14 @@
 
 ---
 
+## [1.3.13] - 2026-05-02
+
+### 修正（相依套件檢查：剝掉 Office build hash）
+
+- `_probe_office()` 取出的版本字串含 OxOffice / LibreOffice 的長 build hash (例：`OxOffice 11.0.4.1 855623c6c181122c9b97d204c8c74172e167cf75`)，把表格版本欄撐得很寬。剝掉 20+ 字 hex 字串只保留版本號 (`OxOffice 11.0.4.1`)。要查 hash 可從表格內的 binary 路徑自行 `--version`。
+
+---
+
 ## [1.3.12] - 2026-05-02
 
 ### 變更（README 用語修正）

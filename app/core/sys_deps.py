@@ -117,7 +117,13 @@ def _probe_office() -> dict:
         return {"installed": False, "version": "", "extra": "", "binary": "", "ok": False}
     flavor = "OxOffice" if "oxoffice" in binary.lower() or "OxOffice" in binary else "LibreOffice"
     rc, out, _ = _run_capture([binary, "--version"], timeout=5)
-    version = (out or "").strip().splitlines()[0] if out else ""
+    version_line = (out or "").strip().splitlines()[0] if out else ""
+    # Strip the long build hash that OxOffice / LibreOffice append after the
+    # version, e.g. "OxOffice 11.0.4.1 855623c6c181122c9b97d204c8c74172e167cf75"
+    # → "OxOffice 11.0.4.1". Hash is noise for users; if they need it, the
+    # binary path is shown and they can re-run --version manually.
+    import re as _re
+    version = _re.sub(r"\s+[0-9a-f]{20,}.*$", "", version_line)
     return {
         "installed": True,
         "version": version,
