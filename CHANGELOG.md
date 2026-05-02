@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.86] - 2026-05-02
+
+### 修正（版本號回到 brand 文字右緣）
+
+- v1.1.85 把收起按鈕放進 brand-block 內，導致 brand-block 的 intrinsic width 被撐到包含按鈕，version 文字 right-align 跑到很右邊。本版把按鈕移出 brand-block，brand-block 維持「inline-flex column 包 brand+version」、按鈕變 brand-row 的兄弟（`margin-left:auto` 貼最右）。version 重新對齊 brand 文字右緣，跟收起按鈕無關。
+
+---
+
 ## [1.1.85] - 2026-05-02
 
 ### 修正（兩個按鈕都不再吃內容空間）
