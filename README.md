@@ -1,4 +1,4 @@
-# Jason Tools 文件工具箱 v1.3.6
+# Jason Tools 文件工具箱 v1.3.7
 
 > 整合式 PDF / Office 文件處理平台。包含 28 個工具：**表單自動填寫**、**用印與簽名**、**浮水印**、**N-up 多頁合併**、**檔案合併 / 分拆 / 轉向 / 頁面整理 / 頁碼**、**文書轉 PDF / 圖片**、**圖片轉 PDF**、**擷取文字 / 圖片 / 附件**、**字數統計**、**註解整理 / 清除 / 平面化**、**敏感資料去識別化**、**PDF 加密 / 解密**、**中繼資料清除**、**隱藏內容掃描**、**文件差異比對**、**文字差異比對**、**頁面編輯器**、**壓縮**、**AES 加密壓縮檔**。
 >
@@ -14,13 +14,15 @@
 
 ## 功能總覽
 
+> 標記說明：**[需 OxOffice/LibreOffice]** 代表該工具會用到 OxOffice / LibreOffice 引擎，安裝腳本會自動處理；其他工具只處理 PDF / 純文字 / 圖片，無相依。
+
 ### 填單與用印
-- **表單自動填寫** 🔧：上傳廠商資料表 / 申請書（PDF、Word、Excel、ODF），自動辨識欄位並填入公司基本資料（Word/Excel/ODF 輸入時需 OxOffice/LibreOffice）
+- **表單自動填寫** [需 OxOffice/LibreOffice]：上傳廠商資料表 / 申請書（PDF、Word、Excel、ODF），自動辨識欄位並填入公司基本資料（Word/Excel/ODF 輸入時需 OxOffice/LibreOffice）
 - **用印與簽名**：套用印章、簽名、Logo 圖片到 PDF，支援批次
 - **浮水印**：透明度、角度、平鋪填滿或指定位置
 
 ### 檔案編輯
-- **PDF 編輯器**：疊加文字、圖片、形狀、白底遮罩、標註；可編輯或刪除原 PDF 上的文字與圖片；內建字型管理
+- **PDF 編輯器**：疊加文字、圖片、形狀、白底遮罩、標註；可編輯或刪除原 PDF 上的文字與圖片；內建字型管理；自動 OCR 處理字型缺 ToUnicode CMap 的 PDF
 - **PDF 壓縮**：3 種預設或進階自訂圖片 DPI、字型子集化等
 - **多頁合併（N-up）**：把 2/4/6/8/9/16 頁 PDF 合併到一張紙；自訂版面、間距、邊框、頁碼
 - **檔案合併**：把多份 PDF 依上傳順序合併為一份
@@ -28,24 +30,25 @@
 - **註解平面化**：把 PDF 註解燒進頁面內容流，收件方無法移除；表單欄位保留可填，適合對外定稿前最後一步
 
 ### 內容擷取
-- **擷取文字** 🔧：輸出 TXT / Markdown / Word / ODT；可選交給 LLM 重排被 PDF 版面切斷的段落（輸出 Word/ODT 時需 OxOffice/LibreOffice）
+- **擷取文字** [需 OxOffice/LibreOffice]：輸出 TXT / Markdown / Word / ODT；可選交給 LLM 重排被 PDF 版面切斷的段落（輸出 Word/ODT 時需 OxOffice/LibreOffice）
 - **擷取圖片**：把 PDF 中所有嵌入的圖片擷取出來，xref 自動 dedupe，可勾選下載成 ZIP 或單張下載
 - **PDF 附件萃取**：列出並取出 PDF 中嵌入的檔案（EmbeddedFiles）
 - **字數統計**：總字數、字元、段落、句子、預估閱讀時間，含每頁字數直條圖、字元類型環圈、中文單字 / 中文雙字 / 英文 三類高頻詞圖表；可匯出 CSV / JSON / Markdown 報表
 - **註解整理**：擷取 PDF 所有註解（螢光筆 / 文字註解 / 圖章 / 自由文字 / 手繪 / 底線 / 刪除線 / 檔案附件等），三種輸出 — 完整清單（CSV/JSON）、審閱報告（Markdown，可依頁碼/作者/類型分組）、待辦清單（Markdown checkbox 或 CSV）；可依類型 / 作者篩選
 
 ### 格式轉換
-- **文書轉 PDF** 🔧：Word / Excel / PowerPoint / ODF 批次轉 PDF
-- **文書轉圖片** 🔧：PDF 或 Office 文件每頁轉成 PNG，5 段 DPI 可選（100 草稿 → 400 高 DPI 印刷）
+- **文書轉 PDF** [需 OxOffice/LibreOffice]：Word / Excel / PowerPoint / ODF 批次轉 PDF
+- **文書轉圖片** [需 OxOffice/LibreOffice]：PDF 或 Office 文件每頁轉成 PNG，5 段 DPI 可選（100 草稿 → 400 高 DPI 印刷）
+- **圖片轉 PDF**：拖入多張圖片（PNG / JPG / GIF / TIFF / WebP / HEIC），逐頁排序 / 旋轉 / 刪除；可選頁面大小（A3-A6 / B5 / Letter / Legal / Tabloid / 原始）、邊距、背景色；EXIF 自動正向
 
 ### 資安處理
-- **文件去識別化** 🔧：偵測身分證 / 手機 / Email / 統編 / 信用卡 / 銀行帳號 / 公司名稱 / 人名 …，一鍵編修（Redaction，不可還原）或資料遮罩（Masking，保留格式）（輸入是 Word/Excel/PPT/ODF 時需 OxOffice/LibreOffice 先轉 PDF）
+- **文件去識別化** [需 OxOffice/LibreOffice]：偵測身分證 / 手機 / Email / 統編 / 信用卡 / 銀行帳號 / 公司名稱 / 人名 …，一鍵編修（Redaction，不可還原）或資料遮罩（Masking，保留格式）（輸入是 Word/Excel/PPT/ODF 時需 OxOffice/LibreOffice 先轉 PDF）
 - **PDF 密碼保護 / 解除**：AES-256 加密、權限控制
 - **AES 加密壓縮檔**：把多份檔案打包成密碼保護的 zip，可寄信附件
 - **中繼資料清除**：作者 / 標題 / XMP / 修訂歷史
 - **註解清除**：刪除 PDF 中的註解（全部 / 依作者 / 依類型篩選），產出乾淨副本
 - **隱藏內容掃描**：JavaScript / 嵌入檔 / 隱藏文字 / 外部連結等風險，一鍵清除
-- **文件差異比對** 🔧：兩份文件逐頁並排比對，文字差異標紅；除 PDF 外也接 Word / Excel / PowerPoint / ODF（Office 輸入時自動先轉 PDF）
+- **文件差異比對** [需 OxOffice/LibreOffice]：兩份文件逐頁並排比對，文字差異標紅；除 PDF 外也接 Word / Excel / PowerPoint / ODF（Office 輸入時自動先轉 PDF）
 - **文字差異比對**：直接貼兩塊文字立即比對，不用上傳檔案；給 log / code 片段、段落改稿前後快速 diff；左右兩欄行/字數雙重統計；支援拖檔（.txt / .csv / .md / .log / .json / 程式碼等）
 
 ### 團隊 / 企業環境
@@ -56,16 +59,17 @@
 - **檔案保留 / 自動清理**：表單填寫 / 用印簽名 / 浮水印歷史 / 暫存檔 / Job 結果 / 稽核 各類獨立保留天數；排程清理
 - **API tokens**：對外呼叫 `/api/*` 的 bearer token；歸屬到使用者，視同該使用者權限
 - **字型管理**：標準 14 字型 + 內建思源黑體 / 宋體繁中 + 系統字型 + 自訂上傳
+- **相依套件檢查**：admin 頁列出所有系統相依（tesseract / Office / CJK 字型 / Python 相依）狀態 + 各平台安裝指令
 
-> 🔧 **Office 引擎相依說明**
+> **Office 引擎相依說明**
 >
-> 標 🔧 的工具會用到 **OxOffice** 或 **LibreOffice**（OxOffice 優先，OSSII 維護的台灣本地化 fork，CJK 支援更好）：
+> 標 [需 OxOffice/LibreOffice] 的工具會用到 **OxOffice** 或 **LibreOffice**（OxOffice 優先，OSSII 維護的台灣本地化 fork，CJK 支援更好）：
 >
 > - **文書轉 PDF**、**文書轉圖片** — 永遠需要
 > - **表單自動填寫**、**文件去識別化** — 輸入是 Word / Excel / PowerPoint / ODF 時需要；PDF 輸入則不需要
 > - **擷取文字** — 輸出選 Word（.docx）/ ODT 時需要；輸出 TXT / Markdown 不需要
 >
-> 其他 21 個工具（合併、分拆、N-up、浮水印、用印、編輯器、壓縮、加密、文字差異比對 …）只處理 PDF / 純文字，**不需要 Office 引擎**。
+> 其他 22 個工具（合併、分拆、N-up、浮水印、用印、編輯器、壓縮、加密、圖片轉 PDF、文字差異比對 …）只處理 PDF / 純文字 / 圖片，**不需要 Office 引擎**。
 >
 > 安裝腳本會自動偵測 / 安裝 OxOffice；若失敗會 fallback 到系統的 LibreOffice。
 
