@@ -11,9 +11,10 @@
   {% block head %}{% endblock %}
 </head>
 <body>
-  <button class="sidebar-toggle" type="button" id="sidebarToggle" aria-label="開關側邊選單">☰</button>
+  <button class="sidebar-toggle" type="button" id="sidebarToggle" aria-label="展開側邊選單" title="展開側邊選單">☰</button>
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-header">
+    <div class="sidebar-header" style="position:relative;">
+      <button class="sidebar-collapse" type="button" id="sidebarCollapse" aria-label="收起側邊選單" title="收起側邊選單">‹</button>
       <div class="brand-block">
         <a class="brand" href="/"><img class="brand-logo" src="/static/images/logo-on-dark.png" alt="" /><span class="brand-text">{{ app_name }}</span></a>
         <div class="brand-version">v{{ version }}</div>
@@ -145,16 +146,42 @@
   <script>
     (function(){
       const btn = document.getElementById('sidebarToggle');
+      const collapseBtn = document.getElementById('sidebarCollapse');
       const sb = document.getElementById('sidebar');
       const bd = document.getElementById('sidebarBackdrop');
-      function close(){ sb.classList.remove('open'); bd.classList.remove('show'); }
+      const LS_KEY = 'jtdt:sidebar-collapsed';
+      const isMobile = () => window.matchMedia('(max-width: 900px)').matches;
+      function closeMobile(){ sb.classList.remove('open'); bd.classList.remove('show'); }
+      // 套用 localStorage 儲存的收合狀態（桌機）
+      try {
+        if (localStorage.getItem(LS_KEY) === '1') {
+          document.body.classList.add('sidebar-collapsed');
+        }
+      } catch(e) {}
+      // 「展開」按鈕（左上 ☰）
       btn && btn.addEventListener('click', () => {
-        const open = sb.classList.toggle('open');
-        bd.classList.toggle('show', open);
+        if (isMobile()) {
+          const open = sb.classList.toggle('open');
+          bd.classList.toggle('show', open);
+        } else {
+          document.body.classList.remove('sidebar-collapsed');
+          try { localStorage.setItem(LS_KEY, '0'); } catch(e) {}
+        }
       });
-      bd && bd.addEventListener('click', close);
-      // Close on nav click (mobile)
-      sb && sb.querySelectorAll('a').forEach(a => a.addEventListener('click', close));
+      // 「收起」按鈕（sidebar header 右上 ‹）
+      collapseBtn && collapseBtn.addEventListener('click', () => {
+        if (isMobile()) {
+          closeMobile();
+        } else {
+          document.body.classList.add('sidebar-collapsed');
+          try { localStorage.setItem(LS_KEY, '1'); } catch(e) {}
+        }
+      });
+      bd && bd.addEventListener('click', closeMobile);
+      // Close on nav click (mobile only)
+      sb && sb.querySelectorAll('a').forEach(a => a.addEventListener('click', () => {
+        if (isMobile()) closeMobile();
+      }));
       // Highlight active link + ensure it's visible (auto-scroll sidebar)
       try {
         const path = location.pathname;
