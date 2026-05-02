@@ -1678,32 +1678,30 @@ $('apUploadInput').addEventListener('change', () => {
 
 // ============ Save ============
 $('btnSave').addEventListener('click', () => savePdf(false));
-// 下載按鈕：用 fetch 抓 PDF blob 強制下載，避免 anchor href + download
-// 在某些情境（autosave URL 還沒 set / 瀏覽器擴充攔截 / safari quirks）下無效。
-$('btnDownload').addEventListener('click', async (e) => {
+// 下載按鈕：用 iframe 觸發瀏覽器原生 download dialog
+//（後端已設 Content-Disposition: attachment + filename=...，
+//  iframe.src = url 會走 server-driven 下載，最穩，不會被
+//  programmatic click 的安全檢查擋掉，也不會在分頁切換）。
+$('btnDownload').addEventListener('click', (e) => {
   const dl = e.currentTarget;
   const url = dl._downloadUrl || dl.getAttribute('href');
+  e.preventDefault();
   if (!url || url === '#') {
-    e.preventDefault();
     setStatus('還沒儲存過，請先按「儲存並預覽」或編輯任何物件觸發自動儲存。');
     return;
   }
-  e.preventDefault();
-  setStatus('準備下載 …');
-  try {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const blob = await r.blob();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = dl._downloadName || 'edited.pdf';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    setStatus('已下載：' + a.download);
-  } catch (err) {
-    setStatus('下載失敗：' + err.message);
-  }
+  setStatus('開始下載 …');
+  // 移除上次留下來的 iframe（避免疊加）
+  const old = document.getElementById('peDlFrame');
+  if (old) old.remove();
+  const iframe = document.createElement('iframe');
+  iframe.id = 'peDlFrame';
+  iframe.style.display = 'none';
+  iframe.src = url;
+  document.body.appendChild(iframe);
+  // 也設 anchor href 給使用者 fallback：右鍵「另存連結」也能用
+  dl.href = url;
+  setTimeout(() => setStatus(''), 3000);
 });
 
 // ============ Global font replace ============
