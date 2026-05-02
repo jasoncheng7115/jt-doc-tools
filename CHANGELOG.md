@@ -4,6 +4,119 @@
 
 ---
 
+## [1.2.3] - 2026-05-02
+
+### 新增（系統依賴檢查工具）
+
+- 設定區新增第一個工具「**系統依賴檢查**」(`/admin/sys-deps`)，列出所有系統套件（tesseract / OxOffice / LibreOffice / CJK 字型 / pytesseract / Pillow 等）的安裝狀態、版本、影響說明，與每個平台對應的手動安裝指令。軟依賴 (optional) 缺失只顯示黃色警告，硬依賴缺失顯示紅色嚴重狀態，使用者一眼看到缺什麼。
+- 配套 `GET /admin/api/sys-deps` JSON API 給外部監控 / 自動化呼叫使用。
+- `app/core/sys_deps.py` 是單一資料來源 — `jtdt update` 結尾的依賴 summary 與 admin 頁面共享同一份 registry，避免兩處 drift。
+
+### 變更（jtdt update 自動補裝系統依賴）
+
+- 自 v1.2.2 起 `jtdt update` 在 `uv sync` 之後新增 `_ensure_system_deps_for_update()` 步驟，自動 best-effort 補裝新版需要的系統套件 (Linux apt / macOS brew / Windows winget)。任何失敗只 warn 不阻擋升級。升級結尾印「系統依賴狀態」表，缺什麼明確列出。
+- 規矩：往後新加任何系統依賴必須**同時**處理 `install.sh` (fresh install) + `install.ps1` (Windows fresh install) + `cli.py:_ensure_system_deps_for_update()` (既有客戶 update) 三處，否則既有客戶升級後該功能無法使用。
+
+### 修正（git 升級用 reset --hard 處理 force-pushed remote）
+
+- `jtdt update` 從 `git pull --ff-only` 改用 `git fetch + git reset --hard origin/main`。原作法在 remote 被 force-push (歷史重寫) 時會 abort「Not possible to fast-forward」，新作法強制對齊 origin/main，符合「install dir 不做開發 commit」的設計前提。
+- UI / CLI 用詞修正：「回滾」(中國用語) → 「還原」(台灣用詞)。
+
+---
+
+## [1.2.2] - 2026-05-02
+
+### 新增（pdf-editor 自動 OCR 重建文字）
+
+- pdf-editor 偵測到既有文字無法可靠擷取（字型缺/壞 ToUnicode CMap 導致 PyMuPDF 取出亂碼）時，自動把該 bbox 區域用 tesseract OCR (`chi_tra+eng` 訓練檔，300 DPI 渲染，PSM 7 單行 / PSM 6 多行) 重建文字，回傳給前端建立可編輯文字框。**使用者完全不用手動重打。** 純軟依賴：tesseract / pytesseract 沒裝就退到原本的「請手動重打」訊息，本體運作完全不受影響。
+- `install.sh`：fresh install 時自動 apt/dnf install `tesseract-ocr` + `tesseract-ocr-chi-tra` + `tesseract-ocr-eng`（Linux），或 `brew install tesseract tesseract-lang`（macOS）。任何錯誤都只 warn 不 die，不阻擋安裝流程。
+- `install.ps1`：fresh install 時用 winget 裝 UB-Mannheim 版 tesseract。失敗只 warn，不阻擋流程。
+- `pyproject.toml` / `requirements.txt` / `uv.lock`：加 `pytesseract>=0.3.10,<0.4` 作 runtime 依賴。
+- `jtdt update`：升版完若偵測 tesseract 不存在，印提示告知使用者如何手動安裝。**不主動 apt install** 以免改動既有客戶系統 apt state。
+
+---
+
+## [1.2.1] - 2026-05-02
+
+### 修正（pdf-editor 亂碼偵測別自動蓋白底）
+
+- v1.1.98 ~ v1.2.0 的修法是「偵測到亂碼 → 自動建白底 + 空文字框」，但白底 Rect 直接 push 進 Fabric overlay，瞬間就把 BG 上的原文字蓋掉，使用者連看清原文都來不及就被覆蓋。改成「只跳訊息提示，不主動建任何物件」— 使用者可目視原文字後，自己決定要不要用 W (白底) + T (文字框) 工具手動覆蓋。
+
+---
+
+## [1.2.0] - 2026-05-02
+
+### 變更（小版本進版，patch 號重整）
+
+- patch 號累積到三位數 (1.1.100) 不利閱讀，本版進到 1.2.0，patch 重新從 0 編。本身行為等同 1.1.100；後續仍以 1.2.x 累積 patch，待累積大功能再進 1.3.x。
+- 累積本日（1.1.93 ~ 1.1.100）的修正：pdf-editor 下載按鈕回到純 anchor design、存檔重影修正、undo 不再誤把擷取物件記成「使用者要刪除」、中文亂碼 (Identity-H 缺/壞 ToUnicode CMap) 偵測 + 自動建白底 + 空文字框引導使用者重打。
+
+---
+
+## [1.1.100] - 2026-05-02
+
+### 修正（pdf-editor 中文亂碼偵測加 heuristic 後援）
+
+- v1.1.98 用「字型有無 /ToUnicode CMap」偵測，但有些 PDF 其實附了 CMap 但 mapping 是 identity（GID→GID），結果 ToUnicode 存在但取出的還是亂碼（例：「登入系統」→「翕⊕ㄱ 戔ㄱ」）。本版加兩個 heuristic 後援：①偵測文字含「不該出現的符號」(數學運算子 ⊕、技術符號、box drawing、注音、韓文相容字母 ㄱ、PUA 等) — 這些是 GID 被當 Unicode 解讀的典型徵兆；②若是純 CJK 字串且不含任何台灣繁中常用字（的/是/在/了 等 ~600 字白名單），視為亂碼。任一條成立就 flag `extracted_text_unreliable=true`，前端不塞亂碼，自動建白底遮罩 + 空文字框讓使用者重打。
+
+---
+
+## [1.1.99] - 2026-05-02
+
+### 修正（pdf-editor undo 到最早會把既有物件 redact 掉）
+
+- 一路 undo 回到最早 snapshot 時，原 PDF 既有文字應該完整顯示，但實際變空白。根因：`restoreSnapshot` 內 `loadFromJSON` 會把現有 Fabric 物件 remove 再 load 新的；`object:removed` handler 對於有 `_origBbox` 的物件會自動 push 到 `deletedOrigs` (使用者「刪除既有物件」的 intent 收集)。這個 handler 沒被 `suppressHistory` 守護，導致 undo 時誤把「正在被 tear down 的擷取物件」記成「使用者要刪除的既有物件」，下個 doAutoSave 把那區 redact 掉 → BG 變空白。修法：handler 開頭直接 `if (suppressHistory) return;`。
+
+---
+
+## [1.1.98] - 2026-05-02
+
+### 修正（pdf-editor 中文擷取亂碼 → 改提示使用者重新輸入）
+
+- 部分 PDF (如 Proxmox VE 手冊) 的中文字型用 Identity-H subset 但缺 `/ToUnicode` CMap，PyMuPDF 取出時把 GID 當 Unicode codepoint，「登入系統」變成「猞狝狘」之類罕見 CJK 亂碼。Scribus / LibreOffice 因為只做視覺 render 不需 Unicode mapping 所以看不出問題；做 overlay editing 必須拿真 Unicode 才行。修法：backend 直接從 PDF font dict 驗該字型有無 `/ToUnicode`（比啟發式判字頻精準），沒有就把 text 留空 + 加 `extracted_text_unreliable` flag；前端收到 flag 不塞亂碼，自動建白底遮罩 + 空文字框，提示使用者直接輸入要替換的內容。
+
+---
+
+## [1.1.97] - 2026-05-02
+
+### 修正（pdf-editor 存檔後既有物件重影）
+
+- 編輯擷取自原 PDF 的文字物件，存檔後 BG 已燒入新文字，但 Fabric overlay 物件仍保持完全可見 → 兩者疊出視覺重影（位置因 PyMuPDF render 與 Fabric render 字型 metrics 微差而錯開）。原本為了「避免使用者以為物件消失」刻意保留 _origBbox 物件 opacity 1，但這代價是重影。改為跟其他疊加物件一樣 fade 到 0.01；物件本體仍存在 Fabric scene，點擊原位置仍可選取再編輯。
+
+---
+
+## [1.1.96] - 2026-05-02
+
+### 整理（pdf-editor 下載：退回純 anchor design）
+
+- v1.1.93~95 加的下載 click handler workaround (target=_blank → programmatic anchor click → location.assign) 全部退回。事後確認問題是使用者 Chrome 上某個擴充功能攔截 download，重啟 Chrome 視窗讓擴充 reload 即解決，跟程式無關。回到 v1.1.88 之前最簡單最 idiomatic 的設計：純 `<a href="{download_url}" download="{filename}">` anchor + 後端回 `Content-Disposition: attachment` header，由瀏覽器 native 處理。
+
+---
+
+## [1.1.95] - 2026-05-02
+
+### 修正（pdf-editor 下載：Chrome 改用 location.assign）
+
+- v1.1.94 用 programmatic anchor click() Edge OK 但 **Chrome 仍不下載** — Network tab 完全沒看到 `/download/...` request。Chrome 對某些情境的 anchor click 有額外擋（download-bomb 防護或擴充攔截）。改用最直接的 `window.location.assign(url)`：因為 server 回 `Content-Disposition: attachment`，Chrome 會觸發下載而不真的 navigate，當前頁面 state 完整保留。
+
+---
+
+## [1.1.94] - 2026-05-02
+
+### 修正（pdf-editor 下載：Chrome 用 programmatic anchor click 而非 iframe）
+
+- v1.1.93 改用隱形 iframe 觸發 attachment download，Edge OK 但 **Chrome 觸發不了** — Chrome 對 iframe-attachment download 有 download-bomb 防護機制會默默吃掉。改回最跨瀏覽器穩的方式：建一個臨時 `<a>` 元素 + `download` attribute + `.click()`。Chrome / Edge / Firefox 都認 programmatic anchor click + same-origin attachment URL 觸發下載。
+
+---
+
+## [1.1.93] - 2026-05-02
+
+### 修正（pdf-editor 下載：anchor + target=_blank + iframe fallback）
+
+- v1.1.92 退回純 anchor 後使用者實測仍未跳出存檔對話框（瀏覽器把 `application/pdf` 認成可內嵌就直接 inline 顯示，或被擴充攔掉 download attribute）。本版改成：`<a target="_blank" rel="noopener" download>` + click handler `preventDefault` 後用隱形 iframe 載入 download URL。Server 已回 `Content-Disposition: attachment` → iframe 不會 navigate，瀏覽器直接觸發下載對話框，且不離開當前頁。同時保留 anchor 的 href / download 屬性，讓「右鍵另存新檔」fallback 仍可用。
+
+---
+
 ## [1.1.92] - 2026-05-02
 
 ### 修正（pdf-editor 下載 — 回到純 anchor 原生行為）

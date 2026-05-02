@@ -829,4 +829,20 @@ def build_router(templates) -> APIRouter:
         api_tokens.set_enforce(bool(body.get("enforce")))
         return {"ok": True, "enforce": api_tokens.is_enforced()}
 
+    # ---- 系統依賴檢查 -----------------------------------------------------
+    @router.get("/sys-deps", response_class=HTMLResponse)
+    async def sys_deps_page(request: Request):
+        from ..core.sys_deps import collect_sys_deps
+        deps = collect_sys_deps()
+        return templates.TemplateResponse(
+            "sys_deps.html",
+            {"request": request, "deps": deps},
+        )
+
+    @router.get("/api/sys-deps")
+    async def sys_deps_api():
+        """JSON 版本，給外部監控 / API token 呼叫者用 (符合「所有功能須有 API」規範)。"""
+        from ..core.sys_deps import collect_sys_deps
+        return {"deps": collect_sys_deps()}
+
     return router

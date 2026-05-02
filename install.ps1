@@ -128,6 +128,37 @@ function Ensure-Office {
     exit 1
 }
 
+# Tesseract OCR — soft optional. Used by pdf-editor to recover real text from
+# PDFs whose Identity-H subset font has a missing/identity ToUnicode CMap.
+# Any failure here is non-fatal — system runs fine without it, OCR feature
+# just degrades to "ask user to retype" message.
+function Test-Tesseract {
+    if (Get-Command tesseract -ErrorAction SilentlyContinue) {
+        $langs = & tesseract --list-langs 2>&1 | Out-String
+        return ($langs -match 'chi_tra')
+    }
+    return $false
+}
+
+function Install-Tesseract {
+    if (Test-Tesseract) { Ok "tesseract + chi_tra already installed"; return }
+    Log "Installing tesseract OCR (soft optional; pdf-editor text recovery)..."
+    try {
+        if (Get-Command winget -ErrorAction SilentlyContinue) {
+            # UB-Mannheim build bundles all language data files including chi_tra
+            $proc = Start-Process winget -ArgumentList "install --id UB-Mannheim.TesseractOCR -e --silent --accept-package-agreements --accept-source-agreements" -Wait -PassThru -NoNewWindow -ErrorAction SilentlyContinue
+            if ($proc.ExitCode -eq 0 -and (Test-Tesseract)) {
+                Ok "tesseract installed via winget"
+                return
+            }
+        }
+        Warn "tesseract auto-install failed - pdf-editor OCR feature will be disabled"
+        Warn "  To enable later: download from https://github.com/UB-Mannheim/tesseract/wiki"
+    } catch {
+        Warn "tesseract install error: $_  (continuing - OCR is optional)"
+    }
+}
+
 # uv
 function Install-Uv {
     if (Test-Path $UvExe) { Ok "uv already present"; return }
@@ -364,6 +395,7 @@ Log "Data:     $DataDir"
 Write-Host ""
 
 Ensure-Office
+Install-Tesseract
 Install-Uv
 Install-Nssm
 Fetch-Code

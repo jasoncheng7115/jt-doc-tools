@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}系統依賴檢查 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('gear', size=22) }} 系統依賴檢查</h1>
+<p class="muted">
+  本工具列出所有需要的系統套件、Python 依賴與字型，並顯示在這台機器上是否安裝、版本、以及缺漏時的安裝指令。
+  軟依賴（標 <span class="dep-soft">optional</span>）缺失時相關功能會 graceful 退化，本體仍可運作；硬依賴缺失則影響核心功能。
+</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">總覽</h2>
+  <div id="dep-summary" style="margin-bottom:12px;">
+    {% set total = deps | length %}
+    {% set ok_count = deps | selectattr('ok') | list | length %}
+    {% set missing_hard = deps | rejectattr('ok') | rejectattr('soft') | list | length %}
+    {% set missing_soft = deps | rejectattr('ok') | selectattr('soft') | list | length %}
+    <span class="dep-pill dep-ok">就緒：{{ ok_count }} / {{ total }}</span>
+    {% if missing_hard %}
+      <span class="dep-pill dep-bad">硬依賴缺：{{ missing_hard }}</span>
+    {% endif %}
+    {% if missing_soft %}
+      <span class="dep-pill dep-warn">軟依賴缺：{{ missing_soft }}</span>
+    {% endif %}
+    <button class="btn btn-small" type="button" id="btnRefresh" style="margin-left:12px;">
+      {{ icon('refresh') }} 重新檢查
+    </button>
+  </div>
+
+  <table class="dep-table">
+    <thead>
+      <tr>
+        <th>狀態</th>
+        <th>套件 / 依賴</th>
+        <th>分類</th>
+        <th>版本 / 備註</th>
+        <th>影響</th>
+      </tr>
+    </thead>
+    <tbody id="dep-tbody">
+    {% for d in deps %}
+      <tr class="{% if d.ok %}row-ok{% elif d.soft %}row-warn{% else %}row-bad{% endif %}">
+        <td class="cell-status">
+          {% if d.ok %}
+            <span class="dep-pill dep-ok">✓ 就緒</span>
+          {% elif d.soft %}
+            <span class="dep-pill dep-warn">⚠ 缺（optional）</span>
+          {% else %}
+            <span class="dep-pill dep-bad">✗ 缺（必要）</span>
+          {% endif %}
+        </td>
+        <td>
+          <b>{{ d.label }}</b>
+          {% if d.soft %}<span class="dep-soft">optional</span>{% endif %}
+          {% if d.binary %}
+            <div class="muted" style="font-size:11px; margin-top:2px;">{{ d.binary }}</div>
+          {% endif %}
+        </td>
+        <td><span class="dep-cat">{{ d.category }}</span></td>
+        <td>
+          {% if d.version %}<code style="font-size:12px;">{{ d.version }}</code>{% endif %}
+          {% if d.extra %}
+            <div class="muted" style="font-size:12px;">{{ d.extra }}</div>
+          {% endif %}
+          {% if not d.ok and d.install_cmd %}
+            <div style="margin-top:6px;">
+              <div class="muted" style="font-size:12px;">手動安裝指令（{{ d.platform }}）：</div>
+              <code class="dep-cmd">{{ d.install_cmd }}</code>
+            </div>
+          {% endif %}
+        </td>
+        <td class="muted" style="font-size:12px;">{{ d.impact }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .dep-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .dep-table th, .dep-table td { padding:10px 8px; text-align:left; vertical-align:top;
+    border-bottom: 1px solid #eee; }
+  .dep-table th { font-weight:600; color:#475569; font-size:12px;
+    background:#f8fafc; border-bottom:2px solid #e2e8f0; }
+  .dep-table tr.row-bad { background: rgba(239, 68, 68, 0.04); }
+  .dep-table tr.row-warn { background: rgba(245, 158, 11, 0.04); }
+  .cell-status { white-space: nowrap; }
+  .dep-pill { display:inline-block; padding:3px 10px; border-radius:12px;
+    font-size:12px; font-weight:600; }
+  .dep-pill.dep-ok   { background:#dcfce7; color:#166534; }
+  .dep-pill.dep-warn { background:#fef3c7; color:#92400e; }
+  .dep-pill.dep-bad  { background:#fee2e2; color:#991b1b; }
+  .dep-soft { display:inline-block; margin-left:6px; padding:1px 6px;
+    background:#e0e7ff; color:#3730a3; border-radius:8px; font-size:10px; font-weight:500; }
+  .dep-cat { display:inline-block; padding:2px 8px;
+    background:#f1f5f9; color:#475569; border-radius:8px; font-size:11px; }
+  .dep-cmd { display:block; padding:6px 8px; margin-top:4px;
+    background:#0f172a; color:#e2e8f0; border-radius:6px;
+    font-size:11px; word-break:break-all; line-height:1.5; }
+</style>
+
+<script>
+  document.getElementById('btnRefresh').addEventListener('click', async () => {
+    const btn = document.getElementById('btnRefresh');
+    btn.disabled = true;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '檢查中…';
+    try {
+      const r = await fetch('/admin/api/sys-deps');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      // Easiest: just reload the page so server-side template re-renders.
+      location.reload();
+    } catch (e) {
+      btn.innerHTML = orig;
+      btn.disabled = false;
+      alert('檢查失敗：' + e.message);
+    }
+  });
+</script>
+{% endblock %}
