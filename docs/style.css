@@ -306,11 +306,13 @@ code {
 .why-h {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 18px;
-  font-weight: 700;
-  margin: 0 0 14px;
+  gap: 12px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0 0 18px;
 }
+.why-h svg { width: 26px; height: 26px; }
 .why-col-bad  .why-h { color: #991b1b; }
 .why-col-good .why-h { color: #166534; }
 .why-col ul { padding: 0; margin: 0; list-style: none; }

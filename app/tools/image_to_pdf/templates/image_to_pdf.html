@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}圖片轉 PDF · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('image', size=22) }} 圖片轉 PDF</h1>
+<p class="muted">拖入多張圖片（PNG / JPG / GIF / TIFF / WebP / HEIC），可隨時再加；拖曳縮圖重新排序、按 ↺ ↻ 旋轉每一頁、按 × 刪除。設定好頁面大小按「產生 PDF」。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">上傳圖片</h2>
+  <div id="dropZone" class="i2p-drop">
+    <p class="i2p-drop-title">{{ icon('upload') }} 拖曳圖片到此，或點擊選擇檔案</p>
+    <p class="muted" style="font-size:12px;">可一次選多張；上傳後可繼續加。單檔上限 50 MB。</p>
+    <input type="file" id="fileInput" accept="image/*" multiple style="display:none;">
+  </div>
+</div>
+
+<details class="panel" id="grid-panel" hidden open>
+  <summary>圖片清單 <span class="muted" id="grid-info" style="font-weight:normal; font-size:12px; margin-left:8px;">—</span></summary>
+  <div class="i2p-toolbar">
+    <span class="muted" style="font-size:12px;">拖曳卡片可重新排序。</span>
+    <span style="flex:1;"></span>
+    <button class="btn btn-small" id="btn-rotate-all-r" type="button" title="全部順時針 90°">↻ 全部</button>
+    <button class="btn btn-small" id="btn-clear" type="button">{{ icon('trash', size=14) }} 全部清除</button>
+  </div>
+  <div class="i2p-grid" id="i2p-grid"></div>
+</details>
+
+<details class="panel" id="settings-panel" hidden open>
+  <summary>頁面設定</summary>
+  <div class="form-row">
+    <label>頁面大小</label>
+    <div class="field">
+      <select id="pageSize">
+        <option value="auto" selected>原始（每頁等於圖片大小）</option>
+        <option value="a4">A4 (210 × 297 mm)</option>
+        <option value="a3">A3 (297 × 420 mm)</option>
+        <option value="a5">A5 (148 × 210 mm)</option>
+        <option value="a6">A6 (105 × 148 mm)</option>
+        <option value="b5">B5 (176 × 250 mm)</option>
+        <option value="letter">Letter (8.5 × 11 in)</option>
+        <option value="legal">Legal (8.5 × 14 in)</option>
+        <option value="tabloid">Tabloid (11 × 17 in)</option>
+      </select>
+      <div class="muted" style="font-size:12px; margin-top:4px;">
+        非「原始」時會自動依圖片比例旋轉頁面方向（橫圖 → 橫向頁面）；圖片置中、留白以背景色填滿。
+      </div>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>邊距</label>
+    <div class="field">
+      <select id="marginMm">
+        <option value="0" selected>0 mm（出血到邊）</option>
+        <option value="5">5 mm</option>
+        <option value="10">10 mm</option>
+        <option value="20">20 mm</option>
+      </select>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>背景色</label>
+    <div class="field">
+      <div class="inline-row">
+        <input type="color" id="bgColor" value="#ffffff">
+        <span class="muted" style="font-size:12px;">頁面大小非「原始」時，圖片置中後留白處的顏色。</span>
+      </div>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>輸出檔名</label>
+    <div class="field">
+      <input type="text" id="outName" value="images.pdf" style="width: 280px;">
+    </div>
+  </div>
+  <div style="margin-top:12px;">
+    <button class="btn btn-primary" id="btn-generate">{{ icon('save') }} 產生 PDF</button>
+  </div>
+  <div style="margin-top:10px;">
+    {% with progress_id='jp' %}{% include "components/job_progress.html" %}{% endwith %}
+  </div>
+</details>
+
+<style>
+.i2p-drop {
+  border: 2px dashed #cbd5e1; border-radius: 12px;
+  padding: 36px 24px; text-align: center; cursor: pointer;
+  transition: all .12s;
+  background: #f8fafc;
+}
+.i2p-drop:hover, .i2p-drop.drag-over {
+  border-color: var(--primary);
+  background: #eff6ff;
+}
+.i2p-drop-title { font-size: 15px; margin: 0 0 6px 0; color: #475569; }
+.i2p-drop svg { vertical-align: -3px; margin-right: 4px; }
+
+.i2p-toolbar { display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+.i2p-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap:14px; }
+
+.i2p-card {
+  position:relative; background:#fff; border:1px solid var(--border); border-radius:8px;
+  padding:8px; display:flex; flex-direction:column; align-items:center; gap:6px;
+  cursor: grab; user-select: none;
+  transition: border-color .12s, box-shadow .12s, transform .05s;
+}
+.i2p-card:hover { border-color: var(--primary); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.i2p-card.dragging { opacity: 0.4; cursor: grabbing; }
+.i2p-card.drop-target { border-color: var(--primary); background:#eff6ff; }
+
+.i2p-thumb-wrap {
+  width: 100%; aspect-ratio: 1; background:#f8fafc;
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+  border:1px solid #e5e7eb; border-radius:4px;
+  cursor: zoom-in; position: relative;
+}
+.i2p-thumb {
+  max-width: 100%; max-height: 100%; pointer-events: none;
+  transition: transform .15s;
+}
+.i2p-num { font-size:13px; font-weight:600; color:#475569; }
+.i2p-fname { font-size: 11px; color: #94a3b8; max-width: 100%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.i2p-actions {
+  display: flex; gap: 4px; align-items: center;
+}
+.i2p-btn {
+  width: 28px; height: 28px; border-radius: 4px; border: 1px solid #e5e7eb;
+  background: #fff; cursor: pointer; font-size: 14px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .12s, border-color .12s;
+}
+.i2p-btn:hover { background: #f1f5f9; border-color: var(--primary); }
+.i2p-btn.danger:hover { background: #fef2f2; border-color: #dc2626; color: #dc2626; }
+
+.i2p-card .del-corner {
+  position:absolute; top:4px; right:4px; width:24px; height:24px; border-radius:50%;
+  background: rgba(220,38,38,0.92); color:#fff; border:none; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; font-size:14px; line-height:1;
+  z-index: 5;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  transition: background .12s, transform .12s;
+}
+.i2p-card .del-corner:hover { background:#dc2626; transform: scale(1.1); }
+
+.drag-hint { position:absolute; left:6px; top:6px; color:rgba(15,23,42,0.35); font-size:14px; pointer-events:none; }
+
+.i2p-lightbox {
+  position: fixed; inset: 0; background: rgba(15,23,42,0.85); z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  cursor: zoom-out; padding: 20px;
+}
+.i2p-lightbox img { max-width: 95%; max-height: 95vh; box-shadow: 0 16px 48px rgba(0,0,0,0.5); border-radius: 4px; background: #fff; }
+
+/* 頁面設定區的 form-row 整齊化：label 一律對齊 field 第一行頂端，
+   不要因為某些 row 的 field 內含說明文字而把 label 推到中間。 */
+#settings-panel .form-row {
+  align-items: flex-start;
+  margin: 10px 0;
+}
+#settings-panel .form-row label {
+  padding-top: 6px;  /* 與 select / input 第一行 baseline 對齊 */
+  width: 96px;
+}
+#settings-panel .form-row .field { display: flex; flex-direction: column; gap: 4px; }
+#settings-panel .form-row .field > select,
+#settings-panel .form-row .field > input[type=text],
+#settings-panel .form-row .field > input[type=color] {
+  align-self: flex-start;
+}
+/* 背景色那列 help text 是 inline，需要把 color picker 跟說明文字 wrap 在一行 */
+#settings-panel .field .inline-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/job_progress.js"></script>
+<script>
+// pages: [{file_id, filename, thumb_url, full_url, w, h, rotation}]
+let pages = [];
+
+const dz = document.getElementById('dropZone');
+const fi = document.getElementById('fileInput');
+
+dz.addEventListener('click', () => fi.click());
+['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, (e) => {
+  e.preventDefault(); e.stopPropagation();
+  dz.classList.add('drag-over');
+}));
+['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, (e) => {
+  e.preventDefault(); e.stopPropagation();
+  dz.classList.remove('drag-over');
+}));
+dz.addEventListener('drop', (e) => uploadFiles(e.dataTransfer.files));
+fi.addEventListener('change', (e) => uploadFiles(e.target.files));
+
+async function uploadFiles(fileList) {
+  if (!fileList || !fileList.length) return;
+  document.getElementById('grid-panel').hidden = false;
+  document.getElementById('settings-panel').hidden = false;
+  for (const f of Array.from(fileList)) {
+    if (!f.type.startsWith('image/') && !f.name.match(/\.(heic|heif|tif|tiff)$/i)) {
+      alert('跳過非圖片：' + f.name);
+      continue;
+    }
+    await uploadOne(f);
+  }
+  // Reset file input so re-selecting the same files triggers change
+  fi.value = '';
+}
+
+async function uploadOne(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  // Push a placeholder card so user sees immediate feedback
+  const placeholderId = 'p_' + Math.random().toString(36).slice(2);
+  pages.push({ file_id: placeholderId, filename: file.name,
+               thumb_url: null, full_url: null, w: 0, h: 0, rotation: 0,
+               uploading: true });
+  render();
+  try {
+    const r = await fetch('/tools/image-to-pdf/upload', {method: 'POST', body: fd});
+    if (!r.ok) {
+      pages = pages.filter(p => p.file_id !== placeholderId);
+      alert('上傳失敗：' + file.name + ' — ' + await r.text());
+      render();
+      return;
+    }
+    const j = await r.json();
+    // Replace placeholder with real entry
+    const idx = pages.findIndex(p => p.file_id === placeholderId);
+    if (idx >= 0) pages[idx] = { ...j, rotation: 0 };
+    render();
+  } catch (e) {
+    pages = pages.filter(p => p.file_id !== placeholderId);
+    alert('上傳錯誤：' + file.name + ' — ' + e.message);
+    render();
+  }
+}
+
+function render() {
+  const grid = document.getElementById('i2p-grid');
+  const info = document.getElementById('grid-info');
+  info.textContent = `共 ${pages.length} 張圖片`;
+  grid.innerHTML = pages.map((p, idx) => {
+    if (p.uploading) {
+      return `<div class="i2p-card" style="cursor:default;">
+        <div class="i2p-thumb-wrap" style="cursor:default;">
+          <span class="muted" style="font-size:12px;">上傳中…</span>
+        </div>
+        <div class="i2p-num">第 ${idx + 1} 頁</div>
+        <div class="i2p-fname" title="${escapeHtml(p.filename)}">${escapeHtml(p.filename)}</div>
+      </div>`;
+    }
+    const rotStyle = p.rotation ? `transform: rotate(${p.rotation}deg);` : '';
+    return `<div class="i2p-card" data-idx="${idx}" data-fid="${p.file_id}" draggable="true">
+      <span class="drag-hint">⠿</span>
+      <button type="button" class="del-corner" data-act="delete" title="刪除">×</button>
+      <div class="i2p-thumb-wrap" data-act="zoom">
+        <img class="i2p-thumb" src="${p.thumb_url}" style="${rotStyle}" alt="${escapeHtml(p.filename)}" loading="lazy" />
+      </div>
+      <div class="i2p-num">第 ${idx + 1} 頁</div>
+      <div class="i2p-fname" title="${escapeHtml(p.filename)}">${escapeHtml(p.filename)}</div>
+      <div class="i2p-actions">
+        <button type="button" class="i2p-btn" data-act="rotate-l" title="逆時針 90°">↺</button>
+        <button type="button" class="i2p-btn" data-act="rotate-r" title="順時針 90°">↻</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+const grid = document.getElementById('i2p-grid');
+grid.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-act]');
+  if (!btn) return;
+  const card = btn.closest('.i2p-card');
+  if (!card) return;
+  const idx = parseInt(card.dataset.idx);
+  const act = btn.dataset.act;
+  if (act === 'rotate-l') {
+    pages[idx].rotation = (pages[idx].rotation + 270) % 360;
+    render();
+  } else if (act === 'rotate-r') {
+    pages[idx].rotation = (pages[idx].rotation + 90) % 360;
+    render();
+  } else if (act === 'delete') {
+    const fid = card.dataset.fid;
+    pages.splice(idx, 1);
+    render();
+    // Best-effort cleanup; ignore failures
+    fetch('/tools/image-to-pdf/delete/' + fid, {method: 'POST'}).catch(() => {});
+  } else if (act === 'zoom') {
+    showLightbox(pages[idx].full_url);
+  }
+});
+
+function showLightbox(url) {
+  if (!url) return;
+  const el = document.createElement('div');
+  el.className = 'i2p-lightbox';
+  el.innerHTML = `<img src="${url}">`;
+  el.addEventListener('click', () => el.remove());
+  document.body.appendChild(el);
+}
+
+// Drag-reorder
+let dragIdx = null;
+grid.addEventListener('dragstart', (e) => {
+  const card = e.target.closest('.i2p-card');
+  if (!card || card.dataset.idx === undefined) return;
+  dragIdx = parseInt(card.dataset.idx);
+  card.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+});
+grid.addEventListener('dragend', () => {
+  document.querySelectorAll('.i2p-card').forEach(c => c.classList.remove('dragging','drop-target'));
+  dragIdx = null;
+});
+grid.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  const card = e.target.closest('.i2p-card');
+  if (!card || dragIdx === null) return;
+  document.querySelectorAll('.i2p-card').forEach(c => c.classList.remove('drop-target'));
+  card.classList.add('drop-target');
+});
+grid.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const card = e.target.closest('.i2p-card');
+  if (!card || dragIdx === null) return;
+  const dropIdx = parseInt(card.dataset.idx);
+  if (dropIdx === dragIdx) return;
+  const moved = pages.splice(dragIdx, 1)[0];
+  pages.splice(dropIdx, 0, moved);
+  dragIdx = null;
+  render();
+});
+
+document.getElementById('btn-rotate-all-r').addEventListener('click', () => {
+  pages.forEach(p => { if (!p.uploading) p.rotation = (p.rotation + 90) % 360; });
+  render();
+});
+
+document.getElementById('btn-clear').addEventListener('click', () => {
+  if (!pages.length) return;
+  if (!confirm('確定要清除所有圖片嗎？')) return;
+  // Best-effort server cleanup
+  pages.filter(p => !p.uploading).forEach(p =>
+    fetch('/tools/image-to-pdf/delete/' + p.file_id, {method: 'POST'}).catch(() => {}));
+  pages = [];
+  render();
+});
+
+const jp = new JobProgress(document.getElementById('jp'));
+
+document.getElementById('btn-generate').addEventListener('click', async () => {
+  const ready = pages.filter(p => !p.uploading);
+  if (!ready.length) { alert('請先上傳圖片'); return; }
+  const body = {
+    items: ready.map(p => ({ file_id: p.file_id, rotation: p.rotation })),
+    page_size: document.getElementById('pageSize').value,
+    margin_mm: parseFloat(document.getElementById('marginMm').value || '0'),
+    bg: document.getElementById('bgColor').value,
+    filename: document.getElementById('outName').value || 'images.pdf',
+  };
+  const btn = document.getElementById('btn-generate');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px;"></span>送出中…';
+  try {
+    const r = await fetch('/tools/image-to-pdf/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) { alert('產生失敗：' + await r.text()); return; }
+    const j = await r.json();
+    jp.track(j.job_id);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+});
+</script>
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+{% endblock %}

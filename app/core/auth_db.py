@@ -208,8 +208,25 @@ def _m3_rename_pdf_diff_to_doc_diff(conn: sqlite3.Connection) -> None:
     """)
 
 
+def _m4_grant_image_to_pdf(conn: sqlite3.Connection) -> None:
+    """v4: grant the new `image-to-pdf` tool to anyone who already has
+    `pdf-to-image`. Without this, existing customers' default-user / clerk
+    roles would be missing the new tool after upgrade — they'd see it in the
+    sidebar but get 403 when clicking. Pair-tool grant is the simplest
+    backfill heuristic that doesn't risk over-granting.
+    """
+    conn.executescript("""
+    INSERT OR IGNORE INTO role_perms(role_id, tool_id)
+        SELECT role_id, 'image-to-pdf' FROM role_perms WHERE tool_id = 'pdf-to-image';
+    INSERT OR IGNORE INTO subject_perms(subject_type, subject_key, tool_id)
+        SELECT subject_type, subject_key, 'image-to-pdf'
+        FROM subject_perms WHERE tool_id = 'pdf-to-image';
+    """)
+
+
 MIGRATIONS = [_m1_initial, _m2_username_source_unique,
-              _m3_rename_pdf_diff_to_doc_diff]
+              _m3_rename_pdf_diff_to_doc_diff,
+              _m4_grant_image_to_pdf]
 
 
 def auth_db_path() -> Path:
