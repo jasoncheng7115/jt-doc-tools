@@ -212,12 +212,14 @@ body {
   line-height: 1; padding: 0; margin-left: auto;
 }
 .sidebar-collapse:hover { background: rgba(255,255,255,0.18); }
-/* brand-row：brand 連結 + 收起按鈕 一行排好（brand 撐開、按鈕貼右） */
+/* brand-row：brand-block（brand+version）在左、收起按鈕貼最右
+   brand-block 維持 inline-flex column，version 仍對齊 brand 文字右緣 */
 .sidebar .brand-row {
-  display: flex; align-items: center; gap: 6px; min-width: 0;
+  display: flex; align-items: flex-start; gap: 6px; min-width: 0;
+  margin-bottom: 12px;
 }
-.sidebar .brand-row > .brand { flex: 1; min-width: 0; overflow: hidden; }
-.sidebar .brand-row > .brand .brand-text { overflow: hidden; text-overflow: ellipsis; }
+.sidebar .brand-row > .brand-block { margin-bottom: 0; }
+.sidebar .brand-row > .sidebar-collapse { margin-left: auto; margin-top: 6px; }
 
 .sidebar-backdrop {
   display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 40;

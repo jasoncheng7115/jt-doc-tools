@@ -14,12 +14,12 @@
   <button class="sidebar-toggle" type="button" id="sidebarToggle" aria-label="展開側邊選單" title="展開側邊選單">☰</button>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
-      <div class="brand-block">
-        <div class="brand-row">
+      <div class="brand-row">
+        <div class="brand-block">
           <a class="brand" href="/"><img class="brand-logo" src="/static/images/logo-on-dark.png" alt="" /><span class="brand-text">{{ app_name }}</span></a>
-          <button class="sidebar-collapse" type="button" id="sidebarCollapse" aria-label="收起側邊選單" title="收起側邊選單">‹</button>
+          <div class="brand-version">v{{ version }}</div>
         </div>
-        <div class="brand-version">v{{ version }}</div>
+        <button class="sidebar-collapse" type="button" id="sidebarCollapse" aria-label="收起側邊選單" title="收起側邊選單">‹</button>
       </div>
       {% set _cur = current_user(request) %}
       {% if _cur %}
