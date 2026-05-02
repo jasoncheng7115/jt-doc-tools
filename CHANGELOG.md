@@ -4,6 +4,15 @@
 
 ---
 
+## [1.3.9] - 2026-05-02
+
+### 修正（jtdt update 結尾系統相依摘要表也英文）
+
+- v1.3.8 已把 cli.py 內 67 處中文 print 翻成英文，但結尾的 `_print_system_deps_summary` 內 hardcoded 的相依清單仍是中文（「pdf-editor 自動文字辨識…」、「office-to-pdf / pdf-to-office 工具」），Win11 console 顯示亂碼。本版翻譯這份 hardcoded list；同時 `app/core/sys_deps.py` 加 `impact_en` 欄位 + `collect_sys_deps(lang='en')` 切換，admin web 頁仍用台灣繁中。
+- 預期完成 .154 / .64.3 兩台 Win11 機器升級驗證 (一台 x64、一台 ARM64)。
+
+---
+
 ## [1.3.8] - 2026-05-02
 
 ### 修正（jtdt update Windows uv 偵測 + CLI 全英文 + 分類更名）
