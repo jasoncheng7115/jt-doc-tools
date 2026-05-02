@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.2.5"
+VERSION = "1.3.3"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -67,6 +67,7 @@ _TOOL_ALIASES = {
     "office-to-pdf":      "convert convert-to-pdf office word excel powerpoint docx xlsx pptx odt ods odp 轉檔 轉成 文書 文件",
     "pdf-extract-images": "extract images pictures jpg png assets 擷取 提取 圖片 影像 抽圖",
     "pdf-to-image":       "convert image images png jpg jpeg raster rasterize export office word excel powerpoint docx xlsx pptx odt ods odp 文書轉圖片 轉圖 轉圖片 轉png 轉成圖片 影像 匯出圖片 Word 轉圖 Excel 轉圖 PPT 轉圖",
+    "image-to-pdf":       "image images photos jpg jpeg png gif tiff webp heic combine merge convert scan a4 letter page size rotate reorder 圖片 照片 相片 掃描 轉 PDF 合併 排序 旋轉 頁面大小 A4",
     "pdf-editor":         "editor edit annotate annotation whiteout redact text textbox shape pencil draw highlight sticky note scribus 編輯 編輯器 標註 註記 塗黑 遮蓋 手繪 螢光筆 便箋 文字框 修圖",
     "pdf-extract-text":   "extract text content txt markdown md docx word odt reflow paragraph ocr llm 擷取文字 取出文字 轉文字 轉 word 轉 markdown 段落重排 LLM 重排",
     "pdf-compress":       "compress compression shrink reduce size optimize optimise slim jpeg dpi downsample ghostscript gs subset font 壓縮 縮小 瘦身 減肥 檔案小 降解析度 去重複 Ghostscript",

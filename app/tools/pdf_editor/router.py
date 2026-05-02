@@ -29,6 +29,99 @@ from ...core.asset_manager import asset_manager
 router = APIRouter()
 
 
+def _extract_image_with_alpha(doc: "fitz.Document", xref: int,
+                              out_path: Path) -> None:
+    """Extract a PDF image to PNG preserving alpha (transparent areas).
+
+    The naive ``fitz.Pixmap(doc, xref).save(...)`` path only grabs the base
+    RGB stream — for PDFs that store transparency as a separate SMask
+    xref (the common case for embedded PNG-with-alpha) the alpha is lost
+    and transparent pixels become black. This helper handles three cases:
+
+      1) extract_image returns PNG bytes already containing alpha → write
+         the original bytes directly. Bit-perfect, fastest.
+      2) extract_image flags an SMask xref → load both pixmaps and combine
+         into an RGBA pixmap, then save as PNG.
+      3) Fallback: regular Pixmap(doc, xref) — same as before, may end up
+         opaque but won't crash.
+    """
+    info = doc.extract_image(xref)
+    ext = (info.get("ext") or "").lower()
+    raw = info.get("image") or b""
+    smask_xref = int(info.get("smask") or 0)
+
+    # Case 1: original is PNG and has its own alpha → just save raw bytes.
+    if ext == "png" and raw:
+        # PNG can be RGB-only or RGBA; either way reusing the original
+        # bytes preserves whatever alpha (if any) was there.
+        try:
+            from PIL import Image as _PILImage
+            import io as _io
+            with _PILImage.open(_io.BytesIO(raw)) as im:
+                # If PNG already has alpha, just write it; otherwise we
+                # might still need to merge SMask below.
+                if im.mode in ("RGBA", "LA") or "A" in im.getbands():
+                    out_path.write_bytes(raw)
+                    return
+        except Exception:
+            pass
+
+    # Case 2: separate SMask → combine base + mask into RGBA pixmap.
+    if smask_xref:
+        try:
+            base = fitz.Pixmap(doc, xref)
+            mask = fitz.Pixmap(doc, smask_xref)
+            # PyMuPDF: combining base RGB pixmap with a 1-channel mask
+            # yields an RGBA pixmap.
+            combined = fitz.Pixmap(base, mask)
+            combined.save(str(out_path))
+            return
+        except Exception:
+            pass
+
+    # Case 3: fallback. May be opaque but at least non-empty.
+    pix = fitz.Pixmap(doc, xref)
+    if pix.n > 4:  # CMYK / DeviceN → convert to RGB
+        pix = fitz.Pixmap(fitz.csRGB, pix)
+    pix.save(str(out_path))
+
+
+# Western fonts — when a span uses one of these, OCR with eng-only is far
+# more accurate than chi_tra+eng (the latter sometimes hallucinates CJK
+# strokes into ASCII letters: "Proxmox" → "ProXimoxX").
+_WESTERN_FONT_HINTS = (
+    "helvetica", "arial", "times", "courier", "verdana", "tahoma",
+    "georgia", "calibri", "cambria", "consolas", "roboto", "opensans",
+    "open sans", "sourcecode", "source code", "source sans", "sourcesans",
+    "lato", "montserrat", "ubuntu", "dejavu", "liberation", "free",
+    "garamond", "palatino", "myriad",
+)
+_CJK_FONT_HINTS = (
+    "pingfang", "songti", "heiti", "kaiti", "stsong", "stkaiti",
+    "noto sans cjk", "noto serif cjk", "notosanscjk", "notoserifcjk",
+    "source han", "sourcehan", "微軟", "細明", "正黑", "明體",
+    "ming", "jhenghei", "jheng hei", "yahei", "simsun", "simhei",
+    "tc", "tw", "hk", "sc", "cn", "jp", "kr",  # subset markers in subset names
+)
+
+
+def _ocr_lang_for_font(span_font: str) -> str:
+    """Pick OCR language(s) based on the span's font name. Western fonts get
+    eng-only (much more accurate); CJK fonts get chi_tra+eng (need both)."""
+    name = (span_font or "").lower()
+    if not name:
+        return "chi_tra+eng"
+    # CJK markers take priority — many subset fonts have generic-sounding
+    # base names but the +TC / +SC suffix gives them away.
+    for h in _CJK_FONT_HINTS:
+        if h in name:
+            return "chi_tra+eng"
+    for h in _WESTERN_FONT_HINTS:
+        if h in name:
+            return "eng"
+    return "chi_tra+eng"
+
+
 def _ocr_bbox(page: "fitz.Page", bbox, lang: str = "chi_tra+eng") -> str:
     """OCR a single bbox region on a PDF page, return cleaned text.
 
@@ -312,7 +405,8 @@ async def detect_objects(request: Request):
                         ocr_text = ""
                         ocr_used = False
                         if unreliable:
-                            ocr_text = _ocr_bbox(page, [bx0, by0, bx1, by1])
+                            ocr_lang = _ocr_lang_for_font(span_font)
+                            ocr_text = _ocr_bbox(page, [bx0, by0, bx1, by1], lang=ocr_lang)
                             if ocr_text:
                                 ocr_used = True
                         if ocr_used:
@@ -344,16 +438,21 @@ async def detect_objects(request: Request):
                     thumb_png = None
                     if xref:
                         # Export image as PNG under work_dir for the
-                        # frontend to preview.
+                        # frontend to preview. Preserve alpha channel:
+                        # PyMuPDF stores transparent PDF images as base
+                        # RGB + a separate SMask xref (soft mask = alpha).
+                        # Naive `fitz.Pixmap(doc, xref)` only grabs base →
+                        # transparent pixels render BLACK. Fix:
+                        #   1) prefer extract_image() raw bytes when ext is
+                        #      png/jpeg-with-alpha (preserves original
+                        #      encoding incl. alpha);
+                        #   2) otherwise combine base pixmap + smask pixmap
+                        #      into RGBA.
                         img_file = (_work_dir() /
                                     f"pe_{upload_id}_imgx{xref}_p{page_idx}.png")
                         if not img_file.exists():
                             try:
-                                pix = fitz.Pixmap(doc, xref)
-                                if pix.alpha or pix.n > 4:
-                                    pix = fitz.Pixmap(fitz.csRGB, pix)
-                                pix.save(str(img_file))
-                                pix = None
+                                _extract_image_with_alpha(doc, xref, img_file)
                             except Exception:
                                 img_file = None
                         if img_file and img_file.exists():

@@ -4,6 +4,57 @@
 
 ---
 
+## [1.3.3] - 2026-05-02
+
+### 修正（pdf-editor 既有圖片擷取保留透明背景）
+
+- 點選原 PDF 上有透明背景 + 陰影的圖片時，擷取出來變成黑底（透明區變黑）。原因：PyMuPDF 把透明 PDF 圖儲存成「base RGB stream + 獨立 SMask xref（alpha mask）」，`fitz.Pixmap(doc, xref)` 只抓 base 不抓 SMask → alpha 全失，被當不透明圖渲染。修法：先試 `doc.extract_image()` 取原始 PNG bytes（自帶 alpha）；若該 image 有 SMask xref，組合 base pixmap + mask pixmap 成 RGBA pixmap 再存。
+
+### 改進（相依套件檢查 UI 排版升級）
+
+- 總覽改用 stat cards：3 張卡片（就緒 / 必要相依缺 / 選用相依缺）並排，數字大字 + 顏色明確 + 卡片背景配色。
+- 表格升級：cell padding 加大、status pill 等寬對齊、optional badge 跟套件名稱同行不換行、binary 路徑 monospace 灰階、版本號用 monospace pill、安裝指令區塊加標題與背景。
+- hover 列高亮，視覺層次更分明。
+
+---
+
+## [1.3.2] - 2026-05-02
+
+### 修正（圖片轉 PDF：縮圖刪除鈕一直顯示 + 頁面設定排列整齊）
+
+- 縮圖右上紅色 × 刪除鈕原本只在 hover 時 fade-in，使用者覺得「找不到刪除鈕」。改成一直顯示，加陰影與 hover 放大效果，更醒目。
+- 「頁面設定」面板裡 label 與 field 對齊修正：原本 `align-items: center` 在某些 row 含 help text 把 label 推到垂直中間，看起來不齊。本面板改 `flex-start`，所有 label 一律對齊 field 第一行頂端。背景色那列也統一用 `inline-row` 排版。
+
+---
+
+## [1.3.1] - 2026-05-02
+
+### 修正（pdf-editor OCR 對純英文字型用 eng-only）
+
+- 「Proxmox VE」(用 OpenSans-Bold 字型) 透過 `chi_tra+eng` OCR 變成「ProXimoxX VE」 — tesseract 在雙語模式下偶爾會把英文 glyph 誤判到中文字。修法：用 PDF span 的字型名稱判斷主語言：含 `helvetica` / `arial` / `opensans` / `times` / `roboto` 等西文字型 hint → OCR 用 `eng` only；含 `pingfang` / `notosanscjk` / `+TC` / `+SC` 等 CJK hint → 用 `chi_tra+eng`。
+
+---
+
+## [1.3.0] - 2026-05-02
+
+### 新增（圖片轉 PDF 工具）
+
+- 全新工具「**圖片轉 PDF**」(`/tools/image-to-pdf/`)：
+  - 拖入多張圖片（PNG / JPG / GIF / TIFF / WebP / HEIC，單檔上限 50 MB），可隨時再加。
+  - 縮圖網格顯示，**拖曳重新排序**、**逐頁旋轉**（90° 增量）、**逐頁刪除**、**全部清除**、**全部順時針旋轉**。
+  - 點縮圖開 lightbox 看大圖。
+  - 頁面大小可選：原始（每頁等於圖片大小）、A3 / A4 / A5 / A6 / B5 / Letter / Legal / Tabloid。
+  - 邊距可選：0 / 5 / 10 / 20 mm。
+  - 背景色可自訂（非「原始」尺寸時用於 letterbox 留白處）。
+  - 圖片置中，依比例自動旋轉頁面方向（橫圖 → 橫向頁面）。
+  - 智能編碼：照片走 JPEG quality 85（大幅省空間），線稿 / 截圖走 PNG（保留銳利邊緣）。
+  - EXIF orientation 自動正向化（手機照片不會躺著）。
+  - 配套 `POST /tools/image-to-pdf/api/image-to-pdf` 給 API token / 自動化呼叫使用（form-data 多檔上傳，回 PDF 直接下載）。
+- 工具總數從 27 → **28 個**；分類「格式轉換」現在含 3 個工具（文書轉 PDF / 文書轉圖片 / 圖片轉 PDF）。
+- 既有客戶 DB migration v4：自動把 `image-to-pdf` 授權給已有 `pdf-to-image` 權限的 role / subject — 升級後 default-user / clerk 自動有權使用，不會出現「看得到但點了 403」。
+
+---
+
 ## [1.2.5] - 2026-05-02
 
 ### 修正（pdf-editor OCR padding 改小避免抓到鄰近文字）
