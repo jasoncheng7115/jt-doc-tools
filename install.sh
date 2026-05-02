@@ -406,6 +406,54 @@ ensure_office() {
     ok "Office 引擎安裝完成：$DETECTED_OFFICE"
 }
 
+# --------------------------------------------------------------------- tesseract
+
+# Tesseract OCR — 軟依賴。pdf-editor 在原 PDF 字型缺/壞 ToUnicode CMap 時
+# 用 OCR 從 bbox 影像重建文字（例：登入系統 → 翕⊕ㄱ → OCR → 登入系統）。
+# 沒裝就退到「請使用者手動重打」訊息，本體運作不受影響 — 因此這個函式
+# 任何錯誤都只 warn 不 die，絕不阻擋安裝流程。
+install_tesseract() {
+    if command -v tesseract >/dev/null 2>&1; then
+        local langs
+        langs="$(tesseract --list-langs 2>/dev/null | tail -n +2 | tr '\n' ' ')"
+        if echo "$langs" | grep -q "chi_tra"; then
+            ok "tesseract 已存在，繁中訓練檔已就緒"
+            return 0
+        fi
+        log "tesseract 已存在但缺繁中訓練檔，補裝 chi_tra ..."
+    else
+        log "安裝 tesseract OCR（pdf-editor 文字辨識；不安裝也可運作但失去 OCR 能力）..."
+    fi
+    if [ "$PLATFORM" = "linux" ]; then
+        if command -v apt-get >/dev/null 2>&1; then
+            DEBIAN_FRONTEND=noninteractive apt-get install -y \
+                tesseract-ocr tesseract-ocr-chi-tra tesseract-ocr-eng \
+                || { warn "tesseract 自動安裝失敗 — pdf-editor OCR 功能會停用，其餘功能正常"; return 0; }
+        elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y tesseract tesseract-langpack-chi_tra tesseract-langpack-eng \
+                || { warn "tesseract 自動安裝失敗 — pdf-editor OCR 功能會停用，其餘功能正常"; return 0; }
+        else
+            warn "未支援的 Linux 發行版，請手動裝 tesseract + chi_tra"
+            return 0
+        fi
+    elif [ "$PLATFORM" = "macos" ]; then
+        if command -v brew >/dev/null 2>&1; then
+            brew install tesseract tesseract-lang \
+                || { warn "tesseract 自動安裝失敗 — pdf-editor OCR 功能會停用，其餘功能正常"; return 0; }
+        else
+            warn "未安裝 Homebrew，請手動 brew install tesseract tesseract-lang"
+            return 0
+        fi
+    fi
+    if command -v tesseract >/dev/null 2>&1 \
+       && tesseract --list-langs 2>/dev/null | grep -q "chi_tra"; then
+        ok "tesseract + 繁中訓練檔安裝完成"
+    else
+        warn "tesseract 安裝後仍偵測不到 chi_tra — pdf-editor OCR 功能將停用"
+    fi
+    return 0
+}
+
 # --------------------------------------------------------------------- uv
 
 install_uv() {
@@ -713,6 +761,7 @@ main() {
     echo
 
     ensure_office
+    install_tesseract
     fetch_code
     install_uv
     setup_python

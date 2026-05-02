@@ -29,6 +29,183 @@ from ...core.asset_manager import asset_manager
 router = APIRouter()
 
 
+def _ocr_bbox(page: "fitz.Page", bbox, lang: str = "chi_tra+eng") -> str:
+    """OCR a single bbox region on a PDF page, return cleaned text.
+
+    Used to recover real text from PDFs whose Identity-H subset fonts have
+    a missing or identity ToUnicode CMap (so PyMuPDF text extraction returns
+    GIDs as Unicode garbage). Renders the region at high DPI and asks
+    tesseract to read it.
+
+    Returns empty string when tesseract / pytesseract is unavailable, OCR
+    crashes, or the result is obviously empty / noise.
+    """
+    try:
+        import pytesseract  # noqa: F401  (optional dep)
+        from PIL import Image
+    except ImportError:
+        return ""
+    try:
+        import pytesseract
+    except Exception:
+        return ""
+    try:
+        x0, y0, x1, y1 = [float(v) for v in bbox]
+        rect = fitz.Rect(x0, y0, x1, y1)
+        # Render at 300 DPI for tesseract — printed text needs detail.
+        zoom = 300 / 72
+        matrix = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=matrix, clip=rect, alpha=False)
+        img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+        # PSM 7 = single text line. Use 6 (uniform block) for taller boxes
+        # where multiple lines may fit.
+        aspect = (y1 - y0) / max((x1 - x0), 1)
+        psm = "6" if aspect > 0.5 else "7"
+        text = pytesseract.image_to_string(
+            img, lang=lang, config=f"--psm {psm}",
+        )
+        text = (text or "").strip()
+        # Strip OCR-flavored line noise: stray standalone punctuation, NBSP,
+        # zero-width chars, control chars.
+        text = "".join(
+            ch for ch in text
+            if ord(ch) >= 0x20 or ch in ("\n", "\t")
+        )
+        text = text.replace(" ", " ").strip()
+        return text
+    except Exception:
+        return ""
+
+
+# Cache: (doc.id, font_name_or_xref) → bool. PDF page font lookup is not free.
+_TOUNICODE_CACHE: dict[tuple[int, str], bool] = {}
+
+
+def _font_has_tounicode(doc: "fitz.Document", page: "fitz.Page",
+                        span_font: str) -> bool:
+    """Check whether the font used by ``span`` carries a /ToUnicode CMap.
+
+    PDF fonts that embed a subset (Identity-H without /ToUnicode) render
+    correctly visually but text extraction returns raw glyph IDs reinterpreted
+    as Unicode codepoints — usually surfacing as obscure CJK characters
+    (e.g. 登入系統 → 猞狝狘). Without ToUnicode we cannot recover the true
+    text, so callers should refuse the extraction and prompt the user to
+    redact + re-type instead.
+    """
+    if not span_font:
+        return True  # nothing to check, be permissive
+    cache_key = (id(doc), str(page.number) + ":" + span_font)
+    cached = _TOUNICODE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = True  # default permissive — only flip to False on confirmed miss
+    try:
+        for finfo in page.get_fonts(full=True):
+            # finfo: (xref, ext, type, basefont, name, encoding[, referencer])
+            xref = finfo[0]
+            basefont = finfo[3] if len(finfo) > 3 else ""
+            name = finfo[4] if len(finfo) > 4 else ""
+            # PyMuPDF strips the 6-letter subset prefix ("ABCDEF+") from the
+            # span's font name in some versions but keeps it in others. Match
+            # by suffix to cover both.
+            span_norm = span_font.split("+")[-1]
+            cand_norms = [
+                str(name).split("+")[-1] if name else "",
+                str(basefont).split("+")[-1] if basefont else "",
+            ]
+            if span_norm not in cand_norms and span_font not in (str(name), str(basefont)):
+                continue
+            try:
+                obj_str = doc.xref_object(xref, compressed=False) or ""
+            except Exception:
+                obj_str = ""
+            result = "/ToUnicode" in obj_str
+            break
+    except Exception:
+        result = True  # on error, don't block the user
+    _TOUNICODE_CACHE[cache_key] = result
+    return result
+
+
+# Common Taiwan-繁中 characters — if a CJK string contains zero of these,
+# it is almost certainly garbled extraction (real Taiwan PDFs almost always
+# include common particles like 的/是/在/了 or function words).
+_COMMON_TC = set(
+    "的是在了一不和有也與及或但若如那這就因為所以從為對於到把被讓以由"
+    "於還只都我你他她我們他們你們什麼怎麼這個那個這些那些"
+    "登入系統設定檔案資料管理服務網路連線安裝啟動關閉重設密碼帳號"
+    "使用者員工客戶廠商日期時間年月日今明昨前後上下左右中間第頁本"
+    "如何說明請按確定取消儲存匯出匯入下載上傳新增修改刪除查詢搜尋"
+    "顯示隱藏離開結束完成成功失敗錯誤警告通知訊息提示輸入輸出選擇"
+    "選項範圍位置數量大小高度寬度長度公司部門組織單位負責人員會員"
+    "權限管理員一般個人團體大型中型小型快速分析統計報告紀錄歷史最新"
+    "中文英文程式語言開源企業免費商業軟體網站手機電腦平板問題答案"
+    "建議考慮注意應該必須可能繁體簡體台灣中華民國"
+    "虛擬化容器實體機器主機網域區網路由備份還原快照映像光碟硬碟"
+    "記憶體處理器執行運作功能操作畫面文字段落章節範例例如說明文件"
+)
+
+
+def _looks_garbled(text: str) -> bool:
+    """Heuristic: detect text-extraction garbage from PDFs whose Identity-H
+    fonts have a broken/identity ToUnicode CMap (so /ToUnicode existence check
+    in :func:`_font_has_tounicode` returns True but content is still GIDs).
+
+    Two signals, either suffices:
+      a) Contains symbols/scripts that should not appear in normal Taiwan text
+         (math operators, technical symbols, lone Hangul jamo, dingbats, etc.).
+         A single occurrence in a short string is highly suspicious.
+      b) Has multiple CJK characters but ZERO common Taiwan characters — real
+         Taiwan PDFs basically always hit at least one of 的/是/在/了/一/...
+    """
+    if not text:
+        return False
+
+    suspicious = 0
+    cjk_count = 0
+    common_hits = 0
+    for ch in text:
+        cp = ord(ch)
+        if ch in _COMMON_TC:
+            common_hits += 1
+        if 0x3400 <= cp <= 0x9FFF or 0x20000 <= cp <= 0x2FFFF:
+            cjk_count += 1
+            # CJK Ext A/B is rare; if a span is mostly Ext A → suspicious
+            if 0x3400 <= cp <= 0x4DBF or 0x20000 <= cp <= 0x2FFFF:
+                suspicious += 1
+            continue
+        # Non-CJK suspicious blocks
+        if 0x2200 <= cp <= 0x22FF:        # Mathematical Operators (⊕, ∂, ...)
+            suspicious += 1
+        elif 0x2300 <= cp <= 0x23FF:      # Miscellaneous Technical
+            suspicious += 1
+        elif 0x2500 <= cp <= 0x257F:      # Box Drawing
+            suspicious += 1
+        elif 0x25A0 <= cp <= 0x25FF:      # Geometric Shapes
+            suspicious += 1
+        elif 0x2600 <= cp <= 0x26FF:      # Misc Symbols
+            suspicious += 1
+        elif 0x2700 <= cp <= 0x27BF:      # Dingbats
+            suspicious += 1
+        elif 0x3100 <= cp <= 0x312F:      # Bopomofo (注音) — lone bopomofo in body text is a smell
+            suspicious += 1
+        elif 0x3130 <= cp <= 0x318F:      # Hangul Compatibility Jamo (ㄱ etc)
+            suspicious += 1
+        elif 0xE000 <= cp <= 0xF8FF:      # Private Use Area
+            suspicious += 1
+
+    # Signal a) suspicious symbols mixed in
+    if suspicious >= 1 and (cjk_count + suspicious) <= 12:
+        return True
+    if suspicious / max(cjk_count + suspicious, 1) >= 0.25:
+        return True
+    # Signal b) multiple CJK but no common chars → garbled
+    if cjk_count >= 2 and common_hits == 0:
+        return True
+    return False
+
+
 @router.get("/fonts")
 async def list_fonts():
     """Return the font catalog for the text-tool dropdown."""
@@ -94,13 +271,44 @@ async def detect_objects(request: Request):
                         r = (col_int >> 16) & 0xff
                         g = (col_int >> 8) & 0xff
                         b = col_int & 0xff
+                        span_text = span.get("text", "")
+                        span_font = span.get("font", "")
+                        # Detect garbled extraction. Two checks:
+                        #  1) Font lacks /ToUnicode CMap (truly broken).
+                        #  2) Heuristic on the extracted text itself — catches
+                        #     PDFs whose CMap exists but is identity (returns
+                        #     GIDs as Unicode); this is the common case where
+                        #     登入系統 → 翕⊕ㄱ 戔ㄱ.
+                        unreliable = False
+                        if span_text:
+                            if not _font_has_tounicode(doc, page, span_font):
+                                unreliable = True
+                            elif _looks_garbled(span_text):
+                                unreliable = True
+                        # When extraction is unreliable, OCR the bbox region
+                        # to recover real text. Only fall back to "ask user
+                        # to retype" if OCR is unavailable or returns nothing.
+                        ocr_text = ""
+                        ocr_used = False
+                        if unreliable:
+                            ocr_text = _ocr_bbox(page, [bx0, by0, bx1, by1])
+                            if ocr_text:
+                                ocr_used = True
+                        if ocr_used:
+                            final_text = ocr_text
+                        elif unreliable:
+                            final_text = ""
+                        else:
+                            final_text = span_text
                         return {
                             "kind": "text",
                             "bbox": [bx0, by0, bx1, by1],
-                            "text": span.get("text", ""),
+                            "text": final_text,
                             "font_size": float(span.get("size", 11)),
                             "color": f"#{r:02x}{g:02x}{b:02x}",
-                            "font": span.get("font", ""),
+                            "font": span_font,
+                            "extracted_text_unreliable": unreliable and not ocr_used,
+                            "ocr_used": ocr_used,
                         }
 
         # 2) Images — get_image_info returns bboxes

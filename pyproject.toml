@@ -1,6 +1,6 @@
 [project]
 name = "jt-doc-tools"
-version = "1.1.92"
+version = "1.2.3"
 description = "Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台"
 authors = [{ name = "Jason Cheng (Jason Tools)", email = "jason@jason.tools" }]
 requires-python = ">=3.10"
@@ -25,6 +25,14 @@ dependencies = [
     "python-docx>=1.0.0",
     "odfpy>=1.4",
     "ldap3>=2.9.1,<3",
+    # OCR — soft optional. Used by pdf-editor when extracting text from
+    # PDFs whose Identity-H subset font has a missing/identity ToUnicode CMap
+    # (PyMuPDF returns garbage like 翕⊕ㄱ instead of 登入系統). pytesseract
+    # itself is just a thin CLI wrapper; the actual heavy lifting needs the
+    # `tesseract` system binary + `chi_tra` traineddata installed via apt /
+    # brew / choco. Code path is `try: import pytesseract` — missing pkg or
+    # binary degrades to "ask user to retype" UX, never breaks anything.
+    "pytesseract>=0.3.10,<0.4",
 ]
 
 [project.scripts]

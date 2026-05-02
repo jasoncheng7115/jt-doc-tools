@@ -551,6 +551,11 @@ function attachPageHandlers(fc) {
   fc.on('object:removed', (opt) => {
     const o = opt.target;
     if (!o) return;
+    // suppressHistory 為 true 表示我們在 undo/redo 內部 tear down/rebuild
+    // canvas，這些 remove 不是使用者操作，不應變動 deletedOrigs（否則
+    // undo 把擷取物件清掉時會誤把它的 bbox push 進「使用者要刪除」清單，
+    // 下次 save 就把原 PDF 該區塊 redact 掉，看起來像「物件變空白」）。
+    if (suppressHistory) return;
     if (o._peMarker) {
       // Marker itself removed — user wants to cancel the redaction.
       // Drop it from deletedOrigs for this page.
@@ -911,6 +916,15 @@ async function pickExistingObject(fc, p) {
       return;
     }
     if (data.kind === 'text') {
+      // 偵測「字型缺 / 壞 ToUnicode CMap」的不可靠擷取 (常見 e.g.
+      // 登入系統 → 翕⊕ㄱ 戔ㄱ)。Backend 已嘗試 OCR 重建文字。
+      // 只有 OCR 也失敗 (沒裝 tesseract / OCR 結果空) 才會 set
+      // extracted_text_unreliable=true，此時提示使用者手動輸入。
+      if (data.extracted_text_unreliable) {
+        setStatus('此 PDF 字型沒有 Unicode 對應表，且系統未裝 tesseract OCR — 無法自動擷取。請目視原文字後，用 W 白底遮罩蓋掉、再用 T 文字框輸入要替換的內容。');
+        setTool('select');
+        return;
+      }
       const obj = new fabric.IText(data.text || '', {
         left: bb[0] * PT2PX, top: bb[1] * PT2PX,
         fontSize: Math.max(6, (data.font_size || 11) * PT2PX),
@@ -924,7 +938,11 @@ async function pickExistingObject(fc, p) {
       addRedactMarker(fc, bb, obj);
       lockUntilMouseUp(fc, obj);
       fc.setActiveObject(obj); fc.requestRenderAll();
-      setStatus(`已擷取文字。原位置有虛線框表示儲存時會被真刪除。`);
+      if (data.ocr_used) {
+        setStatus('已用 OCR 自動辨識既有文字（此 PDF 字型缺 Unicode 對應表）。請檢查辨識結果是否正確。');
+      } else {
+        setStatus(`已擷取文字。原位置有虛線框表示儲存時會被真刪除。`);
+      }
     } else if (data.kind === 'image') {
       if (!data.thumb_url) {
         setStatus('此圖片無法擷取（可能是 vector）');
@@ -1678,9 +1696,10 @@ $('apUploadInput').addEventListener('change', () => {
 
 // ============ Save ============
 $('btnSave').addEventListener('click', () => savePdf(false));
-// 下載按鈕：保持純 anchor + download 屬性原生行為（v1.1.89 加的 click
-// handler 反而被 Chrome 安全機制 / 擴充攔掉，回到原本最穩 design）。
-// savePdf() 完成後會自動把 dl.href 設成 download_url、加上 download 檔名。
+// 下載按鈕：純 anchor + download attribute + server 回 attachment header
+// 是最簡單也最跨瀏覽器穩的設計。savePdf() 完成後設好 href / download。
+// (v1.1.93~95 為了追一個 Chrome 擴充攔截 download 的環境問題加了一堆
+// click handler workaround，後來確認是 Chrome 端問題，全部退回。)
 
 // ============ Global font replace ============
 $('btnGlobalFont').addEventListener('click', () => {
@@ -1912,11 +1931,11 @@ async function savePdf(isAuto) {
       fc.getObjects().forEach(o => {
         if (o._peMarker) return;
         o._peSaved = true;
-        // 1) 目前選的物件 → 維持完全可見（連續編輯不被打斷）
-        // 2) 擷取自 PDF 的物件（有 _origBbox）→ 維持可見，使用者還在編輯它，
-        //    fade 掉會讓人以為「物件不見了」、跑去點空白處新增物件而錯亂
-        // 3) 新增的 / 已完成的疊加物件 → fade 到 0.01 讓 BG 重繪結果透出
-        if (o === stillSelected || o._origBbox) {
+        // 目前選的物件 → 維持完全可見（連續編輯不被打斷）
+        // 其他所有物件（包含擷取自 PDF 的）→ fade 到 0.01 讓 BG 透出，
+        // 否則 overlay 文字 + 已燒入 BG 的相同文字會疊出重影。物件本體
+        // 仍存在 Fabric scene，使用者仍可點選來再編輯。
+        if (o === stillSelected) {
           o.set('opacity', 1);
         } else {
           o.set('opacity', 0.01);

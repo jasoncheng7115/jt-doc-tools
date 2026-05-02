@@ -379,14 +379,18 @@ def svc_update() -> int:
     rc = subprocess.call(
         ["git", "-C", str(root), "fetch", "--tags", "origin"], env=git_env)
     if rc != 0:
-        print("git fetch 失敗，回滾：啟動原服務", file=sys.stderr)
+        print("git fetch 失敗，還原：啟動原服務", file=sys.stderr)
         _restore_ownership(root, owner)
         svc_start()
         return rc
+    # 用 fetch + reset --hard 而非 pull --ff-only：後者在 remote 被 force-push
+    # (歷史重寫) 時會 abort「Not possible to fast-forward」。reset --hard 強制
+    # 對齊 origin/main 是 fresh-checkout 的標準作法 — 我們不在 install 內做開發
+    # commit，所以無「本地未提交變更」需要保留。
     rc = subprocess.call(
-        ["git", "-C", str(root), "pull", "--ff-only", "origin", "main"], env=git_env)
+        ["git", "-C", str(root), "reset", "--hard", "origin/main"], env=git_env)
     if rc != 0:
-        print("git pull 失敗（可能本地有未提交變更），回滾", file=sys.stderr)
+        print("git reset --hard origin/main 失敗，還原", file=sys.stderr)
         _restore_ownership(root, owner)
         svc_start()
         return rc
@@ -403,7 +407,7 @@ def svc_update() -> int:
     print("同步 Python 依賴（uv sync）...")
     rc = subprocess.call([uv, "sync"], cwd=str(root))
     if rc != 0:
-        print("uv sync 失敗，回滾", file=sys.stderr)
+        print("uv sync 失敗，還原", file=sys.stderr)
         _restore_ownership(root, owner)
         svc_start()
         return rc
@@ -418,13 +422,16 @@ def svc_update() -> int:
         rc = subprocess.call([str(venv_py), "-c",
             "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx"])
         if rc != 0:
-            print("依賴 import 失敗 — 升級可能不完整，回滾", file=sys.stderr)
+            print("依賴 import 失敗 — 升級可能不完整，還原", file=sys.stderr)
             _restore_ownership(root, owner)
             svc_start()
             return rc
 
     # 5. Restore ownership so the service user can read the new files
     _restore_ownership(root, owner)
+
+    # 5b. Ensure system-level deps for new features (auto best-effort).
+    _ensure_system_deps_for_update()
 
     # 5. Restart
     print("啟動新版服務 ...")
@@ -444,11 +451,159 @@ def svc_update() -> int:
                 if r.status == 200:
                     new = _read_version()
                     print(f"升級完成：v{cur} → v{new}")
+                    _print_system_deps_summary()
                     return 0
         except Exception:
             time.sleep(1)
     print("健康檢查超時，請檢查 jtdt logs", file=sys.stderr)
+    _print_system_deps_summary()
     return 1
+
+
+def _print_system_deps_summary() -> None:
+    """升級後印「系統依賴狀態」表，缺的套件一目瞭然。
+
+    每個 entry：(顯示名, 偵測函式 → bool, 影響說明, 手動安裝指令 dict)
+    """
+    deps = [
+        (
+            "tesseract OCR",
+            lambda: bool(shutil.which("tesseract")) and _tesseract_has_lang("chi_tra"),
+            "pdf-editor 自動文字辨識（不裝則需手動重打）",
+            {
+                "linux": "sudo apt install tesseract-ocr tesseract-ocr-chi-tra tesseract-ocr-eng",
+                "macos": "brew install tesseract tesseract-lang",
+                "windows": "下載 https://github.com/UB-Mannheim/tesseract/wiki",
+            },
+        ),
+        (
+            "Office 引擎 (OxOffice / LibreOffice)",
+            _office_present,
+            "office-to-pdf / pdf-to-office 工具",
+            {
+                "linux": "sudo apt install libreoffice fonts-noto-cjk",
+                "macos": "brew install --cask libreoffice",
+                "windows": "winget install TheDocumentFoundation.LibreOffice",
+            },
+        ),
+    ]
+    missing = [d for d in deps if not d[1]()]
+    if not missing:
+        return
+    print()
+    print("⚠ 系統依賴未就緒：")
+    plat = "linux" if _is_linux() else ("macos" if _is_macos() else "windows")
+    for name, _, impact, cmds in missing:
+        print(f"  • {name}")
+        print(f"    影響：{impact}")
+        print(f"    手動裝：{cmds.get(plat, '查看官方文件')}")
+    print()
+
+
+def _tesseract_has_lang(lang: str) -> bool:
+    try:
+        out = subprocess.run(
+            ["tesseract", "--list-langs"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return lang in (out.stdout or "")
+    except Exception:
+        return False
+
+
+def _office_present() -> bool:
+    """偵測 OxOffice / LibreOffice 任一存在。"""
+    candidates = []
+    if _is_linux():
+        candidates = [
+            "/opt/oxoffice/program/soffice",
+            "/usr/bin/libreoffice", "/usr/bin/soffice",
+        ]
+    elif _is_macos():
+        candidates = [
+            "/Applications/OxOffice.app/Contents/MacOS/soffice",
+            "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+        ]
+    elif _is_windows():
+        prog = os.environ.get("ProgramFiles", r"C:\Program Files")
+        prog86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        candidates = [
+            rf"{prog}\OxOffice\program\soffice.exe",
+            rf"{prog}\LibreOffice\program\soffice.exe",
+            rf"{prog86}\LibreOffice\program\soffice.exe",
+        ]
+    if any(Path(c).exists() for c in candidates):
+        return True
+    return bool(shutil.which("soffice") or shutil.which("libreoffice"))
+
+
+def _ensure_system_deps_for_update() -> None:
+    """在 jtdt update 流程中自動補裝新版需要的系統套件。
+
+    任何錯誤都只 warn 不 raise — 升級流程不能因為某個 optional system 套件
+    裝不起來就 abort。每個套件的安裝結果獨立判斷。
+
+    新加任何系統依賴時，請在這裡加一段 best-effort 安裝邏輯（並同步更新
+    install.sh / install.ps1 對應段落）。
+    """
+    # tesseract OCR — pdf-editor 文字辨識 fallback (自 v1.2.2 起)
+    _ensure_tesseract()
+
+
+def _ensure_tesseract() -> None:
+    if shutil.which("tesseract"):
+        # Already installed — verify chi_tra trained data also present
+        try:
+            out = subprocess.run(
+                ["tesseract", "--list-langs"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if "chi_tra" in (out.stdout or ""):
+                return
+        except Exception:
+            return
+    print("補裝 tesseract OCR（pdf-editor 文字辨識 fallback）...")
+    rc = -1
+    try:
+        if _is_linux():
+            if shutil.which("apt-get"):
+                env = os.environ.copy()
+                env["DEBIAN_FRONTEND"] = "noninteractive"
+                rc = subprocess.call(
+                    ["apt-get", "install", "-y",
+                     "tesseract-ocr", "tesseract-ocr-chi-tra", "tesseract-ocr-eng"],
+                    env=env,
+                )
+            elif shutil.which("dnf"):
+                rc = subprocess.call(
+                    ["dnf", "install", "-y",
+                     "tesseract", "tesseract-langpack-chi_tra", "tesseract-langpack-eng"],
+                )
+        elif _is_macos():
+            brew = shutil.which("brew")
+            if brew:
+                rc = subprocess.call([brew, "install", "tesseract", "tesseract-lang"])
+        elif _is_windows():
+            winget = shutil.which("winget")
+            if winget:
+                rc = subprocess.call([
+                    winget, "install", "--id", "UB-Mannheim.TesseractOCR",
+                    "-e", "--silent",
+                    "--accept-package-agreements",
+                    "--accept-source-agreements",
+                ])
+    except Exception as e:
+        print(f"  ⚠ tesseract 安裝過程出錯：{e}（pdf-editor OCR 將停用，其餘功能正常）",
+              file=sys.stderr)
+        return
+    if rc == 0 and shutil.which("tesseract"):
+        print("  ✓ tesseract 安裝完成")
+    else:
+        print("  ⚠ tesseract 自動安裝失敗（pdf-editor OCR 將停用，其餘功能正常）",
+              file=sys.stderr)
+        if _is_windows():
+            print("    手動下載：https://github.com/UB-Mannheim/tesseract/wiki",
+                  file=sys.stderr)
 
 
 def svc_uninstall(purge: bool) -> int:
