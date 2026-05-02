@@ -4,6 +4,16 @@
 
 ---
 
+## [1.3.8] - 2026-05-02
+
+### 修正（jtdt update Windows uv 偵測 + CLI 全英文 + 分類更名）
+
+- **Windows `jtdt update` 找不到 uv binary**：`shutil.which("uv") or str(root/bin/uv)` 在 Windows 上會錯，因為 uv 是 `uv.exe`。改成依平台組正確檔名 (`uv.exe` vs `uv`) 並用 `Path.exists()` 驗證。同類問題其他平台也順便加固。
+- **`jtdt` 所有 print 訊息一律英文**：v1.3.6 只改了 no-args 的 friendly help，update / uninstall / bind / auth / reset-password 等 verb 內仍是中文，Windows console / minimal TTY 都顯示亂碼。本版批次翻譯 cli.py 內 67 處中文 print（含 svc_update、svc_uninstall、svc_bind、svc_auth_*、svc_reset_password、_print_system_deps_summary、_ensure_tesseract、降版警告）為英文。GUI / web UI 仍維持台灣繁中。
+- **分類「填單與用印」→「填單用印」**：tool metadata 與 README / docs 同步。
+
+---
+
 ## [1.3.7] - 2026-05-02
 
 ### 變更（README / 公開文件 / CLI 文案調整）

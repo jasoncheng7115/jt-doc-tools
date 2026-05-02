@@ -337,32 +337,32 @@ def _restore_ownership(root: Path, owner: Optional[tuple[int, int]]) -> None:
     try:
         subprocess.call(["chown", "-R", f"{uid}:{gid}", str(root)])
     except Exception as exc:
-        print(f"警告：恢復 {root} 擁有者失敗：{exc}", file=sys.stderr)
+        print(f"Warning: failed to restore owner of {root}: {exc}", file=sys.stderr)
 
 
 def svc_update() -> int:
     """Pull latest release and re-sync deps. Backups data dir first."""
     if not _is_admin():
-        print("升級需要系統管理員權限。", file=sys.stderr)
+        print("Upgrade requires administrator privileges.", file=sys.stderr)
         if _is_windows():
-            print("請以「以系統管理員身分執行 PowerShell」後再跑 jtdt update", file=sys.stderr)
+            print("Please run PowerShell as Administrator, then re-run 'jtdt update'.", file=sys.stderr)
         else:
-            print("請改用：sudo jtdt update", file=sys.stderr)
+            print("Run with sudo:  sudo jtdt update", file=sys.stderr)
         return 1
 
     root = _install_root()
     owner = _install_owner(root)
     if not (root / ".git").exists():
-        print(f"安裝目錄 {root} 不是 git repo，無法 git pull", file=sys.stderr)
-        print(f"請重新跑安裝腳本以升級", file=sys.stderr)
+        print(f"Install dir {root} is not a git repo; cannot git pull", file=sys.stderr)
+        print(f"Re-run the install script to upgrade", file=sys.stderr)
         return 1
 
     # Capture current version
     cur = _read_version()
-    print(f"目前版本：v{cur}")
+    print(f"Current version: v{cur}")
 
     # 1. Stop service
-    print("停止服務 ...")
+    print("Stopping service ...")
     svc_stop()
 
     # 2. Backup data
@@ -370,7 +370,7 @@ def svc_update() -> int:
     data = _data_dir()
     if data.exists():
         backup = data.parent / f"{data.name}.backup-{datetime.datetime.now():%Y%m%d-%H%M%S}"
-        print(f"備份資料：{data} → {backup}")
+        print(f"Backed up data: {data} -> {backup}")
         shutil.copytree(data, backup, dirs_exist_ok=False)
         # Keep only last 3 backups
         siblings = sorted(
@@ -379,16 +379,16 @@ def svc_update() -> int:
             reverse=True,
         )
         for stale in siblings[3:]:
-            print(f"  清掉舊備份：{stale}")
+            print(f"  Removed old backup: {stale}")
             shutil.rmtree(stale, ignore_errors=True)
 
     # 3. git pull (with safe.directory so it works on differently-owned repos)
-    print("從 GitHub 拉新版 ...")
+    print("Pulling latest from GitHub ...")
     git_env = _git_env_for(root)
     rc = subprocess.call(
         ["git", "-C", str(root), "fetch", "--tags", "origin"], env=git_env)
     if rc != 0:
-        print("git fetch 失敗，還原：啟動原服務", file=sys.stderr)
+        print("git fetch failed, restoring: starting previous service", file=sys.stderr)
         _restore_ownership(root, owner)
         svc_start()
         return rc
@@ -399,7 +399,7 @@ def svc_update() -> int:
     rc = subprocess.call(
         ["git", "-C", str(root), "reset", "--hard", "origin/main"], env=git_env)
     if rc != 0:
-        print("git reset --hard origin/main 失敗，還原", file=sys.stderr)
+        print("git reset --hard origin/main failed, restoring", file=sys.stderr)
         _restore_ownership(root, owner)
         svc_start()
         return rc
@@ -410,11 +410,11 @@ def svc_update() -> int:
     new_ver = _read_version()
     if _version_tuple(new_ver) < _version_tuple(cur):
         print(
-            f"⚠ 偵測到降版：origin/main 是 v{new_ver}，比目前 v{cur} 還舊。\n"
-            f"  幾乎一定是 git remote 設錯（例如指向過期的本地 file:// 鏡像）。\n"
-            f"  請檢查：git -C {root} remote -v\n"
-            f"  正式 repo 應是 https://github.com/jasoncheng7115/jt-doc-tools.git\n"
-            f"  已 abort 升級並還原。",
+            f"WARNING: downgrade detected: origin/main is v{new_ver}, older than current v{cur}.\n"
+            f"  Almost certainly a git remote misconfig (e.g. stale local file:// mirror).\n"
+            f"  Check with:  git -C {root} remote -v\n"
+            f"  Official repo should be:  https://github.com/jasoncheng7115/jt-doc-tools.git\n"
+            f"  Aborted upgrade and restored previous state.",
             file=sys.stderr,
         )
         # Restore previous code by undoing the reset
@@ -429,16 +429,22 @@ def svc_update() -> int:
     # 4. uv sync — never use --frozen, lockfile may be stale (see v1.1.68 fix).
     # Always reconcile against pyproject.toml so missing deps (eg. ldap3 in
     # uv.lock < 1.1.68) get installed.
-    uv = shutil.which("uv") or str(root / "bin" / "uv")
-    if not Path(uv).exists() and not shutil.which("uv"):
-        print("找不到 uv 指令，無法同步相依", file=sys.stderr)
+    # On Windows the uv binary is `uv.exe`, on Linux/macOS just `uv`.
+    uv_local = root / "bin" / ("uv.exe" if _is_windows() else "uv")
+    if uv_local.exists():
+        uv = str(uv_local)
+    elif shutil.which("uv"):
+        uv = shutil.which("uv")
+    else:
+        print(f"uv binary not found (looked at {uv_local} and PATH); cannot sync deps",
+              file=sys.stderr)
         _restore_ownership(root, owner)
         svc_start()
         return 1
-    print("同步 Python 相依套件（uv sync）...")
+    print("Syncing Python deps (uv sync) ...")
     rc = subprocess.call([uv, "sync"], cwd=str(root))
     if rc != 0:
-        print("uv sync 失敗，還原", file=sys.stderr)
+        print("uv sync failed, restoring previous state", file=sys.stderr)
         _restore_ownership(root, owner)
         svc_start()
         return rc
@@ -449,11 +455,11 @@ def svc_update() -> int:
     if not venv_py.exists() and _is_windows():
         venv_py = root / ".venv" / "Scripts" / "python.exe"
     if venv_py.exists():
-        print("驗證關鍵相依套件 (fastapi / fitz / ldap3 / PIL / pdfplumber / docx / odf / pyzipper) ...")
+        print("Verifying critical deps (fastapi / fitz / ldap3 / PIL / pdfplumber / docx / odf / pyzipper) ...")
         rc = subprocess.call([str(venv_py), "-c",
             "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx"])
         if rc != 0:
-            print("相依 import 失敗 — 升級可能不完整，還原", file=sys.stderr)
+            print("Dep import failed — upgrade may be incomplete, restoring", file=sys.stderr)
             _restore_ownership(root, owner)
             svc_start()
             return rc
@@ -465,28 +471,28 @@ def svc_update() -> int:
     _ensure_system_deps_for_update()
 
     # 5. Restart
-    print("啟動新版服務 ...")
+    print("Starting new version ...")
     rc = svc_start()
     if rc != 0:
-        print("服務啟動失敗，請查 jtdt logs", file=sys.stderr)
+        print("Service failed to start; check 'jtdt logs'", file=sys.stderr)
         return rc
 
     # 6. Health check
     import time
     import urllib.request
-    print("健康檢查 ...")
+    print("Health check ...")
     url = _server_url() + "healthz"
     for _ in range(15):
         try:
             with urllib.request.urlopen(url, timeout=2) as r:
                 if r.status == 200:
                     new = _read_version()
-                    print(f"升級完成：v{cur} → v{new}")
+                    print(f"Upgrade done: v{cur} -> v{new}")
                     _print_system_deps_summary()
                     return 0
         except Exception:
             time.sleep(1)
-    print("健康檢查超時，請檢查 jtdt logs", file=sys.stderr)
+    print("Health check timed out; check 'jtdt logs'", file=sys.stderr)
     _print_system_deps_summary()
     return 1
 
@@ -522,12 +528,12 @@ def _print_system_deps_summary() -> None:
     if not missing:
         return
     print()
-    print("⚠ 系統相依套件未就緒：")
+    print("Missing system dependencies:")
     plat = "linux" if _is_linux() else ("macos" if _is_macos() else "windows")
     for name, _, impact, cmds in missing:
         print(f"  • {name}")
-        print(f"    影響：{impact}")
-        print(f"    手動裝：{cmds.get(plat, '查看官方文件')}")
+        print(f"    Impact: {impact}")
+        print(f"    Install:  {cmds.get(plat, 'see official docs')}")
     print()
 
 
@@ -593,7 +599,7 @@ def _ensure_tesseract() -> None:
                 return
         except Exception:
             return
-    print("補裝 tesseract OCR（pdf-editor 文字辨識 fallback）...")
+    print("Installing tesseract OCR (pdf-editor text recovery fallback) ...")
     rc = -1
     try:
         if _is_linux():
@@ -624,24 +630,24 @@ def _ensure_tesseract() -> None:
                     "--accept-source-agreements",
                 ])
     except Exception as e:
-        print(f"  ⚠ tesseract 安裝過程出錯：{e}（pdf-editor OCR 將停用，其餘功能正常）",
+        print(f"  WARNING: tesseract install errored: {e}  (pdf-editor OCR disabled, rest still works)",
               file=sys.stderr)
         return
     if rc == 0 and shutil.which("tesseract"):
-        print("  ✓ tesseract 安裝完成")
+        print("  OK: tesseract installed")
     else:
-        print("  ⚠ tesseract 自動安裝失敗（pdf-editor OCR 將停用，其餘功能正常）",
+        print("  WARNING: tesseract auto-install failed  (pdf-editor OCR disabled, rest still works)",
               file=sys.stderr)
         if _is_windows():
-            print("    手動下載：https://github.com/UB-Mannheim/tesseract/wiki",
+            print("    Download manually: https://github.com/UB-Mannheim/tesseract/wiki",
                   file=sys.stderr)
 
 
 def svc_uninstall(purge: bool) -> int:
     if not _is_admin():
-        print("解除安裝需要系統管理員權限。", file=sys.stderr)
+        print("Uninstall requires administrator privileges.", file=sys.stderr)
         return 1
-    print("停止並移除服務 ...")
+    print("Stopping and removing service ...")
     svc_stop()
     if _is_linux():
         _run(["systemctl", "disable", SERVICE_NAME])
@@ -691,13 +697,13 @@ def svc_uninstall(purge: bool) -> int:
     # Remove the jtdt CLI shim (created outside the install dir on Linux/macOS)
     for shim in (Path("/usr/local/bin/jtdt"), Path("/usr/bin/jtdt")):
         if shim.exists() or shim.is_symlink():
-            print(f"移除指令：{shim}")
+            print(f"Removed CLI shim: {shim}")
             try:
                 shim.unlink()
             except Exception:
                 pass
 
-    print(f"移除程式：{root}")
+    print(f"Removed program files: {root}")
     if _is_windows():
         # We're running from a Python interpreter inside `root` (launched via
         # `jtdt.cmd` shim that also lives in `root`). If we rmtree it now,
@@ -734,11 +740,11 @@ def svc_uninstall(purge: bool) -> int:
     data = _data_dir()
     if purge:
         if data.exists():
-            print(f"清除資料：{data}")
+            print(f"Removed data dir: {data}")
             shutil.rmtree(data, ignore_errors=True)
         # Also wipe the rotation backups (jtdt update creates these alongside).
         for bk in sorted(data.parent.glob(f"{data.name}.backup-*")):
-            print(f"清除備份：{bk}")
+            print(f"Removed backup: {bk}")
             shutil.rmtree(bk, ignore_errors=True)
         # If the parent dir is now empty (Linux: /var/lib/jt-doc-tools/),
         # remove it too — leaving an empty dir owned by the (about-to-be-
@@ -746,7 +752,7 @@ def svc_uninstall(purge: bool) -> int:
         try:
             if data.parent.exists() and not any(data.parent.iterdir()):
                 data.parent.rmdir()
-                print(f"清除空目錄：{data.parent}")
+                print(f"Removed empty parent dir: {data.parent}")
         except Exception:
             pass
         # Linux only: remove the dedicated `jtdt` system user we created.
@@ -765,16 +771,16 @@ def svc_uninstall(purge: bool) -> int:
                                             "-uid", str(_pwd.getpwnam("jtdt").pw_uid),
                                             "-print", "-quit"])
                 if leftover.strip():
-                    print(f"保留 jtdt 系統使用者（仍有檔案：{leftover.strip()}）")
+                    print(f"Keeping jtdt service user (other files still owned: {leftover.strip()})")
                 else:
                     _run(["userdel", "jtdt"])
-                    print("移除 jtdt 系統使用者")
+                    print("Removed jtdt service user")
             except KeyError:
                 pass  # user doesn't exist, nothing to do
             except Exception as e:
-                print(f"移除 jtdt 使用者失敗：{e}", file=sys.stderr)
+                print(f"Failed to remove jtdt user: {e}", file=sys.stderr)
     elif data.exists():
-        print(f"資料保留：{data}（要一起清除請加 --purge）")
+        print(f"Data preserved: {data}  (use --purge to also remove)")
     return 0
 
 
@@ -789,7 +795,7 @@ def svc_bind(addr: str) -> int:
       - "0.0.0.0:9999"   兩個一起改
     """
     if not _is_admin():
-        print("變更設定需要系統管理員權限：sudo jtdt bind ...", file=sys.stderr)
+        print("Bind change requires administrator privileges: sudo jtdt bind ...", file=sys.stderr)
         return 1
 
     new_host: Optional[str] = None
@@ -802,7 +808,7 @@ def svc_bind(addr: str) -> int:
         new_host = addr
 
     if new_host is None and new_port is None:
-        print("用法：sudo jtdt bind <addr>[:port]  例如  sudo jtdt bind 0.0.0.0", file=sys.stderr)
+        print("Usage:  sudo jtdt bind <addr>[:port]    e.g.  sudo jtdt bind 0.0.0.0", file=sys.stderr)
         return 2
 
     changed = []
@@ -810,7 +816,7 @@ def svc_bind(addr: str) -> int:
     if _is_linux():
         unit = Path("/etc/systemd/system/jt-doc-tools.service")
         if not unit.exists():
-            print(f"找不到 systemd unit：{unit}", file=sys.stderr)
+            print(f"systemd unit not found: {unit}", file=sys.stderr)
             return 1
         txt = unit.read_text()
         import re as _re
@@ -825,10 +831,10 @@ def svc_bind(addr: str) -> int:
             if txt2 != txt: changed.append(f"JTDT_PORT → {new_port}")
             txt = txt2
         if not changed:
-            print("沒變更（可能已經是這個值）"); return 0
+            print("No change (value may already be set)"); return 0
         unit.write_text(txt)
         for c in changed: print(f"  {c}")
-        print("重新載入 systemd + 重啟服務 ...")
+        print("Reloading systemd + restarting service ...")
         _run(["systemctl", "daemon-reload"])
         _run(["systemctl", "restart", "jt-doc-tools"])
         return 0
@@ -836,7 +842,7 @@ def svc_bind(addr: str) -> int:
     if _is_macos():
         launcher = Path(MACOS_APP_PATH) / "Contents" / "MacOS" / "launcher"
         if not launcher.exists():
-            print(f"找不到 launcher：{launcher}", file=sys.stderr)
+            print(f"launcher not found: {launcher}", file=sys.stderr)
             return 1
         txt = launcher.read_text()
         import re as _re
@@ -852,16 +858,16 @@ def svc_bind(addr: str) -> int:
             if txt2 != txt: changed.append(f"JTDT_PORT → {new_port}")
             txt = txt2
         if not changed:
-            print("沒變更（可能已經是這個值）"); return 0
+            print("No change (value may already be set)"); return 0
         launcher.write_text(txt)
         for c in changed: print(f"  {c}")
-        print("重啟服務 ...")
+        print("Restarting service ...")
         svc_stop()
         svc_start()
         return 0
 
     if _is_windows():
-        print("Windows 請改用 NSSM：", file=sys.stderr)
+        print("Use NSSM on Windows:", file=sys.stderr)
         if new_host is not None:
             print(f"  nssm set jt-doc-tools AppEnvironmentExtra JTDT_HOST={new_host}")
         if new_port is not None:
@@ -889,14 +895,14 @@ def svc_reset_password(username: str, new_password: Optional[str] = None) -> int
     safely while a service might be reading.
     """
     if not _is_admin():
-        print("重設密碼需要系統管理員權限：sudo jtdt reset-password <username>",
+        print("Reset-password requires administrator privileges：sudo jtdt reset-password <username>",
               file=sys.stderr)
         return 1
 
     install_root = _install_root()
     venv_python = install_root / ".venv" / "bin" / "python"
     if not venv_python.exists():
-        print(f"找不到 venv python: {venv_python}", file=sys.stderr)
+        print(f"venv python not found: {venv_python}", file=sys.stderr)
         return 1
 
     # Run via the venv python so we get auth_db / passwords / etc.
@@ -921,17 +927,17 @@ row = conn.execute(
     (username,)
 ).fetchone()
 if not row:
-    print(f"使用者 {{username!r}} 不存在或不是 local 帳號（LDAP/AD 使用者請改密碼於目錄端）",
+    print(f"User {{username!r}} not found or not a local account (LDAP/AD users: change password in the directory server)",
           file=sys.stderr)
     sys.exit(2)
 
 if preset:
     pw1 = preset
 else:
-    pw1 = getpass.getpass(f"輸入 {{username}} 的新密碼：")
-    pw2 = getpass.getpass("再輸入一次確認：")
+    pw1 = getpass.getpass(f"New password for {{username}}: ")
+    pw2 = getpass.getpass("Confirm new password: ")
     if pw1 != pw2:
-        print("兩次輸入不一致", file=sys.stderr)
+        print("Passwords do not match", file=sys.stderr)
         sys.exit(3)
 
 ok, err = passwords.validate_password(pw1)
@@ -952,8 +958,8 @@ audit_db.log_event(
     "user_pwd_reset", username="(cli)", target=username,
     details={{"via": "jtdt reset-password"}}
 )
-print(f"✓ 已重設密碼：{{username}}（user_id={{row['id']}}）")
-print(f"   所有現有 session 已失效，鎖定計數已歸零。")
+print(f"OK: password reset for user {{username}} (user_id={{row['id']}})")
+print(f"   All existing sessions invalidated; failure-counter reset.")
 """
     cmd = [str(venv_python), "-c", helper, username]
     if new_password:
@@ -972,7 +978,7 @@ def _run_auth_helper(snippet: str) -> int:
     if not venv_python.exists() and _is_windows():
         venv_python = install_root / ".venv" / "Scripts" / "python.exe"
     if not venv_python.exists():
-        print(f"找不到 venv python: {venv_python}", file=sys.stderr)
+        print(f"venv python not found: {venv_python}", file=sys.stderr)
         return 1
     header = (
         "import os, sys\n"
@@ -988,14 +994,14 @@ def svc_auth_show() -> int:
         "from app.core import auth_settings\n"
         "s = auth_settings.get()\n"
         "backend = s.get('backend', 'off')\n"
-        "labels = {'off': '未啟用', 'local': '本機帳號', 'ldap': 'LDAP', 'ad': 'Active Directory'}\n"
-        "print(f'認證 backend：{backend} ({labels.get(backend, backend)})')\n"
+        "labels = {'off': 'disabled', 'local': 'local', 'ldap': 'LDAP', 'ad': 'Active Directory'}\n"
+        "print(f'Auth backend: {backend} ({labels.get(backend, backend)})')\n"
         "if backend in ('ldap', 'ad'):\n"
         "    d = s.get('directory', {}) or {}\n"
-        "    print(f'  伺服器 URI：{d.get(\"uri\", \"(未設)\")}')\n"
-        "    print(f'  Search Base：{d.get(\"user_search_base\", \"(未設)\")}')\n"
-        "    print(f'  Bind DN：{d.get(\"bind_dn\", \"(未設)\")}')\n"
-        "    print(f'  TLS：{d.get(\"use_tls\", False)}')\n"
+        "    print(f'  Server URI:  {d.get(\"uri\", \"(unset)\")}')\n"
+        "    print(f'  Search Base: {d.get(\"user_search_base\", \"(unset)\")}')\n"
+        "    print(f'  Bind DN:     {d.get(\"bind_dn\", \"(unset)\")}')\n"
+        "    print(f'  TLS:         {d.get(\"use_tls\", False)}')\n"
     )
 
 
@@ -1004,17 +1010,17 @@ def svc_auth_disable() -> int:
     so re-enabling later doesn't lose setup. Use this when LDAP/AD config
     locks you out and you can't login to fix it via the web UI."""
     if not _is_admin():
-        print("變更認證設定需要系統管理員權限：sudo jtdt auth disable",
+        print("Auth setting change requires admin privileges: sudo jtdt auth disable",
               file=sys.stderr)
         return 1
-    print("即將把認證 backend 切回「未啟用」（所有 session 失效）...")
+    print("Switching auth backend to 'off' (all sessions will be invalidated) ...")
     return _run_auth_helper(
         "from app.core import auth_settings\n"
         "before = auth_settings.get_backend()\n"
         "if before == 'off':\n"
-        "    print('目前已是未啟用狀態，無需變更。'); raise SystemExit(0)\n"
+        "    print('Already 'off'; no change needed.'); raise SystemExit(0)\n"
         "auth_settings.disable_auth(actor='cli', ip='localhost')\n"
-        "print(f'✓ 已從 {before} 切回 off。請重啟服務：jtdt restart')\n"
+        "print(f'OK: switched from {before} to off. Restart the service: jtdt restart')\n"
     )
 
 
@@ -1023,7 +1029,7 @@ def svc_auth_set_local() -> int:
     local admin exists yet, you still need ``jtdt reset-password jtdt-admin``
     to seed/recover the seed admin."""
     if not _is_admin():
-        print("變更認證設定需要系統管理員權限：sudo jtdt auth set-local",
+        print("Auth setting change requires admin privileges: sudo jtdt auth set-local",
               file=sys.stderr)
         return 1
     return _run_auth_helper(
@@ -1031,7 +1037,7 @@ def svc_auth_set_local() -> int:
         "auth_db.init()\n"
         "before = auth_settings.get_backend()\n"
         "if before == 'local':\n"
-        "    print('目前已是 local backend。'); raise SystemExit(0)\n"
+        "    print('Already on 'local' backend.'); raise SystemExit(0)\n"
         "s = auth_settings.get()\n"
         "s['backend'] = 'local'\n"
         "auth_settings.save(s)\n"
@@ -1040,8 +1046,8 @@ def svc_auth_set_local() -> int:
         "conn = auth_db.conn()\n"
         "with db.tx(conn):\n"
         "    conn.execute('DELETE FROM sessions')\n"
-        "print(f'✓ 已從 {before} 切到 local backend。請重啟：jtdt restart')\n"
-        "print('  若要重設 admin 密碼，請跑：sudo jtdt reset-password jtdt-admin')\n"
+        "print(f'OK: switched from {before} to 'local'. Restart: jtdt restart')\n"
+        "print('  To reset admin password, run: sudo jtdt reset-password jtdt-admin')\n"
     )
 
 
