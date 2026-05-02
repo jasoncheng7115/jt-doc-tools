@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
-{% block title %}系統依賴檢查 · {{ app_name }}{% endblock %}
+{% block title %}相依套件檢查 · {{ app_name }}{% endblock %}
 {% block content %}
-<h1>{{ icon('gear', size=22) }} 系統依賴檢查</h1>
+<h1>{{ icon('gear', size=22) }} 相依套件檢查</h1>
 <p class="muted">
-  本工具列出所有需要的系統套件、Python 依賴與字型，並顯示在這台機器上是否安裝、版本、以及缺漏時的安裝指令。
-  軟依賴（標 <span class="dep-soft">optional</span>）缺失時相關功能會 graceful 退化，本體仍可運作；硬依賴缺失則影響核心功能。
+  本工具列出所有需要的系統套件、Python 相依套件與字型，並顯示在這台機器上是否安裝、版本、以及缺漏時的安裝指令。
+  選用相依（標 <span class="dep-soft">optional</span>）缺失時相關功能會 graceful 退化，本體仍可運作；必要相依缺失則影響核心功能。
 </p>
 
 <div class="panel">
@@ -17,10 +17,10 @@
     {% set missing_soft = deps | rejectattr('ok') | selectattr('soft') | list | length %}
     <span class="dep-pill dep-ok">就緒：{{ ok_count }} / {{ total }}</span>
     {% if missing_hard %}
-      <span class="dep-pill dep-bad">硬依賴缺：{{ missing_hard }}</span>
+      <span class="dep-pill dep-bad">必要相依缺：{{ missing_hard }}</span>
     {% endif %}
     {% if missing_soft %}
-      <span class="dep-pill dep-warn">軟依賴缺：{{ missing_soft }}</span>
+      <span class="dep-pill dep-warn">選用相依缺：{{ missing_soft }}</span>
     {% endif %}
     <button class="btn btn-small" type="button" id="btnRefresh" style="margin-left:12px;">
       {{ icon('refresh') }} 重新檢查
@@ -31,7 +31,7 @@
     <thead>
       <tr>
         <th>狀態</th>
-        <th>套件 / 依賴</th>
+        <th>套件 / 相依</th>
         <th>分類</th>
         <th>版本 / 備註</th>
         <th>影響</th>
