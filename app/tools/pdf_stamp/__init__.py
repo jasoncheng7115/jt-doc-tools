@@ -8,7 +8,7 @@ metadata = ToolMetadata(
     name="用印與簽名",
     description="上傳 PDF，套用印章 / 簽名 / Logo 圖片並下載；支援批次處理。",
     icon="stamp",
-    category="填單與用印",
+    category="填單用印",
 )
 
 tool = ToolModule(
