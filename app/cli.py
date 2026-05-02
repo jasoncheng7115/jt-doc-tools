@@ -111,6 +111,15 @@ def _macos_app_running_pid() -> Optional[int]:
     return None
 
 
+def _version_tuple(v: str) -> tuple:
+    """Parse "1.2.3" → (1,2,3) for safe ordered comparison. Unknown / bad
+    inputs sort lowest so update isn't blocked by parse errors."""
+    try:
+        return tuple(int(x) for x in str(v).strip().lstrip("v").split(".")[:4])
+    except Exception:
+        return (0,)
+
+
 def _read_version() -> str:
     # Read directly from main.py text — `from .main import VERSION` would be
     # cached in sys.modules after first call, so a long-running process (e.g.
@@ -394,6 +403,28 @@ def svc_update() -> int:
         _restore_ownership(root, owner)
         svc_start()
         return rc
+
+    # 3b. 降版保護：若 origin/main 的 VERSION 比 cur 還舊，幾乎一定是
+    # origin 設錯（例如指向過期的本地 file:// 鏡像）。直接降版會掉功能、
+    # DB migration 不可逆、客戶資料風險高 — 直接 abort 並還原。
+    new_ver = _read_version()
+    if _version_tuple(new_ver) < _version_tuple(cur):
+        print(
+            f"⚠ 偵測到降版：origin/main 是 v{new_ver}，比目前 v{cur} 還舊。\n"
+            f"  幾乎一定是 git remote 設錯（例如指向過期的本地 file:// 鏡像）。\n"
+            f"  請檢查：git -C {root} remote -v\n"
+            f"  正式 repo 應是 https://github.com/jasoncheng7115/jt-doc-tools.git\n"
+            f"  已 abort 升級並還原。",
+            file=sys.stderr,
+        )
+        # Restore previous code by undoing the reset
+        subprocess.call(
+            ["git", "-C", str(root), "reset", "--hard", f"v{cur}"],
+            env=git_env,
+        )  # may fail if no tag; that's fine — server stays stopped, user fixes manually
+        _restore_ownership(root, owner)
+        svc_start()
+        return 1
 
     # 4. uv sync — never use --frozen, lockfile may be stale (see v1.1.68 fix).
     # Always reconcile against pyproject.toml so missing deps (eg. ldap3 in
@@ -1016,8 +1047,51 @@ def svc_auth_set_local() -> int:
 
 # --------------------------------------------------------------------- argparse
 
+def _print_friendly_help() -> None:
+    """Pretty grouped command list — beats argparse's cramped one-liner usage
+    that overflows on terminal widths < 100 cols."""
+    ver = _read_version()
+    print(f"jtdt — Jason Tools 文件工具箱 v{ver}")
+    print()
+    print("用法： jtdt <指令> [選項]")
+    print()
+    print("服務控制：")
+    print("  start                   啟動服務")
+    print("  stop                    停止服務")
+    print("  restart                 重啟服務")
+    print("  status                  顯示狀態與設定")
+    print("  logs [-f]               顯示服務 log（-f 持續追蹤）")
+    print("  open                    用瀏覽器開啟介面")
+    print()
+    print("升級與維護：")
+    print("  update                  從 GitHub 拉新版並重啟")
+    print("  version                 顯示版本")
+    print("  bind <host:port>        變更服務監聽位址 / port（會自動重啟）")
+    print("  uninstall [--purge]     解除安裝（--purge 連同資料一起刪除）")
+    print()
+    print("緊急復原（auth 鎖死、忘記密碼時用）：")
+    print("  auth show               顯示目前認證 backend")
+    print("  auth disable            把認證 backend 切回 off（解除登入封鎖）")
+    print("  auth set-local          把認證 backend 切到 local（本機帳號）")
+    print("  reset-password <user>   重設使用者密碼")
+    print()
+    print("詳細說明： jtdt <指令> --help")
+
+
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="jtdt", description="Jason Tools 文件工具箱 control")
+    # Show friendly grouped help when no args given (or just `-h` / `--help`).
+    # Default argparse output is one cramped line that overflows on narrow
+    # terminals — bad first impression for a CLI customers see daily.
+    raw = argv if argv is not None else sys.argv[1:]
+    if not raw or raw[0] in ("-h", "--help", "help"):
+        _print_friendly_help()
+        return 0
+
+    p = argparse.ArgumentParser(
+        prog="jtdt",
+        description="Jason Tools 文件工具箱 — 'jtdt' (無參數) 看分組指令清單",
+        usage="jtdt <指令> [選項]   (執行 'jtdt' 看完整指令清單)",
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("start", help="啟動服務")
