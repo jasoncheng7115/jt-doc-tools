@@ -221,8 +221,8 @@ body {
 
 /* 桌機手動收起：body.sidebar-collapsed 由 JS 控制 + 寫入 localStorage */
 body.sidebar-collapsed .sidebar { transform: translateX(-100%); transition: transform 0.2s; box-shadow: 2px 0 18px rgba(0,0,0,0.25); }
-/* 收起時 main 留 60px top padding 給 ☰ 按鈕（避免蓋到 h1） */
-body.sidebar-collapsed .container.with-sidebar { margin-left: 0; padding: 60px 24px 64px; }
+/* 收起時 main 左邊留 60px 給 ☰ 按鈕（按鈕位左側、不擠上方），上方 padding 不變 */
+body.sidebar-collapsed .container.with-sidebar { margin-left: 0; padding: 24px 24px 64px 60px; }
 body.sidebar-collapsed .sidebar-toggle { display: flex; align-items: center; justify-content: center; }
 
 @media (max-width: 900px) {
