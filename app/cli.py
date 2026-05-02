@@ -498,25 +498,27 @@ def svc_update() -> int:
 
 
 def _print_system_deps_summary() -> None:
-    """升級後印「系統相依套件狀態」表，缺的套件一目瞭然。
+    """Print system dependency status table after upgrade.
 
-    每個 entry：(顯示名, 偵測函式 → bool, 影響說明, 手動安裝指令 dict)
+    Each entry: (display name, detect-fn -> bool, impact description, install
+    command dict). All English to ensure compatibility with Windows console
+    that may not render CJK reliably.
     """
     deps = [
         (
             "tesseract OCR",
             lambda: bool(shutil.which("tesseract")) and _tesseract_has_lang("chi_tra"),
-            "pdf-editor 自動文字辨識（不裝則需手動重打）",
+            "pdf-editor automatic OCR text recognition (without it, manual retype required)",
             {
                 "linux": "sudo apt install tesseract-ocr tesseract-ocr-chi-tra tesseract-ocr-eng",
                 "macos": "brew install tesseract tesseract-lang",
-                "windows": "下載 https://github.com/UB-Mannheim/tesseract/wiki",
+                "windows": "Download https://github.com/UB-Mannheim/tesseract/wiki",
             },
         ),
         (
-            "Office 引擎 (OxOffice / LibreOffice)",
+            "Office engine (OxOffice / LibreOffice)",
             _office_present,
-            "office-to-pdf / pdf-to-office 工具",
+            "office-to-pdf / pdf-to-office tools",
             {
                 "linux": "sudo apt install libreoffice fonts-noto-cjk",
                 "macos": "brew install --cask libreoffice",

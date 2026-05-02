@@ -180,38 +180,41 @@ _DEPS = [
         "label": "Tesseract OCR",
         "category": "OCR",
         "impact": "pdf-editor 在原 PDF 字型缺/壞 ToUnicode CMap 時，自動 OCR 辨識既有文字。沒裝就退到「請手動重打」。",
+        "impact_en": "pdf-editor uses OCR to recover text when the original PDF font has missing/broken ToUnicode CMap. Without tesseract, falls back to manual retype.",
         "soft": True,
         "probe": _probe_tesseract,
         "install_cmd": {
             "linux": "sudo apt install tesseract-ocr tesseract-ocr-chi-tra tesseract-ocr-eng",
             "macos": "brew install tesseract tesseract-lang",
-            "windows": "winget install UB-Mannheim.TesseractOCR  或下載 https://github.com/UB-Mannheim/tesseract/wiki",
+            "windows": "winget install UB-Mannheim.TesseractOCR  (or download https://github.com/UB-Mannheim/tesseract/wiki)",
         },
     },
     {
         "key": "office",
-        "label": "Office 引擎 (OxOffice / LibreOffice)",
+        "label": "Office engine (OxOffice / LibreOffice)",
         "category": "文書轉檔",
         "impact": "office-to-pdf、pdf-to-office、合併等需要 Office 解析 docx/xlsx/odt 的工具。",
+        "impact_en": "Required by office-to-pdf, pdf-to-office, and any tool that needs to parse docx/xlsx/odt.",
         "soft": False,
         "probe": _probe_office,
         "install_cmd": {
-            "linux": "sudo apt install libreoffice fonts-noto-cjk  （建議改裝 OxOffice：https://github.com/OSSII/OxOffice/releases）",
-            "macos": "brew install --cask libreoffice  （建議改裝 OxOffice）",
-            "windows": "winget install TheDocumentFoundation.LibreOffice  （建議改裝 OxOffice）",
+            "linux": "sudo apt install libreoffice fonts-noto-cjk  (recommended: install OxOffice from https://github.com/OSSII/OxOffice/releases)",
+            "macos": "brew install --cask libreoffice  (recommended: OxOffice)",
+            "windows": "winget install TheDocumentFoundation.LibreOffice  (recommended: OxOffice)",
         },
     },
     {
         "key": "cjk-fonts",
-        "label": "CJK 中文字型",
+        "label": "CJK fonts",
         "category": "字型",
         "impact": "PDF 文字插入、浮水印、用印需要正確中文 glyph 渲染。沒有 CJK 字型則中文顯示成豆腐方框。",
+        "impact_en": "Needed to render Chinese glyphs in PDF text, watermark, stamp output. Without CJK fonts, Chinese shows as tofu boxes.",
         "soft": True,
         "probe": _probe_cjk_fonts,
         "install_cmd": {
             "linux": "sudo apt install fonts-noto-cjk",
-            "macos": "macOS 內建 PingFang，正常情況不需安裝",
-            "windows": "Windows 內建 微軟正黑體 / 新細明體，正常情況不需安裝",
+            "macos": "Built-in PingFang on macOS; usually no install needed",
+            "windows": "Built-in Microsoft JhengHei on Windows; usually no install needed",
         },
     },
     {
@@ -219,10 +222,11 @@ _DEPS = [
         "label": "pytesseract (Python wrapper)",
         "category": "OCR",
         "impact": "tesseract 的 Python 包裝，沒裝會導致 OCR 路徑直接 disabled。",
+        "impact_en": "Thin Python wrapper around tesseract. Missing => OCR code path is disabled.",
         "soft": True,
         "probe": lambda: _probe_python_pkg("pytesseract"),
         "install_cmd": {
-            "linux": f"{shutil.which('uv') or 'uv'} pip install pytesseract  （或 pip install pytesseract）",
+            "linux": f"{shutil.which('uv') or 'uv'} pip install pytesseract  (or: pip install pytesseract)",
             "macos": "uv pip install pytesseract",
             "windows": "uv pip install pytesseract",
         },
@@ -232,10 +236,11 @@ _DEPS = [
         "label": "Pillow (PIL)",
         "category": "影像",
         "impact": "PDF→影像、影像處理、OCR 前處理。核心套件；缺則大量功能無法運作。",
+        "impact_en": "Imaging core: PDF→image, image processing, OCR preprocessing. Many features break without it.",
         "soft": False,
         "probe": lambda: _probe_python_pkg("PIL"),
         "install_cmd": {
-            "linux": "uv sync  （正常會自動裝起來）",
+            "linux": "uv sync  (normally auto-installed)",
             "macos": "uv sync",
             "windows": "uv sync",
         },
@@ -243,10 +248,11 @@ _DEPS = [
 ]
 
 
-def collect_sys_deps() -> list[dict]:
+def collect_sys_deps(lang: str = "zh") -> list[dict]:
     """Return current status of all registered system deps for the admin
-    page / JSON API. Each entry merges the registry metadata with probe
-    results — never throws even if probe crashes.
+    page / JSON API. ``lang='en'`` swaps impact text to English (used by the
+    CLI summary because Windows console can't always render CJK reliably).
+    Never throws even if probe crashes.
     """
     plat = _platform_key()
     out = []
@@ -256,11 +262,12 @@ def collect_sys_deps() -> list[dict]:
         except Exception as e:
             probe = {"installed": False, "version": "", "extra": f"probe error: {e}", "ok": False}
         ok = bool(probe.get("ok", probe.get("installed")))
+        impact = dep.get("impact_en") if lang == "en" else dep["impact"]
         out.append({
             "key": dep["key"],
             "label": dep["label"],
             "category": dep["category"],
-            "impact": dep["impact"],
+            "impact": impact or dep["impact"],
             "soft": dep["soft"],
             "installed": bool(probe.get("installed")),
             "ok": ok,
