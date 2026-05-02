@@ -1832,8 +1832,11 @@ async function savePdf(isAuto) {
       fc.getObjects().forEach(o => {
         if (o._peMarker) return;
         o._peSaved = true;
-        // Keep the selected one fully visible; fade the rest
-        if (o === stillSelected) {
+        // 1) 目前選的物件 → 維持完全可見（連續編輯不被打斷）
+        // 2) 擷取自 PDF 的物件（有 _origBbox）→ 維持可見，使用者還在編輯它，
+        //    fade 掉會讓人以為「物件不見了」、跑去點空白處新增物件而錯亂
+        // 3) 新增的 / 已完成的疊加物件 → fade 到 0.01 讓 BG 重繪結果透出
+        if (o === stillSelected || o._origBbox) {
           o.set('opacity', 1);
         } else {
           o.set('opacity', 0.01);
