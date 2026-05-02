@@ -3,6 +3,26 @@
 {% block title %}PDF 編輯器 · {{ app_name }}{% endblock %}
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js"></script>
+<script>
+  // Monkey-patch Canvas API: Fabric 5.x 內部把 textBaseline 設為 'alphabetical'
+  // (typo)，新版 Chrome 拒絕並噴 console warning，更糟的是寬度量測 / IText
+  // initDimensions 會計算錯誤，間接造成擷取既有文字後文字位置 / 寬度全部歪掉、
+  // undo 還原也壞。在 fabric 載入後立刻 patch CanvasRenderingContext2D 的
+  // textBaseline setter，把 'alphabetical' 翻譯成正確的 'alphabetic'。
+  (function(){
+    const proto = CanvasRenderingContext2D.prototype;
+    const desc = Object.getOwnPropertyDescriptor(proto, 'textBaseline');
+    if (!desc || !desc.set) return;
+    const origSet = desc.set;
+    Object.defineProperty(proto, 'textBaseline', {
+      configurable: true, enumerable: desc.enumerable, get: desc.get,
+      set: function(v) {
+        if (v === 'alphabetical') v = 'alphabetic';
+        return origSet.call(this, v);
+      },
+    });
+  })();
+</script>
 <style>
 .pe-wrap { display: flex; gap: 12px; height: calc(100vh - 220px); min-height: 500px; }
 .pe-toolbar { display: flex; flex-direction: column; gap: 4px; width: 60px; padding: 8px 4px;
@@ -1489,15 +1509,15 @@ function restoreSnapshot(snap) {
     const c = pageCanvases[i];
     if (!c) { pending--; return; }
     c.loadFromJSON(json, () => {
-      // Fabric.loadFromJSON 不會還原物件上的非 standard 屬性 — 我們在
-      // toJSON 時用 propertiesToInclude 帶出 _peType / _origBbox 等，
-      // loadFromJSON 會把它們塞回每個物件。但 _marker（Fabric Rect 引用）
-      // 沒辦法從 JSON 還原；存檔流程只用 _origBbox + deletedOrigs，所以
-      // marker 缺失不影響存檔正確性。
       c.requestRenderAll();
       if (--pending === 0) {
-        // 還原完，立刻觸發 auto-save 讓 backend 用「還原後狀態」重 render BG
-        scheduleAutoSave();
+        // 還原完，立刻 force save（不走 800ms debounce）讓 backend 用
+        // 「還原後狀態」重 render BG。否則 BG 還停在 undo 前的 redacted 結果，
+        // 使用者覺得「物件還是消失了」。
+        if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
+        if (uploadId) {
+          setTimeout(() => doAutoSave(), 0);
+        }
       }
     });
   });

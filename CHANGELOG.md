@@ -4,6 +4,15 @@
 
 ---
 
+## [1.1.90] - 2026-05-02
+
+### 修正（pdf-editor 真正根因 + undo BG 強制 refresh）
+
+- **Fabric.js 5.x typo `'alphabetical'` 害 IText 寬度計算錯誤**：Fabric 把 textBaseline 設成 typo 字串 `'alphabetical'`（正確是 `'alphabetic'`），新版 Chrome 拒絕並 console warn，更糟的是 `_setTextStyles` / `_measureChar` / `calcTextWidth` / `initDimensions` 整條 chain 都用 fallback 算錯結果。最終症狀：擷取既有文字後寬度 / 位置歪掉、文字渲染偏移、undo 還原時 IText 重建也走錯流程。本版在 fabric 載入後立刻 monkey-patch `CanvasRenderingContext2D.prototype.textBaseline` setter，把 `'alphabetical'` 翻譯成正確的 `'alphabetic'`，根治整條 chain。
+- **Undo 還原後 force save（不走 800ms debounce）**：原本 `scheduleAutoSave` 800ms 後才送，使用者按 undo 看不到 BG 立刻變回原始狀態。本版 restoreSnapshot 完成後 clearTimeout + 直接 doAutoSave，BG 立刻重抓。
+
+---
+
 ## [1.1.89] - 2026-05-02
 
 ### 修正（pdf-editor 三個 bug）
