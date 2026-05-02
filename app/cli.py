@@ -533,7 +533,7 @@ def _print_system_deps_summary() -> None:
     print("Missing system dependencies:")
     plat = "linux" if _is_linux() else ("macos" if _is_macos() else "windows")
     for name, _, impact, cmds in missing:
-        print(f"  • {name}")
+        print(f"  -{name}")
         print(f"    Impact: {impact}")
         print(f"    Install:  {cmds.get(plat, 'see official docs')}")
     print()
