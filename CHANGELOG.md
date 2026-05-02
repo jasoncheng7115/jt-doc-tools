@@ -4,6 +4,15 @@
 
 ---
 
+## [1.3.10] - 2026-05-02
+
+### 修正（jtdt update 結尾 bullet 字元 Win11 console 顯示亂碼）
+
+- v1.3.9 已全英文，但 `_print_system_deps_summary` 內的 bullet `•` (U+2022) 在 Win11 console（cp950 codepage）渲染為 `�E`。改用純 ASCII `-` (hyphen) bullet 完全避免編碼問題。
+- 同步驗證：Win11 x64 (.154) + Win11 ARM64 (.64.3) 兩台都升到 v1.3.x 並 jtdt update 成功。
+
+---
+
 ## [1.3.9] - 2026-05-02
 
 ### 修正（jtdt update 結尾系統相依摘要表也英文）
