@@ -65,6 +65,15 @@ def build_auth_router(templates) -> APIRouter:
         Switching from 'local' → 'ldap' will leave existing local users
         intact (they just won't be able to log in until you switch back).
         """
+        # Defence in depth: refuse if auth is not enabled. The UI also locks
+        # this form, but a curl/script could still hit the endpoint and lock
+        # the admin out (no jtdt-admin exists yet to log back in with).
+        if not auth_settings.is_enabled():
+            raise HTTPException(
+                409,
+                "Cannot configure LDAP/AD backend before authentication is enabled. "
+                "Visit /setup-admin to enable auth and create the first admin first.",
+            )
         body = await request.json()
         target_backend = (body.get("backend") or "").lower()
         ldap_cfg = body.get("ldap") or {}
