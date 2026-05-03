@@ -6,17 +6,16 @@
 
 {% if not is_enabled %}
 <div class="panel" style="border-left:4px solid #f59e0b;">
-  <h2 style="margin-top:0;">⚠ 目前未啟用認證</h2>
+  <h2 style="margin-top:0;">目前未啟用認證</h2>
   <p>所有人都可以使用本系統。如果你打算給多人使用、或部署在內網，建議啟用認證。</p>
-  <p>啟用後會引導你建立第一個管理員帳號。</p>
+  <p>啟用後會引導你建立第一個管理員帳號，避免之後無法登入。</p>
   <p>
-    <a class="btn btn-primary" href="/setup-admin">{{ icon('lock', size=14) }} 啟用認證</a>
+    <a class="btn btn-primary btn-lg" href="/setup-admin">{{ icon('lock', size=14) }} 啟用認證</a>
   </p>
   <hr>
   <p class="muted" style="font-size:12px;">
-    啟用後可選擇 backend：
-    <b>本機</b>（最簡單，所有帳號存在這台機器）、
-    <b>LDAP / AD</b>（接外部目錄；M3 完成後可切換）。
+    <b>請先點上方「啟用認證」、設好管理員密碼後</b>，再回來設定 LDAP / AD backend 與連線測試。<br>
+    啟用後可選 backend：<b>本機</b>（最簡單，所有帳號存在這台機器）、<b>LDAP / AD</b>（接外部目錄）。
   </p>
 </div>
 {% else %}
@@ -40,14 +39,29 @@
 
 {% endif %}
 
-<div class="panel">
+<div class="panel auth-backend-panel{% if not is_enabled %} is-locked{% endif %}">
+  {% if not is_enabled %}
+  <div class="auth-locked-banner">
+    <div class="auth-locked-icon">{{ icon('lock', size=22) }}</div>
+    <div class="auth-locked-text">
+      <h3>請先啟用認證才能設定 backend</h3>
+      <p>
+        為了避免「先設好 AD 再啟用 → 連 admin 帳號都沒建好就被鎖在外面」這種情境，
+        backend 設定與連線測試在「未啟用認證」狀態下會鎖定不可操作。
+        請先點上方<a href="/setup-admin"><b>啟用認證</b></a>建立 jtdt-admin 帳號，
+        登入後再回來設定 LDAP / AD。
+      </p>
+    </div>
+  </div>
+  {% endif %}
+
   <h2>認證 backend / LDAP 設定</h2>
   <p class="muted" style="font-size:12.5px; margin-top:0;">
     選擇驗證使用者的 backend。<b>切換會讓所有現有 session 立刻失效。</b>
     啟用外部目錄後，登入頁的「認證領域」下拉仍會保留<b>本機</b>選項，jtdt-admin 等本機帳號不會被鎖外。
   </p>
 
-  <form id="ldapForm" class="auth-form">
+  <form id="ldapForm" class="auth-form"{% if not is_enabled %} inert aria-disabled="true"{% endif %}>
 
     <!-- ===== Backend ===== -->
     <fieldset class="auth-section">
@@ -212,7 +226,7 @@
     用上方表單目前的設定測試（不會自動儲存）。Service 密碼留空時走已儲存的密碼。
   </p>
 
-  <div class="test-grid">
+  <div class="test-grid"{% if not is_enabled %} inert aria-disabled="true"{% endif %}>
     <!-- 1. 連線測試 -->
     <section class="test-card">
       <header>
@@ -356,6 +370,35 @@
   .test-card .test-row .field { width:100%; box-sizing:border-box; }
   .test-card .btn { align-self:flex-start; }
   .test-card .test-status { font-size:12.5px; min-height:1em; }
+
+  /* ==== 「未啟用認證」鎖定狀態：banner + 灰階 + 不可點 ==== */
+  .auth-backend-panel.is-locked .auth-form,
+  .auth-backend-panel.is-locked .test-grid {
+    opacity: 0.42;
+    filter: grayscale(0.6);
+    pointer-events: none;        /* 整段不可互動，避免使用者誤改 */
+    user-select: none;
+  }
+  /* `inert` 屬性現代瀏覽器原生支援，連 tab key 也跳過該區塊 */
+  .auth-backend-panel.is-locked [inert] { pointer-events: none; }
+
+  .auth-locked-banner {
+    display: flex; gap: 14px; align-items: flex-start;
+    padding: 14px 16px; margin: 0 0 18px;
+    background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b;
+    border-radius: 8px;
+  }
+  .auth-locked-icon {
+    flex: 0 0 auto; color: #b45309;
+    background: #fef3c7; padding: 8px;
+    border-radius: 50%; line-height: 0;
+  }
+  .auth-locked-text { flex: 1 1 0; min-width: 0; }
+  .auth-locked-text h3 {
+    margin: 0 0 6px; font-size: 15px; color: #92400e;
+  }
+  .auth-locked-text p { margin: 0; font-size: 13px; color: #78350f; line-height: 1.6; }
+  .auth-locked-text a { color: #92400e; text-decoration: underline; }
 </style>
 
 <style>

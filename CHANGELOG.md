@@ -4,6 +4,15 @@
 
 ---
 
+## [1.3.14] - 2026-05-03
+
+### 修正（認證設定 UI：未啟用時鎖住 LDAP/AD backend 設定）
+
+- 認證未啟用時，下方「認證 backend / LDAP 設定」面板與「驗證測試」區塊整段鎖定（`inert` 屬性 + 灰階 + `pointer-events:none`），並在面板頂端加黃底警示 banner：「請先啟用認證才能設定 backend」。避免使用者「先設好 AD 再啟用」這個常見的踩雷情境 — 因為一旦 admin 帳號還沒建好就切換到 AD backend，就會被永久鎖在外面。
+- backend 同時加防線：`POST /admin/auth-settings/ldap-save` 在 auth 未啟用狀態下直接回 409，提示「先去 /setup-admin 啟用認證」。即使有人繞過 UI 用 curl 也鎖不死自己。
+
+---
+
 ## [1.3.13] - 2026-05-02
 
 ### 修正（相依套件檢查：剝掉 Office build hash）
