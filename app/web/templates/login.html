@@ -4,7 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>登入 · {{ app_name }}</title>
-  <link rel="icon" type="image/png" href="/static/images/logo-on-light.png" />
+  {% set _brand_logo = branding_logo_url() %}
+  <link rel="icon" type="image/png" href="{{ _brand_logo or '/static/images/logo-on-light.png' }}" />
   <link rel="stylesheet" href="/static/css/platform.css" />
   <style>
     body { display:flex; align-items:center; justify-content:center;
@@ -37,7 +38,7 @@
 <body>
   <form class="login-card" method="post" action="/login" autocomplete="on">
     <div class="login-brand">
-      <img src="/static/images/logo-on-light.png" alt="" />
+      <img src="{{ _brand_logo or '/static/images/logo-on-light.png' }}" alt="" />
       <div>
         <h1>{{ app_name }}</h1>
         <div class="ver">v{{ version }}</div>

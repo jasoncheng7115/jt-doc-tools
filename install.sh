@@ -245,6 +245,26 @@ detect_office() {
     return 1
 }
 
+install_oxoffice_x11_runtime_libs_linux() {
+    # OxOffice / LibreOffice oosplash 啟動時 dlopen 這些 X11 client lib，
+    # 即使是 --headless 模式也會。Debian / Ubuntu 的 minimal / server 安裝
+    # 沒有這些 lib，缺的話 office-to-pdf 一執行就掛：
+    #   "libXinerama.so.1: cannot open shared object file: No such file or directory"
+    [ "$PLATFORM" = "linux" ] || return 0
+    local pkgs="libxinerama1 libxrandr2 libxcursor1 libxi6 libxtst6 \
+                libsm6 libxext6 libxrender1 libdbus-1-3 libcups2"
+    log "安裝 OxOffice / LibreOffice X11 執行時依賴 ..."
+    if command -v apt-get >/dev/null 2>&1; then
+        # shellcheck disable=SC2086
+        DEBIAN_FRONTEND=noninteractive apt-get install -y $pkgs \
+            || warn "X11 執行時依賴部分安裝失敗（OxOffice 可能無法啟動）"
+    elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y libXinerama libXrandr libXcursor libXi libXtst \
+                       libSM libXext libXrender dbus-libs cups-libs \
+            || warn "X11 執行時依賴部分安裝失敗（OxOffice 可能無法啟動）"
+    fi
+}
+
 install_oxoffice_linux() {
     log "嘗試從 GitHub 下載並安裝 OxOffice ..."
     local tmp; tmp="$(mktemp -d)"
@@ -760,6 +780,7 @@ main() {
     log "資料：$DATA_DIR"
     echo
 
+    install_oxoffice_x11_runtime_libs_linux
     ensure_office
     install_tesseract
     fetch_code

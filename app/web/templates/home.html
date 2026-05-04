@@ -4,7 +4,7 @@
 {% block content %}
 <section class="hero">
   <div class="hero-logo">
-    <img src="/static/images/logo-on-light.png" alt="{{ app_name }}" />
+    <img src="{{ branding_logo_url() or '/static/images/logo-on-light.png' }}" alt="{{ app_name }}" />
   </div>
   <h1 class="hero-title">{{ app_name }}</h1>
   <p class="hero-sub">整合式 PDF / Office 文件處理平台 — 表單填寫、用印簽名、浮水印、N-up、合併分拆、轉檔、文字 / 圖片擷取、敏感資料去識別化、加密 / 解密、中繼資料清除、隱藏內容掃描、差異比對、頁面編輯…可選 LDAP / AD 認證 + 角色權限 + 稽核 + 記錄轉送。</p>

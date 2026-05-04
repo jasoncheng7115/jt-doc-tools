@@ -587,6 +587,8 @@ def _ensure_system_deps_for_update() -> None:
     """
     # tesseract OCR — pdf-editor 文字辨識 fallback (自 v1.2.2 起)
     _ensure_tesseract()
+    # OxOffice / LibreOffice X11 runtime libs — Linux only (自 v1.3.15 起)
+    _ensure_oxoffice_x11_libs()
 
 
 def _ensure_tesseract() -> None:
@@ -643,6 +645,49 @@ def _ensure_tesseract() -> None:
         if _is_windows():
             print("    Download manually: https://github.com/UB-Mannheim/tesseract/wiki",
                   file=sys.stderr)
+
+
+def _ensure_oxoffice_x11_libs() -> None:
+    """Install X11 client libs that OxOffice / LibreOffice oosplash dlopens
+    at startup, even in --headless mode. Debian/Ubuntu minimal/server lacks
+    these by default, causing 'libXinerama.so.1: cannot open shared object
+    file' on office-to-pdf etc. Linux-only; macOS/Windows skip silently."""
+    if not _is_linux():
+        return
+    from .core.sys_deps import _OXOFFICE_X11_LIBS, _probe_oxoffice_x11_libs
+    probe = _probe_oxoffice_x11_libs()
+    if probe.get("ok"):
+        return
+    missing = probe.get("missing_pkgs") or [pkg for _, pkg in _OXOFFICE_X11_LIBS]
+    print(f"Installing OxOffice X11 runtime libs ({len(missing)} missing) ...")
+    rc = -1
+    try:
+        if shutil.which("apt-get"):
+            env = os.environ.copy()
+            env["DEBIAN_FRONTEND"] = "noninteractive"
+            rc = subprocess.call(
+                ["apt-get", "install", "-y"] + list(missing),
+                env=env,
+            )
+        elif shutil.which("dnf"):
+            dnf_pkgs = ["libXinerama", "libXrandr", "libXcursor", "libXi",
+                        "libXtst", "libSM", "libXext", "libXrender",
+                        "dbus-libs", "cups-libs"]
+            rc = subprocess.call(["dnf", "install", "-y"] + dnf_pkgs)
+        else:
+            print("  WARNING: no apt-get or dnf found; install X11 libs manually",
+                  file=sys.stderr)
+            return
+    except Exception as e:
+        print(f"  WARNING: X11 libs install errored: {e}  "
+              "(office-to-pdf may fail until installed)", file=sys.stderr)
+        return
+    if rc == 0:
+        print("  OK: X11 runtime libs installed")
+    else:
+        print("  WARNING: X11 libs install failed  "
+              "(office-to-pdf may fail until installed manually)",
+              file=sys.stderr)
 
 
 def svc_uninstall(purge: bool) -> int:

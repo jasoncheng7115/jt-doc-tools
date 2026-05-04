@@ -20,6 +20,93 @@ from . import service
 router = APIRouter()
 
 
+# 臨時資產 (#7, v1.3.16)
+# 使用者可以在 pdf-stamp UI 「臨時上傳」一張圖，圖只放在瀏覽器 sessionStorage，
+# 送出時才隨 request 上傳到 server，server 寫到 temp_dir 用一次就丟。
+# 用 stamp_id == "__temp__" 作為哨兵 — 配合 multipart 內的 temp_asset_file。
+_TEMP_STAMP_SENTINEL = "__temp__"
+_TEMP_ASSET_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+_TEMP_ASSET_ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+async def _resolve_stamp_source(
+    stamp_id: str,
+    temp_asset_file: Optional[UploadFile],
+    request: Optional[Request] = None,
+    actor_username: str = "",
+) -> tuple[Path, dict]:
+    """Return (stamp_image_path_on_disk, preset_dict_or_empty).
+
+    - 一般 asset：查 asset_manager，回路徑 + asset.preset (轉 dict)
+    - 臨時資產：把上傳檔案落地到 temp_dir，回路徑 + 空 preset（preset 由 client
+      傳的 override 決定，所以 service 層只認 override 即可）
+
+    任何錯誤情境一律 raise HTTPException(400)。臨時資產情境會寫一筆 audit。
+    """
+    if stamp_id != _TEMP_STAMP_SENTINEL:
+        asset = asset_manager.get(stamp_id)
+        if not asset or asset.type not in ("stamp", "signature", "logo"):
+            raise HTTPException(400, "stamp not found")
+        # asset.preset is a PositionPreset dataclass; service layer reads via
+        # PositionPreset / dict transparently. Caller treats this as opaque.
+        return asset_manager.file_path(asset), {
+            "x_mm": asset.preset.x_mm, "y_mm": asset.preset.y_mm,
+            "width_mm": asset.preset.width_mm, "height_mm": asset.preset.height_mm,
+            "rotation_deg": asset.preset.rotation_deg,
+            "paper_w_mm": asset.preset.paper_w_mm,
+            "paper_h_mm": asset.preset.paper_h_mm,
+        }
+    if not temp_asset_file:
+        raise HTTPException(400, "temp asset selected but no file uploaded")
+    # validate filename + size
+    fname = (temp_asset_file.filename or "").strip()
+    ext = Path(fname).suffix.lower()
+    if ext and ext not in _TEMP_ASSET_ALLOWED_EXT:
+        raise HTTPException(400, f"unsupported temp asset extension: {ext}")
+    data = await temp_asset_file.read()
+    if not data:
+        raise HTTPException(400, "empty temp asset")
+    if len(data) > _TEMP_ASSET_MAX_BYTES:
+        raise HTTPException(
+            400, f"temp asset too large: {len(data)/1024/1024:.1f} MB > 5 MB")
+    # validate it's actually an image (not just an .png-named .exe)
+    try:
+        from PIL import Image as _PILImage
+        from io import BytesIO as _BytesIO
+        with _PILImage.open(_BytesIO(data)) as im:
+            im.verify()
+    except Exception as e:
+        raise HTTPException(400, f"temp asset is not a valid image: {e}")
+    # Save to temp_dir under a unique name (this stamp_dir gets garbage
+    # collected by the 2-hour temp cleanup task; not stored as a real asset)
+    out = settings.temp_dir / f"stamp_temp_{uuid.uuid4().hex}{ext or '.png'}"
+    out.write_bytes(data)
+    # Audit (best-effort; never fail the user request because audit failed)
+    try:
+        from ...core import audit_db as _audit
+        import hashlib as _hl
+        ip = ""
+        if request is not None:
+            ip = (request.client.host if request.client else "") or ""
+        _audit.log_event(
+            event_type="temp_asset_used",
+            username=actor_username or "",
+            ip=ip,
+            target="pdf-stamp",
+            details={
+                "filename": fname or "(unnamed)",
+                "size_bytes": len(data),
+                "sha256_8": _hl.sha256(data).hexdigest()[:16],
+                "tool": "pdf-stamp",
+            },
+        )
+    except Exception:
+        import logging as _lg
+        _lg.getLogger(__name__).debug("temp_asset_used audit write failed",
+                                     exc_info=True)
+    return out, {}
+
+
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     templates = request.app.state.templates
@@ -53,11 +140,13 @@ async def submit(
     file: List[UploadFile] = File(...),
     override: Optional[str] = Form(None),
     page_mode: str = Form("all"),  # "all" | "first" | "last"
+    temp_asset_file: Optional[UploadFile] = File(None),
 ):
     """Stamp one or many PDFs. Single-file result → PDF; multi → ZIP."""
-    asset = asset_manager.get(stamp_id)
-    if not asset or asset.type not in ("stamp", "signature", "logo"):
-        raise HTTPException(400, "stamp not found")
+    actor = getattr(getattr(request.state, "user", None), "username", "") or ""
+    stamp_png, preset_dict = await _resolve_stamp_source(
+        stamp_id, temp_asset_file, request=request, actor_username=actor)
+    asset = asset_manager.get(stamp_id) if stamp_id != _TEMP_STAMP_SENTINEL else None
 
     files = file or []
     if not files:
@@ -81,23 +170,26 @@ async def submit(
         src_path.write_bytes(data)
         saved.append((src_path, safe))
 
-    # Resolve placement params (shared by all files)
-    p = asset.preset
+    # Resolve placement params (shared by all files). preset_dict comes
+    # from _resolve_stamp_source — empty dict for temp assets means
+    # override IS the only source (UI sends a default sensible preset).
     if override:
         try:
             ov = json.loads(override)
-            p_x = float(ov.get("x_mm", p.x_mm))
-            p_y = float(ov.get("y_mm", p.y_mm))
-            p_w = float(ov.get("width_mm", p.width_mm))
-            p_h = float(ov.get("height_mm", p.height_mm))
-            p_rot = float(ov.get("rotation_deg", p.rotation_deg))
+            p_x = float(ov.get("x_mm", preset_dict.get("x_mm", 105)))
+            p_y = float(ov.get("y_mm", preset_dict.get("y_mm", 250)))
+            p_w = float(ov.get("width_mm", preset_dict.get("width_mm", 30)))
+            p_h = float(ov.get("height_mm", preset_dict.get("height_mm", 30)))
+            p_rot = float(ov.get("rotation_deg", preset_dict.get("rotation_deg", 0)))
         except Exception:
             raise HTTPException(400, "override 格式錯誤")
+    elif preset_dict:
+        p_x = preset_dict["x_mm"]; p_y = preset_dict["y_mm"]
+        p_w = preset_dict["width_mm"]; p_h = preset_dict["height_mm"]
+        p_rot = preset_dict["rotation_deg"]
     else:
-        p_x, p_y, p_w, p_h = p.x_mm, p.y_mm, p.width_mm, p.height_mm
-        p_rot = p.rotation_deg
-
-    stamp_png = asset_manager.file_path(asset)
+        # Temp asset, no override — use sensible default (centered low)
+        p_x, p_y, p_w, p_h, p_rot = 105.0, 250.0, 30.0, 30.0, 0.0
 
     def run(job):
         total = len(saved)
@@ -234,16 +326,18 @@ async def preview_bg(upload_id: str, page_idx: int):
 
 @router.post("/preview-all-pages")
 async def preview_all_pages(
+    request: Request,
     stamp_id: str = Form(...),
     file: UploadFile = File(...),
     override: Optional[str] = Form(None),
     page_mode: str = Form("all"),
+    temp_asset_file: Optional[UploadFile] = File(None),
 ):
     """Render every page of the uploaded PDF with the stamp applied at the
     given position; return one PNG URL per page so the UI can stack them."""
-    asset = asset_manager.get(stamp_id)
-    if not asset or asset.type not in ("stamp", "signature", "logo"):
-        raise HTTPException(400, "stamp not found")
+    actor = getattr(getattr(request.state, "user", None), "username", "") or ""
+    stamp_png_path, preset_dict = await _resolve_stamp_source(
+        stamp_id, temp_asset_file, request=request, actor_username=actor)
     data = await file.read()
     if not data:
         raise HTTPException(400, "empty file")
@@ -253,20 +347,22 @@ async def preview_all_pages(
     stamped = settings.temp_dir / f"{upload_id}_stamped.pdf"
     src.write_bytes(data)
 
-    p = asset.preset
     if override:
         try:
             ov = json.loads(override)
-            p_x = float(ov.get("x_mm", p.x_mm))
-            p_y = float(ov.get("y_mm", p.y_mm))
-            p_w = float(ov.get("width_mm", p.width_mm))
-            p_h = float(ov.get("height_mm", p.height_mm))
-            p_rot = float(ov.get("rotation_deg", p.rotation_deg))
+            p_x = float(ov.get("x_mm", preset_dict.get("x_mm", 105)))
+            p_y = float(ov.get("y_mm", preset_dict.get("y_mm", 250)))
+            p_w = float(ov.get("width_mm", preset_dict.get("width_mm", 30)))
+            p_h = float(ov.get("height_mm", preset_dict.get("height_mm", 30)))
+            p_rot = float(ov.get("rotation_deg", preset_dict.get("rotation_deg", 0)))
         except Exception:
             raise HTTPException(400, "override 格式錯誤")
+    elif preset_dict:
+        p_x = preset_dict["x_mm"]; p_y = preset_dict["y_mm"]
+        p_w = preset_dict["width_mm"]; p_h = preset_dict["height_mm"]
+        p_rot = preset_dict["rotation_deg"]
     else:
-        p_x, p_y, p_w, p_h = p.x_mm, p.y_mm, p.width_mm, p.height_mm
-        p_rot = p.rotation_deg
+        p_x, p_y, p_w, p_h, p_rot = 105.0, 250.0, 30.0, 30.0, 0.0
 
     import fitz
     with fitz.open(str(src)) as doc:
@@ -280,7 +376,7 @@ async def preview_all_pages(
     from ...core import pdf_utils as pu
     pu.stamp_pdf(
         src_pdf=src, dst_pdf=stamped,
-        stamp_png=asset_manager.file_path(asset),
+        stamp_png=stamp_png_path,
         x_mm=p_x, y_mm=p_y, w_mm=p_w, h_mm=p_h,
         pages=pages, rotation_deg=p_rot,
     )
@@ -308,15 +404,17 @@ async def preview_all_pages(
 
 @router.post("/preview-stamped")
 async def preview_stamped(
+    request: Request,
     stamp_id: str = Form(...),
     file: UploadFile = File(...),
     override: Optional[str] = Form(None),
     page_mode: str = Form("all"),
+    temp_asset_file: Optional[UploadFile] = File(None),
 ):
     """Stamp the first applicable page of the PDF and return a PNG preview."""
-    asset = asset_manager.get(stamp_id)
-    if not asset or asset.type not in ("stamp", "signature", "logo"):
-        raise HTTPException(400, "stamp not found")
+    actor = getattr(getattr(request.state, "user", None), "username", "") or ""
+    stamp_png_path, preset_dict = await _resolve_stamp_source(
+        stamp_id, temp_asset_file, request=request, actor_username=actor)
     data = await file.read()
     if not data:
         raise HTTPException(400, "empty file")
@@ -328,20 +426,22 @@ async def preview_stamped(
     src.write_bytes(data)
 
     # Resolve params (same rules as /submit)
-    p = asset.preset
     if override:
         try:
             ov = json.loads(override)
-            p_x = float(ov.get("x_mm", p.x_mm))
-            p_y = float(ov.get("y_mm", p.y_mm))
-            p_w = float(ov.get("width_mm", p.width_mm))
-            p_h = float(ov.get("height_mm", p.height_mm))
-            p_rot = float(ov.get("rotation_deg", p.rotation_deg))
+            p_x = float(ov.get("x_mm", preset_dict.get("x_mm", 105)))
+            p_y = float(ov.get("y_mm", preset_dict.get("y_mm", 250)))
+            p_w = float(ov.get("width_mm", preset_dict.get("width_mm", 30)))
+            p_h = float(ov.get("height_mm", preset_dict.get("height_mm", 30)))
+            p_rot = float(ov.get("rotation_deg", preset_dict.get("rotation_deg", 0)))
         except Exception:
             raise HTTPException(400, "override 格式錯誤")
+    elif preset_dict:
+        p_x = preset_dict["x_mm"]; p_y = preset_dict["y_mm"]
+        p_w = preset_dict["width_mm"]; p_h = preset_dict["height_mm"]
+        p_rot = preset_dict["rotation_deg"]
     else:
-        p_x, p_y, p_w, p_h = p.x_mm, p.y_mm, p.width_mm, p.height_mm
-        p_rot = p.rotation_deg
+        p_x, p_y, p_w, p_h, p_rot = 105.0, 250.0, 30.0, 30.0, 0.0
 
     # Pick the page to preview: first page that will receive a stamp
     import fitz
@@ -361,7 +461,7 @@ async def preview_stamped(
     pu.stamp_pdf(
         src_pdf=src,
         dst_pdf=stamped,
-        stamp_png=asset_manager.file_path(asset),
+        stamp_png=stamp_png_path,
         x_mm=p_x, y_mm=p_y, w_mm=p_w, h_mm=p_h,
         pages=pages, rotation_deg=p_rot,
     )

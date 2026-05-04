@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}企業 Logo / 識別 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('image', size=22) }} 企業 Logo / 識別</h1>
+<p class="muted">上傳一張企業 Logo，自動套用到左側 sidebar、瀏覽器頁籤 favicon、首頁與登入頁。
+建議使用 PNG（含透明）/ JPG / WEBP，正方形或近正方形最佳；最大 {{ max_dim }} px、{{ max_mb }} MB。</p>
+
+<div class="panel" style="display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap;">
+  <div style="flex:0 0 auto;">
+    <h3 style="margin:0 0 8px 0;">目前 Logo</h3>
+    <div id="logoBox" class="logo-preview">
+      {% if has_custom %}
+      <img id="logoImg" src="{{ logo_url }}?v={{ range(100000) | random }}" alt="目前 Logo" />
+      {% else %}
+      <img id="logoImg" src="/static/images/logo-on-light.png" alt="預設 Logo" />
+      <div class="muted" style="font-size:11px; margin-top:6px;">（使用內建預設）</div>
+      {% endif %}
+    </div>
+    <div style="margin-top:8px;" id="statusLine"></div>
+  </div>
+
+  <div style="flex:1 1 320px;">
+    <h3 style="margin:0 0 8px 0;">上傳新 Logo</h3>
+    <input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" />
+    <div style="margin-top:12px;">
+      <button class="btn btn-primary" id="btnUpload" disabled>{{ icon('upload', size=14) }} 上傳並套用</button>
+      <button class="btn" id="btnReset" {% if not has_custom %}disabled{% endif %}>{{ icon('refresh', size=14) }} 還原預設</button>
+    </div>
+    <p class="muted" style="font-size:12px; margin-top:14px;">
+      <b>套用範圍</b>：<br>
+      • 左側 sidebar 上方品牌列<br>
+      • 瀏覽器頁籤 favicon（重新整理頁籤後生效）<br>
+      • 首頁 hero logo<br>
+      • 登入頁 / 啟用認證頁
+    </p>
+    <p class="muted" style="font-size:11.5px;">
+      Logo 存於 <code>data/branding/logo.png</code>，正規化為 PNG，超過 {{ max_dim }} px 會自動縮小。
+      Sidebar 背景偏深色，建議使用透明背景或淺色 logo 才看得見。
+    </p>
+  </div>
+</div>
+
+<style>
+  .logo-preview {
+    width: 240px; height: 240px; border: 1px dashed #cbd5e1; border-radius: 12px;
+    background: linear-gradient(135deg, #f8fafc 25%, transparent 25%) -10px 0,
+                linear-gradient(225deg, #f8fafc 25%, transparent 25%) -10px 0,
+                linear-gradient(315deg, #f8fafc 25%, transparent 25%),
+                linear-gradient(45deg,  #f8fafc 25%, transparent 25%);
+    background-size: 20px 20px; background-color: #ffffff;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding: 16px;
+  }
+  .logo-preview img {
+    max-width: 100%; max-height: 200px; object-fit: contain;
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const fileInput = document.getElementById('logoFile');
+const btnUpload = document.getElementById('btnUpload');
+const btnReset  = document.getElementById('btnReset');
+const status    = document.getElementById('statusLine');
+const previewImg = document.getElementById('logoImg');
+
+fileInput.addEventListener('change', () => {
+  btnUpload.disabled = !fileInput.files.length;
+  if (fileInput.files.length) {
+    // Local preview before upload
+    const r = new FileReader();
+    r.onload = (ev) => { previewImg.src = ev.target.result; };
+    r.readAsDataURL(fileInput.files[0]);
+  }
+});
+
+btnUpload.addEventListener('click', async () => {
+  if (!fileInput.files.length) return;
+  const fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+  btnUpload.disabled = true;
+  status.innerHTML = '<span class="muted">上傳中…</span>';
+  try {
+    const r = await fetch('/admin/branding/upload', {method: 'POST', body: fd});
+    if (!r.ok) {
+      const t = await r.text();
+      status.innerHTML = '<span style="color:#dc2626;">上傳失敗：' + t + '</span>';
+      btnUpload.disabled = false;
+      return;
+    }
+    status.innerHTML = '<span style="color:#059669;">已套用！重整頁面後生效。</span>';
+    btnReset.disabled = false;
+    setTimeout(() => location.reload(), 800);
+  } catch (e) {
+    status.innerHTML = '<span style="color:#dc2626;">錯誤：' + e.message + '</span>';
+    btnUpload.disabled = false;
+  }
+});
+
+btnReset.addEventListener('click', async () => {
+  if (!await showConfirm('確定要還原為內建預設 Logo？', {okText:'還原', kind:'danger'})) return;
+  status.innerHTML = '<span class="muted">還原中…</span>';
+  try {
+    const r = await fetch('/admin/branding/reset', {method: 'POST'});
+    if (!r.ok) {
+      status.innerHTML = '<span style="color:#dc2626;">還原失敗</span>';
+      return;
+    }
+    status.innerHTML = '<span style="color:#059669;">已還原預設。</span>';
+    setTimeout(() => location.reload(), 600);
+  } catch (e) {
+    status.innerHTML = '<span style="color:#dc2626;">錯誤：' + e.message + '</span>';
+  }
+});
+</script>
+{% endblock %}

@@ -230,14 +230,49 @@ class Pattern:
 RE_TW_ID = re.compile(r"\b[A-Z][12]\d{8}\b")
 RE_TW_ARC = re.compile(r"\b[A-Z][A-D89]\d{8}\b")
 RE_TW_BIZ = re.compile(r"(?<!\d)\d{8}(?!\d)")
-RE_MOBILE = re.compile(r"\b09\d{2}[\s\-]?\d{3}[\s\-]?\d{3}\b")
-RE_LANDLINE = re.compile(r"\b0[2-8][\s\-]?\d{7,8}\b")
+# 手機：包含國際碼 +886 / 886 / 9XX-XXX-XXX 多種格式（v1.3.16 強化）
+RE_MOBILE = re.compile(
+    r"(?:\+?886[\s\-]?|0)9\d{2}[\s\-．\.]?\d{3}[\s\-．\.]?\d{3}\b"
+)
+# 市話：(電話) / (電話) / (電話) 多種；分機 #123 / ext 123
+RE_LANDLINE = re.compile(
+    r"(?:\(?\+?886\)?[\s\-]?|\b)0?[2-8][\s\-．\.]?\d{3,4}[\s\-．\.]?\d{3,4}"
+    r"(?:[\s\-]?(?:#|ext\.?|分機)[\s\-]?\d{1,5})?\b",
+    re.IGNORECASE,
+)
 RE_EMAIL = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
 RE_CC = re.compile(r"\b(?:\d[ \-]?){13,19}\b")
 RE_IP = re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\b")
-RE_PLATE = re.compile(r"\b[A-Z]{2,4}[\s\-]?\d{2,4}\b")
-RE_PASSPORT = re.compile(r"\b\d{9}\b")
+# 車牌：強化 — 必須要在前後出現非字母情境（避免吃掉 "FROM 123"），格式
+# AAA-1234 / AAA1234 / 1234-AB / 新式 ABC-1234 / 機車 XX-123 / XX-1234
+RE_PLATE = re.compile(
+    r"(?:(?<=[車牌號照:：\s])|^)"
+    r"(?:[A-Z]{2,3}[\s\-]\d{3,4}|\d{3,4}[\s\-][A-Z]{2,3})"
+    r"(?=[\s,。、；;]|$)"
+)
+# 護照：要 label 或前綴才認，避免任何 9 位數字都被視為護照（false positive 大）
+RE_PASSPORT = re.compile(
+    r"(?:護照(?:號碼?)?|Passport(?:\s*No\.?|\s*Number)?)\s*[:：]?\s*([A-Z0-9]{8,10})\b",
+    re.IGNORECASE,
+)
 RE_HIC = re.compile(r"\b0000\d{8,12}\b")   # 健保卡號 (以 0000 起頭的較長數字)
+# 駕照：6-12 位英數混合，要前綴 label
+RE_DRIVER_LICENSE = re.compile(
+    r"(?:駕照(?:號碼?)?|Driver(?:'s)?\s*License(?:\s*No\.?)?|DL\s*No\.?)\s*[:：]?\s*([A-Z0-9]{6,12})\b",
+    re.IGNORECASE,
+)
+# 出生日期 / 生日：常見格式 YYYY-MM-DD / YYYY/MM/DD / 民國 XXX 年 X 月 X 日
+RE_DOB = re.compile(
+    r"(?:出生(?:日期|年月日)?|生日|Date\s*of\s*Birth|DOB|Birth\s*Date)\s*[:：]?\s*"
+    r"("
+    # 中文 / 民國格式: "民國 70 年 3 月 21 日" / "70-3-21" / "1985 年 3 月 21 日"
+    r"(?:民國\s*)?\d{2,4}\s*(?:年|[\-/])\s*\d{1,2}\s*(?:月|[\-/])\s*\d{1,2}\s*日?"
+    r"|"
+    # 純數字 ISO: 1985-03-21 / 1985/03/21
+    r"\d{4}[\s\-/]\d{1,2}[\s\-/]\d{1,2}"
+    r")",
+    re.IGNORECASE,
+)
 
 # --- Label-anchored patterns (value_group=1 extracts only the sensitive part) ---
 # Bank account: captures digits/dashes after "帳號" / "帳戶" / "account" label.
@@ -293,10 +328,30 @@ RE_PERSON = re.compile(
     r")"
 )
 
-# Taiwan address — heuristic, matches things like "(地址)"
+# Taiwan address — heuristic + 強化版（v1.3.16）：
+#   - 支援「之 N」「N 之 N」（巷弄）
+#   - 支援「N 樓」「N 樓之 N」「Floor N」「F.」（樓層）
+#   - 支援「N 段」「Section N」（路段）
+#   - 支援「Lane N」「Alley N」（巷弄英文）
+#   - 直轄市 / 縣市 / 鄉鎮 / 區 全種類路 / 街 / 道 / 大道
 RE_ADDR = re.compile(
-    r"[台臺][北中南東][縣市][一-鿿]{0,30}[路街道巷弄][一-鿿\d]{0,20}\d+號"
-    r"|[一-鿿]{1,5}[縣市][一-鿿]{1,3}[區鄉鎮市][一-鿿]{0,20}[路街道巷弄][一-鿿\d]{0,20}\d+號"
+    # 中文地址主要型 — 新增段、樓、之等後綴
+    r"(?:[台臺][北中南東][縣市]|[一-鿿]{1,5}[縣市][一-鿿]{1,3}[區鄉鎮市])"
+    r"[一-鿿]{0,30}"
+    r"(?:[路街道]|大道)"
+    r"(?:[一-鿿]{0,5}段)?"  # X 段
+    r"[一-鿿\d]{0,20}\d+號"
+    r"(?:之\d+)?"           # 之 N
+    r"(?:[一-鿿\d]{0,5}樓)?"  # N 樓
+    r"(?:之\d+)?"           # 樓之 N
+    r"|"
+    # 英文地址型：No.X, Sec.Y, Road, Lane, Alley, Floor
+    r"\bNo\.?\s*\d+[\s,]*"
+    r"(?:Sec\.?\s*\d+[\s,]*)?"
+    r"[A-Za-z][A-Za-z\s\-\.]{2,30}"
+    r"(?:\s*Rd\.?|\s*Road|\s*St\.?|\s*Street|\s*Ave\.?|\s*Avenue|\s*Lane|\s*Alley)"
+    r"(?:[\s,]*Floor\s*\d+|\s*\d+F\.?)?",
+    re.IGNORECASE,
 )
 
 
@@ -304,7 +359,10 @@ CATALOG: list[Pattern] = [
     # 個人身分
     Pattern("tw_id",     "身分證字號",    RE_TW_ID,     _tw_id_valid,  _mask_id,    True,  group="個人身分", icon="id-card"),
     Pattern("tw_arc",    "居留證號",      RE_TW_ARC,    _tw_arc_valid, _mask_id,    True,  group="個人身分", icon="id-card"),
-    Pattern("passport",  "護照號碼",      RE_PASSPORT,  _always,       _mask_passport, False, group="個人身分", icon="book"),
+    Pattern("passport",  "護照號碼",      RE_PASSPORT,  _always,       _mask_passport, True,  value_group=1, group="個人身分", icon="book"),
+    Pattern("driver_license", "駕照號碼", RE_DRIVER_LICENSE, _always,  _mask_passport, True,  value_group=1, group="個人身分", icon="car"),
+    Pattern("dob",       "出生日期",      RE_DOB,       _always,
+            lambda v: "****-**-**", True, value_group=1, group="個人身分", icon="page"),
     Pattern("hic",       "健保卡號",      RE_HIC,       _always,
             lambda v: _mask_keep_edges(v, 4, 4), False, group="個人身分", icon="heart"),
     # 聯絡方式

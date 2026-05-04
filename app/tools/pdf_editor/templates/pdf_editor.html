@@ -1934,15 +1934,23 @@ async function savePdf(isAuto) {
     // background PDF now shows them baked in. EXCEPT the currently
     // selected object (preserve selection across auto-save so the user
     // keeps editing the same thing without re-clicking).
-    pageCanvases.forEach(fc => {
+    pageCanvases.forEach((fc, pIdx) => {
       const stillSelected = fc.getActiveObject();
+      // The active object was SKIPPED from this bake (savePdf skips
+      // skipObj per canvas), so do NOT mark it _peSaved — otherwise
+      // selection:cleared will fade it to opacity 0.01 even though the
+      // background PDF doesn't have it baked, making the object look
+      // blank/empty after deselecting (#6 bug regression 2026-05).
+      const skippedActive = activePerCanvas[pIdx];
       fc.getObjects().forEach(o => {
         if (o._peMarker) return;
+        if (o === skippedActive) {
+          // Stay opaque; not yet baked into BG. Subsequent save (after
+          // deselect) will bake it and only then mark _peSaved.
+          o.set('opacity', 1);
+          return;
+        }
         o._peSaved = true;
-        // 目前選的物件 → 維持完全可見（連續編輯不被打斷）
-        // 其他所有物件（包含擷取自 PDF 的）→ fade 到 0.01 讓 BG 透出，
-        // 否則 overlay 文字 + 已燒入 BG 的相同文字會疊出重影。物件本體
-        // 仍存在 Fabric scene，使用者仍可點選來再編輯。
         if (o === stillSelected) {
           o.set('opacity', 1);
         } else {

@@ -224,9 +224,24 @@ def _m4_grant_image_to_pdf(conn: sqlite3.Connection) -> None:
     """)
 
 
+def _m5_grant_translate_doc(conn: sqlite3.Connection) -> None:
+    """v5: grant the new `translate-doc` tool to anyone who already has
+    `text-diff` (both are LLM-light text utilities, similar audience).
+    Same backfill heuristic as m4. Without this, existing customers'
+    default-user / clerk roles miss translate-doc after upgrade."""
+    conn.executescript("""
+    INSERT OR IGNORE INTO role_perms(role_id, tool_id)
+        SELECT role_id, 'translate-doc' FROM role_perms WHERE tool_id = 'text-diff';
+    INSERT OR IGNORE INTO subject_perms(subject_type, subject_key, tool_id)
+        SELECT subject_type, subject_key, 'translate-doc'
+        FROM subject_perms WHERE tool_id = 'text-diff';
+    """)
+
+
 MIGRATIONS = [_m1_initial, _m2_username_source_unique,
               _m3_rename_pdf_diff_to_doc_diff,
-              _m4_grant_image_to_pdf]
+              _m4_grant_image_to_pdf,
+              _m5_grant_translate_doc]
 
 
 def auth_db_path() -> Path:

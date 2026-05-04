@@ -62,15 +62,39 @@ async def load(file: UploadFile = File(...)):
     }
 
 
+_VALID_MODES = {"rotate-90", "rotate-180", "rotate-270", "flip-h", "flip-v"}
+
+
 @router.get("/thumb/{upload_id}/{page}")
-async def thumb(upload_id: str, page: int, large: bool = False):
+async def thumb(upload_id: str, page: int, large: bool = False, mode: str = ""):
     src = settings.temp_dir / f"rotL_{upload_id}.pdf"
     if not src.exists():
         raise HTTPException(404, "upload not found (expired?)")
     suffix = "_large" if large else ""
-    out = settings.temp_dir / f"rotL_{upload_id}_thumb{suffix}_{page}.png"
+    base = settings.temp_dir / f"rotL_{upload_id}_thumb{suffix}_{page}.png"
+    if not base.exists():
+        pdf_preview.render_page_png(src, base, page - 1, dpi=160 if large else 64)
+    mode = mode if mode in _VALID_MODES else ""
+    if not mode:
+        return FileResponse(str(base), media_type="image/png",
+                            headers={"Cache-Control": "max-age=300"})
+    out = settings.temp_dir / f"rotL_{upload_id}_thumb{suffix}_{mode}_{page}.png"
     if not out.exists():
-        pdf_preview.render_page_png(src, out, page - 1, dpi=160 if large else 64)
+        from PIL import Image
+        with Image.open(str(base)) as im:
+            if mode == "rotate-90":      # clockwise 90
+                im2 = im.transpose(Image.Transpose.ROTATE_270)
+            elif mode == "rotate-180":
+                im2 = im.transpose(Image.Transpose.ROTATE_180)
+            elif mode == "rotate-270":   # counter-clockwise 90
+                im2 = im.transpose(Image.Transpose.ROTATE_90)
+            elif mode == "flip-h":
+                im2 = im.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+            elif mode == "flip-v":
+                im2 = im.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+            else:
+                im2 = im
+            im2.save(str(out))
     return FileResponse(str(out), media_type="image/png",
                         headers={"Cache-Control": "max-age=300"})
 
@@ -108,6 +132,9 @@ async def submit(
     pages: str = Form("all"),
     # Legacy: older clients may still send `angle`. Kept for back-compat.
     angle: int | None = Form(None),
+    # JSON object {pageNum(str): mode|"none"} for per-page override.
+    # Empty / missing => 走 mode + pages 全頁套用語意（既有行為）。
+    per_page: str = Form(""),
 ):
     # Back-compat: translate legacy angle param.
     if angle is not None and mode.startswith("rotate-"):
@@ -115,6 +142,21 @@ async def submit(
     valid = {"rotate-90", "rotate-180", "rotate-270", "flip-h", "flip-v"}
     if mode not in valid:
         raise HTTPException(400, f"mode 必須是 {valid}")
+    per_page_map: dict[int, str] = {}
+    if per_page:
+        import json as _json
+        try:
+            raw = _json.loads(per_page)
+            if not isinstance(raw, dict):
+                raise ValueError("per_page must be JSON object")
+            for k, v in raw.items():
+                pn = int(k)
+                vs = str(v)
+                if vs != "none" and vs not in valid:
+                    raise ValueError(f"per_page mode 無效：{vs}")
+                per_page_map[pn] = vs
+        except Exception as e:
+            raise HTTPException(400, f"per_page 解析失敗：{e}")
     files = file or []
     if not files: raise HTTPException(400, "沒有檔案")
     bid = uuid.uuid4().hex
@@ -128,30 +170,46 @@ async def submit(
         sp = bdir / f"{i:03d}_{Path(f.filename).name}"
         sp.write_bytes(data); saved.append((sp, f.filename))
 
+    def _apply_mode_to_page(page, m: str) -> None:
+        if m == "none" or not m:
+            return
+        if m.startswith("rotate-"):
+            ang = int(m.split("-")[1])
+            page.set_rotation((page.rotation + ang) % 360)
+        elif m == "flip-h":
+            _flip_page(page, horizontal=True)
+        elif m == "flip-v":
+            _flip_page(page, horizontal=False)
+
     def run(job):
         outs: list[Path] = []
+        any_flip = mode.startswith("flip-") or any(
+            v.startswith("flip-") for v in per_page_map.values())
+        any_rotate = mode.startswith("rotate-") or any(
+            v.startswith("rotate-") for v in per_page_map.values())
+        # 命名 suffix：純 flip → flipped；其他 → rotated（含混合）
+        if any_rotate or not any_flip:
+            suffix = "rotated"
+        else:
+            suffix = "flipped"
         for fi, (sp, orig) in enumerate(saved):
             job.message = f"處理 {orig}"; job.progress = (fi/len(saved)) * 0.95
             with fitz.open(str(sp)) as doc:
                 target = _parse_pages(pages, doc.page_count)
                 for i in range(doc.page_count):
-                    if i not in target:
-                        continue
-                    if mode.startswith("rotate-"):
-                        ang = int(mode.split("-")[1])
-                        doc[i].set_rotation((doc[i].rotation + ang) % 360)
-                    elif mode == "flip-h":
-                        _flip_page(doc[i], horizontal=True)
-                    elif mode == "flip-v":
-                        _flip_page(doc[i], horizontal=False)
-                suffix = "flipped" if mode.startswith("flip-") else "rotated"
+                    page_num_1based = i + 1
+                    # per-page 覆寫優先（含 'none' = 此頁明確不轉）
+                    if page_num_1based in per_page_map:
+                        _apply_mode_to_page(doc[i], per_page_map[page_num_1based])
+                    elif i in target:
+                        _apply_mode_to_page(doc[i], mode)
                 op = bdir / f"{Path(orig).stem}_{suffix}.pdf"
                 doc.save(str(op), garbage=3, deflate=True)
                 outs.append(op)
         if len(outs) == 1:
             job.result_path = outs[0]; job.result_filename = outs[0].name
         else:
-            prefix = "flipped" if mode.startswith("flip-") else "rotated"
+            prefix = suffix
             zname = f"{prefix}_{time.strftime('%Y%m%d_%H%M%S')}.zip"
             zp = bdir / zname
             with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED) as zf:

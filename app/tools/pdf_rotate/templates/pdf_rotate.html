@@ -57,7 +57,7 @@
 
 <details class="panel" id="thumbs-panel" hidden open>
   <summary>頁面預覽 <span class="muted" id="thumbs-info" style="font-weight:normal; font-size:12px; margin-left:8px;">—</span></summary>
-  <p class="muted" style="font-size:12px;">會被旋轉的頁面有紫色邊框與「↻ 將旋轉」徽章；縮圖即時跟著轉動。</p>
+  <p class="muted" style="font-size:12px;">會被旋轉的頁面有紫色邊框與「↻ 將旋轉」徽章；縮圖即時跟著轉動。每張縮圖下的工具列可<b>個別覆寫</b>該頁的轉向設定（綠框 = 個別覆寫）。</p>
   <div class="page-grid" id="thumb-grid"></div>
 </details>
 
@@ -75,6 +75,18 @@
   padding:8px; display:flex; flex-direction:column; align-items:center; gap:6px;
 }
 .page-card.will-rotate { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(99,102,241,0.2); }
+.page-card.has-override { border-color: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,0.25); }
+.page-card.has-override.will-rotate { border-color: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,0.25); }
+.page-tools { display:flex; flex-wrap:wrap; gap:3px; justify-content:center; margin-top:4px; }
+.page-tools button {
+  background:#fff; border:1px solid #e5e7eb; border-radius:4px;
+  padding:2px 6px; font-size:11px; cursor:pointer; line-height:1.2;
+  color:#475569;
+}
+.page-tools button:hover { background:#f1f5f9; border-color:#94a3b8; }
+.page-tools button.is-active { background:#16a34a; border-color:#16a34a; color:#fff; }
+.page-tools button.clear-btn { color:#94a3b8; }
+.page-tools button.clear-btn:hover { color:#dc2626; border-color:#dc2626; }
 .page-thumb {
   width: 100%; aspect-ratio: 0.7071; background:#f8fafc;
   display:flex; align-items:center; justify-content:center; overflow:hidden;
@@ -109,6 +121,10 @@ let files = [];
 let uploadId = null;
 let pages = [];
 let pageCount = 0;
+// page number (1-based) → mode string ('rotate-90' / 'rotate-180' / 'rotate-270'
+// / 'flip-h' / 'flip-v' / 'none'). 'none' 代表「明確不轉這頁」(覆寫全頁套用)；
+// Map 內沒有的 key 表示「跟隨全頁設定」。
+const perPageMode = new Map();
 
 const fu = new FileUpload(document.getElementById('upR'), async (_first, fs) => {
   files = Array.isArray(fs) ? fs : (fs ? [fs] : []);
@@ -212,21 +228,54 @@ function renderThumbs() {
          <img src="${p.thumb}" alt="page ${p.page}" loading="lazy" />
        </div>
        <div class="page-num">原第 ${p.page} 頁</div>
+       <div class="page-tools" data-page-tools>
+         <button type="button" data-pmode="rotate-270" title="逆時針 90°">↺</button>
+         <button type="button" data-pmode="rotate-90"  title="順時針 90°">↻</button>
+         <button type="button" data-pmode="rotate-180" title="180°">180°</button>
+         <button type="button" data-pmode="flip-h"     title="左右鏡向">⇆</button>
+         <button type="button" data-pmode="flip-v"     title="上下鏡向">⇅</button>
+         <button type="button" data-pmode="none"       title="此頁不轉" class="clear-btn">─</button>
+       </div>
      </div>`
   ).join('');
+  // 點 per-page 工具列：toggle 個別覆寫
+  document.querySelectorAll('[data-page-tools]').forEach(toolbar => {
+    const card = toolbar.closest('.page-card');
+    const page = parseInt(card.dataset.page);
+    toolbar.querySelectorAll('button[data-pmode]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const m = btn.dataset.pmode;
+        // 再點一次同一個 mode → 取消覆寫，回到全頁設定
+        if (perPageMode.get(page) === m) perPageMode.delete(page);
+        else perPageMode.set(page, m);
+        refreshThumbStates();
+      });
+    });
+  });
   refreshThumbStates();
+}
+
+// 取得某一頁的有效模式：個別覆寫優先 > 全頁設定（且該頁在 pages spec 內）
+function effectivePageMode(page, globalMode, target) {
+  if (perPageMode.has(page)) {
+    const m = perPageMode.get(page);
+    return m === 'none' ? null : m;
+  }
+  return target.has(page) ? globalMode : null;
 }
 
 function refreshThumbStates() {
   const mode = getMode();
   const target = parsePages(getPagesSpec(), pageCount);
-  const tf = modeTransform(mode);
   document.querySelectorAll('.page-card').forEach(card => {
     const page = parseInt(card.dataset.page);
-    const willApply = target.has(page);
+    const eff = effectivePageMode(page, mode, target);
+    const hasOverride = perPageMode.has(page);
+    const willApply = eff !== null;
     card.classList.toggle('will-rotate', willApply);
+    card.classList.toggle('has-override', hasOverride);
     const img = card.querySelector('.page-thumb img');
-    img.style.transform = willApply ? tf : 'none';
+    img.style.transform = willApply ? modeTransform(eff) : 'none';
     let badge = card.querySelector('.rotate-badge');
     if (willApply) {
       if (!badge) {
@@ -234,25 +283,38 @@ function refreshThumbStates() {
         badge.className = 'rotate-badge';
         card.querySelector('.page-thumb').appendChild(badge);
       }
-      badge.textContent = modeLabel(mode);
+      badge.textContent = (hasOverride ? '★ ' : '') + modeLabel(eff);
+      badge.style.background = hasOverride ? '#16a34a' : '';
     } else if (badge) {
       badge.remove();
     }
+    // Per-page toolbar: highlight active mode (if override is set)
+    card.querySelectorAll('[data-page-tools] button[data-pmode]').forEach(b => {
+      b.classList.toggle('is-active',
+        hasOverride && b.dataset.pmode === perPageMode.get(page));
+    });
   });
 }
 
-// Lightbox
+// Lightbox — uses server-rendered (pre-rotated) image so the image's
+// natural aspect matches the rotated visual, no CSS transform layout gotcha.
 document.getElementById('thumb-grid').addEventListener('click', (e) => {
+  // 點到 per-page 工具列的按鈕別觸發 lightbox
+  if (e.target.closest('[data-page-tools]')) return;
   const t = e.target.closest('.page-thumb');
   if (!t) return;
   const card = t.closest('.page-card');
-  const willApply = card.classList.contains('will-rotate');
-  const tf = willApply ? modeTransform(getMode()) : 'none';
-  const big = t.dataset.zoomSrc + (t.dataset.zoomSrc.includes('?') ? '&' : '?') + 'large=1';
+  const page = parseInt(card.dataset.page);
+  const target = parsePages(getPagesSpec(), pageCount);
+  const eff = effectivePageMode(page, getMode(), target);
+  const params = new URLSearchParams({large: '1'});
+  if (eff) params.set('mode', eff);
+  const sep = t.dataset.zoomSrc.includes('?') ? '&' : '?';
+  const big = t.dataset.zoomSrc + sep + params.toString();
   const lb = document.createElement('div');
   lb.className = 'page-lightbox';
   lb.innerHTML = `<button class="page-lightbox-close" type="button">×</button>
-                  <img src="${big}" alt="" style="transform:${tf};" />`;
+                  <img src="${big}" alt="" />`;
   lb.addEventListener('click', () => lb.remove());
   document.body.appendChild(lb);
 });
@@ -263,6 +325,12 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
   for (const f of files) fd.append('file', f);
   fd.append('mode', getMode());
   fd.append('pages', getPagesSpec());
+  // per-page 覆寫：只送有設定的頁。後端拿到 per_page 就以此為準（覆寫 mode/pages）
+  if (perPageMode.size) {
+    const obj = {};
+    perPageMode.forEach((v, k) => { obj[String(k)] = v; });
+    fd.append('per_page', JSON.stringify(obj));
+  }
   const r = await fu.upload('/tools/pdf-rotate/submit', fd, {processingLabel: '排隊轉向中…'});
   if(!r.ok) return alert('送出失敗：' + await r.text());
   const j = await r.json(); jp.track(j.job_id);
