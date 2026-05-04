@@ -130,7 +130,13 @@
 </div>
 
 <div class="panel">
-  <h2 style="margin-top:0;">4. 校驗行為</h2>
+  <h2 style="margin-top:0;">4. 各工具進階設定</h2>
+  <p class="muted" style="margin:-4px 0 14px 0; font-size:12px;">下列設定<b>各自只影響特定工具</b>。沒在用該工具的話可保留預設。</p>
+
+  <h3 class="tool-section-h">
+    <span class="tool-section-tag tool-section-tag-vision">表單自動填寫 · LLM 校驗</span>
+    <code class="muted">pdf-fill</code>
+  </h3>
   <div class="form-row">
     <label>預設審查輪數</label>
     <div class="field" style="display:flex; gap:8px; align-items:center;">
@@ -163,6 +169,11 @@
       <span class="muted" style="font-size:12px;">秒 — review loop 上限，避免死循環</span>
     </div>
   </div>
+
+  <h3 class="tool-section-h" style="margin-top:24px;">
+    <span class="tool-section-tag tool-section-tag-text">逐句翻譯</span>
+    <code class="muted">translate-doc</code>
+  </h3>
   <div class="form-row">
     <label>翻譯並行數</label>
     <div class="field" style="display:flex; gap:8px; align-items:center;">
@@ -260,6 +271,19 @@
 }
 .llm-page .ptt-tag-vision { background: #fef3c7; color: #92400e; }
 .llm-page .ptt-tag-text { background: #dbeafe; color: #1e40af; }
+
+/* 各工具進階設定 — 子標題分組 */
+.llm-page .tool-section-h {
+  margin: 4px 0 10px 0; font-size: 14px; font-weight: 600; color: #0f172a;
+  display: flex; align-items: center; gap: 8px;
+  padding-bottom: 8px; border-bottom: 1px solid #e2e8f0;
+}
+.llm-page .tool-section-tag {
+  font-size: 12.5px; padding: 3px 10px; border-radius: 12px; font-weight: 600;
+}
+.llm-page .tool-section-tag-vision { background: #fef3c7; color: #92400e; }
+.llm-page .tool-section-tag-text { background: #dbeafe; color: #1e40af; }
+.llm-page .tool-section-h code { font-size: 11.5px; }
 .llm-page .form-row input[type=text]   { flex: 1 1 auto; }
 .llm-page .form-row label              { min-width: 160px; width: auto; }
 </style>
