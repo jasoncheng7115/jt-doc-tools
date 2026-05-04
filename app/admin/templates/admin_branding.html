@@ -161,15 +161,26 @@ function _refreshMask() {
 }
 
 function _initCropForImage() {
-  cropState.imgW = cropImg.clientWidth;
-  cropState.imgH = cropImg.clientHeight;
   cropState.natW = cropImg.naturalWidth;
   cropState.natH = cropImg.naturalHeight;
   cropState.active = (cropState.natW !== cropState.natH);
-  if (!cropState.active) { cropPanel.hidden = true; return; }
+  if (!cropState.active) {
+    cropPanel.hidden = true;
+    return;
+  }
+  // 先 unhide 才量得到 clientWidth/clientHeight；hidden 時是 0 → 全部 NaN
   cropPanel.hidden = false;
-  // Default selection: largest centred SQUARE within image
-  _setAspectSquare();
+  // 等下一次 layout flush，否則 clientWidth 還是 0
+  requestAnimationFrame(() => {
+    cropState.imgW = cropImg.clientWidth || cropImg.naturalWidth;
+    cropState.imgH = cropImg.clientHeight || cropImg.naturalHeight;
+    // 萬一還是 0（極端 case），fallback 到 natural 尺寸（cropWrap max 360px CSS 會限）
+    if (!cropState.imgW || !cropState.imgH) {
+      cropState.imgW = Math.min(cropState.natW, 360);
+      cropState.imgH = Math.round(cropState.natH * cropState.imgW / cropState.natW);
+    }
+    _setAspectSquare();
+  });
 }
 
 function _setAspectSquare() {
@@ -306,11 +317,14 @@ fileInput.addEventListener('change', () => {
   const r = new FileReader();
   r.onload = (ev) => {
     previewImg.src = ev.target.result;
+    // Set onload BEFORE src so it fires even if browser caches
+    cropImg.onload = () => { _initCropForImage(); };
     cropImg.src = ev.target.result;
-    // Wait for image to load to get natural dims
-    cropImg.onload = () => {
+    // Defensive: 如果圖已經 complete (cached / data URL synchronous decode)
+    // 而 onload 沒觸發，主動呼叫一次
+    if (cropImg.complete && cropImg.naturalWidth > 0) {
       _initCropForImage();
-    };
+    }
   };
   r.readAsDataURL(fileInput.files[0]);
 });
