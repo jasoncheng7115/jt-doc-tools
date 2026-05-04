@@ -30,68 +30,128 @@
 </div>
 
 <div class="panel">
-  <h2 style="margin-top:0;">2. 密碼</h2>
-  <div class="form-row">
-    <label>密碼</label>
-    <input id="pw" type="password" class="field" placeholder="開啟密碼或擁有者密碼都可以" />
-  </div>
-  <div class="form-row">
-    <label></label>
-    <label class="field opt-card" style="background:#f8fafc; border:1px solid var(--border);">
-      <input id="useFnamePw" type="checkbox" />
-      <span class="opt-card-text">
-        <b>以檔名為密碼</b>
-        <span class="opt-card-desc">
-          每個檔用自己的<b>主檔名</b>（去掉 <code>.pdf</code>）當作密碼。例如 <code>report-2026.pdf</code> 會試 <code>report-2026</code>。<br>
-          如同時也填了上方密碼，先試檔名失敗再試手動密碼，先成功的用。多份檔密碼不同時很方便。
+  <h2 style="margin-top:0;">2. 解密模式 <span class="muted" style="font-weight:400; font-size:12.5px;">（可複選；多模式同時勾選時，解密會依序嘗試直到成功）</span></h2>
+
+  <div class="mode-stack">
+
+    <!-- 模式 1：密碼模式（預設勾） -->
+    <div class="mode-card" data-mode="password">
+      <label class="mode-head">
+        <input type="checkbox" id="mPassword" checked />
+        <span class="mode-title">密碼模式</span>
+        <span class="mode-tag mode-tag-default">預設</span>
+        <span class="mode-desc">手動輸入一個密碼，所有檔案套用同一個密碼。</span>
+      </label>
+      <div class="mode-body">
+        <input id="pw" type="password" class="field" placeholder="開啟密碼或擁有者密碼都可以" />
+        <p class="muted" style="font-size:11.5px; margin:6px 0 0;">
+          如果 PDF 沒有開啟密碼但有權限限制（禁列印 / 禁複製），此處留空即可；工具會直接去掉權限限制。
+        </p>
+      </div>
+    </div>
+
+    <!-- 模式 2：檔名模式 -->
+    <div class="mode-card" data-mode="filename">
+      <label class="mode-head">
+        <input type="checkbox" id="mFilename" />
+        <span class="mode-title">檔名模式</span>
+        <span class="mode-desc">
+          每個檔用自己的<b>主檔名</b>（去掉 <code>.pdf</code>）當作密碼。例：<code>report-2026.pdf</code> 會試 <code>report-2026</code>。<br>
+          多份檔密碼剛好等於檔名時很方便（例如出版社按書號加密）。
         </span>
-      </span>
-    </label>
-  </div>
-  <div class="form-row">
-    <label></label>
-    <label class="field opt-card" style="background:#fff7ed; border:1px solid #fdba74;">
-      <input id="useThsrMode" type="checkbox" />
-      <span class="opt-card-text">
-        <b>高鐵模式</b>
-        <span class="opt-card-desc" style="color:#7c2d12;">
+      </label>
+    </div>
+
+    <!-- 模式 3：高鐵模式 -->
+    <div class="mode-card mode-card-thsr" data-mode="thsr">
+      <label class="mode-head">
+        <input type="checkbox" id="mThsr" />
+        <span class="mode-title">高鐵模式</span>
+        <span class="mode-desc">
           台灣高鐵電子車票 PDF 的密碼是<b>出發日期</b>（例：2024/03/15 → 密碼 <code>20240315</code>）。
-          勾選後在下方挑選日期範圍，工具會對每個檔嘗試該範圍內的每一天，成功就解密。
-          輸出檔名會自動改成「<code>20240315.pdf</code>」（可從檔名直接看出該票的搭乘日期）。
+          挑選月份範圍，工具對每個檔嘗試該範圍內的每一天；成功後輸出檔名改為該日期（例 <code>20240315.pdf</code>）。
         </span>
-      </span>
-    </label>
-  </div>
-  <div class="form-row" id="thsrDateRow" style="display:none;">
-    <label>搜尋月份範圍</label>
-    <div class="field" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-      <input id="thsrFrom" type="month" class="field" style="width:auto;" />
-      <span style="color:#64748b;">至</span>
-      <input id="thsrTo" type="month" class="field" style="width:auto;" />
-      <span class="muted" style="font-size:11.5px;">
-        預設最近 2 個月；起=當月 1 日，迄=當月最後一日；最多 3 個月範圍
-      </span>
+      </label>
+      <div class="mode-body">
+        <div class="thsr-row">
+          <span class="thsr-label">搜尋月份範圍</span>
+          <input id="thsrFrom" type="month" class="field thsr-input" />
+          <span class="thsr-sep">至</span>
+          <input id="thsrTo" type="month" class="field thsr-input" />
+          <span class="muted thsr-hint">預設最近 2 個月；最多約 3 個月範圍</span>
+        </div>
+        <div class="thsr-row">
+          <span class="thsr-label">日期格式</span>
+          <select id="thsrFmtPreset" class="field thsr-input">
+            <option value="YYYYMMDD" selected>YYYYMMDD（高鐵預設）</option>
+            <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+            <option value="YYYY/MM/DD">YYYY/MM/DD</option>
+            <option value="DDMMYYYY">DDMMYYYY</option>
+            <option value="DD-MM-YYYY">DD-MM-YYYY</option>
+            <option value="MMDDYYYY">MMDDYYYY</option>
+            <option value="YYMMDD">YYMMDD</option>
+            <option value="__custom__">自訂…</option>
+          </select>
+          <input id="thsrFmtCustom" type="text" class="field thsr-input" placeholder="自訂 (Y/M/D 與 - / . _ 空白)" style="display:none; width:200px;" />
+          <span class="muted thsr-hint">預覽：<code id="thsrFmtSample">—</code></span>
+        </div>
+      </div>
     </div>
+
   </div>
-  <div class="form-row" id="thsrFmtRow" style="display:none;">
-    <label>日期格式</label>
-    <div class="field" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-      <select id="thsrFmtPreset" class="field" style="width:auto;">
-        <option value="YYYYMMDD" selected>YYYYMMDD（高鐵預設）</option>
-        <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-        <option value="YYYY/MM/DD">YYYY/MM/DD</option>
-        <option value="DDMMYYYY">DDMMYYYY</option>
-        <option value="DD-MM-YYYY">DD-MM-YYYY</option>
-        <option value="MMDDYYYY">MMDDYYYY</option>
-        <option value="YYMMDD">YYMMDD</option>
-        <option value="__custom__">自訂…</option>
-      </select>
-      <input id="thsrFmtCustom" type="text" class="field" placeholder="自訂格式 (Y/M/D 與 - / . _ 空白)" style="width:240px; display:none;" />
-      <span class="muted" style="font-size:11.5px;" id="thsrFmtPreview">預覽：<code id="thsrFmtSample">—</code></span>
-    </div>
-  </div>
-  <p class="muted" style="font-size:12px;">如果 PDF 沒有開啟密碼但有權限限制（禁列印 / 禁複製），此處留空即可送出；工具會直接去掉權限限制。</p>
 </div>
+
+<style>
+  .mode-stack { display: flex; flex-direction: column; gap: 10px; }
+  .mode-card {
+    border: 1px solid var(--border, #e5e7eb); border-radius: 8px;
+    background: #fff;
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .mode-card.is-on { border-color: #3b82f6; background: #f5f9ff; }
+  .mode-card-thsr { background: #fffbeb; border-color: #fbbf24; }
+  .mode-card-thsr.is-on { background: #fff7ed; border-color: #f59e0b; }
+
+  .mode-head {
+    display: grid;
+    grid-template-columns: auto auto auto 1fr;
+    align-items: baseline;
+    gap: 8px;
+    padding: 10px 14px;
+    cursor: pointer; user-select: none;
+  }
+  .mode-head input[type=checkbox] { transform: scale(1.15); cursor: pointer; align-self: center; }
+  .mode-title { font-weight: 600; font-size: 14px; color: #0f172a; white-space: nowrap; }
+  .mode-tag {
+    font-size: 10.5px; padding: 2px 7px; border-radius: 10px;
+    font-weight: 600; white-space: nowrap;
+  }
+  .mode-tag-default { background: #dbeafe; color: #1e40af; }
+  .mode-desc {
+    grid-column: 4 / 5;
+    font-size: 12px; color: #64748b; line-height: 1.55;
+    word-wrap: break-word; overflow-wrap: anywhere; min-width: 0;
+  }
+  .mode-desc code { background: #e2e8f0; padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+
+  .mode-body {
+    padding: 4px 14px 14px 40px;  /* 縮排對齊 checkbox 後文字位置 */
+    display: none;
+  }
+  .mode-card.is-on .mode-body { display: block; }
+
+  .thsr-row {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    margin-top: 8px;
+  }
+  .thsr-row:first-child { margin-top: 0; }
+  .thsr-label {
+    font-size: 12.5px; color: #475569; min-width: 88px;
+  }
+  .thsr-input { width: auto; }
+  .thsr-sep { color: #64748b; font-size: 12px; }
+  .thsr-hint { font-size: 11px; }
+</style>
 
 <div style="margin-top:12px;">
   <button class="btn btn-primary" id="btn-submit">{{ icon('unlock', size=14) }} 解除並下載</button>
@@ -135,12 +195,24 @@ function _monthToToDate(ym) {
   const last = new Date(y, m, 0).getDate();
   return `${ym}-${String(last).padStart(2, '0')}`;
 }
-$('useThsrMode').addEventListener('change', () => {
-  const on = $('useThsrMode').checked;
-  $('thsrDateRow').style.display = on ? '' : 'none';
-  $('thsrFmtRow').style.display = on ? '' : 'none';
-  if (on) { _setDefaultThsrRange(); _refreshFmtPreview(); }
+// Mode card toggle — checkbox 勾選時整張卡 .is-on，body 才展開
+function _refreshModeCards() {
+  const map = {mPassword: 'password', mFilename: 'filename', mThsr: 'thsr'};
+  for (const [cbId, mode] of Object.entries(map)) {
+    const cb = $(cbId);
+    const card = document.querySelector(`.mode-card[data-mode="${mode}"]`);
+    if (cb && card) card.classList.toggle('is-on', cb.checked);
+  }
+}
+['mPassword', 'mFilename', 'mThsr'].forEach(id => {
+  $(id).addEventListener('change', () => {
+    _refreshModeCards();
+    if (id === 'mThsr' && $(id).checked) {
+      _setDefaultThsrRange(); _refreshFmtPreview();
+    }
+  });
 });
+_refreshModeCards();  // 初始化（密碼模式預設勾）
 
 // 日期格式：preset 下拉 / 自訂輸入；即時預覽今天的日期看起來怎樣
 function _getThsrFormat() {
@@ -167,16 +239,22 @@ $('thsrFmtCustom').addEventListener('input', _refreshFmtPreview);
 
 $('btn-submit').addEventListener('click', async () => {
   if (!files.length) return alert('請上傳 PDF');
+  // 至少要勾一個模式才有意義
+  if (!$('mPassword').checked && !$('mFilename').checked && !$('mThsr').checked) {
+    return alert('請至少勾選一種解密模式（密碼 / 檔名 / 高鐵）');
+  }
   const fd = new FormData();
   for (const f of files) fd.append('file', f);
-  fd.append('password', $('pw').value);
-  fd.append('use_filename_as_password', $('useFnamePw').checked ? '1' : '');
-  if ($('useThsrMode').checked) {
+  // 密碼模式：只有勾才送密碼欄位（沒勾就完全跳過）
+  if ($('mPassword').checked) {
+    fd.append('password', $('pw').value);
+  }
+  fd.append('use_filename_as_password', $('mFilename').checked ? '1' : '');
+  if ($('mThsr').checked) {
     if (!$('thsrFrom').value || !$('thsrTo').value) {
       return alert('高鐵模式：請選擇起迄月份');
     }
     fd.append('thsr_mode', '1');
-    // 月份 YYYY-MM → from = 該月 1 日；to = 該月最後一日
     fd.append('thsr_date_from', _monthToFromDate($('thsrFrom').value));
     fd.append('thsr_date_to',   _monthToToDate($('thsrTo').value));
     fd.append('thsr_date_format', _getThsrFormat());
