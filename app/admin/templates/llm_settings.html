@@ -242,35 +242,55 @@
 .llm-page .per-tool-header p {
   margin: 0 0 12px 0; font-size: 12px; line-height: 1.5;
 }
-.llm-page .per-tool-table {
+/* 模型欄位下方的提示段落 — 縮小、緊湊，左邊跟下拉欄位對齊 */
+.llm-page .model-hint {
+  margin: 6px 0 14px 208px;
+  font-size: 12px; line-height: 1.55; color: #475569;
+}
+.llm-page .model-hint-line { margin: 0 0 4px 0; }
+.llm-page .model-hint-line:last-child { margin-bottom: 0; }
+.llm-page .model-hint code {
+  background: #f1f5f9; padding: 1px 5px; border-radius: 3px;
+  font-size: 11px; color: #1e293b;
+}
+.llm-page .model-hint-warn { color: #92400e; }
+
+.llm-page .per-tool-cards {
   display: grid;
-  grid-template-columns: minmax(220px, 1.2fr) minmax(280px, 2fr) auto;
-  gap: 6px 12px;
-  align-items: center;
+  grid-template-columns: 1fr;
+  gap: 10px;
 }
-.llm-page .ptt-head {
-  display: contents;
+.llm-page .ptc-card {
+  background: #fff; border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.llm-page .ptc-head {
+  display: flex; align-items: center; gap: 6px;
+  flex-wrap: wrap;
+}
+.llm-page .ptc-icon { color: #64748b; line-height: 0; }
+.llm-page .ptc-icon .ic { stroke: currentColor; }
+.llm-page .ptc-name {
+  font-weight: 600; font-size: 13.5px; color: #0f172a;
+}
+.llm-page .ptc-id {
   font-size: 11px; color: #64748b;
+  background: #f1f5f9; padding: 1px 6px; border-radius: 3px;
+  margin-left: auto;
 }
-.llm-page .ptt-head > span {
-  padding: 4px 0; border-bottom: 1px solid #e2e8f0;
-  font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+.llm-page .ptc-tag {
+  font-size: 10.5px; padding: 1px 8px; border-radius: 10px;
+  font-weight: 600; white-space: nowrap;
 }
-.llm-page .ptt-row { display: contents; }
-.llm-page .ptt-tool { padding: 6px 0; }
-.llm-page .ptt-tool-name { font-weight: 600; font-size: 13.5px; color: #0f172a; }
-.llm-page .ptt-tool-meta { font-size: 11.5px; color: #64748b; margin-top: 2px; }
-.llm-page .ptt-tool-meta code { background: #e2e8f0; padding: 1px 5px; border-radius: 3px; font-size: 10.5px; }
-.llm-page .ptt-model select.per-tool-model {
-  width: 100%; max-width: 360px;
+.llm-page .ptc-tag-vision { background: #fef3c7; color: #92400e; }
+.llm-page .ptc-tag-text { background: #dbeafe; color: #1e40af; }
+.llm-page .ptc-desc {
+  font-size: 11.5px; color: #64748b; line-height: 1.45;
 }
-.llm-page .ptt-hint { display: flex; align-items: center; }
-.llm-page .ptt-tag {
-  font-size: 10.5px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
-  white-space: nowrap;
+.llm-page .ptc-select select.per-tool-model {
+  width: 100%;
 }
-.llm-page .ptt-tag-vision { background: #fef3c7; color: #92400e; }
-.llm-page .ptt-tag-text { background: #dbeafe; color: #1e40af; }
 
 /* 醒目的「點此測試連線」inline 連結 — 看起來像個按鈕、提醒使用者要先按 */
 .llm-page .hint-test-conn {

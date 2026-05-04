@@ -287,28 +287,34 @@ function _ymLabel(idx) {
   return `${y}/${String(m).padStart(2, '0')}`;
 }
 
-// thumb 在 .mr-input (left:12px right:12px width:calc(100%-24px)) 上的實際位置：
-//    px = 12 + (idx/13) * (containerWidth - 24)
-// 用 calc 表示就是： calc(12px + idx/13 * (100% - 24px))
-// 但 .mr-ticks 容器本身已 inset 12px，所以 ticks/fill/label 三者需要不同 base：
-//    fill / label  → 父 .month-range，需 calc(12px + idx/13 * (100% - 24px))
-//    ticks         → 父 .mr-ticks (已 inset 12px)，所以 calc(idx/13 * 100%) 即可
+// 瀏覽器 range input 的 thumb 中心位置：
+//   thumb_center = (idx/max) * (track_width - thumb_width) + thumb_width/2
+// 我們的 .mr-input 寬度 = 父容器 - 24（左右各 inset 12px），thumb 寬 20px
+// 所以 thumb 中心相對 .month-range 左邊 = 12 + 10 + (idx/13) * ((100%-24px) - 20px)
+//                                       = 22 + (idx/13) * (100% - 44px)
+// 三者對齊時的 calc 公式：
+//   fill / floating label → 父 .month-range：calc(22px + idx/13 * (100% - 44px))
+//   anchor ticks          → 父 .mr-ticks (已 inset 12px)：calc(10px + idx/13 * (100% - 20px))
 function _thumbPosCalc(idx) {
-  // 在 .month-range 容器內的實際 px 位置（calc 字串）
-  return `calc(12px + ${idx / 13} * (100% - 24px))`;
+  // 在 .month-range 容器內的 thumb 中心 px 位置（calc 字串）
+  return `calc(22px + ${idx / 13} * (100% - 44px))`;
+}
+function _tickPosCalc(idx) {
+  // 在 .mr-ticks 容器內（已 inset 12px）的 thumb 中心 px 位置
+  return `calc(10px + ${idx / 13} * (100% - 20px))`;
 }
 
 function _renderMrTicks() {
   const ticksEl = $('mrTicks');
   if (!ticksEl) return;
   ticksEl.innerHTML = '';
-  // .mr-ticks 已 left:12px right:12px，內部 0~100% 直接對齊軌道兩端
+  // anchor ticks 必須對齊 thumb 中心，不能用 0~100% 簡化（thumb 不貼軌道兩端）
   const anchors = [0, 6, 13];
   for (const idx of anchors) {
     const t = document.createElement('div');
     t.className = 'mr-tick is-major';
     t.textContent = _ymLabel(idx);
-    t.style.left = `${(idx / 13) * 100}%`;
+    t.style.left = _tickPosCalc(idx);
     if (idx === 0) t.style.transform = 'translateX(0)';
     else if (idx === 13) t.style.transform = 'translateX(-100%)';
     ticksEl.appendChild(t);
@@ -331,14 +337,13 @@ function _updateMrUI() {
   const tLabel = $('mrLabelTo');
   fLabel.textContent = _ymLabel(f);
   tLabel.textContent = _ymLabel(t);
+  // 永遠 center 在 thumb 中心上方 — 不做邊緣 clamp，因為 clamp 會讓
+  // label 視覺上偏離方塊。label 約 50px 寬，邊緣 idx=0/13 時頂多 overflow
+  // 父容器 padding (12px) 約 13px，視覺仍在合理範圍。
   fLabel.style.left = _thumbPosCalc(f);
   tLabel.style.left = _thumbPosCalc(t);
-  fLabel.style.transform = (f <= 1) ? 'translateX(0)'
-                          : (f >= 12) ? 'translateX(-100%)'
-                          : 'translateX(-50%)';
-  tLabel.style.transform = (t <= 1) ? 'translateX(0)'
-                          : (t >= 12) ? 'translateX(-100%)'
-                          : 'translateX(-50%)';
+  fLabel.style.transform = 'translateX(-50%)';
+  tLabel.style.transform = 'translateX(-50%)';
 
   const months = (t - f) + 1;
   $('mrSummary').textContent = `${_ymLabel(f)} ～ ${_ymLabel(t)}`;

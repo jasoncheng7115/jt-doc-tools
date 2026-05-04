@@ -1,8 +1,24 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
+{% from "components/llm_gate.html" import llm_gate, llm_gate_styles with context %}
 {% block title %}註解整理 · {{ app_name }}{% endblock %}
 {% block head %}
+{{ llm_gate_styles() }}
 <style>
+.an-llm-card { background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%);
+  border:1px solid #93c5fd; border-radius:10px; padding:14px 16px; margin-top:14px; }
+.an-llm-card h3 { margin:0 0 8px; font-size:14.5px; color:#1e3a8a;
+  display:flex; align-items:center; gap:6px; }
+.an-llm-grp { background:#fff; border:1px solid #bfdbfe; border-radius:6px;
+  padding:10px 14px; margin-bottom:8px; }
+.an-llm-grp .name { font-weight:700; color:#1e3a8a; font-size:14px; }
+.an-llm-grp .count { background:#1e40af; color:#fff; padding:1px 8px;
+  border-radius:10px; font-size:11.5px; margin-left:6px; }
+.an-llm-grp .desc { color:#475569; font-size:12.5px; margin-top:3px; }
+.an-llm-grp .ids { color:#64748b; font-size:11.5px; margin-top:6px;
+  font-family: ui-monospace, SFMono-Regular, monospace; }
+.an-llm-err { background:#fef3c7; border:1px solid #fde68a; color:#78350f;
+  padding:8px 12px; border-radius:6px; font-size:12.5px; }
 .an-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px; margin-top: 12px; }
 .an-stat { border-radius:10px; padding: 12px 14px; border:1px solid; }
@@ -72,6 +88,12 @@
 <div class="panel">
   <h2 style="margin-top:0;">1. 上傳 PDF</h2>
   {% with upload_id='anUp', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+
+  {{ llm_gate('pdf-annotations', llm_enabled, llm_model, mode='augment',
+              feature_label='LLM 自動分組（依主題歸類）',
+              feature_desc='把所有註解送地端 LLM，依內容主題自動歸類（例：需修改文字 / 格式問題 / 詢問疑點 / 已確認）。註解內容會傳送給設定的 LLM server，請確認為內網地端服務。',
+              input_id='anLlmGroup') }}
+
   <div id="anLoading" class="muted" style="margin-top:10px; font-size:12.5px;" hidden>
     {{ icon('refresh', size=14) }} 分析中…
   </div>
@@ -151,6 +173,8 @@ const fu = new FileUpload($("anUp"), async (f) => {
 
   const fd = new FormData();
   fd.append("file", f);
+  const llmCb = $("anLlmGroup");
+  if (llmCb && llmCb.checked) fd.append("llm_group", "1");
   let resp;
   try {
     resp = await fetch("/tools/pdf-annotations/analyze", { method: "POST", body: fd });
@@ -213,7 +237,40 @@ function render(r) {
     $("anError").hidden = true;
   }
 
+  renderLlm(r.llm);
   redrawList();
+}
+
+function renderLlm(llm) {
+  const old = document.getElementById("anLlmPanel");
+  if (old) old.remove();
+  if (!llm) return;
+  const card = document.createElement("div");
+  card.id = "anLlmPanel";
+  card.className = "an-llm-card";
+  let html = '<h3>' + '{{ icon("globe", size=14)|safe }} LLM 自動分組' +
+    (llm.model ? ' <span style="margin-left:auto;font-size:11.5px;color:#3b82f6;font-weight:normal;">模型 ' + escapeHtml(llm.model) + '</span>' : '') +
+    '</h3>';
+  if (llm.error) {
+    html += '<div class="an-llm-err">LLM 處理失敗:' + escapeHtml(llm.error) + '</div>';
+  } else if (Array.isArray(llm.groups) && llm.groups.length) {
+    for (const g of llm.groups) {
+      const ids = (g.indices || []).slice(0, 30);
+      html += '<div class="an-llm-grp">' +
+        '<div><span class="name">' + escapeHtml(g.name || "未分類") + '</span>' +
+        '<span class="count">' + (g.indices || []).length + '</span></div>' +
+        (g.summary ? '<div class="desc">' + escapeHtml(g.summary) + '</div>' : '') +
+        (ids.length ? '<div class="ids">註解 #: ' + ids.join(", ") +
+          ((g.indices || []).length > 30 ? "…" : "") + '</div>' : '') +
+        '</div>';
+    }
+  } else {
+    html += '<div class="an-llm-err">LLM 未回傳任何分組</div>';
+  }
+  card.innerHTML = html;
+  // Insert before the "註解明細" panel
+  const target = $("anList").closest(".panel");
+  target.parentNode.insertBefore(card, target);
 }
 
 function toggleChip(chip) {

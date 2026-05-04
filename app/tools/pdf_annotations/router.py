@@ -245,11 +245,87 @@ def _load_cached(upload_id: str) -> dict[str, Any]:
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     templates = request.app.state.templates
-    return templates.TemplateResponse("pdf_annotations.html", {"request": request})
+    from ...core.llm_settings import llm_settings
+    return templates.TemplateResponse("pdf_annotations.html", {
+        "request": request,
+        "llm_enabled": llm_settings.is_enabled(),
+        "llm_model": llm_settings.get_model_for("pdf-annotations") if llm_settings.is_enabled() else "",
+    })
+
+
+async def _llm_group_annots(annots: list[dict[str, Any]]) -> dict[str, Any]:
+    """Ask LLM to cluster annotations into themed categories.
+
+    Returns {groups: [{name, summary, indices: [int]}], model: str} or
+    {error, model} on failure. Each annotation is identified by its global
+    'idx' (assigned during _read_annotations)."""
+    from ...core.llm_settings import llm_settings as _llms
+    import asyncio as _asyncio
+    client = _llms.make_client()
+    if client is None:
+        return {}
+    model = _llms.get_model_for("pdf-annotations")
+    if not annots:
+        return {}
+    items = []
+    for a in annots[:200]:
+        body = (a.get("content") or a.get("subject") or "").strip()
+        if not body:
+            body = a.get("type_label") or ""
+        body = body[:200]
+        items.append({
+            "id":   a["idx"],
+            "page": a["page"],
+            "type": a["type_label"],
+            "by":   a["author"] or "(未署名)",
+            "text": body,
+        })
+    payload_json = json.dumps(items, ensure_ascii=False)
+    prompt = (
+        "你是文件審閱助手。下面是 PDF 上的所有註解 (JSON list)，請依照"
+        "「註解的內容主題」自動分組（例：『需修改文字』『格式問題』"
+        "『詢問疑點』『已確認』『其他』等，由你判斷）。每組請給簡短"
+        "中文名稱與一句話描述，並列出該組成員的 id。\n"
+        "**只能回 JSON，不要 markdown / 解釋 / 前綴 / 後綴 / ```json``` 包裝。**\n"
+        "格式：{\"groups\": [{\"name\": \"...\", \"summary\": \"...\", \"indices\": [id, id, ...]}, ...]}\n\n"
+        f"註解資料：\n{payload_json}"
+    )
+    def _call():
+        return client.text_query(prompt=prompt, model=model,
+                                  temperature=0.0, think=False)
+    try:
+        resp = await _asyncio.to_thread(_call)
+    except Exception as e:
+        return {"error": str(e), "model": model}
+    raw = (resp or "").strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE)
+    try:
+        parsed = json.loads(raw)
+        groups = parsed.get("groups") if isinstance(parsed, dict) else None
+        if not isinstance(groups, list):
+            return {"error": "LLM 回應缺少 groups 欄位", "model": model}
+        cleaned = []
+        for g in groups:
+            if not isinstance(g, dict):
+                continue
+            ids = [int(x) for x in (g.get("indices") or []) if isinstance(x, (int, float))]
+            cleaned.append({
+                "name":    str(g.get("name") or "未分類").strip(),
+                "summary": str(g.get("summary") or "").strip(),
+                "indices": ids,
+            })
+        return {"groups": cleaned, "model": model}
+    except Exception as e:
+        return {"error": f"LLM 回應解析失敗：{e}", "model": model,
+                "raw": raw[:300]}
 
 
 @router.post("/analyze")
-async def analyze(file: UploadFile = File(...)):
+async def analyze(
+    file: UploadFile = File(...),
+    llm_group: str = Form(""),
+):
     """Analyze the upload and persist results.
 
     The PDF is kept at ``annot_{uid}_in.pdf`` and a JSON sidecar at
@@ -271,6 +347,15 @@ async def analyze(file: UploadFile = File(...)):
         "summary":    _summarize(annots, pc),
         "annots":     annots,
     }
+    if str(llm_group).lower() in ("1", "true", "on", "yes"):
+        try:
+            llm_extra = await _llm_group_annots(annots)
+            if llm_extra:
+                payload["llm"] = llm_extra
+        except Exception as exc:
+            import logging as _lg
+            _lg.getLogger(__name__).warning("LLM grouping failed: %s", exc)
+            payload["llm"] = {"error": str(exc)}
     # Save sidecar; PDF stays for /preview thumbnails.
     _, sidecar = _cached_paths(upload_id)
     sidecar.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")

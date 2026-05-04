@@ -160,9 +160,12 @@ async def index(request: Request):
     ] + [
         {"title": g, "entries": items} for g, items in grouped.items() if g not in preferred
     ]
+    from ...core.llm_settings import llm_settings
     return templates.TemplateResponse(
         "doc_deident.html",
-        {"request": request, "pattern_groups": pattern_groups},
+        {"request": request, "pattern_groups": pattern_groups,
+         "llm_enabled": llm_settings.is_enabled(),
+         "llm_model": llm_settings.get_model_for("doc-deident") if llm_settings.is_enabled() else ""},
     )
 
 
@@ -171,6 +174,7 @@ async def detect(
     file: UploadFile = File(...),
     types: str = Form(""),    # comma-separated pattern ids
     custom: str = Form(""),   # optional: "label|regex\nlabel2|regex2"
+    llm_augment: str = Form(""),  # "1" → 啟用 LLM 補偵測（regex 抓不到的人名 / 職稱 / 客戶代號等）
 ):
     data = await file.read()
     if not data:
@@ -233,6 +237,7 @@ async def detect(
 
     findings_by_page: list[dict] = []
     all_findings: list[dict] = []
+    page_texts: list[str] = []
     with fitz.open(str(pdf_path)) as doc:
         total_pages = doc.page_count
         for pno in range(doc.page_count):
@@ -247,6 +252,52 @@ async def detect(
                 "page": pno + 1,
                 "count": len(page_findings),
             })
+            page_texts.append(page.get_text("text") or "")
+
+    # === LLM 補偵測（v1.4.27）===
+    # regex 抓不到的 context-sensitive 案例（人名「王經理」「Dr. Chen」、
+    # 客戶代號「KC-2024-A」、特殊地址簡稱等）— 把已抓到的列為「已知」
+    # 給 LLM，請它找出疑似漏抓的，回 JSON list。最後逐一在原文 search 找
+    # 確切位置 + bbox，加進 findings 並標 `source: "llm"`。
+    llm_added = 0
+    llm_warning = ""
+    if str(llm_augment).lower() in ("1", "true", "on", "yes"):
+        try:
+            from ...core.llm_settings import llm_settings as _llms
+            if _llms.is_enabled():
+                full_text = "\n\n".join(
+                    f"--- 第 {i+1} 頁 ---\n{t}" for i, t in enumerate(page_texts) if t.strip()
+                )
+                if full_text.strip():
+                    already_known = list({f["value"] for f in all_findings})[:50]
+                    extra = _llm_extra_findings(full_text, already_known)
+                    if extra:
+                        with fitz.open(str(pdf_path)) as doc2:
+                            for item in extra:
+                                txt = (item.get("text") or "").strip()
+                                kind = (item.get("type") or "其他")
+                                if not txt or len(txt) < 2:
+                                    continue
+                                # 在每頁全文 search 確切位置 + bbox
+                                for pno in range(doc2.page_count):
+                                    rects = doc2[pno].search_for(txt) or []
+                                    for r in rects:
+                                        f = {
+                                            "id": len(all_findings),
+                                            "page": pno + 1,
+                                            "type_id": "llm_" + kind,
+                                            "type_label": "[LLM] " + kind,
+                                            "value": txt,
+                                            "masked": "*" * len(txt),
+                                            "bbox": [r.x0, r.y0, r.x1, r.y1],
+                                            "source": "llm",
+                                        }
+                                        all_findings.append(f)
+                                        llm_added += 1
+        except Exception as exc:
+            import logging as _lg
+            _lg.getLogger(__name__).warning("LLM augment failed: %s", exc)
+            llm_warning = f"LLM 補偵測失敗：{exc}"
 
     by_type: dict[str, int] = {}
     for f in all_findings:
@@ -260,7 +311,63 @@ async def detect(
         "findings": all_findings,
         "by_type": by_type,
         "by_page": findings_by_page,
+        "llm_added": llm_added,
+        "llm_warning": llm_warning,
     }
+
+
+def _llm_extra_findings(full_text: str, already_known: list[str]) -> list[dict]:
+    """Ask the LLM to find sensitive entities the regex missed. Returns
+    a list of {text, type} dicts; bbox lookup is done by the caller."""
+    from ...core.llm_settings import llm_settings as _llms
+    client = _llms.make_client()
+    if client is None:
+        return []
+    model = _llms.get_model_for("doc-deident")
+    # 文件可能很長 — 截斷以免 LLM 超時。 8K char 大概對應 1500-2000 個中文字
+    max_chars = 8000
+    if len(full_text) > max_chars:
+        full_text = full_text[:max_chars] + "\n\n…（後續省略）"
+    known_str = "、".join(already_known[:30]) or "（無）"
+    prompt = (
+        "你是文件去識別化助手。請從下面文件中找出『可能屬於敏感個人 / 業務資料但容易被 regex 漏掉』"
+        "的詞彙，例如：人名（包含「先生 / 小姐 / 博士 / 經理」等前綴）、職稱、客戶代號、產品代號、"
+        "特殊地址簡稱、暱稱、別名等。\n"
+        f"以下詞彙『已被偵測』，請不要重複列出：{known_str}\n\n"
+        "回應**只能是純 JSON array**，每筆 `{\"text\": \"...\", \"type\": \"類別\"}`，"
+        "type 用簡短中文（如 人名 / 職稱 / 代號 / 暱稱 / 地址）。"
+        "例：`[{\"text\":\"王經理\",\"type\":\"人名\"},{\"text\":\"KC-2024-A\",\"type\":\"代號\"}]`。"
+        "找不到就回 `[]`。**不要任何解釋文字、不要 ```json``` 包裝、不要前綴後綴。**\n\n"
+        f"文件內容：\n{full_text}"
+    )
+    try:
+        resp = client.text_query(prompt=prompt, model=model,
+                                  temperature=0.0, think=False)
+    except Exception as e:
+        import logging as _lg
+        _lg.getLogger(__name__).warning("LLM call failed: %s", e)
+        return []
+    raw = (resp or "").strip()
+    # 容錯：去掉 ```json``` 包裝
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE)
+    try:
+        import json as _json
+        arr = _json.loads(raw)
+        if not isinstance(arr, list):
+            return []
+        # Sanity filter: drop empty / overly long entries
+        out = []
+        for x in arr:
+            if not isinstance(x, dict):
+                continue
+            t = (x.get("text") or "").strip()
+            if not t or len(t) > 80:
+                continue
+            out.append({"text": t, "type": (x.get("type") or "其他").strip()[:16]})
+        return out
+    except Exception:
+        return []
 
 
 # ----------------------------------------------------------- processing
