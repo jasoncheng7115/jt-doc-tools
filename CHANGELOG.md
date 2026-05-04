@@ -4,6 +4,53 @@
 
 ---
 
+## [1.4.0] - 2026-05-04
+
+### 大改版 — 11 項使用者建議全部到位
+
+#### 新工具
+
+- **逐句翻譯**（`/tools/translate-doc`）：接 admin 設定的 LLM server，左原文右譯文逐句並排。可貼文字或上傳 PDF / DOCX / TXT；目標語言預設繁中可選；每句可單獨重新翻譯。LLM 未啟用時頁面顯示提示，不擋其他工具。對外 API：`POST /tools/translate-doc/api/translate-doc`。
+
+#### 系統依賴自動安裝（修文件轉檔失敗）
+
+- 修 `office-to-pdf` / `pdf-to-image` / `doc-diff` 在 minimal Linux 起不來（OxOffice oosplash 缺 X11 client lib：`libXinerama.so.1: cannot open shared object file`）。`install.sh` + `jtdt update` 都自動補裝完整 X11 runtime（`libxinerama1 libxrandr2 libxcursor1 libxi6 libxtst6 libsm6 libxext6 libxrender1 libdbus-1-3 libcups2`）；admin「相依套件檢查」頁面新增 X11 lib 偵測項目。
+
+#### 企業識別
+
+- 新 admin 子頁「企業 Logo / 識別」（`/admin/branding`）：上傳一張企業 logo（PNG / JPG / WEBP，自動 resize 到 256 px、轉 PNG），自動套用到左側 sidebar、瀏覽器 favicon、首頁 hero、登入頁。「還原預設」按鈕一鍵 rollback。
+
+#### 設定備份 / 搬遷
+
+- 新 admin 子頁「設定備份 / 匯入」（`/admin/settings-export`）：把所有 admin 設定（assets / branding / fonts / profile / synonyms / templates / api tokens / llm settings / office paths / auth settings / font settings）打包成單一 zip 給備份 / 跨機搬遷。匯入時舊檔自動備份成 `.bak.<timestamp>`，失敗可手動 rollback。歷史記錄目錄（fill / stamp / watermark history）為可選匯出項。
+
+#### 個人臨時資產（用印與簽名）
+
+- 「用印與簽名」可在 admin 沒有預先建好印章時，使用者「臨時上傳」一張圖片自己用。圖只放在瀏覽器 sessionStorage，**不存到伺服器**，別人也看不到；蓋章送出時才隨 request 上傳。每次使用會寫一筆 `event_type=temp_asset_used` 稽核（含使用者、IP、檔名、size、sha256 前 16 字），admin 在稽核記錄頁可查。
+
+#### UX 改善
+
+- **每頁右上「回首頁」浮動按鈕**：所有工具 / admin 頁右上角加一個圓角按鈕，一鍵回到工具總覽（首頁本身會自動隱藏）。手機上自動縮成只有圖示。
+- **角色管理權限矩陣加「全選 / 全不選 / 反選」**按鈕 + 即時計數（已選 X / Y），編輯角色時不用一個一個點。
+- **「轉向」工具預覽頁可個別轉向**：每張縮圖下方加 `↻ ↺ 180° ⇆ ⇅ ─` 工具列；點任一個 = 此頁個別覆寫（綠色徽章 ★ 標示）；再點同一個 = 取消覆寫回到全頁設定。後端 `/submit` 新增 `per_page` JSON 參數（公開 API 一樣可用）。
+
+#### Bug 修正
+
+- **PDF 編輯器**：選定文字物件後離開選取，物件變空白的 bug。根因 — `selection:cleared` 把所有 `_peSaved=true` 的物件 fade 到 opacity 0.01，但被「跳過 bake」的 active 物件不該標 `_peSaved`，否則背景沒燒入物件文字、overlay 又變透明，使用者看到一片空白。
+- **PDF 轉向預覽**：lightbox 點放大方向不對。`transform: rotate()` 視覺旋轉但 layout box 沒變，導致 max-width / max-height 算錯方向（縮圖剛好被 `aspect-ratio` 容器 mask 住所以正常）。改成 server-side 預先用 PIL transpose 燒進 PNG，`/thumb` endpoint 新增 `?mode=` query param。
+
+#### 文件去識別化（doc-deident）精準度提升
+
+- 新增規則：駕照號碼、出生日期 / 生日（含民國格式 `民國 70 年 3 月 21 日`）。
+- 強化規則：手機號（含 `+886-9XX-XXX-XXX` 國際格式）、市話（含分機 `#123` / `ext 123`）、地址（支援 `之 N` / `N 樓` / `N 樓之 N` / `Section N` / 英文 `No. X, Sec. Y, Lane Z, Floor N`）、車牌（要求前後標點，避免吃到 `FROM 123` 之類雜訊）。
+- 護照規則改為「需 label」（`護照 / Passport No.` 才認），從原本任意 9 位數字（false positive 大）改為 label-anchored，整體誤判大幅下降。
+
+#### 資料庫 migration
+
+- v5 migration：新工具 `translate-doc` 自動授權給已有 `text-diff` 的 role / subject。既有客戶升上來 sidebar 看得到、點得開，不會 403。
+
+---
+
 ## [1.3.14] - 2026-05-03
 
 ### 修正（認證設定 UI：未啟用時鎖住 LDAP/AD backend 設定）

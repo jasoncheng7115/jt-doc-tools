@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}逐句翻譯 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('globe', size=22) }} 逐句翻譯</h1>
+<p class="muted">把長段文字或上傳檔案（PDF / DOCX / TXT）逐句送到 LLM 翻譯，
+左原文右譯文並排對照。每句可單獨重新翻譯。
+語言自動偵測或手動指定，目標語言預設繁體中文。</p>
+
+{% if not llm_enabled %}
+<div class="panel" style="border-left:4px solid #f59e0b; background:#fffbeb;">
+  <p style="margin:0;"><b>{{ icon('alert', size=16) }} LLM 服務尚未啟用</b></p>
+  <p class="muted" style="margin:6px 0 0 0;">本工具需要連到 LLM server。請管理員到「<a href="/admin/llm-settings">設定 → LLM 設定</a>」開啟。
+    啟用後本頁的翻譯功能就可以直接使用，不需要再額外設定。</p>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 來源文字</h2>
+  <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+    <div>
+      <label style="font-size:12.5px; color:#475569;">原文語言</label><br>
+      <select id="srcLang" style="padding:5px 8px; min-width:160px;">
+        <option value="auto">自動偵測</option>
+        <option value="en">英文 (English)</option>
+        <option value="zh">中文 (簡 / 繁混合)</option>
+        <option value="zh-TW">繁體中文</option>
+        <option value="zh-CN">簡體中文</option>
+        <option value="ja">日文</option>
+        <option value="ko">韓文</option>
+        <option value="fr">法文</option>
+        <option value="de">德文</option>
+        <option value="es">西班牙文</option>
+        <option value="vi">越南文</option>
+        <option value="th">泰文</option>
+        <option value="id">印尼文</option>
+        <option value="ru">俄文</option>
+      </select>
+    </div>
+    <div>
+      <label style="font-size:12.5px; color:#475569;">目標語言</label><br>
+      <select id="tgtLang" style="padding:5px 8px; min-width:160px;">
+        <option value="zh-TW" selected>繁體中文</option>
+        <option value="zh-CN">簡體中文</option>
+        <option value="en">英文</option>
+        <option value="ja">日文</option>
+        <option value="ko">韓文</option>
+        <option value="fr">法文</option>
+        <option value="de">德文</option>
+        <option value="es">西班牙文</option>
+        <option value="vi">越南文</option>
+        <option value="th">泰文</option>
+      </select>
+    </div>
+    <div>
+      <label style="font-size:12.5px; color:#475569;">或上傳檔案 (PDF / DOCX / TXT)</label><br>
+      <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.md" />
+    </div>
+  </div>
+  <textarea id="srcText" rows="10" style="width:100%; padding:10px; border:1px solid #d1d5db; border-radius:6px; font-family: -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif; font-size:14px;" placeholder="貼上要翻譯的文字，或上傳檔案到上方欄位…"></textarea>
+  <div style="margin-top:8px; display:flex; align-items:center; gap:14px;">
+    <button class="btn btn-primary" id="btnTranslate" {% if not llm_enabled %}disabled title="LLM 未啟用"{% endif %}>{{ icon('play', size=14) }} 開始翻譯</button>
+    <button class="btn" type="button" id="btnClear">{{ icon('reset', size=14) }} 清空</button>
+    <span class="muted" style="font-size:12px;" id="charCounter">0 字 / 0 句</span>
+  </div>
+</div>
+
+<div class="panel" id="resultPanel" hidden>
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+    <h2 style="margin:0;">2. 並排對照</h2>
+    <span class="muted" id="resultMeta" style="font-size:12px;"></span>
+    <span style="flex:1;"></span>
+    <button class="btn btn-small" type="button" id="btnCopyTgt">{{ icon('paperclip', size=12) }} 複製譯文</button>
+    <button class="btn btn-small" type="button" id="btnCopySxs">{{ icon('paperclip', size=12) }} 複製對照</button>
+  </div>
+  <div class="trd-grid" id="trdGrid"></div>
+  <div style="margin-top:10px; font-size:11.5px; color:#94a3b8;">
+    每一列對應一句。點 <b>↻</b> 可重新請 LLM 翻譯該句。空白列代表原文是空行。
+  </div>
+</div>
+
+<style>
+  .trd-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 32px;
+    gap: 4px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .trd-row {
+    display: contents;
+  }
+  .trd-row .src, .trd-row .tgt {
+    padding: 8px 10px;
+    background: #fff;
+    border-top: 1px solid #f1f5f9;
+    font-size: 13.5px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .trd-row:first-child .src,
+  .trd-row:first-child .tgt,
+  .trd-row:first-child .ctl { border-top: 0; }
+  .trd-row .src { border-right: 1px solid #f1f5f9; color: #0f172a; }
+  .trd-row .tgt { color: #1e293b; background:#f8fafc; }
+  .trd-row .tgt.is-empty { color:#cbd5e1; font-style:italic; }
+  .trd-row .tgt.is-error { background:#fef2f2; color:#b91c1c; font-size:12px; }
+  .trd-row .ctl {
+    background: #f1f5f9;
+    display:flex; align-items:center; justify-content:center;
+    border-top: 1px solid #e5e7eb;
+  }
+  .trd-row .ctl button {
+    border:none; background:transparent; cursor:pointer; padding:4px 6px;
+    font-size:13px; color:#64748b; border-radius:4px;
+  }
+  .trd-row .ctl button:hover { background:#e0e7ff; color:#3730a3; }
+  .trd-row.is-loading .tgt { background:#fffbeb; color:#92400e; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = (id) => document.getElementById(id);
+const srcText = $('srcText');
+const srcLang = $('srcLang');
+const tgtLang = $('tgtLang');
+const fileInput = $('fileInput');
+const btnTranslate = $('btnTranslate');
+const btnClear = $('btnClear');
+const resultPanel = $('resultPanel');
+const resultMeta = $('resultMeta');
+const trdGrid = $('trdGrid');
+const charCounter = $('charCounter');
+
+let currentSentences = [];
+
+function _splitClient(text) {
+  // 跟 backend 的 _SENT_SPLIT_RE 對齊（純 UI 用，後端會再切一次）
+  if (!text) return [];
+  const norm = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const raw = norm.split(/(?<=[\.!?。！？])\s+|(?<=[\.!?。！？])(?=[A-Z一-鿿])|\n+/);
+  return raw.map(s => (s || '').trim()).filter(Boolean);
+}
+
+function refreshCounter() {
+  const t = srcText.value;
+  const sents = _splitClient(t);
+  charCounter.textContent = `${t.length} 字 / ${sents.length} 句`;
+}
+srcText.addEventListener('input', refreshCounter);
+refreshCounter();
+
+fileInput.addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const fd = new FormData();
+  fd.append('file', f);
+  charCounter.textContent = '檔案解析中…';
+  try {
+    const r = await fetch('/tools/translate-doc/extract-text', {method:'POST', body: fd});
+    if (!r.ok) {
+      const t = await r.text();
+      alert('解析失敗：' + t);
+      return;
+    }
+    const j = await r.json();
+    srcText.value = j.sentences.join('\n');
+    if (j.detected_lang && srcLang.value === 'auto') {
+      // Update label only — keep srcLang on auto so backend re-detects
+    }
+    if (j.truncated) {
+      alert(`原文超過上限，僅取前 ${j.sentences.length} 句翻譯。`);
+    }
+    refreshCounter();
+  } catch (err) {
+    alert('上傳失敗：' + err.message);
+  } finally {
+    fileInput.value = '';
+  }
+});
+
+btnClear.addEventListener('click', () => {
+  srcText.value = '';
+  resultPanel.hidden = true;
+  trdGrid.innerHTML = '';
+  refreshCounter();
+});
+
+function escapeHTML(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+function renderRow(idx, src, translated, error) {
+  const row = document.createElement('div');
+  row.className = 'trd-row';
+  row.dataset.idx = idx;
+  let tgtCls = '';
+  let tgtHtml = '';
+  if (error) {
+    tgtCls = 'is-error';
+    tgtHtml = escapeHTML(error);
+  } else if (!translated) {
+    tgtCls = 'is-empty';
+    tgtHtml = '（無）';
+  } else {
+    tgtHtml = escapeHTML(translated);
+  }
+  row.innerHTML = `
+    <div class="src">${escapeHTML(src) || '<span style="color:#cbd5e1;">（空行）</span>'}</div>
+    <div class="tgt ${tgtCls}">${tgtHtml}</div>
+    <div class="ctl"><button type="button" data-act="retry" title="重新翻譯本句">↻</button></div>
+  `;
+  return row;
+}
+
+trdGrid.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act=retry]');
+  if (!btn) return;
+  const row = btn.closest('.trd-row');
+  const idx = parseInt(row.dataset.idx);
+  const src = currentSentences[idx];
+  if (!src) return;
+  row.classList.add('is-loading');
+  const tgtCell = row.querySelector('.tgt');
+  tgtCell.className = 'tgt'; tgtCell.textContent = '翻譯中…';
+  try {
+    const r = await fetch('/tools/translate-doc/translate-one', {
+      method: 'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({src, source_lang: srcLang.value, target_lang: tgtLang.value}),
+    });
+    if (!r.ok) {
+      tgtCell.classList.add('is-error');
+      tgtCell.textContent = '失敗：' + await r.text();
+      return;
+    }
+    const j = await r.json();
+    if (j.error) {
+      tgtCell.classList.add('is-error'); tgtCell.textContent = j.error;
+    } else {
+      tgtCell.textContent = j.translated || '（無）';
+      if (!j.translated) tgtCell.classList.add('is-empty');
+    }
+  } finally {
+    row.classList.remove('is-loading');
+  }
+});
+
+btnTranslate.addEventListener('click', async () => {
+  const text = srcText.value;
+  if (!text.trim()) return alert('請先輸入或上傳要翻譯的文字');
+  currentSentences = _splitClient(text);
+  if (!currentSentences.length) return alert('沒有可翻譯的內容');
+  // Render rows immediately with loading state
+  trdGrid.innerHTML = '';
+  currentSentences.forEach((s, i) => {
+    const row = renderRow(i, s, '翻譯中…', '');
+    row.classList.add('is-loading');
+    trdGrid.appendChild(row);
+  });
+  resultPanel.hidden = false;
+  resultMeta.textContent = `${currentSentences.length} 句送出，請稍候…`;
+  btnTranslate.disabled = true;
+  btnTranslate.dataset.orig = btnTranslate.innerHTML;
+  btnTranslate.innerHTML = '翻譯中…';
+
+  try {
+    const r = await fetch('/tools/translate-doc/translate-batch', {
+      method: 'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        sentences: currentSentences,
+        source_lang: srcLang.value,
+        target_lang: tgtLang.value,
+      }),
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      alert('翻譯失敗：' + t);
+      return;
+    }
+    const j = await r.json();
+    trdGrid.innerHTML = '';
+    j.results.forEach((res, i) => {
+      trdGrid.appendChild(renderRow(i, res.src, res.translated, res.error));
+    });
+    resultMeta.textContent = `共 ${j.results.length} 句 — 原文：${j.source_lang || '?'}, 譯文：${j.target_lang}`;
+  } catch (e) {
+    alert('翻譯失敗：' + e.message);
+  } finally {
+    btnTranslate.disabled = false;
+    btnTranslate.innerHTML = btnTranslate.dataset.orig || '開始翻譯';
+  }
+});
+
+$('btnCopyTgt').addEventListener('click', () => {
+  const lines = [];
+  trdGrid.querySelectorAll('.trd-row').forEach(row => {
+    const tgt = row.querySelector('.tgt');
+    if (!tgt.classList.contains('is-error') && !tgt.classList.contains('is-empty')) {
+      lines.push(tgt.textContent);
+    }
+  });
+  navigator.clipboard.writeText(lines.join('\n'));
+  showToast?.('已複製譯文', 'ok');
+});
+$('btnCopySxs').addEventListener('click', () => {
+  const lines = [];
+  trdGrid.querySelectorAll('.trd-row').forEach(row => {
+    const src = row.querySelector('.src').textContent;
+    const tgt = row.querySelector('.tgt').textContent;
+    lines.push(src + '\n' + tgt + '\n');
+  });
+  navigator.clipboard.writeText(lines.join('\n'));
+  showToast?.('已複製對照', 'ok');
+});
+</script>
+{% endblock %}

@@ -8,9 +8,9 @@
 <div class="panel">
   <h2 style="margin-top:0;">1. 選擇要蓋的圖片（印章 / 簽名 / Logo）</h2>
   {% if not stamps %}
-    <div class="empty">還沒有任何可用的印章 / 簽名 / Logo，請先到「<a href="/admin/assets">資產管理</a>」上傳。</div>
+    <div class="empty">還沒有共用印章 / 簽名 / Logo，可請管理員到「<a href="/admin/assets">資產管理</a>」上傳，或使用下方「臨時上傳」自帶一張（僅本次有效，不存於伺服器）。</div>
   {% else %}
-  <div class="asset-list" style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));">
+  <div class="asset-list" id="stampAssetList" style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));">
     {% for s in stamps %}
     <label class="asset-item" style="cursor:pointer;">
       <div class="thumb"><img src="/admin/assets/{{ s.id }}/thumb" /></div>
@@ -24,6 +24,26 @@
     {% endfor %}
   </div>
   {% endif %}
+  <div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--border);">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <input type="file" id="tempAssetFile" accept="image/png,image/jpeg,image/webp" hidden />
+      <button class="btn btn-small" type="button" id="btnTempAsset">{{ icon('upload', size=12) }} 臨時上傳一張（僅本次）</button>
+      <span class="muted" style="font-size:12px;">圖片只放在你的瀏覽器，<b>不會存到伺服器</b>，別人也看不到；蓋章送出時才上傳。管理員會看到一筆「使用臨時資產」的稽核記錄（只記事件 + 檔名 hash，不留圖檔）。</span>
+    </div>
+    <div id="tempAssetSlot" style="margin-top:10px; display:none;">
+      <div class="asset-item" style="max-width:200px; border:2px solid #16a34a; border-radius:8px; padding:8px;">
+        <div class="thumb"><img id="tempAssetThumb" alt="臨時資產預覽" /></div>
+        <div class="name">
+          <input type="radio" name="stamp" value="__temp__" id="tempAssetRadio" />
+          <span id="tempAssetName">（未選）</span>
+          <span class="type-chip" style="background:#dcfce7; color:#166534;">臨時</span>
+        </div>
+        <div class="meta">
+          <button type="button" class="btn btn-small" id="btnTempRemove" style="font-size:11px; padding:2px 6px;">移除</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="panel">
@@ -179,10 +199,46 @@ function getSelectedStamp() {
   return el ? el.value : null;
 }
 
+// 預設用紙是 A4 portrait — 臨時資產沒有 preset，給一個合理的中下置中。
+const TEMP_DEFAULT_PRESET = {
+  x_mm: 105, y_mm: 250, width_mm: 30, height_mm: 30, rotation_deg: 0,
+  paper_w_mm: 210, paper_h_mm: 297, lock_aspect: true,
+};
+
 function getSelectedStampPreset() {
-  const stamps = window.__STAMPS__;
   const id = getSelectedStamp();
+  if (id === '__temp__') {
+    // 臨時資產：preset 是預設中央偏下；preview 進來後會用 paper 真實尺寸再 clamp
+    const t = window._tempAsset;
+    return t ? Object.assign({}, TEMP_DEFAULT_PRESET, t.preset || {}) : TEMP_DEFAULT_PRESET;
+  }
+  const stamps = window.__STAMPS__;
   return stamps.find(s => s.id === id)?.preset || null;
+}
+
+// 取得「印章圖片來源 URL」— 一般 asset 走 /admin/assets/{id}/file，
+// 臨時資產走 sessionStorage 內的 data URL。
+function getSelectedStampImageUrl() {
+  const id = getSelectedStamp();
+  if (id === '__temp__') {
+    return window._tempAsset ? window._tempAsset.dataUrl : '';
+  }
+  return id ? `/admin/assets/${id}/file?t=${Date.now()}` : '';
+}
+
+// 把 sessionStorage 的 data URL 還原成 File 物件，submit / preview 時上傳
+function tempAssetAsFile() {
+  const t = window._tempAsset;
+  if (!t) return null;
+  // dataURL → Blob
+  const m = t.dataUrl.match(/^data:([^;,]+)(;base64)?,(.*)$/);
+  if (!m) return null;
+  const mime = m[1] || 'image/png';
+  const isBase64 = !!m[2];
+  const raw = isBase64 ? atob(m[3]) : decodeURIComponent(m[3]);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return new File([arr], t.filename || 'temp.png', {type: mime});
 }
 
 async function ensureEditor() {
@@ -197,7 +253,7 @@ async function ensureEditor() {
   }
   editor = new DragPositionEditor({
     root: document.getElementById('stampOverride'),
-    asset_url: `/admin/assets/${id}/file`,
+    asset_url: getSelectedStampImageUrl(),
     paper_w_mm: previewInfo?.paper_w_mm || preset.paper_w_mm || 210,
     paper_h_mm: previewInfo?.paper_h_mm || preset.paper_h_mm || 297,
     value: preset,
@@ -243,6 +299,11 @@ async function refreshSim() {
     status.textContent = '產生合成圖中…';
     const fd = new FormData();
     fd.append('stamp_id', stampId);
+    if (stampId === '__temp__') {
+      const tf = tempAssetAsFile();
+      if (!tf) { status.textContent = '臨時資產遺失'; return; }
+      fd.append('temp_asset_file', tf, tf.name);
+    }
     fd.append('file', f);
     fd.append('page_mode', document.getElementById('page-mode').value);
     // Always send the live editor value so backend re-renders with the
@@ -333,7 +394,7 @@ document.addEventListener('change', (e) => {
       const id = getSelectedStamp();
       const preset = getSelectedStampPreset();
       if (id && editor.$assetImg) {
-        editor.$assetImg.src = `/admin/assets/${id}/file?t=${Date.now()}`;
+        editor.$assetImg.src = getSelectedStampImageUrl();
       }
       if (preset) {
         editor.value = {
@@ -353,12 +414,23 @@ document.addEventListener('change', (e) => {
   }
 });
 
+// 把臨時資產塞進 FormData（如果使用者選的就是 __temp__）。每個 endpoint
+// 統一呼叫這個，未來新增 endpoint 也只要改這裡。
+function appendTempAssetIfNeeded(fd) {
+  if (getSelectedStamp() !== '__temp__') return true;
+  const f = tempAssetAsFile();
+  if (!f) { alert('臨時資產已遺失，請重新上傳'); return false; }
+  fd.append('temp_asset_file', f, f.name);
+  return true;
+}
+
 document.getElementById('btn-submit').addEventListener('click', async () => {
   const stampId = getSelectedStamp();
   if (!stampId) return alert('請先選擇印章');
   if (!pickedFiles.length) return alert('請先上傳 PDF');
   const fd = new FormData();
   fd.append('stamp_id', stampId);
+  if (!appendTempAssetIfNeeded(fd)) return;
   for (const f of pickedFiles) fd.append('file', f);
   fd.append('page_mode', document.getElementById('page-mode').value);
   if (editor) fd.append('override', JSON.stringify(editor.getValue()));
@@ -369,6 +441,72 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
   }
   const j = await r.json();
   progress.track(j.job_id);
+});
+
+// ===== 臨時資產：上傳 / 移除 / sessionStorage 還原 =====
+const TEMP_KEY = 'jtdt:pdf-stamp:temp-asset';
+
+function _tempAssetRender() {
+  const slot = document.getElementById('tempAssetSlot');
+  const t = window._tempAsset;
+  if (!t) {
+    slot.style.display = 'none';
+    document.getElementById('tempAssetRadio').checked = false;
+    return;
+  }
+  slot.style.display = '';
+  document.getElementById('tempAssetThumb').src = t.dataUrl;
+  document.getElementById('tempAssetName').textContent = t.filename || '臨時資產';
+}
+
+function _tempAssetSet(t) {
+  window._tempAsset = t;
+  try {
+    if (t) sessionStorage.setItem(TEMP_KEY, JSON.stringify(t));
+    else sessionStorage.removeItem(TEMP_KEY);
+  } catch (_) { /* quota / private mode — silently OK */ }
+  _tempAssetRender();
+}
+
+(function _restoreTempAsset() {
+  try {
+    const raw = sessionStorage.getItem(TEMP_KEY);
+    if (raw) window._tempAsset = JSON.parse(raw);
+    _tempAssetRender();
+  } catch (_) {}
+})();
+
+document.getElementById('btnTempAsset').addEventListener('click', () => {
+  document.getElementById('tempAssetFile').click();
+});
+
+document.getElementById('tempAssetFile').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const MAX = 5 * 1024 * 1024;
+  if (f.size > MAX) {
+    alert('檔案過大（上限 5 MB）');
+    e.target.value = '';
+    return;
+  }
+  const r = new FileReader();
+  r.onload = (ev) => {
+    _tempAssetSet({
+      filename: f.name,
+      dataUrl: ev.target.result,
+      size: f.size,
+      mime: f.type,
+    });
+    document.getElementById('tempAssetRadio').checked = true;
+    document.getElementById('tempAssetRadio').dispatchEvent(new Event('change', {bubbles: true}));
+  };
+  r.readAsDataURL(f);
+  e.target.value = '';
+});
+
+document.getElementById('btnTempRemove').addEventListener('click', () => {
+  if (!confirm('移除臨時資產？')) return;
+  _tempAssetSet(null);
 });
 
 // Cache stamp presets into page for the editor

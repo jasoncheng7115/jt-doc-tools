@@ -845,4 +845,105 @@ def build_router(templates) -> APIRouter:
         from ..core.sys_deps import collect_sys_deps
         return {"deps": collect_sys_deps()}
 
+    # ---- 企業 logo / 識別 -----------------------------------------------------
+    @router.get("/branding", response_class=HTMLResponse)
+    async def branding_page(request: Request):
+        from ..core import branding
+        return templates.TemplateResponse(
+            "admin_branding.html",
+            {
+                "request": request,
+                "has_custom": branding.has_custom_logo(),
+                "logo_url": branding.custom_logo_url(),
+                "max_mb": branding.MAX_LOGO_BYTES // 1024 // 1024,
+                "max_dim": branding.MAX_LOGO_DIMENSION,
+            },
+        )
+
+    @router.post("/branding/upload")
+    async def branding_upload(file: UploadFile = File(...)):
+        from ..core import branding
+        data = await file.read()
+        try:
+            branding.save_logo(data, file.filename or "")
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"ok": True, "url": branding.custom_logo_url()}
+
+    @router.post("/branding/reset")
+    async def branding_reset():
+        from ..core import branding
+        removed = branding.reset_logo()
+        return {"ok": True, "had_custom": removed}
+
+    @router.get("/api/branding")
+    async def branding_api():
+        from ..core import branding
+        return {
+            "has_custom": branding.has_custom_logo(),
+            "logo_url": branding.custom_logo_url(),
+        }
+
+    # ---- 全站設定匯出 / 匯入 -------------------------------------------------
+    @router.get("/settings-export", response_class=HTMLResponse)
+    async def settings_export_page(request: Request):
+        from ..core import settings_export
+        return templates.TemplateResponse(
+            "admin_settings_export.html",
+            {
+                "request": request,
+                "summary": settings_export.collect_summary(),
+                "optional_dirs": settings_export._OPTIONAL_DIRS,
+            },
+        )
+
+    @router.post("/settings-export/download")
+    async def settings_export_download(request: Request):
+        from ..core import settings_export
+        from ..main import VERSION
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+        include_optional = list(body.get("include_optional") or [])
+        out_name = (
+            f"jtdt-settings-{time.strftime('%Y%m%d-%H%M%S')}-v{VERSION}.zip"
+        )
+        out_path = settings.temp_dir / out_name
+        result = settings_export.export_to_zip(out_path, include_optional, app_version=VERSION)
+        return FileResponse(
+            str(out_path), media_type="application/zip",
+            filename=out_name, headers={"X-File-Count": str(result["file_count"])},
+        )
+
+    @router.post("/settings-export/import")
+    async def settings_export_import(
+        file: UploadFile = File(...),
+        overwrite_optional: str = Form("0"),
+    ):
+        from ..core import settings_export
+        from ..main import VERSION
+        data = await file.read()
+        if not data:
+            raise HTTPException(400, "empty file")
+        if len(data) > 200 * 1024 * 1024:
+            raise HTTPException(400, "import file too large (>200 MB)")
+        # Save to temp then import
+        zip_path = settings.temp_dir / f"settings_import_{uuid.uuid4().hex}.zip"
+        zip_path.write_bytes(data)
+        try:
+            result = settings_export.import_from_zip(
+                zip_path,
+                overwrite_optional=(overwrite_optional == "1"),
+                app_version=VERSION,
+            )
+        except (ValueError, FileNotFoundError) as e:
+            raise HTTPException(400, str(e))
+        finally:
+            try: zip_path.unlink()
+            except OSError: pass
+        return result
+
+    @router.get("/api/settings-export/summary")
+    async def settings_export_summary_api():
+        from ..core import settings_export
+        return settings_export.collect_summary()
+
     return router

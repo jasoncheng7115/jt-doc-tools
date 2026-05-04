@@ -143,6 +143,65 @@ def _probe_python_pkg(import_name: str) -> dict:
         return {"installed": False, "version": "", "extra": str(e), "ok": False}
 
 
+_OXOFFICE_X11_LIBS = [
+    # (soname, apt-pkg)
+    ("libXinerama.so.1", "libxinerama1"),
+    ("libXrandr.so.2", "libxrandr2"),
+    ("libXcursor.so.1", "libxcursor1"),
+    ("libXi.so.6", "libxi6"),
+    ("libXtst.so.6", "libxtst6"),
+    ("libSM.so.6", "libsm6"),
+    ("libXext.so.6", "libxext6"),
+    ("libXrender.so.1", "libxrender1"),
+    ("libdbus-1.so.3", "libdbus-1-3"),
+    ("libcups.so.2", "libcups2"),
+]
+
+
+def _probe_oxoffice_x11_libs() -> dict:
+    """OxOffice / LibreOffice oosplash dlopens these X11 libs at startup even
+    in headless mode. Debian/Ubuntu minimal doesn't preinstall them; missing
+    libs cause office-to-pdf / pdf-to-image / doc-diff to die with
+    `libXinerama.so.1: cannot open shared object file: No such file or
+    directory`."""
+    if not _is_linux():
+        return {"installed": True, "version": "n/a (Linux only)", "extra": "",
+                "ok": True, "binary": ""}
+    search_paths = [
+        Path("/usr/lib/x86_64-linux-gnu"),
+        Path("/usr/lib/aarch64-linux-gnu"),
+        Path("/usr/lib64"),
+        Path("/usr/lib"),
+        Path("/lib/x86_64-linux-gnu"),
+        Path("/lib/aarch64-linux-gnu"),
+    ]
+    rc, ldconfig_out, _ = _run_capture(["ldconfig", "-p"], timeout=3)
+    ldconfig_index = ldconfig_out if rc == 0 else ""
+    missing: list[tuple[str, str]] = []
+    for soname, pkg in _OXOFFICE_X11_LIBS:
+        found = any((sp / soname).exists() for sp in search_paths)
+        if not found and ldconfig_index:
+            found = soname in ldconfig_index
+        if not found:
+            missing.append((soname, pkg))
+    if missing:
+        return {
+            "installed": False,
+            "version": f"missing {len(missing)}/{len(_OXOFFICE_X11_LIBS)}",
+            "extra": "缺：" + ", ".join(p for _, p in missing),
+            "ok": False,
+            "missing_pkgs": [p for _, p in missing],
+            "binary": "",
+        }
+    return {
+        "installed": True,
+        "version": f"完整（{len(_OXOFFICE_X11_LIBS)} 個）",
+        "extra": "",
+        "ok": True,
+        "binary": "",
+    }
+
+
 def _probe_cjk_fonts() -> dict:
     """Look for at least one CJK font file in standard locations."""
     candidates = []
@@ -207,6 +266,20 @@ _DEPS = [
             "linux": "sudo apt install libreoffice fonts-noto-cjk  (recommended: install OxOffice from https://github.com/OSSII/OxOffice/releases)",
             "macos": "brew install --cask libreoffice  (recommended: OxOffice)",
             "windows": "winget install TheDocumentFoundation.LibreOffice  (recommended: OxOffice)",
+        },
+    },
+    {
+        "key": "oxoffice-x11-libs",
+        "label": "OxOffice / LibreOffice 執行時依賴 X11 lib",
+        "category": "文書轉檔",
+        "impact": "OxOffice 與 LibreOffice 的 oosplash 啟動時會 dlopen libXinerama / libXrandr / libXcursor 等 X11 client lib（即使 --headless 模式也一樣）。Debian / Ubuntu 的 minimal / server 安裝沒有這些 lib，缺的話 office-to-pdf、pdf-to-image、文件差異比對等需轉檔的工具會失敗，錯誤訊息類似「libXinerama.so.1: cannot open shared object file: No such file or directory」。",
+        "impact_en": "OxOffice and LibreOffice oosplash dlopens X11 client libs (libXinerama / libXrandr / libXcursor / ...) at startup even in --headless mode. Debian/Ubuntu minimal/server installs lack these libs; missing => office-to-pdf, pdf-to-image, doc-diff fail with 'libXinerama.so.1: cannot open shared object file: No such file or directory'.",
+        "soft": False,
+        "probe": _probe_oxoffice_x11_libs,
+        "install_cmd": {
+            "linux": "sudo apt install libxinerama1 libxrandr2 libxcursor1 libxi6 libxtst6 libsm6 libxext6 libxrender1 libdbus-1-3 libcups2",
+            "macos": "n/a (macOS uses Aqua, not X11)",
+            "windows": "n/a (Windows uses GDI, not X11)",
         },
     },
     {

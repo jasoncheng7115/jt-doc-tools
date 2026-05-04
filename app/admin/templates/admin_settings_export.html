@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}設定備份 / 匯入 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('archive', size=22) }} 設定備份 / 匯入</h1>
+<p class="muted">把所有 admin 設定打包成單一壓縮檔備份 / 搬遷到另一台機器；或從備份檔還原。
+匯入時會自動把現有設定備份成 <code>.bak.&lt;timestamp&gt;</code>，失敗可手動 rollback。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">{{ icon('download', size=18) }} 1. 匯出設定</h2>
+  <p class="muted" style="font-size:12.5px;">下表是目前 <code>data/</code> 目錄內會被打包的內容。匯出檔名格式：<code>jtdt-settings-YYYYMMDD-HHMMSS-vX.Y.Z.zip</code></p>
+
+  <h3 style="margin:14px 0 6px 0;">必含設定（核心）</h3>
+  <table class="exp-table">
+    <thead><tr><th>項目</th><th>說明</th><th style="text-align:right;">大小</th></tr></thead>
+    <tbody>
+      {% for f in summary.core_files %}
+      <tr><td><code>{{ f.name }}</code></td><td class="muted">JSON 設定檔</td><td style="text-align:right;">{{ '%.1f'|format(f.size/1024) }} KB</td></tr>
+      {% endfor %}
+      {% for d in summary.core_dirs %}
+      <tr><td><code>{{ d.name }}/</code></td><td class="muted">{{ d.files }} 個檔案</td><td style="text-align:right;">{{ '%.2f'|format(d.size/1024/1024) }} MB</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if summary.optional_dirs %}
+  <h3 style="margin:14px 0 6px 0;">可選擇匯出（歷史記錄）</h3>
+  <p class="muted" style="font-size:12px;">勾選才會包含；通常搬遷新機時不需要帶歷史。</p>
+  <div style="display:flex; flex-direction:column; gap:6px;">
+    {% for d in summary.optional_dirs %}
+    <label style="display:flex; gap:10px; align-items:center; padding:6px 10px; background:#f8fafc; border-radius:6px;">
+      <input type="checkbox" class="opt-include" data-name="{{ d.name }}" />
+      <span><code>{{ d.name }}/</code> &nbsp; <span class="muted">{{ d.label }} — {{ d.files }} 個檔案 / {{ '%.2f'|format(d.size/1024/1024) }} MB</span></span>
+    </label>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div style="margin-top:14px;">
+    <button class="btn btn-primary" id="btnExport">{{ icon('download', size=14) }} 下載備份壓縮檔</button>
+    <span id="exportStatus" class="muted" style="margin-left:10px; font-size:12px;"></span>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">{{ icon('upload', size=18) }} 2. 匯入備份</h2>
+  <p class="muted" style="font-size:12.5px;">
+    <b>注意</b>：匯入會覆蓋現有 admin 設定。系統會自動把現有檔案備份成 <code>.bak.&lt;時間&gt;</code>（在 <code>data/</code> 下），出錯可從那邊還原。
+    建議先匯出當前設定當保險。
+  </p>
+  <input type="file" id="importFile" accept=".zip" />
+  <label style="display:block; margin-top:8px; font-size:12.5px;">
+    <input type="checkbox" id="overwriteOptional" /> 也覆寫歷史記錄目錄（<code>fill_history</code> / <code>stamp_history</code> / <code>watermark_history</code>，若備份檔內有的話）
+  </label>
+  <div style="margin-top:12px;">
+    <button class="btn btn-danger" id="btnImport" disabled>{{ icon('upload', size=14) }} 開始匯入</button>
+    <span id="importStatus" class="muted" style="margin-left:10px; font-size:12px;"></span>
+  </div>
+</div>
+
+<style>
+  .exp-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:8px; }
+  .exp-table th, .exp-table td { padding:6px 10px; border-bottom:1px solid #f1f5f9; text-align:left; }
+  .exp-table th { background:#f8fafc; color:#475569; font-weight:600; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = (id) => document.getElementById(id);
+
+$('btnExport').addEventListener('click', async () => {
+  const optInclude = Array.from(document.querySelectorAll('.opt-include:checked')).map(c => c.dataset.name);
+  $('btnExport').disabled = true;
+  $('exportStatus').textContent = '產生中…';
+  try {
+    const r = await fetch('/admin/settings-export/download', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({include_optional: optInclude}),
+    });
+    if (!r.ok) {
+      $('exportStatus').textContent = '失敗：' + await r.text();
+      return;
+    }
+    // Trigger browser download from blob
+    const blob = await r.blob();
+    const dispo = r.headers.get('content-disposition') || '';
+    const m = dispo.match(/filename="([^"]+)"/);
+    const fname = m ? m[1] : 'jtdt-settings.zip';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname; document.body.appendChild(a);
+    a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    $('exportStatus').innerHTML = '<span style="color:#059669;">已下載 ' + fname + '</span>';
+  } catch (e) {
+    $('exportStatus').textContent = '錯誤：' + e.message;
+  } finally {
+    $('btnExport').disabled = false;
+  }
+});
+
+$('importFile').addEventListener('change', () => {
+  $('btnImport').disabled = !$('importFile').files.length;
+});
+
+$('btnImport').addEventListener('click', async () => {
+  const f = $('importFile').files[0];
+  if (!f) return;
+  const ok = await showConfirm(
+    '即將以「' + f.name + '」覆蓋現有 admin 設定，現有檔會自動備份成 .bak。\n\n確認繼續？',
+    {okText: '匯入', kind: 'danger'}
+  );
+  if (!ok) return;
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('overwrite_optional', $('overwriteOptional').checked ? '1' : '0');
+  $('btnImport').disabled = true;
+  $('importStatus').textContent = '匯入中…';
+  try {
+    const r = await fetch('/admin/settings-export/import', {method:'POST', body: fd});
+    if (!r.ok) {
+      $('importStatus').innerHTML = '<span style="color:#dc2626;">匯入失敗：' + await r.text() + '</span>';
+      return;
+    }
+    const j = await r.json();
+    $('importStatus').innerHTML = '<span style="color:#059669;">已匯入 ' + j.imported_files + ' 個檔案，原檔備份在 data/ 下。建議重啟服務以套用新設定。</span>';
+  } catch (e) {
+    $('importStatus').innerHTML = '<span style="color:#dc2626;">錯誤：' + e.message + '</span>';
+  } finally {
+    $('btnImport').disabled = false;
+  }
+});
+</script>
+{% endblock %}

@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.3.14"
+VERSION = "1.4.0"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -70,6 +70,7 @@ _TOOL_ALIASES = {
     "image-to-pdf":       "image images photos jpg jpeg png gif tiff webp heic combine merge convert scan a4 letter page size rotate reorder 圖片 照片 相片 掃描 轉 PDF 合併 排序 旋轉 頁面大小 A4",
     "pdf-editor":         "editor edit annotate annotation whiteout redact text textbox shape pencil draw highlight sticky note scribus 編輯 編輯器 標註 註記 塗黑 遮蓋 手繪 螢光筆 便箋 文字框 修圖",
     "pdf-extract-text":   "extract text content txt markdown md docx word odt reflow paragraph ocr llm 擷取文字 取出文字 轉文字 轉 word 轉 markdown 段落重排 LLM 重排",
+    "translate-doc":      "translate translation translator sentence by sentence parallel side by side bilingual english chinese japanese korean traditional simplified llm ai ollama 翻譯 逐句 並排 對照 中英 中翻英 英翻中 機器翻譯 LLM 大語言模型 句子 中翻日 日翻中",
     "pdf-compress":       "compress compression shrink reduce size optimize optimise slim jpeg dpi downsample ghostscript gs subset font 壓縮 縮小 瘦身 減肥 檔案小 降解析度 去重複 Ghostscript",
     "doc-deident":        "deident deidentify de-identification redact redaction mask masking anonymize anonymise pii personal data privacy gdpr 個資 個人資料 去識別化 敏感資料 編修 不可逆遮蔽 資料遮罩 遮蔽 塗黑 脫敏 脫敏化 匿名 身分證 手機 Email 統編 信用卡 車牌 地址",
     "pdf-encrypt":        "encrypt password protect lock aes permission restrict owner user 加密 密碼 保護 權限 禁列印 禁複製 禁編輯 AES",
@@ -150,6 +151,12 @@ templates.env.globals["nav_settings"] = [
     {"icon": "image", "name": "資產管理", "description": "上傳/編輯印章、簽名、Logo",
      "url": "/admin/assets",
      "keywords": "asset assets stamp signature logo image upload 圖片 印章 簽名 浮水印"},
+    {"icon": "image", "name": "企業 Logo / 識別", "description": "更換 topbar、favicon、首頁 logo",
+     "url": "/admin/branding",
+     "keywords": "branding logo favicon enterprise corporate identity custom 企業 識別 標誌 標識 公司"},
+    {"icon": "archive", "name": "設定備份 / 匯入", "description": "全站 admin 設定打包匯出 / 匯入",
+     "url": "/admin/settings-export",
+     "keywords": "backup export import zip migrate move config settings restore 備份 匯出 匯入 還原 搬遷"},
     {"icon": "building", "name": "公司資料", "description": "管理多公司基本資料",
      "url": "/admin/profile",
      "keywords": "company profile vendor info 廠商 公司"},
@@ -301,6 +308,30 @@ app.include_router(_admin, prefix="/admin", tags=["admin"])
 mount_tools(app, tools)
 
 
+# ---- Public branding endpoint (custom enterprise logo) ----
+# 一定要在 auth gate _PUBLIC_PREFIXES 內，登入頁也能顯示自訂 logo。
+from fastapi.responses import FileResponse as _FileResponse  # noqa: E402
+
+@app.get("/branding/logo")
+async def _branding_logo():
+    from fastapi import HTTPException as _HTTPException
+    from .core import branding as _branding
+    p = _branding.get_custom_logo_path()
+    if not p:
+        raise _HTTPException(404, "no custom logo set")
+    return _FileResponse(str(p), media_type="image/png",
+                         headers={"Cache-Control": "no-cache"})
+
+
+def _branding_logo_url() -> str:
+    """Jinja global. 用法：`<img src="{{ branding_logo_url() or '預設 url' }}" />`"""
+    from .core import branding as _branding
+    return _branding.custom_logo_url()
+
+
+templates.env.globals["branding_logo_url"] = _branding_logo_url
+
+
 # ---- Auth gate middleware ----
 # When auth backend != 'off', every non-public request must carry a valid
 # session cookie. Public paths (always reachable):
@@ -315,7 +346,7 @@ from fastapi.responses import JSONResponse as _JSONResponse  # noqa: E402
 from urllib.parse import quote as _qstr  # noqa: E402
 
 _PUBLIC_PREFIXES = ("/static/", "/login", "/logout", "/setup-admin",
-                    "/healthz", "/favicon", "/api/")
+                    "/healthz", "/favicon", "/api/", "/branding/")
 _PUBLIC_EXACT = {"/login", "/logout", "/setup-admin", "/healthz", "/favicon.ico"}
 
 
