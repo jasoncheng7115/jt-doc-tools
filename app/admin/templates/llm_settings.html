@@ -85,7 +85,7 @@
     </div>
   </div>
   <div class="muted" style="font-size:12px; margin-left:208px;">
-    清單會在「測試連線」後從 server 抓取。視覺模型 (vl/vision/llava/gemma 等) 會標 ✨。<br>
+    清單會在<a href="#" id="lnkTestConn" class="hint-test-conn">{{ icon('refresh', size=12) }} 點此測試連線</a>後從 server 抓取。視覺模型 (vl/vision/llava/gemma 等) 會標 ✨。<br>
     建議：<b><code>gemma4:26b</code></b>（預設；MoE 架構、4 張廠商表單實測 100% 準、平均 11 秒）、
     <code>qwen3-vl:8b</code>（低 VRAM 備案；~8GB、筆電部署用）。<br>
     <span style="color:#b91c1c;">⚠️ gemma4:e4b 對繁中人名/公司名多處誤判（58% 準），qwen3-vl:2b/4b 會 timeout，皆不建議。</span>
@@ -271,6 +271,20 @@
 }
 .llm-page .ptt-tag-vision { background: #fef3c7; color: #92400e; }
 .llm-page .ptt-tag-text { background: #dbeafe; color: #1e40af; }
+
+/* 醒目的「點此測試連線」inline 連結 — 看起來像個按鈕、提醒使用者要先按 */
+.llm-page .hint-test-conn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 10px; margin: 0 2px;
+  background: #fef3c7; color: #92400e !important;
+  border: 1px solid #fbbf24; border-radius: 12px;
+  font-weight: 600; text-decoration: none; font-size: 12px;
+  vertical-align: 1px;
+  transition: background 0.12s, transform 0.05s;
+}
+.llm-page .hint-test-conn:hover { background: #fde68a; }
+.llm-page .hint-test-conn:active { transform: translateY(1px); }
+.llm-page .hint-test-conn .ic { stroke: currentColor; vertical-align: middle; }
 
 /* 各工具進階設定 — 子標題分組 */
 .llm-page .tool-section-h {
@@ -460,6 +474,18 @@ async function saveSettings() {
 }
 
 $('btn-test').addEventListener('click', testConnection);
+// 模型描述內的「點此測試連線」inline link 也觸發同一個流程，
+// 並把上方的測試連線按鈕短暫高亮，讓使用者知道狀態在哪呈現。
+$('lnkTestConn').addEventListener('click', (e) => {
+  e.preventDefault();
+  const tb = $('btn-test');
+  if (tb) {
+    tb.style.boxShadow = '0 0 0 4px rgba(37,99,235,0.35)';
+    setTimeout(() => { tb.style.boxShadow = ''; }, 1400);
+    tb.scrollIntoView({behavior: 'smooth', block: 'center'});
+  }
+  testConnection();
+});
 $('btn-refresh-models').addEventListener('click', refreshModels);
 $('btn-save').addEventListener('click', saveSettings);
 </script>
