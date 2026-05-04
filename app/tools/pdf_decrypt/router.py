@@ -56,8 +56,9 @@ async def submit(
             raise HTTPException(400, "高鐵模式：請選擇起迄日期")
         if d_from > d_to:
             d_from, d_to = d_to, d_from
-        if (d_to - d_from).days > 200:
-            raise HTTPException(400, "高鐵模式：日期範圍最多約 6 個月")
+        # 不再限制日期範圍上限 — 前端 slider 已限制在 14 個月內 (≈420 天)
+        # PyMuPDF authenticate 是微秒級，420 次試開無感。
+        # 範圍下限：從上方的 `if d_from > d_to: swap` 已保證 d_to >= d_from
         # 把 user 給的日期格式 token 轉成 strftime pattern。預設 YYYYMMDD。
         # 接受 user 自訂任意 token 組合（例如 `YYYY/MM/DD`、`DD-MM-YY` 等）。
         fmt = (thsr_date_format or "YYYYMMDD")
