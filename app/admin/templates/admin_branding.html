@@ -237,18 +237,22 @@ function _attachDragMove() {
     const dx = e.clientX - startMX;
     const dy = e.clientY - startMY;
     let {x, y, w, h} = startSel;
+    // 允許裁切框「超出」原圖邊界，超出區會在 _cropToBlob 補成透明 padding
+    // (原圖小、想做大方形 logo 時很有用)。設一個寬鬆上限避免拉到無限大。
+    const maxOver = Math.max(cropState.imgW, cropState.imgH) * 2;
+    const minX = -maxOver, maxX = cropState.imgW + maxOver;
+    const minY = -maxOver, maxY = cropState.imgH + maxOver;
     if (dragMode === 'move') {
-      x = Math.max(0, Math.min(cropState.imgW - w, x + dx));
-      y = Math.max(0, Math.min(cropState.imgH - h, y + dy));
+      x = Math.max(minX, Math.min(maxX - w, x + dx));
+      y = Math.max(minY, Math.min(maxY - h, y + dy));
     } else {
       // Resize from a corner — adjust two of (x,y,w,h) accordingly
       if (dragMode.includes('w')) { x = startSel.x + dx; w = startSel.w - dx; }
       if (dragMode.includes('e')) { w = startSel.w + dx; }
       if (dragMode.includes('n')) { y = startSel.y + dy; h = startSel.h - dy; }
       if (dragMode.includes('s')) { h = startSel.h + dy; }
-      // Lock aspect if needed
+      // Lock aspect — 用 driven dimension 推另一邊
       if (cropState.aspect === 1) {
-        // Use whichever dimension changed more (driven dim)
         const useW = Math.abs(w - startSel.w) > Math.abs(h - startSel.h);
         if (useW) {
           const oldH = h; h = w;
@@ -258,18 +262,16 @@ function _attachDragMove() {
           if (dragMode.includes('w')) x = startSel.x + (oldW - w);
         }
       }
-      // Clamp into image
+      // Min size 20px；不再限制不准超出原圖
       if (w < 20) w = 20;
       if (h < 20) h = 20;
-      if (x < 0) { w += x; x = 0; }
-      if (y < 0) { h += y; y = 0; }
-      if (x + w > cropState.imgW) w = cropState.imgW - x;
-      if (y + h > cropState.imgH) h = cropState.imgH - y;
+      // 寬鬆上限（圖寬 ×3）避免拉到無限大造成記憶體爆炸
+      const maxW = cropState.imgW * 3, maxH = cropState.imgH * 3;
+      if (w > maxW) w = maxW;
+      if (h > maxH) h = maxH;
       if (cropState.aspect === 1) {
         const side = Math.min(w, h);
         w = side; h = side;
-        if (x + w > cropState.imgW) x = cropState.imgW - w;
-        if (y + h > cropState.imgH) y = cropState.imgH - h;
       }
     }
     cropState.selX = x; cropState.selY = y;

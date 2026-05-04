@@ -186,6 +186,20 @@
   .trd-row .cell-copy:hover { opacity: 1 !important; background: #e0e7ff; color: #3730a3; }
   .trd-row .cell-copy.is-copied { opacity: 1 !important; background: #dcfce7; color: #166534; }
   .trd-row .cell-copy svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+  /* 表頭列（原文 / 譯文 標籤 + 字數）— 永遠顯示在第一列，sticky 跟著捲 */
+  .trd-head {
+    display: contents;
+    font-size: 12px; font-weight: 600; color: #0f172a;
+  }
+  .trd-head > .h-src, .trd-head > .h-tgt, .trd-head > .h-ctl {
+    background: #eef2ff;
+    border-bottom: 2px solid #c7d2fe;
+    padding: 8px 10px;
+    position: sticky; top: 0; z-index: 2;
+  }
+  .trd-head .h-src { border-right: 1px solid #c7d2fe; }
+  .trd-head .h-lang { color: #4338ca; font-weight: 500; font-size: 11.5px; margin-left: 4px; }
+  .trd-head .h-stat { color: #6b7280; font-weight: 400; font-size: 11px; float: right; }
   .trd-row:first-child .src,
   .trd-row:first-child .tgt,
   .trd-row:first-child .ctl { border-top: 0; }
@@ -415,6 +429,30 @@ function _setHoverRow(idx) {
       r.classList.add('is-hover'));
   }
 }
+// 語言代碼 → 顯示名稱（與後端 _LANG_NAMES 對齊；'auto' 顯示「自動偵測」）
+const LANG_NAMES = {
+  'auto': '自動偵測', 'en': 'English (英文)',
+  'zh': '中文', 'zh-TW': '繁體中文', 'zh-CN': '簡體中文',
+  'ja': '日本語 (日文)', 'ko': '한국어 (韓文)',
+  'fr': 'Français (法文)', 'de': 'Deutsch (德文)',
+  'es': 'Español (西班牙文)', 'vi': 'Tiếng Việt (越南文)',
+  'th': 'ไทย (泰文)', 'id': 'Bahasa Indonesia (印尼文)',
+  'ru': 'Русский (俄文)',
+};
+function _langName(code) { return LANG_NAMES[code] || code || '?'; }
+
+// 表頭列（原文 / 譯文 標題 + 語言 + 字數），永遠在第一列
+function renderHeader(srcLang, tgtLang, srcChars, tgtChars) {
+  const hd = document.createElement('div');
+  hd.className = 'trd-head';
+  hd.innerHTML = `
+    <div class="h-src">原文<span class="h-lang">（${escapeHTML(_langName(srcLang))}）</span><span class="h-stat">${srcChars} 字</span></div>
+    <div class="h-tgt">譯文<span class="h-lang">（${escapeHTML(_langName(tgtLang))}）</span><span class="h-stat">${tgtChars} 字</span></div>
+    <div class="h-ctl"></div>
+  `;
+  return hd;
+}
+
 trdGrid.addEventListener('mouseover', (e) => {
   const row = e.target.closest('.trd-row');
   _setHoverRow(row ? row.dataset.idx : null);
@@ -474,6 +512,8 @@ btnTranslate.addEventListener('click', async () => {
   if (!currentSentences.length) return alert('沒有可翻譯的內容');
   // Render rows immediately with loading state
   trdGrid.innerHTML = '';
+  const srcChars = currentSentences.reduce((n, s) => n + (s || '').length, 0);
+  trdGrid.appendChild(renderHeader(srcLang.value, tgtLang.value, srcChars, 0));
   currentSentences.forEach((s, i) => {
     const row = renderRow(i, s, '翻譯中…', '');
     row.classList.add('is-loading');
@@ -501,10 +541,13 @@ btnTranslate.addEventListener('click', async () => {
     }
     const j = await r.json();
     trdGrid.innerHTML = '';
+    const srcCharsAll = j.results.reduce((n, r) => n + (r.src || '').length, 0);
+    const tgtCharsAll = j.results.reduce((n, r) => n + (r.translated || '').length, 0);
+    trdGrid.appendChild(renderHeader(j.source_lang, j.target_lang, srcCharsAll, tgtCharsAll));
     j.results.forEach((res, i) => {
       trdGrid.appendChild(renderRow(i, res.src, res.translated, res.error));
     });
-    resultMeta.textContent = `共 ${j.results.length} 句 — 原文：${j.source_lang || '?'}, 譯文：${j.target_lang}, 模型：${LLM_MODEL || '?'}`;
+    resultMeta.textContent = `共 ${j.results.length} 句 — 原文 ${srcCharsAll} 字、譯文 ${tgtCharsAll} 字 · 模型：${LLM_MODEL || '?'}`;
   } catch (e) {
     alert('翻譯失敗：' + e.message);
   } finally {
