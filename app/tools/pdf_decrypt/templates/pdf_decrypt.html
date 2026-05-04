@@ -73,12 +73,16 @@
         </span>
       </label>
       <div class="mode-body">
-        <div class="thsr-row">
-          <span class="thsr-label">搜尋月份範圍</span>
-          <input id="thsrFrom" type="month" class="field thsr-input" />
-          <span class="thsr-sep">至</span>
-          <input id="thsrTo" type="month" class="field thsr-input" />
-          <span class="muted thsr-hint">預設最近 2 個月；最多 6 個月範圍</span>
+        <div class="thsr-row" style="display:block;">
+          <div class="mr-summary">搜尋範圍：<b id="mrSummary">—</b> <span class="muted" id="mrCount" style="font-size:11.5px; margin-left:6px;"></span></div>
+          <div class="month-range" id="monthRange" data-anchor-year="" data-anchor-month="">
+            <div class="mr-track"></div>
+            <div class="mr-fill" id="mrFill"></div>
+            <input type="range" class="mr-input mr-from" id="mrFrom" min="0" max="13" step="1" />
+            <input type="range" class="mr-input mr-to"   id="mrTo"   min="0" max="13" step="1" />
+            <div class="mr-ticks" id="mrTicks"></div>
+          </div>
+          <div class="muted thsr-hint" style="margin-top:6px;">預設最近 3 個月；最多 6 個月範圍。把左右兩端拖到想要的月份。</div>
         </div>
         <div class="thsr-row">
           <span class="thsr-label">日期格式</span>
@@ -155,13 +159,68 @@
   .thsr-label {
     font-size: 12.5px; color: #475569; min-width: 88px;
   }
-  .thsr-input { width: auto; }
-  .thsr-sep { color: #64748b; font-size: 12px; }
+  .thsr-input { width: auto; padding: 4px 8px; }
+  .thsr-sep { color: #64748b; font-size: 12px; margin: 0 6px; }
+  .thsr-unit { color: #64748b; font-size: 12px; }
   .thsr-hint { font-size: 11px; }
+
+  /* === 雙把手月份範圍滑桿 === */
+  .mr-summary { font-size: 13px; color: #1e293b; margin-bottom: 14px; }
+  .mr-summary b { color: #d97706; }
+  .month-range {
+    position: relative; height: 60px;
+    width: 100%; max-width: 720px;
+    padding: 18px 12px 22px; box-sizing: border-box;
+    user-select: none;
+  }
+  .mr-track {
+    position: absolute; left: 12px; right: 12px; top: 28px;
+    height: 6px; background: #e5e7eb; border-radius: 3px;
+  }
+  .mr-fill {
+    position: absolute; top: 28px; height: 6px;
+    background: #f59e0b; border-radius: 3px; pointer-events: none;
+  }
+  /* 兩個 range input 疊在同一條 track 上；只留 thumb 可互動 */
+  .mr-input {
+    position: absolute; left: 12px; right: 12px; top: 18px;
+    width: calc(100% - 24px); height: 26px;
+    margin: 0; padding: 0;
+    -webkit-appearance: none; appearance: none;
+    background: transparent; pointer-events: none; z-index: 2;
+  }
+  .mr-input::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 18px; height: 26px; background: #fff;
+    border: 2px solid #d97706; border-radius: 4px;
+    cursor: grab; pointer-events: auto;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  }
+  .mr-input::-webkit-slider-thumb:active { cursor: grabbing; background: #fef3c7; }
+  .mr-input::-moz-range-thumb {
+    width: 18px; height: 26px; background: #fff;
+    border: 2px solid #d97706; border-radius: 4px;
+    cursor: grab; pointer-events: auto;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  }
+  /* 軌道本身透明（用 .mr-track 自繪） */
+  .mr-input::-webkit-slider-runnable-track { background: transparent; height: 6px; }
+  .mr-input::-moz-range-track { background: transparent; height: 6px; }
+  /* tick 標籤 */
+  .mr-ticks {
+    position: absolute; left: 12px; right: 12px; top: 44px;
+    height: 14px; pointer-events: none;
+  }
+  .mr-tick {
+    position: absolute; top: 0; transform: translateX(-50%);
+    font-size: 10.5px; color: #64748b; white-space: nowrap;
+  }
+  .mr-tick.is-major { color: #1e293b; font-weight: 600; }
+  .mr-tick.is-selected { color: #d97706; font-weight: 600; }
 </style>
 
 <div style="margin-top:12px;">
-  <button class="btn btn-primary" id="btn-submit">{{ icon('unlock', size=14) }} 解除並下載</button>
+  <button class="btn btn-primary" id="btn-submit">{{ icon('unlock', size=14) }} 解除密碼</button>
 </div>
 <div style="margin-top:10px;">
   {% with progress_id='decJob' %}{% include "components/job_progress.html" %}{% endwith %}
@@ -179,29 +238,88 @@ const fu = new FileUpload($('decUp'), (_first, fs) => {
 });
 const jp = new JobProgress($('decJob'), { onReset: () => { fu.reset(); files = []; } });
 
-// 高鐵模式：toggle 顯示月份範圍 + 預設最近 2 個月
-function _isoMonth(d) {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  return `${yyyy}-${mm}`;  // YYYY-MM (HTML <input type=month> 的格式)
+// 高鐵模式：雙把手月份範圍滑桿 — 拖一次搞定，不用兩個 dropdown
+//
+// 模型：13 格刻度（index 0..13），代表 anchor 月份往前 12 個月 + 當月 + 下個月
+//   index 0  = 12 個月前
+//   index 12 = 當月（today）
+//   index 13 = 下個月（給未來票一點空間）
+// from 把手範圍 0..12（不含 13）；to 把手範圍 1..13。always from < to。
+// 預設：to=12（當月），from=10（兩個月前）= 共 3 個月。
+const MR_TICKS = 14;  // index 0..13
+let _mrAnchor = null;  // 當月 Date — 程式邏輯的 0-點
+
+function _addMonths(d, delta) {
+  return new Date(d.getFullYear(), d.getMonth() + delta, 1);
 }
+function _idxToYearMonth(idx) {
+  // idx=12 對應 anchor (當月)，所以 delta = idx - 12
+  const d = _addMonths(_mrAnchor, idx - 12);
+  return {y: d.getFullYear(), m: d.getMonth() + 1};
+}
+function _ymLabel(idx) {
+  const {y, m} = _idxToYearMonth(idx);
+  return `${y}/${String(m).padStart(2, '0')}`;
+}
+
+function _renderMrTicks(fromIdx, toIdx) {
+  const ticksEl = $('mrTicks');
+  if (!ticksEl) return;
+  ticksEl.innerHTML = '';
+  // 在 0, 6, 12 三個關鍵位置印年月；其餘印小點
+  const keyIdx = new Set([0, 6, 12]);
+  keyIdx.add(fromIdx); keyIdx.add(toIdx);
+  for (const idx of keyIdx) {
+    if (idx < 0 || idx > 13) continue;
+    const t = document.createElement('div');
+    t.className = 'mr-tick';
+    if (idx === fromIdx || idx === toIdx) t.classList.add('is-selected');
+    else if (keyIdx.has(idx)) t.classList.add('is-major');
+    t.textContent = _ymLabel(idx);
+    // % 位置 — slider thumb 寬 18px，左右各 9px 的 inset；
+    // 用簡化線性公式 idx/13 × 100% 對齊 input range thumb 位置
+    t.style.left = `calc(${(idx / 13) * 100}% )`;
+    ticksEl.appendChild(t);
+  }
+}
+
+function _updateMrUI() {
+  let f = parseInt($('mrFrom').value, 10);
+  let t = parseInt($('mrTo').value, 10);
+  // 確保 from < to，差至少 1 (= 至少 1 個月範圍)
+  if (f >= t) { f = Math.max(0, t - 1); $('mrFrom').value = String(f); }
+  // fill 條：% 算法跟 thumb 對齊
+  const lp = (f / 13) * 100;
+  const rp = (t / 13) * 100;
+  $('mrFill').style.left = `calc(${lp}% )`;
+  $('mrFill').style.width = `${rp - lp}%`;
+  // summary
+  const fromLabel = _ymLabel(f);
+  const toLabel = _ymLabel(t);
+  const months = (t - f) + 1;  // 含起迄 inclusive
+  $('mrSummary').textContent = months === 1
+      ? `${fromLabel}（共 1 個月）`.replace('（共 1 個月）', '')
+      : `${fromLabel} ～ ${toLabel}`;
+  $('mrCount').textContent = `（共 ${months} 個月）`;
+  _renderMrTicks(f, t);
+}
+
 function _setDefaultThsrRange() {
-  const today = new Date();
-  const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  if (!$('thsrFrom').value) $('thsrFrom').value = _isoMonth(lastMonth);
-  if (!$('thsrTo').value) $('thsrTo').value = _isoMonth(today);
+  if (!_mrAnchor) {
+    _mrAnchor = new Date();
+    _mrAnchor.setDate(1);  // anchor 取當月 1 日
+    // 預設 to=12 (當月), from=10 (兩個月前) → 共 3 個月
+    if (!$('mrFrom').dataset.userSet) $('mrFrom').value = '10';
+    if (!$('mrTo').dataset.userSet) $('mrTo').value = '12';
+  }
+  _updateMrUI();
 }
-// 把 YYYY-MM 月份字串轉成完整 YYYY-MM-DD 日期：
-//   from → 該月 1 日；  to → 該月最後一天
-function _monthToFromDate(ym) {
-  return ym + '-01';  // YYYY-MM → YYYY-MM-01
-}
-function _monthToToDate(ym) {
-  const [y, m] = ym.split('-').map(Number);
-  // 下個月的 0 日 = 本月最後一天
-  const last = new Date(y, m, 0).getDate();
-  return `${ym}-${String(last).padStart(2, '0')}`;
-}
+['mrFrom', 'mrTo'].forEach(id => {
+  $(id).addEventListener('input', () => {
+    $(id).dataset.userSet = '1';
+    _updateMrUI();
+  });
+});
 // Mode card toggle — checkbox 勾選時整張卡 .is-on，body 才展開
 function _refreshModeCards() {
   const map = {mPassword: 'password', mFilename: 'filename', mThsr: 'thsr'};
@@ -258,12 +376,17 @@ $('btn-submit').addEventListener('click', async () => {
   }
   fd.append('use_filename_as_password', $('mFilename').checked ? '1' : '');
   if ($('mThsr').checked) {
-    if (!$('thsrFrom').value || !$('thsrTo').value) {
-      return alert('高鐵模式：請選擇起迄月份');
-    }
+    const f = parseInt($('mrFrom').value, 10);
+    const t = parseInt($('mrTo').value, 10);
+    const fYM = _idxToYearMonth(f);
+    const tYM = _idxToYearMonth(t);
     fd.append('thsr_mode', '1');
-    fd.append('thsr_date_from', _monthToFromDate($('thsrFrom').value));
-    fd.append('thsr_date_to',   _monthToToDate($('thsrTo').value));
+    // from = 該月 1 日；to = 該月最後一日
+    fd.append('thsr_date_from',
+      `${fYM.y}-${String(fYM.m).padStart(2,'0')}-01`);
+    const lastDay = new Date(tYM.y, tYM.m, 0).getDate();
+    fd.append('thsr_date_to',
+      `${tYM.y}-${String(tYM.m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`);
     fd.append('thsr_date_format', _getThsrFormat());
   }
   const r = await fu.upload('/tools/pdf-decrypt/submit', fd, {processingLabel: '排隊解密中…'});
