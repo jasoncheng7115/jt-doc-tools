@@ -4,6 +4,14 @@
 
 ---
 
+## [1.4.12] - 2026-05-04
+
+### 新增
+
+- **浮水印支援個人臨時資產**（與 pdf-stamp 相同模式）：在「浮水印」工具下方新增「臨時上傳一張（僅本次）」按鈕。圖片只放在使用者瀏覽器 sessionStorage，**不會存到伺服器**，別人也看不到；產製送出時才隨 request 上傳。每次使用會寫一筆 `event_type=temp_asset_used`/`pdf-watermark` 稽核記錄（含使用者、IP、檔名、size、sha256 前 16 字），admin 在稽核記錄頁可查。Backend 用同樣的 `_resolve_watermark_source` helper 處理；preview-watermarked + submit 兩個 endpoint 都接 `temp_asset_file` form field。
+
+---
+
 ## [1.4.11] - 2026-05-04
 
 ### 緊急修正

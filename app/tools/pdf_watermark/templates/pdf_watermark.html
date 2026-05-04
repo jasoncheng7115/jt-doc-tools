@@ -28,7 +28,7 @@
   <div id="asset-source" class="wm-source-block">
     <div class="wm-source-block-title">選擇浮水印圖片</div>
     {% if not assets %}
-      <div class="empty">還沒有任何浮水印資產。請到「<a href="/admin/assets">資產管理</a>」上傳（類型選「浮水印 watermark」），或切到「文字」模式。</div>
+      <div class="empty">還沒有共用浮水印資產。可請管理員到「<a href="/admin/assets">資產管理</a>」上傳（類型選「浮水印 watermark」），或使用下方「臨時上傳」自帶一張（僅本次有效，不存於伺服器），或切到「文字」模式。</div>
     {% else %}
     <div class="wm-asset-grid">
       {% for s in assets %}
@@ -43,6 +43,25 @@
       {% endfor %}
     </div>
     {% endif %}
+
+    <div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--border);">
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <input type="file" id="wmTempAssetFile" accept="image/png,image/jpeg,image/webp" hidden />
+        <button class="btn btn-small" type="button" id="btnWmTempAsset">{{ icon('upload', size=12) }} 臨時上傳一張（僅本次）</button>
+        <span class="muted" style="font-size:12px;">圖片只放在你的瀏覽器，<b>不會存到伺服器</b>，別人也看不到；產製送出時才上傳。管理員會看到一筆「使用臨時資產」的稽核記錄（只記事件 + 檔名 hash，不留圖檔）。</span>
+      </div>
+      <div id="wmTempAssetSlot" style="margin-top:10px; display:none;">
+        <label class="wm-asset-card" style="max-width:240px; border:2px solid #16a34a; cursor:pointer;">
+          <input type="radio" name="asset" value="__temp__" id="wmTempAssetRadio" />
+          <div class="wm-asset-thumb"><img id="wmTempAssetThumb" alt="臨時資產預覽" /></div>
+          <div class="wm-asset-meta">
+            <span class="wm-asset-name" id="wmTempAssetName">（未選）</span>
+            <span class="type-chip" style="background:#dcfce7; color:#166534;">臨時</span>
+            <button type="button" class="btn btn-small" id="btnWmTempRemove" style="font-size:11px; padding:2px 6px; margin-left:auto;">移除</button>
+          </div>
+        </label>
+      </div>
+    </div>
   </div>
 
   <div id="text-source" class="wm-source-block" hidden>
@@ -320,7 +339,12 @@ function getEditorAssetUrl(){
     return `/tools/pdf-watermark/text-png?${params.toString()}&v=${Date.now()}`;
   }
   const id = getSelectedAsset();
-  return id ? `/admin/assets/${id}/file?v=${Date.now()}` : null;
+  if (!id) return null;
+  if (id === '__temp__') {
+    // 臨時資產：editor 顯示用 sessionStorage 內的 data URL
+    return window._wmTempAsset ? window._wmTempAsset.dataUrl : null;
+  }
+  return `/admin/assets/${id}/file?v=${Date.now()}`;
 }
 
 // Probe a URL for natural image dimensions, return aspect ratio (w/h) or 1 on failure.
@@ -439,7 +463,15 @@ function refreshSim(){
     const img = document.getElementById('sim-image');
     panel.hidden = false; status.textContent = '產生預覽中…';
     const fd = new FormData();
-    if (src === 'asset') fd.append('asset_id', getSelectedAsset());
+    if (src === 'asset') {
+      const aid = getSelectedAsset();
+      fd.append('asset_id', aid);
+      if (aid === '__temp__') {
+        const tf = wmTempAssetAsFile();
+        if (!tf) { status.textContent = '臨時資產遺失'; return; }
+        fd.append('temp_asset_file', tf, tf.name);
+      }
+    }
     fd.append('file', f);
     fd.append('params', JSON.stringify(buildParams()));
     try {
@@ -483,7 +515,15 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
   if (src === 'text' && !document.getElementById('wm-text').value.trim()) return alert('請輸入浮水印文字');
   if (!pickedFiles.length) return alert('請先上傳 PDF');
   const fd = new FormData();
-  if (src === 'asset') fd.append('asset_id', getSelectedAsset());
+  if (src === 'asset') {
+    const aid = getSelectedAsset();
+    fd.append('asset_id', aid);
+    if (aid === '__temp__') {
+      const tf = wmTempAssetAsFile();
+      if (!tf) return alert('臨時資產已遺失，請重新上傳');
+      fd.append('temp_asset_file', tf, tf.name);
+    }
+  }
   for (const f of pickedFiles) fd.append('file', f);
   fd.append('params', JSON.stringify(buildParams()));
   fd.append('page_mode', document.getElementById('page-mode').value);
@@ -518,5 +558,80 @@ wmColorHex.addEventListener('input', () => {
 });
 wmSize.addEventListener('input', () => { wmSizeNum.value = wmSize.value; refreshSim(); });
 wmSizeNum.addEventListener('input', () => { wmSize.value = wmSizeNum.value; refreshSim(); });
+
+// ===== 臨時資產（與 pdf-stamp 相同模式，v1.4.12） =====
+const WM_TEMP_KEY = 'jtdt:pdf-watermark:temp-asset';
+function _wmTempRender() {
+  const slot = document.getElementById('wmTempAssetSlot');
+  const t = window._wmTempAsset;
+  if (!t) {
+    slot.style.display = 'none';
+    const r = document.getElementById('wmTempAssetRadio');
+    if (r) r.checked = false;
+    return;
+  }
+  slot.style.display = '';
+  document.getElementById('wmTempAssetThumb').src = t.dataUrl;
+  document.getElementById('wmTempAssetName').textContent = t.filename || '臨時資產';
+}
+function _wmTempSet(t) {
+  window._wmTempAsset = t;
+  try {
+    if (t) sessionStorage.setItem(WM_TEMP_KEY, JSON.stringify(t));
+    else sessionStorage.removeItem(WM_TEMP_KEY);
+  } catch (_) {}
+  _wmTempRender();
+}
+(function _wmTempRestore() {
+  try {
+    const raw = sessionStorage.getItem(WM_TEMP_KEY);
+    if (raw) window._wmTempAsset = JSON.parse(raw);
+    _wmTempRender();
+  } catch (_) {}
+})();
+function wmTempAssetAsFile() {
+  const t = window._wmTempAsset;
+  if (!t) return null;
+  const m = t.dataUrl.match(/^data:([^;,]+)(;base64)?,(.*)$/);
+  if (!m) return null;
+  const mime = m[1] || 'image/png';
+  const isBase64 = !!m[2];
+  const raw = isBase64 ? atob(m[3]) : decodeURIComponent(m[3]);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return new File([arr], t.filename || 'temp.png', {type: mime});
+}
+document.getElementById('btnWmTempAsset').addEventListener('click', () => {
+  document.getElementById('wmTempAssetFile').click();
+});
+document.getElementById('wmTempAssetFile').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const MAX = 5 * 1024 * 1024;
+  if (f.size > MAX) {
+    alert('檔案過大（上限 5 MB）');
+    e.target.value = '';
+    return;
+  }
+  const r = new FileReader();
+  r.onload = (ev) => {
+    _wmTempSet({
+      filename: f.name,
+      dataUrl: ev.target.result,
+      size: f.size,
+      mime: f.type,
+    });
+    const radio = document.getElementById('wmTempAssetRadio');
+    radio.checked = true;
+    radio.dispatchEvent(new Event('change', {bubbles: true}));
+  };
+  r.readAsDataURL(f);
+  e.target.value = '';
+});
+document.getElementById('btnWmTempRemove').addEventListener('click', (e) => {
+  e.preventDefault(); e.stopPropagation();
+  if (!confirm('移除臨時資產？')) return;
+  _wmTempSet(null);
+});
 </script>
 {% endblock %}

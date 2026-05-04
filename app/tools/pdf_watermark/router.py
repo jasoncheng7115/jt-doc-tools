@@ -168,19 +168,22 @@ async def preview(file: UploadFile = File(...)):
 
 @router.post("/preview-watermarked")
 async def preview_watermarked(
+    request: Request,
     file: UploadFile = File(...),
     params: str = Form(...),
     asset_id: Optional[str] = Form(None),
+    temp_asset_file: Optional[UploadFile] = File(None),
 ):
     p = _parse_params(params)
     wm_path: Optional[Path] = None
     if not (p.text and p.text.strip()):
         if not asset_id:
             raise HTTPException(400, "需要 asset_id 或 text")
-        asset = asset_manager.get(asset_id)
-        if not asset:
+        actor = getattr(getattr(request.state, "user", None), "username", "") or ""
+        wm_path = await _resolve_watermark_source(
+            asset_id, temp_asset_file, request=request, actor_username=actor)
+        if wm_path is None:
             raise HTTPException(400, "asset not found")
-        wm_path = asset_manager.file_path(asset)
     data = await file.read()
     if not data:
         raise HTTPException(400, "empty file")
@@ -211,20 +214,23 @@ async def preview_watermarked(
 
 @router.post("/submit")
 async def submit(
+    request: Request,
     file: List[UploadFile] = File(...),
     params: str = Form(...),
     page_mode: str = Form("all"),
     asset_id: Optional[str] = Form(None),
+    temp_asset_file: Optional[UploadFile] = File(None),
 ):
     base_params = _parse_params(params)
     wm_png: Optional[Path] = None
     if not (base_params.text and base_params.text.strip()):
         if not asset_id:
             raise HTTPException(400, "需要 asset_id 或 text")
-        asset = asset_manager.get(asset_id)
-        if not asset:
+        actor = getattr(getattr(request.state, "user", None), "username", "") or ""
+        wm_png = await _resolve_watermark_source(
+            asset_id, temp_asset_file, request=request, actor_username=actor)
+        if wm_png is None:
             raise HTTPException(400, "asset not found")
-        wm_png = asset_manager.file_path(asset)
     files = file or []
     if not files:
         raise HTTPException(400, "沒有檔案")
