@@ -343,6 +343,9 @@ function fillModelDropdown(models) {
 // 清單裡會保留；includeBlank 會加一個「（用預設：xxx）」value=""。
 function _fillSelectGrouped(sel, models, includeBlank, preserveValue, defaultModel) {
   sel.innerHTML = '';
+  // 工具是否要求視覺模型 — 由 select 的 data-kind 決定
+  // (per-tool selects 帶 data-kind="vision"/"text"，預設 model select 沒此屬性)
+  const requiresVision = sel.dataset.kind === 'vision';
   if (includeBlank) {
     const o = document.createElement('option');
     o.value = '';
@@ -354,13 +357,14 @@ function _fillSelectGrouped(sel, models, includeBlank, preserveValue, defaultMod
   if (vision.length) {
     const grp = document.createElement('optgroup');
     grp.label = '✨ 視覺模型';
-    vision.forEach(m => grp.appendChild(makeOpt(m)));
+    vision.forEach(m => grp.appendChild(makeOpt(m, /* disabled */ false)));
     sel.appendChild(grp);
   }
   if (others.length) {
     const grp = document.createElement('optgroup');
-    grp.label = '文字 / 其他模型';
-    others.forEach(m => grp.appendChild(makeOpt(m)));
+    // 視覺工具：把非視覺模型整組標示為「不可用」
+    grp.label = requiresVision ? '文字 / 其他模型（此工具需視覺模型，無法使用）' : '文字 / 其他模型';
+    others.forEach(m => grp.appendChild(makeOpt(m, /* disabled */ requiresVision)));
     sel.appendChild(grp);
   }
   if (!vision.length && !others.length && !includeBlank) {
@@ -369,20 +373,30 @@ function _fillSelectGrouped(sel, models, includeBlank, preserveValue, defaultMod
     o.disabled = true;
     sel.appendChild(o);
   }
-  // 還原原本選擇（若還在）
-  if (preserveValue && [...sel.options].some(o => o.value === preserveValue)) {
-    sel.value = preserveValue;
+  // 還原原本選擇（若還在且未被 disable）
+  if (preserveValue) {
+    const opt = [...sel.options].find(o => o.value === preserveValue);
+    if (opt && !opt.disabled) {
+      sel.value = preserveValue;
+    } else if (includeBlank) {
+      sel.value = '';
+    }
   } else if (includeBlank) {
     sel.value = '';
   }
 }
 
-function makeOpt(m) {
+function makeOpt(m, disabled) {
   const o = document.createElement('option');
   o.value = m.id;
   let label = m.id;
   if (m.size_bytes) label += `  (${(m.size_bytes/1024**3).toFixed(1)} GB)`;
+  if (disabled) label = '🚫 ' + label;
   o.textContent = label;
+  if (disabled) {
+    o.disabled = true;
+    o.style.color = '#9ca3af';
+  }
   return o;
 }
 
