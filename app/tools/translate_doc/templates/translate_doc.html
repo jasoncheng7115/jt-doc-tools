@@ -21,8 +21,9 @@
 <div class="panel" style="border-left:4px solid #3b82f6; background:#eff6ff; padding:10px 14px;">
   <p style="margin:0; font-size:13px;">
     {{ icon('globe', size=14) }} <b>使用模型：</b><code style="background:#dbeafe; color:#1e40af; padding:2px 8px; border-radius:4px; font-family: ui-monospace, monospace;">{{ llm_model }}</code>
-    <span class="muted" style="margin-left:10px; font-size:12px;">@ <code>{{ llm_url }}</code></span>
     {% if is_admin(request) %}
+    {# admin 才顯示 server URL — 內網 IP 對一般使用者是敏感資訊 #}
+    <span class="muted" style="margin-left:10px; font-size:12px;">@ <code>{{ llm_url }}</code></span>
     <span class="muted" style="margin-left:10px; font-size:12px;">（要換模型請到 <a href="/admin/llm-settings">LLM 設定</a>）</span>
     {% else %}
     <span class="muted" style="margin-left:10px; font-size:12px;">（如要更換模型，請聯絡管理員）</span>
