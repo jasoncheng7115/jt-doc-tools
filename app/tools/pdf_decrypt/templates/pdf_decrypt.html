@@ -5,9 +5,28 @@
 <h1>{{ icon('unlock', size=22) }} PDF 密碼解除</h1>
 <p class="muted">輸入已知密碼後，把 PDF 的保護解除。<b style="color:#b91c1c;">此工具僅解除你自己擁有的加密 PDF；不提供密碼破解。</b></p>
 
+<style>
+  /* 選項卡片：勾選 + 標題 + 內縮說明文字（會自動 wrap，不溢出 panel） */
+  .opt-card {
+    display: flex; align-items: flex-start; gap: 8px; cursor: pointer;
+    padding: 10px 12px; border-radius: 6px;
+    box-sizing: border-box; width: 100%; min-width: 0;
+  }
+  .opt-card > input[type=checkbox] { margin-top: 3px; flex: 0 0 auto; }
+  .opt-card-text {
+    flex: 1 1 auto; min-width: 0;
+    font-size: 13px; line-height: 1.55; color: #1e293b;
+  }
+  .opt-card-desc {
+    display: block; margin-top: 4px;
+    font-size: 11.5px; color: #64748b;
+    word-wrap: break-word; overflow-wrap: anywhere;
+  }
+</style>
+
 <div class="panel">
   <h2 style="margin-top:0;">1. 上傳加密 PDF</h2>
-  {% with upload_id='decUp', accept='application/pdf', multiple=True, hint='支援多檔批次；所有檔案套用同一個密碼。' %}{% include "components/file_upload.html" %}{% endwith %}
+  {% with upload_id='decUp', accept='application/pdf', multiple=True, hint='支援多檔批次。' %}{% include "components/file_upload.html" %}{% endwith %}
 </div>
 
 <div class="panel">
@@ -18,11 +37,11 @@
   </div>
   <div class="form-row">
     <label></label>
-    <label class="field" style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; padding:8px 10px; background:#f8fafc; border:1px solid var(--border); border-radius:6px;">
-      <input id="useFnamePw" type="checkbox" style="margin-top:3px;" />
-      <span style="font-size:13px; line-height:1.55;">
+    <label class="field opt-card" style="background:#f8fafc; border:1px solid var(--border);">
+      <input id="useFnamePw" type="checkbox" />
+      <span class="opt-card-text">
         <b>以檔名為密碼</b>
-        <span style="display:block; font-size:11.5px; color:#64748b; margin-top:2px;">
+        <span class="opt-card-desc">
           每個檔用自己的<b>主檔名</b>（去掉 <code>.pdf</code>）當作密碼。例如 <code>report-2026.pdf</code> 會試 <code>report-2026</code>。<br>
           如同時也填了上方密碼，先試檔名失敗再試手動密碼，先成功的用。多份檔密碼不同時很方便。
         </span>
@@ -31,11 +50,11 @@
   </div>
   <div class="form-row">
     <label></label>
-    <label class="field" style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; padding:8px 10px; background:#fff7ed; border:1px solid #fdba74; border-radius:6px;">
-      <input id="useThsrMode" type="checkbox" style="margin-top:3px;" />
-      <span style="font-size:13px; line-height:1.55;">
+    <label class="field opt-card" style="background:#fff7ed; border:1px solid #fdba74;">
+      <input id="useThsrMode" type="checkbox" />
+      <span class="opt-card-text">
         <b>高鐵模式</b>
-        <span style="display:block; font-size:11.5px; color:#7c2d12; margin-top:2px;">
+        <span class="opt-card-desc" style="color:#7c2d12;">
           台灣高鐵電子車票 PDF 的密碼是<b>出發日期</b>（例：2024/03/15 → 密碼 <code>20240315</code>）。
           勾選後在下方挑選日期範圍，工具會對每個檔嘗試該範圍內的每一天，成功就解密。
           輸出檔名會自動改成「<code>20240315.pdf</code>」（可從檔名直接看出該票的搭乘日期）。
@@ -44,13 +63,13 @@
     </label>
   </div>
   <div class="form-row" id="thsrDateRow" style="display:none;">
-    <label>搜尋日期範圍</label>
+    <label>搜尋月份範圍</label>
     <div class="field" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-      <input id="thsrFrom" type="date" class="field" style="width:auto;" />
+      <input id="thsrFrom" type="month" class="field" style="width:auto;" />
       <span style="color:#64748b;">至</span>
-      <input id="thsrTo" type="date" class="field" style="width:auto;" />
+      <input id="thsrTo" type="month" class="field" style="width:auto;" />
       <span class="muted" style="font-size:11.5px;">
-        預設最近 2 個月；最多 90 天範圍
+        預設最近 2 個月；起=當月 1 日，迄=當月最後一日；最多 3 個月範圍
       </span>
     </div>
   </div>
@@ -93,18 +112,28 @@ const fu = new FileUpload($('decUp'), (_first, fs) => {
 });
 const jp = new JobProgress($('decJob'), { onReset: () => { fu.reset(); files = []; } });
 
-// 高鐵模式：toggle 顯示日期範圍 + 預設最近 2 個月
-function _isoDate(d) {
+// 高鐵模式：toggle 顯示月份範圍 + 預設最近 2 個月
+function _isoMonth(d) {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
+  return `${yyyy}-${mm}`;  // YYYY-MM (HTML <input type=month> 的格式)
 }
 function _setDefaultThsrRange() {
   const today = new Date();
-  const twoMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 2, today.getDate());
-  if (!$('thsrFrom').value) $('thsrFrom').value = _isoDate(twoMonthsAgo);
-  if (!$('thsrTo').value) $('thsrTo').value = _isoDate(today);
+  const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  if (!$('thsrFrom').value) $('thsrFrom').value = _isoMonth(lastMonth);
+  if (!$('thsrTo').value) $('thsrTo').value = _isoMonth(today);
+}
+// 把 YYYY-MM 月份字串轉成完整 YYYY-MM-DD 日期：
+//   from → 該月 1 日；  to → 該月最後一天
+function _monthToFromDate(ym) {
+  return ym + '-01';  // YYYY-MM → YYYY-MM-01
+}
+function _monthToToDate(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  // 下個月的 0 日 = 本月最後一天
+  const last = new Date(y, m, 0).getDate();
+  return `${ym}-${String(last).padStart(2, '0')}`;
 }
 $('useThsrMode').addEventListener('change', () => {
   const on = $('useThsrMode').checked;
@@ -144,15 +173,16 @@ $('btn-submit').addEventListener('click', async () => {
   fd.append('use_filename_as_password', $('useFnamePw').checked ? '1' : '');
   if ($('useThsrMode').checked) {
     if (!$('thsrFrom').value || !$('thsrTo').value) {
-      return alert('高鐵模式：請選擇起迄日期');
+      return alert('高鐵模式：請選擇起迄月份');
     }
     fd.append('thsr_mode', '1');
-    fd.append('thsr_date_from', $('thsrFrom').value);
-    fd.append('thsr_date_to', $('thsrTo').value);
+    // 月份 YYYY-MM → from = 該月 1 日；to = 該月最後一日
+    fd.append('thsr_date_from', _monthToFromDate($('thsrFrom').value));
+    fd.append('thsr_date_to',   _monthToToDate($('thsrTo').value));
     fd.append('thsr_date_format', _getThsrFormat());
   }
   const r = await fu.upload('/tools/pdf-decrypt/submit', fd, {processingLabel: '排隊解密中…'});
-  if (!r.ok) return alert('失敗：' + await r.text());
+  if (!r.ok) return alert('失敗：' + await jtdtError(r));
   const j = await r.json();
   jp.track(j.job_id);
 });
