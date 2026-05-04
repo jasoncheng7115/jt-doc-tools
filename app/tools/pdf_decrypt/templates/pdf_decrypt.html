@@ -88,7 +88,7 @@
             <input type="range" class="mr-input mr-to"   id="mrTo"   min="0" max="13" step="1" />
             <div class="mr-ticks" id="mrTicks"></div>
           </div>
-          <div class="muted thsr-hint" style="margin-top:6px;">預設最近 3 個月；最多 6 個月範圍。把左右兩端拖到想要的月份。</div>
+          <div class="muted thsr-hint" style="margin-top:6px;">預設最近 3 個月。把左右兩端拖到想要的月份；範圍可橫跨整個時間軸。</div>
         </div>
         <div class="thsr-row">
           <span class="thsr-label">日期格式</span>
@@ -196,6 +196,9 @@
     -webkit-appearance: none; appearance: none;
     background: transparent; pointer-events: none; z-index: 2;
   }
+  /* 簡化方法：runnable-track 高度設成跟 input 一樣高 (24px)，
+     thumb 高度也 24px，自然垂直置中，不用 margin-top hack。
+     visible track 用 .mr-track div 自繪在中心線。 */
   .mr-input::-webkit-slider-thumb {
     -webkit-appearance: none; appearance: none;
     width: 20px; height: 24px; background: #fff;
@@ -210,8 +213,10 @@
     cursor: grab; pointer-events: auto;
     box-shadow: 0 2px 4px rgba(0,0,0,0.18);
   }
-  .mr-input::-webkit-slider-runnable-track { background: transparent; height: 8px; }
-  .mr-input::-moz-range-track { background: transparent; height: 8px; }
+  .mr-input::-webkit-slider-runnable-track {
+    background: transparent; height: 24px; border: 0;
+  }
+  .mr-input::-moz-range-track { background: transparent; height: 24px; border: 0; }
 
   /* Floating labels — 飄在 thumb 上方顯示「目前是哪一個月」 */
   .mr-handle-label {
@@ -282,19 +287,28 @@ function _ymLabel(idx) {
   return `${y}/${String(m).padStart(2, '0')}`;
 }
 
+// thumb 在 .mr-input (left:12px right:12px width:calc(100%-24px)) 上的實際位置：
+//    px = 12 + (idx/13) * (containerWidth - 24)
+// 用 calc 表示就是： calc(12px + idx/13 * (100% - 24px))
+// 但 .mr-ticks 容器本身已 inset 12px，所以 ticks/fill/label 三者需要不同 base：
+//    fill / label  → 父 .month-range，需 calc(12px + idx/13 * (100% - 24px))
+//    ticks         → 父 .mr-ticks (已 inset 12px)，所以 calc(idx/13 * 100%) 即可
+function _thumbPosCalc(idx) {
+  // 在 .month-range 容器內的實際 px 位置（calc 字串）
+  return `calc(12px + ${idx / 13} * (100% - 24px))`;
+}
+
 function _renderMrTicks() {
   const ticksEl = $('mrTicks');
   if (!ticksEl) return;
   ticksEl.innerHTML = '';
-  // 固定 3 個錨點 (左端 0 / 中段 6 / 右端 13)
+  // .mr-ticks 已 left:12px right:12px，內部 0~100% 直接對齊軌道兩端
   const anchors = [0, 6, 13];
   for (const idx of anchors) {
     const t = document.createElement('div');
     t.className = 'mr-tick is-major';
     t.textContent = _ymLabel(idx);
-    const pct = (idx / 13) * 100;
-    t.style.left = `${pct}%`;
-    // 左 / 右端對齊修正：translateX 換成靠邊，避免文字超出 container
+    t.style.left = `${(idx / 13) * 100}%`;
     if (idx === 0) t.style.transform = 'translateX(0)';
     else if (idx === 13) t.style.transform = 'translateX(-100%)';
     ticksEl.appendChild(t);
@@ -305,25 +319,27 @@ function _updateMrUI() {
   let f = parseInt($('mrFrom').value, 10);
   let t = parseInt($('mrTo').value, 10);
   if (f >= t) { f = Math.max(0, t - 1); $('mrFrom').value = String(f); }
-  const lp = (f / 13) * 100;
-  const rp = (t / 13) * 100;
-  $('mrFill').style.left = `${lp}%`;
-  $('mrFill').style.width = `${rp - lp}%`;
-  // Floating thumb labels — 顯示「目前是哪一個月」
+
+  // Fill bar — 從 from-thumb 中心拉到 to-thumb 中心
+  const fillLeft = _thumbPosCalc(f);
+  const fillRight = _thumbPosCalc(t);
+  $('mrFill').style.left = fillLeft;
+  $('mrFill').style.width = `calc(${fillRight} - ${fillLeft})`;
+
+  // Floating thumb labels — 對齊 thumb 中心
   const fLabel = $('mrLabelFrom');
   const tLabel = $('mrLabelTo');
   fLabel.textContent = _ymLabel(f);
   tLabel.textContent = _ymLabel(t);
-  fLabel.style.left = `${lp}%`;
-  tLabel.style.left = `${rp}%`;
-  // 邊緣 clamp — 避免 thumb 在最左 / 最右時 label 飄出 container
+  fLabel.style.left = _thumbPosCalc(f);
+  tLabel.style.left = _thumbPosCalc(t);
   fLabel.style.transform = (f <= 1) ? 'translateX(0)'
                           : (f >= 12) ? 'translateX(-100%)'
                           : 'translateX(-50%)';
   tLabel.style.transform = (t <= 1) ? 'translateX(0)'
                           : (t >= 12) ? 'translateX(-100%)'
                           : 'translateX(-50%)';
-  // summary
+
   const months = (t - f) + 1;
   $('mrSummary').textContent = `${_ymLabel(f)} ～ ${_ymLabel(t)}`;
   $('mrCount').textContent = `（共 ${months} 個月）`;

@@ -4,6 +4,17 @@
 
 ---
 
+## [1.4.26] - 2026-05-05
+
+### 修正
+
+- **PDF 密碼解除月份滑桿 fill / thumb 對齊**：
+  - fill bar 不再 overshoot — 從「container 寬」改算「thumb 實際位置」(`calc(12px + idx/13 × (100% - 24px))`)，跟 thumb 中心 100% 對齊
+  - thumb 垂直置中：runnable-track 高度設成跟 input 同高 (24px)，thumb 自然居中，不用 margin-top hack
+- **取消高鐵模式 6 個月上限**：依使用者選取範圍計算多少個月就用多少個月（slider 自然限在 14 個月內）
+
+---
+
 ## [1.4.25] - 2026-05-05
 
 ### 改善
