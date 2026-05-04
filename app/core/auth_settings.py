@@ -155,6 +155,66 @@ class BootstrapError(ValueError):
     pass
 
 
+def list_existing_users() -> list[dict]:
+    """Return list of users currently in the auth DB. Used by setup-admin to
+    detect the「停用過認證後又想重新啟用」case — sqlite 內還有 users，
+    但 backend=off。直接走 enable_local_with_admin 會踩「已存在使用者」。
+    每筆 dict: {id, username, display_name, source, enabled, is_admin_seed}.
+    Empty list if DB doesn't exist yet or no users."""
+    try:
+        from . import auth_db
+        auth_db.init()
+        conn = auth_db.conn()
+        rows = conn.execute(
+            "SELECT id, username, display_name, source, enabled, is_admin_seed "
+            "FROM users ORDER BY is_admin_seed DESC, id ASC"
+        ).fetchall()
+        return [
+            {
+                "id": r[0], "username": r[1],
+                "display_name": r[2] or r[1], "source": r[3],
+                "enabled": bool(r[4]), "is_admin_seed": bool(r[5]),
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
+
+
+def reenable_local_with_existing(*, actor_ip: str = "") -> int:
+    """Re-enable the local backend while keeping existing users intact.
+    Used by the「偵測到既有帳號 → 直接恢復」path. Returns count of users
+    preserved. Raises BootstrapError if no existing users (caller should
+    fall back to enable_local_with_admin to create one)."""
+    if get_backend() != "off":
+        raise BootstrapError("認證已啟用，無法重新初始化（請先停用後再開啟）")
+    auth_db.init()
+    audit_db.init()
+    roles.seed_builtin_roles()
+    conn = auth_db.conn()
+    rows = conn.execute("SELECT COUNT(*) FROM users").fetchone()
+    n_users = int(rows[0]) if rows else 0
+    if n_users == 0:
+        raise BootstrapError("DB 內沒有任何既有帳號 — 請改用建立新管理員流程")
+    # 關鍵：清掉舊 sessions（避免舊 LDAP / 之前 backend 的 cookie 還能用）
+    with db.tx(conn):
+        conn.execute("DELETE FROM sessions")
+    # Flip backend on
+    settings = get()
+    settings["backend"] = "local"
+    save(settings)
+    audit_db.log_event(
+        "auth_enabled",
+        username="(reuse-existing)",
+        ip=actor_ip,
+        target="local",
+        details={"reused_users": n_users},
+    )
+    logger.info("Auth re-enabled (backend=local), preserving %d existing users",
+                n_users)
+    return n_users
+
+
 def enable_local_with_admin(
     *,
     admin_username: str,

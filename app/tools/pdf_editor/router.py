@@ -808,15 +808,39 @@ def _insert_mixed_text(page, x: float, y: float, text: str, *,
     cx = x
     for is_cjk, run in runs:
         fn = cjk_font if is_cjk else ascii_font
-        try:
-            page.insert_text(fitz.Point(cx, y), run,
-                             fontname=fn, fontsize=font_size, color=color)
-        except Exception:
-            page.insert_text(fitz.Point(cx, y), run,
-                             fontname="helv", fontsize=font_size, color=color)
+        # 多層 fallback — CJK 內容若 primary fail，要試其他 CJK font，**不能**
+        # 直接掉到 helv（Helvetica 沒 CJK glyphs，會渲成 .notdef tofu 或完全
+        # 不顯示，使用者看到的就是「文字消失」#6 慘案根因之一）。
+        if is_cjk:
+            tried = [fn, "china-ts", "china-t", "china-s", "china-ss"]
+        else:
+            tried = [fn, _style_suffix("helv") if fn != "helv" else "helv"]
+        # Dedupe while preserving order
+        seen = set(); fallbacks = []
+        for f in tried:
+            if f not in seen:
+                seen.add(f); fallbacks.append(f)
+        ok_font = None
+        last_err = None
+        for try_fn in fallbacks:
+            try:
+                page.insert_text(fitz.Point(cx, y), run,
+                                 fontname=try_fn, fontsize=font_size, color=color)
+                ok_font = try_fn
+                break
+            except Exception as e:
+                last_err = e
+                continue
+        if ok_font is None:
+            # 所有 fallback 都炸 — 印 warning 讓 admin 知道（避免悄悄變空白）
+            import logging as _lg
+            _lg.getLogger(__name__).warning(
+                "insert_text all fallbacks failed for run %r (cjk=%s, tried=%s): %s",
+                run[:20], is_cjk, fallbacks, last_err)
+            ok_font = fn  # for length calculation
         # Advance x by measured width of that run
         try:
-            cx += fitz.get_text_length(run, fontname=fn, fontsize=font_size)
+            cx += fitz.get_text_length(run, fontname=ok_font, fontsize=font_size)
         except Exception:
             cx += font_size * len(run) * 0.6  # rough fallback
     return cx
@@ -1015,6 +1039,17 @@ async def save(request: Request):
             for obj in pg.get("objects", []):
                 orig = obj.get("original_bbox")
                 if not orig or len(orig) != 4:
+                    continue
+                # Backend safety net (#6 v1.4.2): text 物件 text 為空但有
+                # original_bbox 是 bug state — redact 會清掉原文位置但 Pass 2
+                # 又跳過空 text 不寫，結果留下完全空白「文字消失」。直接 skip
+                # 此 obj 的 redact，原文保留；client safety net 也已有同樣邏輯
+                # 不送上來，這裡是雙保險。
+                if obj.get("type") == "text" and not str(obj.get("text") or "").strip():
+                    import logging as _lg
+                    _lg.getLogger(__name__).warning(
+                        "skipping redact for text obj with empty text "
+                        "(original_bbox=%s) — would leave blank area", orig)
                     continue
                 ox0, oy0, ox1, oy1 = [float(v) for v in orig]
                 page.add_redact_annot(

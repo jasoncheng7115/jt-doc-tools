@@ -467,6 +467,13 @@ def svc_update() -> int:
     # 5. Restore ownership so the service user can read the new files
     _restore_ownership(root, owner)
 
+    # 5a. Defensive heal — chown data dir back to its owner. Catches the
+    # "previous CLI command (sudo jtdt auth disable / reset-password) ran
+    # as root and left data/ files root-owned mode 600" trap. Without this
+    # the service can't read auth_settings.json after upgrade, making it
+    # look like LDAP/AD config disappeared (v1.4.2 客戶慘案).
+    _chown_data_files_back()
+
     # 5b. Ensure system-level deps for new features (auto best-effort).
     _ensure_system_deps_for_update()
 
@@ -1016,10 +1023,51 @@ print(f"   All existing sessions invalidated; failure-counter reset.")
 
 # --------------------------------------------------------------------- auth recovery (offline)
 
+def _data_dir_owner() -> Optional[tuple[int, int]]:
+    """Return (uid, gid) of the data dir, or None on Windows / dir missing.
+    Used to chown CLI-written files back to the service user — without this
+    `sudo jtdt auth disable` writes auth_settings.json as root:root mode 600
+    and the service (running as `jtdt`) can never read it again, ending up
+    showing default placeholders instead of saved settings (v1.4.2 bug)."""
+    if _is_windows():
+        return None
+    try:
+        d = _data_dir()
+        if not d.exists():
+            return None
+        st = d.stat()
+        return (st.st_uid, st.st_gid)
+    except Exception:
+        return None
+
+
+def _chown_data_files_back() -> None:
+    """Recursively chown the entire data dir to the dir's own owner. Called
+    after any CLI helper that writes to data/ as root, to undo the
+    "root-owned 600 file the service can't read" trap. Idempotent."""
+    owner = _data_dir_owner()
+    if not owner:
+        return
+    uid, gid = owner
+    if uid == 0:
+        return  # data dir is root-owned anyway, no fix needed
+    try:
+        subprocess.call(["chown", "-R", f"{uid}:{gid}", str(_data_dir())])
+    except Exception as exc:
+        print(f"Warning: failed to chown data dir back: {exc}", file=sys.stderr)
+
+
 def _run_auth_helper(snippet: str) -> int:
     """Run a Python snippet inside the install venv with the data-dir env
     set up. Used for offline auth-recovery commands (disable-auth, show-auth)
-    so they don't require the web service to be running."""
+    so they don't require the web service to be running.
+
+    IMPORTANT: When invoked via sudo, this process runs as root. Any file the
+    snippet writes (auth_settings.json, auth.sqlite, etc.) will end up
+    root-owned mode 600 — the service user (jtdt) then can't read it and
+    saved settings disappear from the web UI (v1.4.2 慘案). We chown the
+    data dir back to its original owner after every run as defence.
+    """
     install_root = _install_root()
     venv_python = install_root / ".venv" / "bin" / "python"
     if not venv_python.exists() and _is_windows():
@@ -1032,7 +1080,11 @@ def _run_auth_helper(snippet: str) -> int:
         f"os.environ.setdefault('JTDT_DATA_DIR', {repr(str(_data_dir()))})\n"
         f"sys.path.insert(0, {repr(str(install_root))})\n"
     )
-    return subprocess.call([str(venv_python), "-c", header + snippet])
+    rc = subprocess.call([str(venv_python), "-c", header + snippet])
+    # Always chown back — even if snippet failed mid-write, we don't want
+    # half-written files to be unreadable by the service.
+    _chown_data_files_back()
+    return rc
 
 
 def svc_auth_show() -> int:

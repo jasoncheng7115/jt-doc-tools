@@ -28,6 +28,11 @@
 
 <div class="panel">
   <h2 style="margin-top:0;">2. 連線資訊</h2>
+  <div style="background:#fffbeb; border-left:4px solid #f59e0b; padding:10px 14px; border-radius:6px; margin-bottom:14px; font-size:12.5px; line-height:1.55;">
+    <b style="color:#92400e;">⚠ 隱私建議</b>：強烈建議接 <b>地端自架 LLM Server</b>（如 <a href="https://ollama.com/" target="_blank" rel="noopener">Ollama</a> / vLLM / LM Studio），讓檔案內容只在公司內網流動。
+    若指向 OpenAI / Claude / Gemini 等雲端 API，所有送 LLM 校驗 / 翻譯 / 段落重排的<b>原始文件內容</b>都會離開公司網路，
+    可能違反個資法、營業秘密或客戶 NDA。地端 LLM 才能符合本平台「資料留在自己手中」的設計初衷。
+  </div>
   <div class="form-row">
     <label>Base URL</label>
     <div class="field" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -86,31 +91,41 @@
     <span style="color:#b91c1c;">⚠️ gemma4:e4b 對繁中人名/公司名多處誤判（58% 準），qwen3-vl:2b/4b 會 timeout，皆不建議。</span>
   </div>
 
-  <h3 style="margin:18px 0 6px 0; font-size:14px;">各工具個別模型（可選）</h3>
-  <p class="muted" style="font-size:12px; margin:0 0 10px 0;">
-    依工具用途指定不同模型 — 例如純文字翻譯用文字模型、PDF 校驗用視覺模型。
-    留空白 / 選「（用上方預設）」就跟隨上方的預設模型。每次「重新整理清單」抓回的 model 都會出現在下拉。
-  </p>
-  <div id="perToolWrap" style="display:flex; flex-direction:column; gap:8px;">
-    {% for t in known_llm_tools %}
-    {% set _v = settings.model_per_tool.get(t.id) if settings.model_per_tool else '' %}
-    <div class="form-row" style="margin:0;">
-      <label style="min-width:200px;">
-        <b>{{ t.name }}</b>
-        <code style="font-size:11px; color:#6b7280; margin-left:6px;">{{ t.id }}</code>
-        <span class="muted" style="display:block; font-size:11px; font-weight:normal;">{{ t.use }}</span>
-      </label>
-      <div class="field" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <select class="field per-tool-model" data-tool-id="{{ t.id }}" data-kind="{{ t.kind }}" style="flex:1; min-width:280px; max-width:400px;">
-          <option value="">（用上方預設：{{ settings.model }}）</option>
-          {% if _v and _v != settings.model %}
-          <option value="{{ _v }}" selected>{{ _v }}</option>
-          {% endif %}
-        </select>
-        <span class="muted" style="font-size:11px;">{% if t.kind == 'vision' %}建議視覺模型{% else %}文字模型即可{% endif %}</span>
-      </div>
+  <div class="per-tool-section">
+    <div class="per-tool-header">
+      <h3>各工具個別模型 <span class="muted">（可選）</span></h3>
+      <p class="muted">
+        依工具用途指定不同模型 — 純文字翻譯可用文字模型、PDF 校驗用視覺模型。
+        選「（用上方預設）」就跟隨預設。重新整理清單後，新抓回的 model 會自動出現在下拉。
+      </p>
     </div>
-    {% endfor %}
+    <div class="per-tool-table">
+      <div class="ptt-head">
+        <span>工具</span>
+        <span>個別模型</span>
+        <span>建議</span>
+      </div>
+      {% for t in known_llm_tools %}
+      {% set _v = settings.model_per_tool.get(t.id) if settings.model_per_tool else '' %}
+      <div class="ptt-row">
+        <div class="ptt-tool">
+          <div class="ptt-tool-name">{{ t.name }}</div>
+          <div class="ptt-tool-meta"><code>{{ t.id }}</code> · {{ t.use }}</div>
+        </div>
+        <div class="ptt-model">
+          <select class="field per-tool-model" data-tool-id="{{ t.id }}" data-kind="{{ t.kind }}">
+            <option value="">（用上方預設：{{ settings.model }}）</option>
+            {% if _v and _v != settings.model %}
+            <option value="{{ _v }}" selected>{{ _v }}</option>
+            {% endif %}
+          </select>
+        </div>
+        <div class="ptt-hint">
+          {% if t.kind == 'vision' %}<span class="ptt-tag ptt-tag-vision">視覺</span>{% else %}<span class="ptt-tag ptt-tag-text">文字</span>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
   </div>
 </div>
 
@@ -146,6 +161,14 @@
       <input type="number" id="overall_timeout_seconds" min="30" max="600" step="10"
              value="{{ settings.overall_timeout_seconds }}" style="width:100px;" />
       <span class="muted" style="font-size:12px;">秒 — review loop 上限，避免死循環</span>
+    </div>
+  </div>
+  <div class="form-row">
+    <label>翻譯並行數</label>
+    <div class="field" style="display:flex; gap:8px; align-items:center;">
+      <input type="number" id="translate_concurrency" min="1" max="16" step="1"
+             value="{{ settings.translate_concurrency|default(4) }}" style="width:100px;" />
+      <span class="muted" style="font-size:12px;">逐句翻譯時同時送 LLM 的 worker 數（1-16，預設 4）。本機 Ollama 建議 4-8；高 VRAM 可拉到 12+；雲端 API 設小一點避免被 rate-limit</span>
     </div>
   </div>
 </div>
@@ -192,6 +215,51 @@
 .llm-page .form-row input.field-wide { width: 100%; max-width: 460px; }
 /* 統一左側標籤欄寬度，整列起始位置對齊 */
 .llm-page .form-row > label:first-child { min-width: 200px; max-width: 200px; }
+
+/* 各工具個別模型 — 用三欄 grid 整齊排，跟上方預設模型欄位視覺脫鉤
+   （脫鉤但縮排對齊：margin-left 200px 配合 label 寬度 = 跟預設模型欄位起點對齊） */
+.llm-page .per-tool-section {
+  margin: 18px 0 0 200px;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.llm-page .per-tool-header h3 {
+  margin: 0 0 4px 0; font-size: 14px; font-weight: 600; color: #0f172a;
+}
+.llm-page .per-tool-header p {
+  margin: 0 0 12px 0; font-size: 12px; line-height: 1.5;
+}
+.llm-page .per-tool-table {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(280px, 2fr) auto;
+  gap: 6px 12px;
+  align-items: center;
+}
+.llm-page .ptt-head {
+  display: contents;
+  font-size: 11px; color: #64748b;
+}
+.llm-page .ptt-head > span {
+  padding: 4px 0; border-bottom: 1px solid #e2e8f0;
+  font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.llm-page .ptt-row { display: contents; }
+.llm-page .ptt-tool { padding: 6px 0; }
+.llm-page .ptt-tool-name { font-weight: 600; font-size: 13.5px; color: #0f172a; }
+.llm-page .ptt-tool-meta { font-size: 11.5px; color: #64748b; margin-top: 2px; }
+.llm-page .ptt-tool-meta code { background: #e2e8f0; padding: 1px 5px; border-radius: 3px; font-size: 10.5px; }
+.llm-page .ptt-model select.per-tool-model {
+  width: 100%; max-width: 360px;
+}
+.llm-page .ptt-hint { display: flex; align-items: center; }
+.llm-page .ptt-tag {
+  font-size: 10.5px; padding: 2px 8px; border-radius: 10px; font-weight: 600;
+  white-space: nowrap;
+}
+.llm-page .ptt-tag-vision { background: #fef3c7; color: #92400e; }
+.llm-page .ptt-tag-text { background: #dbeafe; color: #1e40af; }
 .llm-page .form-row input[type=text]   { flex: 1 1 auto; }
 .llm-page .form-row label              { min-width: 160px; width: auto; }
 </style>
@@ -337,6 +405,7 @@ async function saveSettings() {
     confidence_threshold:     parseFloat($('confidence_threshold').value),
     consecutive_required:     parseInt($('consecutive_required').value),
     overall_timeout_seconds:  parseFloat($('overall_timeout_seconds').value),
+    translate_concurrency:    parseInt($('translate_concurrency').value),
     debug_log:                $('debug_log').checked,
   };
   const r = await fetch('/admin/api/llm/settings', {
