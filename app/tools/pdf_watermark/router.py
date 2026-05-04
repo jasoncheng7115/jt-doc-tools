@@ -25,6 +25,78 @@ def _eligible_assets():
     return asset_manager.list(type="watermark")
 
 
+# ---- 個人臨時資產（與 pdf-stamp 相同模式，v1.4.11） ----
+# UI 端傳 asset_id == "__temp__" + multipart 內帶 temp_asset_file 時，
+# 把上傳檔案落地到 temp_dir 用一次後丟。圖只放在使用者瀏覽器 sessionStorage，
+# server 不長存；audit 寫一筆 `temp_asset_used`/pdf-watermark。
+_TEMP_ASSET_SENTINEL = "__temp__"
+_TEMP_ASSET_MAX_BYTES = 5 * 1024 * 1024
+_TEMP_ASSET_ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+async def _resolve_watermark_source(
+    asset_id: Optional[str],
+    temp_asset_file: Optional[UploadFile],
+    request: Optional[Request] = None,
+    actor_username: str = "",
+) -> Optional[Path]:
+    """Return the watermark image path, or None if the caller is using TEXT
+    watermark (no image needed). Raises HTTPException(400) on bad input."""
+    if asset_id == _TEMP_ASSET_SENTINEL:
+        if not temp_asset_file:
+            raise HTTPException(400, "temp asset selected but no file uploaded")
+        fname = (temp_asset_file.filename or "").strip()
+        ext = Path(fname).suffix.lower()
+        if ext and ext not in _TEMP_ASSET_ALLOWED_EXT:
+            raise HTTPException(400, f"unsupported temp asset extension: {ext}")
+        data = await temp_asset_file.read()
+        if not data:
+            raise HTTPException(400, "empty temp asset")
+        if len(data) > _TEMP_ASSET_MAX_BYTES:
+            raise HTTPException(
+                400, f"temp asset too large: {len(data)/1024/1024:.1f} MB > 5 MB")
+        try:
+            from PIL import Image as _PILImage
+            from io import BytesIO as _BytesIO
+            with _PILImage.open(_BytesIO(data)) as im:
+                im.verify()
+        except Exception as e:
+            raise HTTPException(400, f"temp asset is not a valid image: {e}")
+        out = settings.temp_dir / f"wm_temp_{uuid.uuid4().hex}{ext or '.png'}"
+        out.write_bytes(data)
+        # Audit (best-effort)
+        try:
+            from ...core import audit_db as _audit
+            import hashlib as _hl
+            ip = ""
+            if request is not None:
+                ip = (request.client.host if request.client else "") or ""
+            _audit.log_event(
+                event_type="temp_asset_used",
+                username=actor_username or "",
+                ip=ip,
+                target="pdf-watermark",
+                details={
+                    "filename": fname or "(unnamed)",
+                    "size_bytes": len(data),
+                    "sha256_8": _hl.sha256(data).hexdigest()[:16],
+                    "tool": "pdf-watermark",
+                },
+            )
+        except Exception:
+            import logging as _lg
+            _lg.getLogger(__name__).debug(
+                "temp_asset_used audit write failed", exc_info=True)
+        return out
+    # Normal asset path
+    if not asset_id:
+        return None  # caller may be using text watermark
+    asset = asset_manager.get(asset_id)
+    if not asset:
+        raise HTTPException(400, "asset not found")
+    return asset_manager.file_path(asset)
+
+
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     templates = request.app.state.templates
