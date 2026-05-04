@@ -43,10 +43,14 @@
         <span class="mode-desc">手動輸入一個密碼，所有檔案套用同一個密碼。</span>
       </label>
       <div class="mode-body">
-        <input id="pw" type="password" class="field" placeholder="開啟密碼或擁有者密碼都可以" />
-        <p class="muted" style="font-size:11.5px; margin:6px 0 0;">
-          如果 PDF 沒有開啟密碼但有權限限制（禁列印 / 禁複製），此處留空即可；工具會直接去掉權限限制。
-        </p>
+        <div class="thsr-row">
+          <span class="thsr-label">密碼</span>
+          <input id="pw" type="password" class="field" placeholder="開啟密碼或擁有者密碼都可以" style="flex:1; min-width:240px; max-width:400px;" />
+        </div>
+        <div class="thsr-row" style="margin-top:6px;">
+          <span class="thsr-label"></span>
+          <span class="muted thsr-hint">如果 PDF 沒有開啟密碼但有權限限制（禁列印 / 禁複製），此處留空即可；工具會直接去掉權限限制。</span>
+        </div>
       </div>
     </div>
 
@@ -75,7 +79,9 @@
       <div class="mode-body">
         <div class="thsr-row" style="display:block;">
           <div class="mr-summary">搜尋範圍：<b id="mrSummary">—</b> <span class="muted" id="mrCount" style="font-size:11.5px; margin-left:6px;"></span></div>
-          <div class="month-range" id="monthRange" data-anchor-year="" data-anchor-month="">
+          <div class="month-range" id="monthRange">
+            <div class="mr-handle-label" id="mrLabelFrom">—</div>
+            <div class="mr-handle-label" id="mrLabelTo">—</div>
             <div class="mr-track"></div>
             <div class="mr-fill" id="mrFill"></div>
             <input type="range" class="mr-input mr-from" id="mrFrom" min="0" max="13" step="1" />
@@ -165,58 +171,72 @@
   .thsr-hint { font-size: 11px; }
 
   /* === 雙把手月份範圍滑桿 === */
-  .mr-summary { font-size: 13px; color: #1e293b; margin-bottom: 14px; }
-  .mr-summary b { color: #d97706; }
+  .mr-summary { font-size: 13px; color: #1e293b; margin-bottom: 6px; }
+  .mr-summary b { color: #d97706; font-size: 14px; }
   .month-range {
-    position: relative; height: 60px;
+    position: relative; height: 80px;
     width: 100%; max-width: 720px;
-    padding: 18px 12px 22px; box-sizing: border-box;
+    padding: 28px 12px 24px; box-sizing: border-box;
     user-select: none;
   }
+  /* 軌道（較粗） */
   .mr-track {
-    position: absolute; left: 12px; right: 12px; top: 28px;
-    height: 6px; background: #e5e7eb; border-radius: 3px;
+    position: absolute; left: 12px; right: 12px; top: 38px;
+    height: 8px; background: #e5e7eb; border-radius: 4px;
   }
   .mr-fill {
-    position: absolute; top: 28px; height: 6px;
-    background: #f59e0b; border-radius: 3px; pointer-events: none;
+    position: absolute; top: 38px; height: 8px;
+    background: #f59e0b; border-radius: 4px; pointer-events: none;
   }
-  /* 兩個 range input 疊在同一條 track 上；只留 thumb 可互動 */
+  /* range input 疊在 track 上，只留 thumb 可互動 */
   .mr-input {
-    position: absolute; left: 12px; right: 12px; top: 18px;
-    width: calc(100% - 24px); height: 26px;
+    position: absolute; left: 12px; right: 12px; top: 30px;
+    width: calc(100% - 24px); height: 24px;
     margin: 0; padding: 0;
     -webkit-appearance: none; appearance: none;
     background: transparent; pointer-events: none; z-index: 2;
   }
   .mr-input::-webkit-slider-thumb {
     -webkit-appearance: none; appearance: none;
-    width: 18px; height: 26px; background: #fff;
+    width: 20px; height: 24px; background: #fff;
     border: 2px solid #d97706; border-radius: 4px;
     cursor: grab; pointer-events: auto;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.18);
   }
   .mr-input::-webkit-slider-thumb:active { cursor: grabbing; background: #fef3c7; }
   .mr-input::-moz-range-thumb {
-    width: 18px; height: 26px; background: #fff;
+    width: 20px; height: 24px; background: #fff;
     border: 2px solid #d97706; border-radius: 4px;
     cursor: grab; pointer-events: auto;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.18);
   }
-  /* 軌道本身透明（用 .mr-track 自繪） */
-  .mr-input::-webkit-slider-runnable-track { background: transparent; height: 6px; }
-  .mr-input::-moz-range-track { background: transparent; height: 6px; }
-  /* tick 標籤 */
+  .mr-input::-webkit-slider-runnable-track { background: transparent; height: 8px; }
+  .mr-input::-moz-range-track { background: transparent; height: 8px; }
+
+  /* Floating labels — 飄在 thumb 上方顯示「目前是哪一個月」 */
+  .mr-handle-label {
+    position: absolute; top: 0; transform: translateX(-50%);
+    background: #d97706; color: #fff;
+    font-size: 11.5px; font-weight: 600;
+    padding: 3px 8px; border-radius: 4px;
+    white-space: nowrap; pointer-events: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .mr-handle-label::after {
+    content: ''; position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
+    border: 4px solid transparent; border-top-color: #d97706; border-bottom: 0;
+  }
+
+  /* Anchor ticks — 固定錨點 (時間軸最早 / 中段 / 最晚)，永遠不變 */
   .mr-ticks {
-    position: absolute; left: 12px; right: 12px; top: 44px;
+    position: absolute; left: 12px; right: 12px; top: 56px;
     height: 14px; pointer-events: none;
   }
   .mr-tick {
     position: absolute; top: 0; transform: translateX(-50%);
-    font-size: 10.5px; color: #64748b; white-space: nowrap;
+    font-size: 10.5px; color: #94a3b8; white-space: nowrap;
   }
-  .mr-tick.is-major { color: #1e293b; font-weight: 600; }
-  .mr-tick.is-selected { color: #d97706; font-weight: 600; }
+  .mr-tick.is-major { color: #475569; font-weight: 600; }
 </style>
 
 <div style="margin-top:12px;">
@@ -262,23 +282,21 @@ function _ymLabel(idx) {
   return `${y}/${String(m).padStart(2, '0')}`;
 }
 
-function _renderMrTicks(fromIdx, toIdx) {
+function _renderMrTicks() {
   const ticksEl = $('mrTicks');
   if (!ticksEl) return;
   ticksEl.innerHTML = '';
-  // 在 0, 6, 12 三個關鍵位置印年月；其餘印小點
-  const keyIdx = new Set([0, 6, 12]);
-  keyIdx.add(fromIdx); keyIdx.add(toIdx);
-  for (const idx of keyIdx) {
-    if (idx < 0 || idx > 13) continue;
+  // 固定 3 個錨點 (左端 0 / 中段 6 / 右端 13)
+  const anchors = [0, 6, 13];
+  for (const idx of anchors) {
     const t = document.createElement('div');
-    t.className = 'mr-tick';
-    if (idx === fromIdx || idx === toIdx) t.classList.add('is-selected');
-    else if (keyIdx.has(idx)) t.classList.add('is-major');
+    t.className = 'mr-tick is-major';
     t.textContent = _ymLabel(idx);
-    // % 位置 — slider thumb 寬 18px，左右各 9px 的 inset；
-    // 用簡化線性公式 idx/13 × 100% 對齊 input range thumb 位置
-    t.style.left = `calc(${(idx / 13) * 100}% )`;
+    const pct = (idx / 13) * 100;
+    t.style.left = `${pct}%`;
+    // 左 / 右端對齊修正：translateX 換成靠邊，避免文字超出 container
+    if (idx === 0) t.style.transform = 'translateX(0)';
+    else if (idx === 13) t.style.transform = 'translateX(-100%)';
     ticksEl.appendChild(t);
   }
 }
@@ -286,22 +304,30 @@ function _renderMrTicks(fromIdx, toIdx) {
 function _updateMrUI() {
   let f = parseInt($('mrFrom').value, 10);
   let t = parseInt($('mrTo').value, 10);
-  // 確保 from < to，差至少 1 (= 至少 1 個月範圍)
   if (f >= t) { f = Math.max(0, t - 1); $('mrFrom').value = String(f); }
-  // fill 條：% 算法跟 thumb 對齊
   const lp = (f / 13) * 100;
   const rp = (t / 13) * 100;
-  $('mrFill').style.left = `calc(${lp}% )`;
+  $('mrFill').style.left = `${lp}%`;
   $('mrFill').style.width = `${rp - lp}%`;
+  // Floating thumb labels — 顯示「目前是哪一個月」
+  const fLabel = $('mrLabelFrom');
+  const tLabel = $('mrLabelTo');
+  fLabel.textContent = _ymLabel(f);
+  tLabel.textContent = _ymLabel(t);
+  fLabel.style.left = `${lp}%`;
+  tLabel.style.left = `${rp}%`;
+  // 邊緣 clamp — 避免 thumb 在最左 / 最右時 label 飄出 container
+  fLabel.style.transform = (f <= 1) ? 'translateX(0)'
+                          : (f >= 12) ? 'translateX(-100%)'
+                          : 'translateX(-50%)';
+  tLabel.style.transform = (t <= 1) ? 'translateX(0)'
+                          : (t >= 12) ? 'translateX(-100%)'
+                          : 'translateX(-50%)';
   // summary
-  const fromLabel = _ymLabel(f);
-  const toLabel = _ymLabel(t);
-  const months = (t - f) + 1;  // 含起迄 inclusive
-  $('mrSummary').textContent = months === 1
-      ? `${fromLabel}（共 1 個月）`.replace('（共 1 個月）', '')
-      : `${fromLabel} ～ ${toLabel}`;
+  const months = (t - f) + 1;
+  $('mrSummary').textContent = `${_ymLabel(f)} ～ ${_ymLabel(t)}`;
   $('mrCount').textContent = `（共 ${months} 個月）`;
-  _renderMrTicks(f, t);
+  _renderMrTicks();
 }
 
 function _setDefaultThsrRange() {
