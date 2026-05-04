@@ -23,6 +23,33 @@
   <div style="flex:1 1 320px;">
     <h3 style="margin:0 0 8px 0;">上傳新 Logo</h3>
     <input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" />
+
+    <!-- 裁切 UI — 上傳非正方形圖片時自動出現 -->
+    <div id="cropPanel" hidden style="margin-top:12px;">
+      <div class="crop-toolbar">
+        <span class="muted" style="font-size:12px;">拖曳方框與四角調整裁切範圍：</span>
+        <button class="btn btn-small" type="button" id="btnAspectSquare" title="鎖定 1:1">▢ 正方形</button>
+        <button class="btn btn-small" type="button" id="btnAspectFree" title="自由比例">↔ 自由</button>
+        <button class="btn btn-small" type="button" id="btnAspectFull" title="全圖（不裁切）">🗖 全圖</button>
+      </div>
+      <div class="crop-wrap" id="cropWrap">
+        <img id="cropImg" alt="" />
+        <div class="crop-mask" id="cropMaskTop"></div>
+        <div class="crop-mask" id="cropMaskBottom"></div>
+        <div class="crop-mask" id="cropMaskLeft"></div>
+        <div class="crop-mask" id="cropMaskRight"></div>
+        <div class="crop-sel" id="cropSel">
+          <span class="crop-handle nw"></span>
+          <span class="crop-handle ne"></span>
+          <span class="crop-handle sw"></span>
+          <span class="crop-handle se"></span>
+        </div>
+      </div>
+      <div class="muted" style="font-size:11.5px; margin-top:6px;">
+        裁切後尺寸：<span id="cropDim">—</span>
+      </div>
+    </div>
+
     <div style="margin-top:12px;">
       <button class="btn btn-primary" id="btnUpload" disabled>{{ icon('upload', size=14) }} 上傳並套用</button>
       <button class="btn" id="btnReset" {% if not has_custom %}disabled{% endif %}>{{ icon('refresh', size=14) }} 還原預設</button>
@@ -42,6 +69,36 @@
 </div>
 
 <style>
+  /* === Crop UI === */
+  .crop-toolbar {
+    display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;
+  }
+  .crop-wrap {
+    position: relative; user-select: none; max-width: 100%;
+    background: #f3f4f6; border-radius: 6px; overflow: hidden;
+    display: inline-block; line-height: 0;
+  }
+  .crop-wrap img {
+    display: block; max-width: 100%; max-height: 360px;
+    -webkit-user-drag: none; pointer-events: none;
+  }
+  .crop-mask {
+    position: absolute; background: rgba(15,23,42,0.55); pointer-events: none;
+  }
+  .crop-sel {
+    position: absolute; box-sizing: border-box;
+    border: 2px solid #2563eb; background: rgba(37,99,235,0.06);
+    cursor: move;
+  }
+  .crop-handle {
+    position: absolute; width: 14px; height: 14px;
+    background: #fff; border: 2px solid #2563eb; border-radius: 2px;
+  }
+  .crop-handle.nw { left: -8px;  top: -8px;     cursor: nwse-resize; }
+  .crop-handle.ne { right: -8px; top: -8px;     cursor: nesw-resize; }
+  .crop-handle.sw { left: -8px;  bottom: -8px;  cursor: nesw-resize; }
+  .crop-handle.se { right: -8px; bottom: -8px;  cursor: nwse-resize; }
+
   .logo-preview {
     width: 240px; height: 240px; border: 1px dashed #cbd5e1; border-radius: 12px;
     background: linear-gradient(135deg, #f8fafc 25%, transparent 25%) -10px 0,
@@ -65,21 +122,207 @@ const btnUpload = document.getElementById('btnUpload');
 const btnReset  = document.getElementById('btnReset');
 const status    = document.getElementById('statusLine');
 const previewImg = document.getElementById('logoImg');
+const cropPanel = document.getElementById('cropPanel');
+const cropImg = document.getElementById('cropImg');
+const cropWrap = document.getElementById('cropWrap');
+const cropSel = document.getElementById('cropSel');
+const cropDim = document.getElementById('cropDim');
+const cropMaskTop = document.getElementById('cropMaskTop');
+const cropMaskBottom = document.getElementById('cropMaskBottom');
+const cropMaskLeft = document.getElementById('cropMaskLeft');
+const cropMaskRight = document.getElementById('cropMaskRight');
+
+// Crop state — selection rect in DISPLAYED-image coordinates (CSS px).
+// On apply, scale back to natural pixel coords for canvas.toBlob.
+let cropState = {
+  active: false,           // crop UI active (image not square)
+  aspect: 1,               // 1 = square; 0 = free
+  selX: 0, selY: 0, selW: 0, selH: 0,  // in displayed px
+  imgW: 0, imgH: 0,        // displayed dims
+  natW: 0, natH: 0,        // natural pixel dims
+};
+
+function _refreshMask() {
+  const W = cropState.imgW, H = cropState.imgH;
+  const x = cropState.selX, y = cropState.selY,
+        w = cropState.selW, h = cropState.selH;
+  cropSel.style.left = x + 'px';
+  cropSel.style.top  = y + 'px';
+  cropSel.style.width  = w + 'px';
+  cropSel.style.height = h + 'px';
+  cropMaskTop.style.cssText    = `left:0;top:0;width:${W}px;height:${y}px`;
+  cropMaskBottom.style.cssText = `left:0;top:${y+h}px;width:${W}px;height:${H-y-h}px`;
+  cropMaskLeft.style.cssText   = `left:0;top:${y}px;width:${x}px;height:${h}px`;
+  cropMaskRight.style.cssText  = `left:${x+w}px;top:${y}px;width:${W-x-w}px;height:${h}px`;
+  // Show the natural-px size of the crop region (what gets uploaded)
+  const sx = cropState.natW / cropState.imgW;
+  const sy = cropState.natH / cropState.imgH;
+  cropDim.textContent = `${Math.round(w * sx)} × ${Math.round(h * sy)} px`;
+}
+
+function _initCropForImage() {
+  cropState.imgW = cropImg.clientWidth;
+  cropState.imgH = cropImg.clientHeight;
+  cropState.natW = cropImg.naturalWidth;
+  cropState.natH = cropImg.naturalHeight;
+  cropState.active = (cropState.natW !== cropState.natH);
+  if (!cropState.active) { cropPanel.hidden = true; return; }
+  cropPanel.hidden = false;
+  // Default selection: largest centred SQUARE within image
+  _setAspectSquare();
+}
+
+function _setAspectSquare() {
+  cropState.aspect = 1;
+  const side = Math.min(cropState.imgW, cropState.imgH);
+  cropState.selW = side; cropState.selH = side;
+  cropState.selX = Math.round((cropState.imgW - side) / 2);
+  cropState.selY = Math.round((cropState.imgH - side) / 2);
+  _refreshMask();
+}
+
+function _setAspectFree() {
+  cropState.aspect = 0;
+  // Default: 80% centred
+  cropState.selW = Math.round(cropState.imgW * 0.8);
+  cropState.selH = Math.round(cropState.imgH * 0.8);
+  cropState.selX = Math.round((cropState.imgW - cropState.selW) / 2);
+  cropState.selY = Math.round((cropState.imgH - cropState.selH) / 2);
+  _refreshMask();
+}
+
+function _setAspectFull() {
+  cropState.aspect = 0;
+  cropState.selX = 0; cropState.selY = 0;
+  cropState.selW = cropState.imgW; cropState.selH = cropState.imgH;
+  _refreshMask();
+}
+
+document.getElementById('btnAspectSquare').addEventListener('click', _setAspectSquare);
+document.getElementById('btnAspectFree').addEventListener('click', _setAspectFree);
+document.getElementById('btnAspectFull').addEventListener('click', _setAspectFull);
+
+// Drag selection box (move) + corner handles (resize)
+function _attachDragMove() {
+  let dragMode = null;       // null | 'move' | 'nw'/'ne'/'sw'/'se'
+  let startMX = 0, startMY = 0;
+  let startSel = null;
+  const onDown = (e) => {
+    if (!cropState.active) return;
+    const t = e.target;
+    if (t.classList.contains('crop-handle')) {
+      dragMode = ['nw','ne','sw','se'].find(c => t.classList.contains(c));
+    } else if (t === cropSel) {
+      dragMode = 'move';
+    } else { return; }
+    startMX = e.clientX; startMY = e.clientY;
+    startSel = {x: cropState.selX, y: cropState.selY,
+                w: cropState.selW, h: cropState.selH};
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  };
+  const onMove = (e) => {
+    const dx = e.clientX - startMX;
+    const dy = e.clientY - startMY;
+    let {x, y, w, h} = startSel;
+    if (dragMode === 'move') {
+      x = Math.max(0, Math.min(cropState.imgW - w, x + dx));
+      y = Math.max(0, Math.min(cropState.imgH - h, y + dy));
+    } else {
+      // Resize from a corner — adjust two of (x,y,w,h) accordingly
+      if (dragMode.includes('w')) { x = startSel.x + dx; w = startSel.w - dx; }
+      if (dragMode.includes('e')) { w = startSel.w + dx; }
+      if (dragMode.includes('n')) { y = startSel.y + dy; h = startSel.h - dy; }
+      if (dragMode.includes('s')) { h = startSel.h + dy; }
+      // Lock aspect if needed
+      if (cropState.aspect === 1) {
+        // Use whichever dimension changed more (driven dim)
+        const useW = Math.abs(w - startSel.w) > Math.abs(h - startSel.h);
+        if (useW) {
+          const oldH = h; h = w;
+          if (dragMode.includes('n')) y = startSel.y + (oldH - h);
+        } else {
+          const oldW = w; w = h;
+          if (dragMode.includes('w')) x = startSel.x + (oldW - w);
+        }
+      }
+      // Clamp into image
+      if (w < 20) w = 20;
+      if (h < 20) h = 20;
+      if (x < 0) { w += x; x = 0; }
+      if (y < 0) { h += y; y = 0; }
+      if (x + w > cropState.imgW) w = cropState.imgW - x;
+      if (y + h > cropState.imgH) h = cropState.imgH - y;
+      if (cropState.aspect === 1) {
+        const side = Math.min(w, h);
+        w = side; h = side;
+        if (x + w > cropState.imgW) x = cropState.imgW - w;
+        if (y + h > cropState.imgH) y = cropState.imgH - h;
+      }
+    }
+    cropState.selX = x; cropState.selY = y;
+    cropState.selW = w; cropState.selH = h;
+    _refreshMask();
+  };
+  const onUp = () => {
+    dragMode = null;
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  };
+  cropSel.addEventListener('mousedown', onDown);
+  cropSel.querySelectorAll('.crop-handle').forEach(h => h.addEventListener('mousedown', onDown));
+}
+_attachDragMove();
+
+// Crop the currently-loaded image to the selection rect, return as Blob (PNG)
+function _cropToBlob() {
+  return new Promise((resolve) => {
+    if (!cropState.active) {
+      // No crop — return original file as blob
+      resolve(fileInput.files[0]);
+      return;
+    }
+    const sx = cropState.natW / cropState.imgW;
+    const sy = cropState.natH / cropState.imgH;
+    const cx = Math.round(cropState.selX * sx);
+    const cy = Math.round(cropState.selY * sy);
+    const cw = Math.round(cropState.selW * sx);
+    const ch = Math.round(cropState.selH * sy);
+    const canvas = document.createElement('canvas');
+    canvas.width = cw; canvas.height = ch;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(cropImg, cx, cy, cw, ch, 0, 0, cw, ch);
+    canvas.toBlob((blob) => resolve(blob), 'image/png');
+  });
+}
 
 fileInput.addEventListener('change', () => {
   btnUpload.disabled = !fileInput.files.length;
-  if (fileInput.files.length) {
-    // Local preview before upload
-    const r = new FileReader();
-    r.onload = (ev) => { previewImg.src = ev.target.result; };
-    r.readAsDataURL(fileInput.files[0]);
+  if (!fileInput.files.length) {
+    cropPanel.hidden = true; cropState.active = false;
+    return;
   }
+  const r = new FileReader();
+  r.onload = (ev) => {
+    previewImg.src = ev.target.result;
+    cropImg.src = ev.target.result;
+    // Wait for image to load to get natural dims
+    cropImg.onload = () => {
+      _initCropForImage();
+    };
+  };
+  r.readAsDataURL(fileInput.files[0]);
 });
 
 btnUpload.addEventListener('click', async () => {
   if (!fileInput.files.length) return;
+  const blob = await _cropToBlob();
+  const f = fileInput.files[0];
+  const ext = (f.name.match(/\.[^.]+$/) || ['.png'])[0];
+  const filename = (cropState.active ? 'cropped-' : '') + (f.name.replace(/\.[^.]+$/, '') || 'logo') + (cropState.active ? '.png' : ext);
   const fd = new FormData();
-  fd.append('file', fileInput.files[0]);
+  fd.append('file', blob, filename);
   btnUpload.disabled = true;
   status.innerHTML = '<span class="muted">上傳中…</span>';
   try {
