@@ -89,7 +89,10 @@ async def submit(
         saved.append((sp, f.filename))
 
     def run(job):
-        outs: list[Path] = []
+        # `outs_meta` keeps (current_path, intended_base, src_tag) so we can
+        # post-process THSR collisions: if two files share the same date base
+        # we want BOTH renamed to `_01` / `_02` (not just the second one).
+        outs_meta: list[tuple[Path, str, str]] = []
         bad: list[str] = []
         for fi, (sp, orig) in enumerate(saved):
             job.message = f"解除 {orig}"
@@ -123,18 +126,42 @@ async def submit(
                 if used_src == "thsr":
                     # 用 used_pw 當檔名 — 但日期格式可能含 / 或 . 等檔名禁字，
                     # sanitize 成 _。例：「2024/03/15」→「2024_03_15.pdf」
-                    safe_name = re.sub(r"[^A-Za-z0-9_-]", "_", used_pw)
-                    op = bdir / f"{safe_name}.pdf"
-                    n_dup = 1
-                    while op.exists():
-                        n_dup += 1
-                        op = bdir / f"{safe_name}_{n_dup}.pdf"
+                    base = re.sub(r"[^A-Za-z0-9_-]", "_", used_pw)
                 else:
-                    op = bdir / f"{Path(orig).stem}_decrypted.pdf"
+                    base = f"{Path(orig).stem}_decrypted"
+                # Use a unique temp name during writing; final name is
+                # decided after the loop once we know all collisions.
+                tmp = bdir / f"__tmp_{fi:03d}_{base}.pdf"
                 # Saving with encryption=NONE strips all protection.
-                doc.save(str(op), encryption=fitz.PDF_ENCRYPT_NONE,
+                doc.save(str(tmp), encryption=fitz.PDF_ENCRYPT_NONE,
                          garbage=3, deflate=True)
-                outs.append(op)
+                outs_meta.append((tmp, base, used_src or ""))
+
+        # Resolve final names. Group THSR results by intended base; if a base
+        # appears more than once, suffix EVERY collision member with `_NN`
+        # (zero-padded to width of the larger group, min 2).
+        from collections import defaultdict
+        thsr_groups: dict[str, list[int]] = defaultdict(list)
+        for idx, (_p, base, src) in enumerate(outs_meta):
+            if src == "thsr":
+                thsr_groups[base].append(idx)
+        outs: list[Path] = []
+        for idx, (tmp, base, src) in enumerate(outs_meta):
+            if src == "thsr" and len(thsr_groups[base]) > 1:
+                grp = thsr_groups[base]
+                width = max(2, len(str(len(grp))))
+                ord_in_group = grp.index(idx) + 1
+                final = bdir / f"{base}_{str(ord_in_group).zfill(width)}.pdf"
+            else:
+                final = bdir / f"{base}.pdf"
+                # Defensive: if some non-THSR collision somehow still happens
+                # (e.g. duplicated original filename), fall back to numeric.
+                n_dup = 1
+                while final.exists():
+                    n_dup += 1
+                    final = bdir / f"{base}_{n_dup}.pdf"
+            tmp.rename(final)
+            outs.append(final)
         if bad and not outs:
             raise RuntimeError(f"密碼不正確：{', '.join(bad)}")
         if bad:

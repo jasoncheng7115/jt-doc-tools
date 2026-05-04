@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
+{% from "components/llm_gate.html" import llm_gate, llm_gate_styles with context %}
 {% block title %}文件去識別化 · {{ app_name }}{% endblock %}
 {% block head %}
+{{ llm_gate_styles() }}
 <style>
 .dd-hint { background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px;
   padding: 10px 14px; font-size: 13px; color:#075985; margin: 10px 0; }
@@ -170,6 +172,12 @@
     <summary class="muted" style="cursor:pointer; font-size:13px;">+ 自訂 regex（一行一條，格式：<code>標籤|正則式</code>）</summary>
     <textarea id="ddCustom" placeholder="員編|EMP\d{5}&#10;合約號|CON-\d{4}-\d{3}"></textarea>
   </details>
+
+  {{ llm_gate('doc-deident', llm_enabled, llm_model, mode='augment',
+              feature_label='LLM 補偵測（找 regex 漏掉的）',
+              feature_desc='regex 抓不到的 context-sensitive 案例：人名（含「先生 / 經理」前綴）、職稱、客戶代號、產品代號、特殊地址簡稱等。會多送一次 LLM call，會稍慢但找回率高。',
+              input_id='ddLlmAugment') }}
+
   <div style="margin-top:10px;">
     <button class="btn btn-primary" id="btnDetect">{{ icon('eye', size=14) }} 偵測敏感資料</button>
     <span id="detectStatus" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
@@ -285,9 +293,12 @@ $('btnDetect').addEventListener('click', async () => {
   fd.append('file', currentFile);
   fd.append('types', types);
   fd.append('custom', custom);
+  const llmAug = $('ddLlmAugment');
+  if (llmAug && llmAug.checked) fd.append('llm_augment', '1');
   try {
-    const r = await fu.upload('/tools/doc-deident/detect', fd, {processingLabel: '偵測敏感資料中…'});
-    if (!r.ok) { $('detectStatus').textContent = '失敗：' + await r.text(); return; }
+    const procLabel = (llmAug && llmAug.checked) ? '偵測 + LLM 補偵測中…' : '偵測敏感資料中…';
+    const r = await fu.upload('/tools/doc-deident/detect', fd, {processingLabel: procLabel});
+    if (!r.ok) { $('detectStatus').textContent = '失敗：' + await jtdtError(r); return; }
     detectResult = await r.json();
     renderDetect(detectResult);
     $('resultPanel').hidden = false;

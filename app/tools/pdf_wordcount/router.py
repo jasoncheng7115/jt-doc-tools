@@ -10,7 +10,7 @@ from collections import Counter
 from pathlib import Path
 
 import fitz
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from ...config import settings
@@ -191,15 +191,91 @@ def _analyze_pdf(data: bytes, filename: str = "document.pdf") -> dict:
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     templates = request.app.state.templates
-    return templates.TemplateResponse("pdf_wordcount.html", {"request": request})
+    from ...core.llm_settings import llm_settings
+    return templates.TemplateResponse("pdf_wordcount.html", {
+        "request": request,
+        "llm_enabled": llm_settings.is_enabled(),
+        "llm_model": llm_settings.get_model_for("pdf-wordcount") if llm_settings.is_enabled() else "",
+    })
 
 
 @router.post("/analyze")
-async def analyze(file: UploadFile = File(...)):
+async def analyze(
+    file: UploadFile = File(...),
+    llm_summarize: str = Form(""),  # "1" → 加 LLM 摘要 + 關鍵字
+):
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF")
     data = await file.read()
-    return JSONResponse(_analyze_pdf(data, file.filename or "document.pdf"))
+    result = _analyze_pdf(data, file.filename or "document.pdf")
+    if str(llm_summarize).lower() in ("1", "true", "on", "yes"):
+        try:
+            llm_extra = await _llm_summarize(data)
+            if llm_extra:
+                result["llm"] = llm_extra
+        except Exception as exc:
+            import logging as _lg
+            _lg.getLogger(__name__).warning("LLM summarize failed: %s", exc)
+            result["llm"] = {"error": str(exc)}
+    return JSONResponse(result)
+
+
+async def _llm_summarize(pdf_bytes: bytes) -> dict:
+    """Extract document text + ask LLM for summary + keywords. Returns
+    {summary: str, keywords: [str], model: str} or empty dict on failure."""
+    from ...core.llm_settings import llm_settings as _llms
+    import asyncio as _asyncio
+    client = _llms.make_client()
+    if client is None:
+        return {}
+    model = _llms.get_model_for("pdf-wordcount")
+    # Extract text
+    import fitz
+    text_parts = []
+    try:
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+            for page in doc:
+                text_parts.append(page.get_text("text") or "")
+    except Exception:
+        return {}
+    full_text = "\n\n".join(text_parts).strip()
+    if not full_text:
+        return {}
+    # Truncate to manageable size for LLM
+    max_chars = 12000
+    if len(full_text) > max_chars:
+        full_text = full_text[:max_chars] + "\n\n…（後續省略）"
+    prompt = (
+        "你是文件助手。請根據下面文件內容，產出 JSON：\n"
+        "  {\"summary\": \"3-5 句重點摘要（不要超過 200 字）\", "
+        "\"keywords\": [\"前 10 大重要概念 / 名詞，由重要到次要排序\"]}\n"
+        "**只能回 JSON，不要 markdown / 解釋 / 前綴 / 後綴 / ```json``` 包裝。**\n\n"
+        f"文件內容：\n{full_text}"
+    )
+    def _call():
+        return client.text_query(prompt=prompt, model=model,
+                                  temperature=0.0, think=False)
+    try:
+        resp = await _asyncio.to_thread(_call)
+    except Exception as e:
+        return {"error": str(e), "model": model}
+    raw = (resp or "").strip()
+    import re as _re
+    if raw.startswith("```"):
+        raw = _re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=_re.MULTILINE)
+    try:
+        import json as _json
+        parsed = _json.loads(raw)
+        if not isinstance(parsed, dict):
+            return {"error": "LLM 回應非 JSON object", "model": model}
+        return {
+            "summary": str(parsed.get("summary") or "").strip(),
+            "keywords": [str(k) for k in (parsed.get("keywords") or [])][:15],
+            "model": model,
+        }
+    except Exception as e:
+        return {"error": f"LLM 回應解析失敗：{e}", "model": model,
+                "raw": raw[:300]}
 
 
 @router.post("/api/pdf-wordcount")

@@ -7,11 +7,13 @@ then the same line-level diff runs against the rendered text.
 from __future__ import annotations
 
 import difflib
+import json
+import re
 import uuid
 from pathlib import Path
 
 import fitz
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 
 from ...config import settings
@@ -24,7 +26,90 @@ router = APIRouter()
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     templates = request.app.state.templates
-    return templates.TemplateResponse("pdf_diff.html", {"request": request})
+    from ...core.llm_settings import llm_settings
+    return templates.TemplateResponse("pdf_diff.html", {
+        "request": request,
+        "llm_enabled": llm_settings.is_enabled(),
+        "llm_model": llm_settings.get_model_for("doc-diff") if llm_settings.is_enabled() else "",
+    })
+
+
+async def _llm_summarize_diff(pages_out: list[dict], totals: dict,
+                              fname_a: str, fname_b: str) -> dict:
+    """Build a compact diff text and ask LLM for a Chinese change summary.
+
+    Returns {summary, highlights: [str], model} or {error, model} on failure.
+    """
+    from ...core.llm_settings import llm_settings as _llms
+    import asyncio as _asyncio
+    client = _llms.make_client()
+    if client is None:
+        return {}
+    model = _llms.get_model_for("doc-diff")
+    # Build a textual diff (only non-equal lines, capped at ~12k chars).
+    snippets: list[str] = []
+    cap = 12000
+    used = 0
+    for pg in pages_out:
+        d = pg.get("diff") or {}
+        a_lines = d.get("a") or []
+        b_lines = d.get("b") or []
+        page_chunks: list[str] = []
+        for i in range(min(len(a_lines), len(b_lines))):
+            ta = a_lines[i].get("tag")
+            tb = b_lines[i].get("tag")
+            if ta == "equal" and tb == "equal":
+                continue
+            la = a_lines[i].get("text") or ""
+            lb = b_lines[i].get("text") or ""
+            if ta in ("delete", "replace") and la:
+                page_chunks.append(f"- {la}")
+            if tb in ("insert", "replace") and lb:
+                page_chunks.append(f"+ {lb}")
+        if page_chunks:
+            block = f"\n[第 {pg['index']} 頁]\n" + "\n".join(page_chunks)
+            if used + len(block) > cap:
+                snippets.append(block[:max(0, cap - used)])
+                snippets.append("\n…（後續省略）")
+                break
+            snippets.append(block)
+            used += len(block)
+    diff_text = "".join(snippets).strip()
+    if not diff_text:
+        return {"summary": "兩份文件內容完全相同，沒有差異需要描述。",
+                "highlights": [], "model": model}
+    prompt = (
+        f"你是文件審閱助手。下面是「{fname_a}」與「{fname_b}」"
+        "之間的差異 (- 表示舊版有、+ 表示新版有)。"
+        "請用繁體中文寫出 3-5 句話的整體變動摘要 (不超過 200 字)，"
+        "並列出最重要的 3-7 個重點 (條列短句)。\n"
+        f"統計：新增 {totals.get('added',0)} 行 / 刪除 {totals.get('removed',0)} 行 / 修改 {totals.get('changed',0)} 行。\n"
+        "**只能回 JSON，不要 markdown / 解釋 / ```json``` 包裝。**\n"
+        "格式：{\"summary\": \"...\", \"highlights\": [\"...\", \"...\"]}\n\n"
+        f"差異內容：\n{diff_text}"
+    )
+    def _call():
+        return client.text_query(prompt=prompt, model=model,
+                                  temperature=0.0, think=False)
+    try:
+        resp = await _asyncio.to_thread(_call)
+    except Exception as e:
+        return {"error": str(e), "model": model}
+    raw = (resp or "").strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE)
+    try:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            return {"error": "LLM 回應非 JSON object", "model": model}
+        return {
+            "summary":    str(parsed.get("summary") or "").strip(),
+            "highlights": [str(x) for x in (parsed.get("highlights") or [])][:10],
+            "model":      model,
+        }
+    except Exception as e:
+        return {"error": f"LLM 回應解析失敗：{e}", "model": model,
+                "raw": raw[:300]}
 
 
 def _ensure_pdf(upload: UploadFile, data: bytes, uid: str, slot: str) -> Path:
@@ -188,6 +273,7 @@ def _metadata_diff(a_meta: dict, b_meta: dict) -> list[dict]:
 async def compare(
     file_a: UploadFile = File(...),
     file_b: UploadFile = File(...),
+    llm_summarize: str = Form(""),
 ):
     data_a = await file_a.read()
     data_b = await file_b.read()
@@ -229,7 +315,7 @@ async def compare(
         return a_page_count, b_page_count, pages_out, totals, meta_diff
     a_page_count, b_page_count, pages_out, totals, meta_diff = await _asyncio.to_thread(_do_diff)
 
-    return {
+    out = {
         "filename_a": file_a.filename,
         "filename_b": file_b.filename,
         "pages": pages_out,
@@ -238,3 +324,16 @@ async def compare(
         "totals": totals,
         "metadata_diff": meta_diff,
     }
+    if str(llm_summarize).lower() in ("1", "true", "on", "yes"):
+        try:
+            llm_extra = await _llm_summarize_diff(
+                pages_out, totals,
+                file_a.filename or "(舊版)",
+                file_b.filename or "(新版)")
+            if llm_extra:
+                out["llm"] = llm_extra
+        except Exception as exc:
+            import logging as _lg
+            _lg.getLogger(__name__).warning("LLM diff summarize failed: %s", exc)
+            out["llm"] = {"error": str(exc)}
+    return out

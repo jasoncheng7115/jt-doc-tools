@@ -1,8 +1,20 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
+{% from "components/llm_gate.html" import llm_gate, llm_gate_styles with context %}
 {% block title %}文件差異比對 · {{ app_name }}{% endblock %}
 {% block head %}
+{{ llm_gate_styles() }}
 <style>
+.df-llm-card { background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%);
+  border:1px solid #93c5fd; border-radius:10px; padding:14px 16px; margin: 10px 0 16px; }
+.df-llm-card h3 { margin:0 0 8px; font-size:14.5px; color:#1e3a8a;
+  display:flex; align-items:center; gap:6px; }
+.df-llm-summary { font-size:14px; line-height:1.7; color:#0f172a;
+  background:#fff; padding:10px 14px; border-radius:6px; border:1px solid #bfdbfe; }
+.df-llm-hl { margin:10px 0 0 18px; font-size:13px; color:#1e293b; }
+.df-llm-hl li { margin: 3px 0; }
+.df-llm-err { background:#fef3c7; border:1px solid #fde68a; color:#78350f;
+  padding:8px 12px; border-radius:6px; font-size:12.5px; }
 .df-uploads { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 720px) { .df-uploads { grid-template-columns: 1fr; } }
 .df-upload-slot { }
@@ -68,6 +80,12 @@
       {% with upload_id='dfB', accept='.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp' %}{% include "components/file_upload.html" %}{% endwith %}
     </div>
   </div>
+
+  {{ llm_gate('doc-diff', llm_enabled, llm_model, mode='augment',
+              feature_label='LLM 變動摘要',
+              feature_desc='比對完成後額外呼叫地端 LLM，產出整體變動的中文摘要與重點清單（差異片段會送往設定的 LLM server，請確認為內網地端服務）。',
+              input_id='dfLlmSum') }}
+
   <div style="margin-top:12px;">
     <button class="btn btn-primary" id="btnCompare">{{ icon('diff', size=14) }} 開始比對</button>
     <span id="status" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
@@ -76,6 +94,14 @@
 
 <div class="panel" id="resultPanel" hidden>
   <h2 style="margin-top:0;">2. 比對結果</h2>
+  <div id="dfLlmPanel" class="df-llm-card" hidden>
+    <h3>{{ icon('globe', size=14) }} LLM 變動摘要
+      <span id="dfLlmModel" style="margin-left:auto;font-size:11.5px;color:#3b82f6;font-weight:normal;"></span>
+    </h3>
+    <div id="dfLlmErr" class="df-llm-err" hidden></div>
+    <div id="dfLlmSummary" class="df-llm-summary" hidden></div>
+    <ul id="dfLlmHl" class="df-llm-hl" hidden></ul>
+  </div>
   <div class="df-summary" id="sumBox"></div>
   <div class="df-meta" id="metaBox" hidden>
     <h3 style="margin:10px 0 4px; font-size:14px;">Metadata 差異</h3>
@@ -104,6 +130,8 @@ $('btnCompare').addEventListener('click', async () => {
   $('resultPanel').hidden = true;
   const fd = new FormData();
   fd.append('file_a', fileA); fd.append('file_b', fileB);
+  const llmCb = $('dfLlmSum');
+  if (llmCb && llmCb.checked) fd.append('llm_summarize', '1');
   const r = await fuA.upload('/tools/doc-diff/compare', fd, {processingLabel: '比對中…'});
   if (!r.ok) { $('status').textContent = '失敗：' + await r.text(); return; }
   const d = await r.json();
@@ -111,7 +139,34 @@ $('btnCompare').addEventListener('click', async () => {
   renderResult(d);
 });
 
+function renderLlm(llm) {
+  const panel = $('dfLlmPanel');
+  const sumEl = $('dfLlmSummary');
+  const hlEl  = $('dfLlmHl');
+  const errEl = $('dfLlmErr');
+  const modelEl = $('dfLlmModel');
+  panel.hidden = true;
+  sumEl.hidden = true; hlEl.hidden = true; errEl.hidden = true;
+  if (!llm) return;
+  panel.hidden = false;
+  modelEl.textContent = llm.model ? '模型 ' + llm.model : '';
+  if (llm.error) {
+    errEl.textContent = 'LLM 處理失敗：' + llm.error;
+    errEl.hidden = false;
+    return;
+  }
+  if (llm.summary) {
+    sumEl.textContent = llm.summary;
+    sumEl.hidden = false;
+  }
+  if (Array.isArray(llm.highlights) && llm.highlights.length) {
+    hlEl.innerHTML = llm.highlights.map(h => '<li>' + esc(h) + '</li>').join('');
+    hlEl.hidden = false;
+  }
+}
+
 function renderResult(d) {
+  renderLlm(d.llm);
   const t = d.totals || {};
   const ca = t.chars_a || 0, cb = t.chars_b || 0;
   const delta = cb - ca;

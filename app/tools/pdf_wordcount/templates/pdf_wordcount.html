@@ -1,8 +1,22 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
+{% from "components/llm_gate.html" import llm_gate, llm_gate_styles with context %}
 {% block title %}字數統計 · {{ app_name }}{% endblock %}
 {% block head %}
+{{ llm_gate_styles() }}
 <style>
+.wc-llm-card { background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%);
+  border:1px solid #93c5fd; border-radius:10px; padding:14px 16px; margin-top:14px; }
+.wc-llm-card h3 { margin:0 0 8px; font-size:14.5px; color:#1e3a8a;
+  display:flex; align-items:center; gap:6px; }
+.wc-llm-summary { font-size:14px; line-height:1.7; color:#0f172a;
+  background:#fff; padding:10px 14px; border-radius:6px; border:1px solid #bfdbfe; }
+.wc-llm-kw { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.wc-llm-kw .kw { background:#dbeafe; color:#1e40af; padding:3px 10px;
+  border-radius:12px; font-size:12.5px; font-weight:600; }
+.wc-llm-kw .kw:nth-child(-n+3) { background:#fef3c7; color:#92400e; }
+.wc-llm-err { background:#fef3c7; border:1px solid #fde68a; color:#78350f;
+  padding:8px 12px; border-radius:6px; font-size:12.5px; }
 .wc-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px; margin-top: 12px; }
 .wc-stat { border-radius:10px; padding: 12px 14px; border:1px solid; position: relative; overflow: hidden; }
@@ -84,6 +98,12 @@
 <div class="panel">
   <h2 style="margin-top:0;">1. 上傳 PDF</h2>
   {% with upload_id='wcUp', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+
+  {{ llm_gate('pdf-wordcount', llm_enabled, llm_model, mode='augment',
+              feature_label='LLM 摘要 + 關鍵字',
+              feature_desc='上傳後額外呼叫地端 LLM，產出 3-5 句重點摘要與前 10 大關鍵字（會將文件內容送往設定的 LLM server，請確認為內網地端服務）。',
+              input_id='wcLlmSum') }}
+
   <div id="wcLoading" class="muted" style="margin-top:10px; font-size:12.5px;" hidden>
     {{ icon('refresh', size=14) }} 分析中，請稍候…
   </div>
@@ -143,6 +163,15 @@
     <button class="btn" id="btnJson">{{ icon('download', size=12) }} 完整 JSON</button>
     <button class="btn" id="btnMd">{{ icon('download', size=12) }} Markdown 報表</button>
   </div>
+</div>
+
+<div id="wcLlmPanel" class="wc-llm-card" hidden>
+  <h3>{{ icon('globe', size=14) }} LLM 摘要與關鍵字
+    <span class="hint" id="wcLlmModel" style="font-size:11.5px; color:#3b82f6; margin-left:auto; font-weight:normal;"></span>
+  </h3>
+  <div id="wcLlmErr" class="wc-llm-err" hidden></div>
+  <div id="wcLlmSummary" class="wc-llm-summary" hidden></div>
+  <div id="wcLlmKw" class="wc-llm-kw" hidden></div>
 </div>
 
 <div class="wc-grid">
@@ -214,6 +243,8 @@ const fu = new FileUpload($('wcUp'), async (f) => {
 
   const fd = new FormData();
   fd.append('file', f);
+  const llmCb = $('wcLlmSum');
+  if (llmCb && llmCb.checked) fd.append('llm_summarize', '1');
   let resp;
   try {
     resp = await fetch('/tools/pdf-wordcount/analyze', { method: 'POST', body: fd });
@@ -264,6 +295,34 @@ function render(r) {
   drawFreq('chartFreqCjk',    'emptyCjk',    r.freq.cjk_chars,   '#3b82f6', '#1e40af');
   drawFreq('chartFreqBigram', 'emptyBigram', r.freq.cjk_bigrams, '#10b981', '#0d9488');
   drawFreq('chartFreqEn',     'emptyEn',     r.freq.en_words,    '#a855f7', '#7c3aed');
+  renderLlm(r.llm);
+}
+
+function renderLlm(llm) {
+  const panel = $('wcLlmPanel');
+  const sumEl = $('wcLlmSummary');
+  const kwEl  = $('wcLlmKw');
+  const errEl = $('wcLlmErr');
+  const modelEl = $('wcLlmModel');
+  panel.hidden = true;
+  sumEl.hidden = true; kwEl.hidden = true; errEl.hidden = true;
+  if (!llm) return;
+  panel.hidden = false;
+  modelEl.textContent = llm.model ? '模型 ' + llm.model : '';
+  if (llm.error) {
+    errEl.textContent = 'LLM 處理失敗:' + llm.error;
+    errEl.hidden = false;
+    return;
+  }
+  if (llm.summary) {
+    sumEl.textContent = llm.summary;
+    sumEl.hidden = false;
+  }
+  if (Array.isArray(llm.keywords) && llm.keywords.length) {
+    kwEl.innerHTML = llm.keywords.map(k =>
+      `<span class="kw">${escapeXml(k)}</span>`).join('');
+    kwEl.hidden = false;
+  }
 }
 
 // ---- Chart 1: per-page bar chart ----
