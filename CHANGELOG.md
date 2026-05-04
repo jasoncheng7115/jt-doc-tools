@@ -4,6 +4,14 @@
 
 ---
 
+## [1.4.15] - 2026-05-04
+
+### #6 偵錯強化
+
+- pdf-editor backend Pass 2 text insert log 多印 `page.rotation` / `page.mediabox` / `page.rect`，以便診斷「文字消失」是不是被 PDF page rotation 雷到（rotated page 用 insert_text 時座標系跟 unrotated 不一樣）。
+
+---
+
 ## [1.4.14] - 2026-05-04
 
 ### 改善
