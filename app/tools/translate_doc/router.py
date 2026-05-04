@@ -237,7 +237,14 @@ async def translate_batch(request: Request):
     target_lang = str(body.get("target_lang") or "zh-TW")
     if source_lang == "auto":
         source_lang = _detect_language("\n".join(sentences[:50]))
-    results = _translate_sentences(sentences, source_lang, target_lang)
+    # CRITICAL: 不能直接呼叫 _translate_sentences — 它是同步的 (內部
+    # ThreadPoolExecutor + 阻塞 .map())，會卡住整個 async event loop →
+    # 翻譯期間其他 request 全部排隊（v1.4.13 客戶回報：翻譯時開新分頁
+    # 進其他工具都打不開）。用 asyncio.to_thread 把它送到 default
+    # executor 跑，async loop 就能繼續處理其他請求。
+    import asyncio as _asyncio
+    results = await _asyncio.to_thread(
+        _translate_sentences, sentences, source_lang, target_lang)
     return {
         "source_lang": source_lang,
         "target_lang": target_lang,
@@ -257,7 +264,9 @@ async def translate_one(request: Request):
     target_lang = str(body.get("target_lang") or "zh-TW")
     if source_lang == "auto":
         source_lang = _detect_language(src)
-    results = _translate_sentences([src], source_lang, target_lang)
+    import asyncio as _asyncio
+    results = await _asyncio.to_thread(
+        _translate_sentences, [src], source_lang, target_lang)
     return results[0] if results else {"src": src, "translated": "",
                                        "error": "no result"}
 
@@ -299,7 +308,14 @@ async def api_translate_doc(request: Request):
     target_lang = str(body.get("target_lang") or "zh-TW")
     if source_lang == "auto":
         source_lang = _detect_language(text)
-    results = _translate_sentences(sentences, source_lang, target_lang)
+    # CRITICAL: 不能直接呼叫 _translate_sentences — 它是同步的 (內部
+    # ThreadPoolExecutor + 阻塞 .map())，會卡住整個 async event loop →
+    # 翻譯期間其他 request 全部排隊（v1.4.13 客戶回報：翻譯時開新分頁
+    # 進其他工具都打不開）。用 asyncio.to_thread 把它送到 default
+    # executor 跑，async loop 就能繼續處理其他請求。
+    import asyncio as _asyncio
+    results = await _asyncio.to_thread(
+        _translate_sentences, sentences, source_lang, target_lang)
     return {
         "source_lang": source_lang,
         "target_lang": target_lang,

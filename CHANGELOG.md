@@ -4,6 +4,24 @@
 
 ---
 
+## [1.4.13] - 2026-05-04
+
+### 緊急修正
+
+- **逐句翻譯阻塞整個 server**（客戶 / 同事回報）：`translate-doc` 的 `_translate_sentences` 是同步函數（內部用 ThreadPoolExecutor + 阻塞 `.map()`），但被 `async def` 路由直接呼叫 → 翻譯期間整個 async event loop 被卡住 → 使用者開新分頁進其他工具完全沒回應。修法：3 個 endpoint（`translate-batch` / `translate-one` / `api/translate-doc`）全部改用 `await asyncio.to_thread(...)` 把翻譯送到 default executor 跑，event loop 立刻可以服務其他請求。
+
+### 新增
+
+- **API 使用手冊**（`API.md`）：完整記錄所有 `/api/*` 對外 endpoint、認證方式（Bearer token）、即時回應 vs job 模式、整合範例（GitLab CI / Python / Shell / Node.js），以及反向代理 / 速率限制建議。
+- **網站新增「11. 逐句翻譯（接地端 LLM）」showcase**：用實際翻譯介面截圖展示，強調「不上雲、文件內容絕不外傳」的 on-prem LLM 賣點。
+
+### 改善
+
+- **網站 / README / 工具描述：「接 LLM」→「接地端 LLM」**：明確強調建議用本機 Ollama / vLLM / LM Studio 等，避免雲端 API 把文件內容外傳。
+- **pdf-editor #6 後續偵錯**：backend Pass 2 text insert 加入詳細 INFO log（page / rect / text / font / has_orig_bbox），日後若有「文字消失」客訴可從 log 直接看到實際送進 PyMuPDF 的內容。
+
+---
+
 ## [1.4.12] - 2026-05-04
 
 ### 新增

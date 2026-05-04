@@ -213,7 +213,7 @@
           </li>
           <li>
             <span class="fl-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a14 14 0 0 1 0 18a14 14 0 0 1 0-18"/></svg></span>
-            <div class="fl-text"><span class="fn">逐句翻譯</span><span class="fd">接 LLM 逐句翻譯，左原文右譯文並排對照；可貼文字或上傳 PDF / DOCX / TXT；目標語言預設繁中可選</span></div>
+            <div class="fl-text"><span class="fn">逐句翻譯</span><span class="fd">接地端 LLM 逐句翻譯，左原文右譯文並排對照；可貼文字或上傳 PDF / DOCX / TXT；目標語言預設繁中可選</span></div>
           </li>
         </ul>
       </article>
@@ -483,6 +483,24 @@
         </div>
         <div class="ss-img">
           <img src="screenshots/fonts.png" alt="字型管理 — 標準 / 內建 / 系統 / 自訂上傳" loading="lazy">
+        </div>
+      </figure>
+
+      <figure class="ss-row">
+        <div class="ss-text">
+          <div class="ss-num">11</div>
+          <h3>逐句翻譯（接地端 LLM）</h3>
+          <p>把長段文字 / PDF / DOCX / TXT 分句後送進公司內網架的 LLM Server（Ollama / vLLM / LM Studio…），左原文右譯文並排對照、每句可單獨重譯。<b>不上雲、文件內容絕不外傳</b>，符合個資法、營業秘密、客戶 NDA 要求。並行翻譯（預設 4 並發）讓批次處理快 4-8 倍；每格小複製按鈕、整列 hover 高亮、表頭顯示來源 / 目標語言 + 字數。</p>
+          <div class="ss-tags">
+            <span class="tag">地端 LLM</span>
+            <span class="tag">原文 / 譯文並排</span>
+            <span class="tag">並行翻譯</span>
+            <span class="tag">逐句重譯</span>
+            <span class="tag">PDF / DOCX / TXT</span>
+          </div>
+        </div>
+        <div class="ss-img">
+          <img src="screenshots/translate-doc.png" alt="逐句翻譯 — 接地端 LLM 並排對照，文件內容不外傳" loading="lazy">
         </div>
       </figure>
 
