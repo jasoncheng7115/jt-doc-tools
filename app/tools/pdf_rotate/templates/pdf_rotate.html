@@ -25,7 +25,7 @@
       </label>
       <label class="option-card">
         <span class="opt-ic">{{ icon('rotate-ccw', size=28) }}</span>
-        <span class="opt-label">逆時針 90°</span>
+        <span class="opt-label">270°</span>
         <input type="radio" name="mode" value="rotate-270" />
       </label>
       <label class="option-card">
@@ -231,12 +231,12 @@ function renderThumbs() {
        </div>
        <div class="page-num">原第 ${p.page} 頁</div>
        <div class="page-tools" data-page-tools>
-         <button type="button" data-pmode="rotate-270" title="逆時針 90°">↺</button>
-         <button type="button" data-pmode="rotate-90"  title="順時針 90°">↻</button>
+         <button type="button" data-pmode="none"       title="此頁不轉（0°）" class="clear-btn">0°</button>
+         <button type="button" data-pmode="rotate-90"  title="順時針 90°">90°</button>
          <button type="button" data-pmode="rotate-180" title="180°">180°</button>
+         <button type="button" data-pmode="rotate-270" title="逆時針 90°（= 270°）">270°</button>
          <button type="button" data-pmode="flip-h"     title="左右鏡向">⇆</button>
          <button type="button" data-pmode="flip-v"     title="上下鏡向">⇅</button>
-         <button type="button" data-pmode="none"       title="此頁不轉" class="clear-btn">─</button>
        </div>
      </div>`
   ).join('');

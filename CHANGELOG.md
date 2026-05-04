@@ -4,6 +4,15 @@
 
 ---
 
+## [1.4.4] - 2026-05-04
+
+### 修正
+
+- **企業 Logo 裁切框看不見**：`cropPanel` 還在 `hidden` 時讀 `cropImg.clientWidth` 回 0 → 後面所有計算 NaN → 藍色拖曳框 `width:0` 看不見。修法：先 unhide 再用 `requestAnimationFrame` 等 layout 完成才量。順便處理 cached image 不觸發 onload 的 corner case。
+- **註解清除頁警告 banner 與「上傳 PDF」區塊太貼**：`.as-warn` 加 `margin-bottom:18px`。
+
+---
+
 ## [1.4.3] - 2026-05-04
 
 ### 新增 — 企業 Logo 上傳支援裁切
