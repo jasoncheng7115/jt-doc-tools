@@ -75,7 +75,14 @@
   }
   .crop-wrap {
     position: relative; user-select: none; max-width: 100%;
-    background: #f3f4f6; border-radius: 6px; overflow: hidden;
+    /* checkerboard 表示「空白區」— 拖超過原圖時看得出 padding 範圍 */
+    background:
+      linear-gradient(45deg, #e5e7eb 25%, transparent 25%) 0 0/16px 16px,
+      linear-gradient(-45deg, #e5e7eb 25%, transparent 25%) 0 0/16px 16px,
+      linear-gradient(45deg, transparent 75%, #e5e7eb 75%) 0 0/16px 16px,
+      linear-gradient(-45deg, transparent 75%, #e5e7eb 75%) 0 0/16px 16px,
+      #f8fafc;
+    border-radius: 6px; overflow: visible;
     display: inline-block; line-height: 0;
   }
   .crop-wrap img {
@@ -146,14 +153,40 @@ function _refreshMask() {
   const W = cropState.imgW, H = cropState.imgH;
   const x = cropState.selX, y = cropState.selY,
         w = cropState.selW, h = cropState.selH;
-  cropSel.style.left = x + 'px';
-  cropSel.style.top  = y + 'px';
+
+  // 計算 wrapper bounding box（包住「圖 + 選取框」）。
+  // 選取框可能超出圖片任一邊：左/上負值、右/下超過 W/H。
+  const minX = Math.min(0, x);
+  const minY = Math.min(0, y);
+  const maxX = Math.max(W, x + w);
+  const maxY = Math.max(H, y + h);
+  const wrapW = maxX - minX;
+  const wrapH = maxY - minY;
+  // 圖片在 wrapper 內的 offset（往右 / 往下推，避免跑到負座標）
+  const imgOffX = -minX;
+  const imgOffY = -minY;
+  // 選取框在 wrapper 內的座標（也要 shift）
+  const selX2 = x + imgOffX;
+  const selY2 = y + imgOffY;
+
+  // 設定 wrapper / 圖片位置
+  cropWrap.style.width = wrapW + 'px';
+  cropWrap.style.height = wrapH + 'px';
+  cropImg.style.position = 'absolute';
+  cropImg.style.left = imgOffX + 'px';
+  cropImg.style.top = imgOffY + 'px';
+  cropImg.style.width = W + 'px';
+  cropImg.style.height = H + 'px';
+
+  cropSel.style.left = selX2 + 'px';
+  cropSel.style.top  = selY2 + 'px';
   cropSel.style.width  = w + 'px';
   cropSel.style.height = h + 'px';
-  cropMaskTop.style.cssText    = `left:0;top:0;width:${W}px;height:${y}px`;
-  cropMaskBottom.style.cssText = `left:0;top:${y+h}px;width:${W}px;height:${H-y-h}px`;
-  cropMaskLeft.style.cssText   = `left:0;top:${y}px;width:${x}px;height:${h}px`;
-  cropMaskRight.style.cssText  = `left:${x+w}px;top:${y}px;width:${W-x-w}px;height:${h}px`;
+  // Mask cover everything OUTSIDE selection (in wrapper coords)
+  cropMaskTop.style.cssText    = `left:0;top:0;width:${wrapW}px;height:${selY2}px`;
+  cropMaskBottom.style.cssText = `left:0;top:${selY2+h}px;width:${wrapW}px;height:${wrapH-selY2-h}px`;
+  cropMaskLeft.style.cssText   = `left:0;top:${selY2}px;width:${selX2}px;height:${h}px`;
+  cropMaskRight.style.cssText  = `left:${selX2+w}px;top:${selY2}px;width:${wrapW-selX2-w}px;height:${h}px`;
   // Show the natural-px size of the crop region (what gets uploaded)
   const sx = cropState.natW / cropState.imgW;
   const sy = cropState.natH / cropState.imgH;
