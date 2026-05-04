@@ -10,7 +10,7 @@ metadata = ToolMetadata(
     name="擷取文字",
     description="擷取 PDF 文字，輸出 TXT / Markdown / Word / ODT，可選 LLM 重排段落。",
     icon="paragraph",
-    category="內容擷取",
+    category="內容處理",
 )
 
 tool = ToolModule(

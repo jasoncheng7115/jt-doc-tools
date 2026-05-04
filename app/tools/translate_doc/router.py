@@ -141,8 +141,9 @@ def _translate_sentences(
     client = llm_settings.make_client()
     if client is None:
         raise HTTPException(503, "LLM 服務未啟用，請到「設定 → LLM 設定」開啟")
-    s = llm_settings.get()
-    model = s.get("model") or "gemma4:26b"
+    # Per-tool 模型覆寫優先；admin 在 LLM 設定頁可以給 translate-doc 指定
+    # 不同模型（例如純文字翻譯用 qwen3:32b，校驗仍用 gemma4:26b）
+    model = llm_settings.get_model_for("translate-doc")
     out: list[dict] = []
     for i, src in enumerate(sentences):
         if not src.strip():
@@ -176,7 +177,8 @@ async def index(request: Request):
         {
             "request": request,
             "llm_enabled": bool(s.get("enabled")),
-            "llm_model": s.get("model", ""),
+            "llm_model": llm_settings.get_model_for("translate-doc"),
+            "llm_default_model": s.get("model", ""),
             "llm_url": s.get("base_url", ""),
         },
     )

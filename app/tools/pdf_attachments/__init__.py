@@ -9,7 +9,7 @@ metadata = ToolMetadata(
     name="PDF 附件萃取",
     description="列出並取出 PDF 中嵌入的檔案（EmbeddedFiles）。",
     icon="paperclip",
-    category="內容擷取",
+    category="內容處理",
 )
 
 tool = ToolModule(

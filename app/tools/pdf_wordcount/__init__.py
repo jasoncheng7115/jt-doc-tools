@@ -9,7 +9,7 @@ metadata = ToolMetadata(
     name="字數統計",
     description="統計 PDF 字數 / 字元 / 段落 / 句子，含每頁分布與高頻詞圖表。",
     icon="chart-bar",
-    category="內容擷取",
+    category="內容處理",
 )
 
 tool = ToolModule(

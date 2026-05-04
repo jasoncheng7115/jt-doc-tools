@@ -16,7 +16,7 @@ metadata = ToolMetadata(
     name="逐句翻譯",
     description="接 LLM 逐句翻譯，左原文右譯文並排。可貼文字、上傳 PDF / DOCX / TXT。",
     icon="globe",
-    category="文書內容",
+    category="內容處理",
 )
 
 tool = ToolModule(

@@ -228,7 +228,8 @@ def per_field_review(
         return result
 
     base_url = s.get("base_url") or ""
-    model = s.get("model") or "qwen3-vl:2b"
+    # Per-tool 覆寫優先（admin 在 LLM 設定頁可以給 pdf-fill 校驗指定模型）
+    model = llm_settings.get_model_for("pdf-fill")
 
     def notify(n, total, msg):
         if progress_cb:

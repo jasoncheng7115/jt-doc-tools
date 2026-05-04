@@ -382,8 +382,8 @@ async def llm_reflow(request: Request):
     client = llm_settings.make_client()
     if client is None:
         raise HTTPException(503, "LLM client 未就緒")
-    conf = llm_settings.get()
-    model_name = conf.get("model") or conf.get("default_model") or ""
+    # Per-tool 模型覆寫優先（admin 在 LLM 設定頁可指定）
+    model_name = llm_settings.get_model_for("pdf-extract-text")
     if not model_name:
         raise HTTPException(503, "尚未設定 LLM 模型。")
 
