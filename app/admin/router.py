@@ -610,13 +610,14 @@ def build_router(templates) -> APIRouter:
 
     @router.get("/llm-settings", response_class=HTMLResponse)
     async def llm_settings_page(request: Request):
-        from ..core.llm_settings import llm_settings, DEFAULT_SETTINGS
+        from ..core.llm_settings import llm_settings, DEFAULT_SETTINGS, LLMSettingsManager
         return templates.TemplateResponse(
             "llm_settings.html",
             {
                 "request": request,
                 "settings": llm_settings.get(),
                 "defaults": DEFAULT_SETTINGS,
+                "known_llm_tools": LLMSettingsManager.KNOWN_LLM_TOOLS,
             },
         )
 

@@ -346,11 +346,12 @@ async def llm_review_start(
             raise
 
     _s = llm_settings.get()
+    _model = llm_settings.get_model_for("pdf-fill")
     job = job_manager.submit(
         "pdf-fill-llm", job_fn,
         meta={
             "upload_id": upload_id,
-            "model": _s.get("model", "?"),
+            "model": _model,
             "base_url": _s.get("base_url", ""),
         },
     )

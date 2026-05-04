@@ -222,10 +222,12 @@ function renderThumbs() {
   const info = document.getElementById('thumbs-info');
   info.textContent = `共 ${pageCount} 頁`;
   if (files.length > 1) info.textContent += `；批次共 ${files.length} 份檔案`;
+  // data-base-src 留住原始 thumb URL；refreshThumbStates 會在末尾接 ?mode=
+  // 讓 server 給已旋轉好的 PNG（縮圖、lightbox 都用同一條 URL，視覺一致）。
   grid.innerHTML = pages.map(p =>
     `<div class="page-card" data-page="${p.page}">
        <div class="page-thumb" data-zoom-src="${p.thumb}">
-         <img src="${p.thumb}" alt="page ${p.page}" loading="lazy" />
+         <img data-base-src="${p.thumb}" src="${p.thumb}" alt="page ${p.page}" loading="lazy" />
        </div>
        <div class="page-num">原第 ${p.page} 頁</div>
        <div class="page-tools" data-page-tools>
@@ -238,16 +240,18 @@ function renderThumbs() {
        </div>
      </div>`
   ).join('');
-  // 點 per-page 工具列：toggle 個別覆寫
+  // Per-page 工具列：每個按鈕都是「設成那個方向」。
+  //   ↺ ↻ 180° ⇆ ⇅ → 該頁套用此方向（覆寫全頁設定）
+  //   ─            → 該頁明確「不轉」（覆寫全頁設定 — 例如全頁套順時針，但這頁要保持原樣）
+  // 沒有「toggle off」 — 重複點同一個按鈕視覺上不會變動（故意的，使用者預期 click X 就是 X）。
+  // 要把該頁從個別覆寫拉回全頁設定 → 點「該頁按鈕對應全頁的方向」即可同效果，
+  // 或重新整理頁面（per-page state 不持久化）。
   document.querySelectorAll('[data-page-tools]').forEach(toolbar => {
     const card = toolbar.closest('.page-card');
     const page = parseInt(card.dataset.page);
     toolbar.querySelectorAll('button[data-pmode]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const m = btn.dataset.pmode;
-        // 再點一次同一個 mode → 取消覆寫，回到全頁設定
-        if (perPageMode.get(page) === m) perPageMode.delete(page);
-        else perPageMode.set(page, m);
+        perPageMode.set(page, btn.dataset.pmode);
         refreshThumbStates();
       });
     });
@@ -256,12 +260,22 @@ function renderThumbs() {
 }
 
 // 取得某一頁的有效模式：個別覆寫優先 > 全頁設定（且該頁在 pages spec 內）
+// 個別覆寫的 'none' 代表「明確不轉」 → 回傳 null
 function effectivePageMode(page, globalMode, target) {
   if (perPageMode.has(page)) {
     const m = perPageMode.get(page);
     return m === 'none' ? null : m;
   }
   return target.has(page) ? globalMode : null;
+}
+
+// Build server-rendered thumb URL with per-page mode baked in. 縮圖跟
+// lightbox 用同一條 URL pattern (差只在 large=1)，server 端 PIL transpose
+// 回 PNG，客戶端不再依賴 CSS transform，視覺一致、沒有 aspect ratio 雷。
+function thumbUrlFor(baseSrc, mode) {
+  if (!mode) return baseSrc;
+  const sep = baseSrc.includes('?') ? '&' : '?';
+  return baseSrc + sep + 'mode=' + encodeURIComponent(mode);
 }
 
 function refreshThumbStates() {
@@ -275,7 +289,13 @@ function refreshThumbStates() {
     card.classList.toggle('will-rotate', willApply);
     card.classList.toggle('has-override', hasOverride);
     const img = card.querySelector('.page-thumb img');
-    img.style.transform = willApply ? modeTransform(eff) : 'none';
+    const baseSrc = img.dataset.baseSrc;
+    const newSrc = thumbUrlFor(baseSrc, willApply ? eff : null);
+    if (img.src !== new URL(newSrc, location.href).href) {
+      img.src = newSrc;
+    }
+    // 確保沒殘留 CSS transform（避免舊版本暫存的 inline style）
+    img.style.transform = '';
     let badge = card.querySelector('.rotate-badge');
     if (willApply) {
       if (!badge) {

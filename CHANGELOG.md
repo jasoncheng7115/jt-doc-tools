@@ -4,6 +4,22 @@
 
 ---
 
+## [1.4.1] - 2026-05-04
+
+### 新增 — 使用者後續回饋整合
+
+- **pdf-rotate 縮圖個別轉向 UX 改善**：點同一方向不再「toggle off」（使用者點 ↻ 期待轉，但二次點變不轉是反直覺）。每個方向按鈕都是「設成那個方向」；要清掉個別覆寫請點「─」（明確不轉）。縮圖也改用 server-side 預先 render（PIL transpose）取代 CSS `transform: rotate()`，視覺直接顯示旋轉後結果，跟 lightbox 一致，沒有 aspect ratio 雷。
+- **逐句翻譯 UI 強化**：
+  - 上方加藍底 banner 一直顯示「使用模型：{model name}」，翻譯中也在按鈕與 meta 顯示
+  - 翻譯進行中的列加 shimmer 光棒效果（流動高光），左 src + 右 tgt + 中央按鈕欄都吃
+  - 每一格右下加小複製按鈕，hover cell 才浮現（半透明），點下變綠表示成功；可單獨複製某句原文 / 譯文
+  - 語言下拉與檔案 input 套平台 `.field` 樣式，跟其他工具頁一致
+- **LLM 設定支援各工具個別模型**：admin 「LLM 設定 → 模型」段下方新增「各工具個別模型」清單，可為 `translate-doc` / `pdf-extract-text` / `pdf-fill` 各自指定不同模型（例：純文字翻譯用 qwen3:32b、視覺校驗用 gemma4:26b）。留空就跟隨上方預設。`llm_settings.get_model_for(tool_id)` 統一解析；新加 LLM-using tool 時加進 `KNOWN_LLM_TOOLS` 即可自動出現在 UI。
+- **LLM 設定欄位寬度統一**：所有短輸入（timeout / 輪數 / threshold）統一 100px、左側 label 統一 200px，整面對齊。`base_url` / `api_key` 走 `field-wide` class 維持寬版。
+- **「文書內容」分類併入「內容處理」**：原 v1.4.0 為了放逐句翻譯新開的「文書內容」分類只有一個工具，太單薄。重新命名「內容擷取」→「**內容處理**」（語意更廣，未來 LLM 摘要 / Q&A 也能進），把 6 個工具（擷取文字 / 圖片 / 附件 / 字數統計 / 註解整理 / 逐句翻譯）放在一起。從 7 大類回到 6 大類。
+
+---
+
 ## [1.4.0] - 2026-05-04
 
 ### 大改版 — 11 項使用者建議全部到位

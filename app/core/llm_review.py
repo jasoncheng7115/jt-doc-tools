@@ -503,7 +503,8 @@ def review(
     conf_threshold = float(settings.get("confidence_threshold", 0.8))
     n_required = int(settings.get("consecutive_required", 2))
     overall_timeout = float(settings.get("overall_timeout_seconds", 180))
-    model = settings.get("model")
+    # Per-tool 覆寫優先（admin 在 LLM 設定頁可以給 pdf-fill 校驗指定模型）
+    model = llm_settings.get_model_for("pdf-fill")
 
     deadline = time.monotonic() + overall_timeout
     started = time.monotonic()

@@ -13,14 +13,21 @@
   <p class="muted" style="margin:6px 0 0 0;">本工具需要連到 LLM server。請管理員到「<a href="/admin/llm-settings">設定 → LLM 設定</a>」開啟。
     啟用後本頁的翻譯功能就可以直接使用，不需要再額外設定。</p>
 </div>
+{% else %}
+<div class="panel" style="border-left:4px solid #3b82f6; background:#eff6ff; padding:10px 14px;">
+  <p style="margin:0; font-size:13px;">
+    {{ icon('globe', size=14) }} <b>使用模型：</b><code style="background:#dbeafe; color:#1e40af; padding:2px 8px; border-radius:4px; font-family: ui-monospace, monospace;">{{ llm_model }}</code>
+    <span class="muted" style="margin-left:10px; font-size:12px;">@ <code>{{ llm_url }}</code></span>
+    <span class="muted" style="margin-left:10px; font-size:12px;">（要換模型請到 <a href="/admin/llm-settings">LLM 設定</a>）</span>
+  </p>
+</div>
 {% endif %}
 
 <div class="panel">
   <h2 style="margin-top:0;">1. 來源文字</h2>
-  <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
-    <div>
-      <label style="font-size:12.5px; color:#475569;">原文語言</label><br>
-      <select id="srcLang" style="padding:5px 8px; min-width:160px;">
+  <div class="form-row" style="margin-bottom:14px;">
+    <label>原文語言
+      <select class="field" id="srcLang" style="min-width:170px;">
         <option value="auto">自動偵測</option>
         <option value="en">英文 (English)</option>
         <option value="zh">中文 (簡 / 繁混合)</option>
@@ -36,10 +43,9 @@
         <option value="id">印尼文</option>
         <option value="ru">俄文</option>
       </select>
-    </div>
-    <div>
-      <label style="font-size:12.5px; color:#475569;">目標語言</label><br>
-      <select id="tgtLang" style="padding:5px 8px; min-width:160px;">
+    </label>
+    <label>目標語言
+      <select class="field" id="tgtLang" style="min-width:170px;">
         <option value="zh-TW" selected>繁體中文</option>
         <option value="zh-CN">簡體中文</option>
         <option value="en">英文</option>
@@ -51,13 +57,12 @@
         <option value="vi">越南文</option>
         <option value="th">泰文</option>
       </select>
-    </div>
-    <div>
-      <label style="font-size:12.5px; color:#475569;">或上傳檔案 (PDF / DOCX / TXT)</label><br>
-      <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.md" />
-    </div>
+    </label>
+    <label>或上傳檔案 (PDF / DOCX / TXT)
+      <input type="file" class="field" id="fileInput" accept=".pdf,.docx,.txt,.md" />
+    </label>
   </div>
-  <textarea id="srcText" rows="10" style="width:100%; padding:10px; border:1px solid #d1d5db; border-radius:6px; font-family: -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif; font-size:14px;" placeholder="貼上要翻譯的文字，或上傳檔案到上方欄位…"></textarea>
+  <textarea class="field" id="srcText" rows="10" style="width:100%; resize:vertical; font-family: -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;" placeholder="貼上要翻譯的文字，或上傳檔案到上方欄位…"></textarea>
   <div style="margin-top:8px; display:flex; align-items:center; gap:14px;">
     <button class="btn btn-primary" id="btnTranslate" {% if not llm_enabled %}disabled title="LLM 未啟用"{% endif %}>{{ icon('play', size=14) }} 開始翻譯</button>
     <button class="btn" type="button" id="btnClear">{{ icon('reset', size=14) }} 清空</button>
@@ -92,7 +97,8 @@
     display: contents;
   }
   .trd-row .src, .trd-row .tgt {
-    padding: 8px 10px;
+    position: relative;
+    padding: 8px 28px 8px 10px;
     background: #fff;
     border-top: 1px solid #f1f5f9;
     font-size: 13.5px;
@@ -100,6 +106,27 @@
     white-space: pre-wrap;
     word-wrap: break-word;
   }
+  /* 每格右下角小複製按鈕，hover 浮現 */
+  .trd-row .cell-copy {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    border: none;
+    background: rgba(255,255,255,0.85);
+    color: #64748b;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s, background 0.12s, color 0.12s;
+    font-size: 0;
+  }
+  .trd-row .src:hover .cell-copy,
+  .trd-row .tgt:hover .cell-copy { opacity: 0.55; }
+  .trd-row .cell-copy:hover { opacity: 1 !important; background: #e0e7ff; color: #3730a3; }
+  .trd-row .cell-copy.is-copied { opacity: 1 !important; background: #dcfce7; color: #166534; }
+  .trd-row .cell-copy svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; }
   .trd-row:first-child .src,
   .trd-row:first-child .tgt,
   .trd-row:first-child .ctl { border-top: 0; }
@@ -117,12 +144,45 @@
     font-size:13px; color:#64748b; border-radius:4px;
   }
   .trd-row .ctl button:hover { background:#e0e7ff; color:#3730a3; }
-  .trd-row.is-loading .tgt { background:#fffbeb; color:#92400e; }
+  /* 光棒（shimmer）效果 — 翻譯進行中的列，左原文 + 右譯文 + 中央按鈕欄
+     全部蓋一層流動高光，吸睛但不擋字。重點 cell 用 ::after pseudo 浮在
+     上面、pointer-events:none 不擋滑鼠。 */
+  .trd-row.is-loading .src,
+  .trd-row.is-loading .tgt,
+  .trd-row.is-loading .ctl {
+    position: relative;
+    overflow: hidden;
+  }
+  .trd-row.is-loading .src { background: #fffbeb; }
+  .trd-row.is-loading .tgt { background: #fffbeb; color: #92400e; }
+  .trd-row.is-loading .src::after,
+  .trd-row.is-loading .tgt::after,
+  .trd-row.is-loading .ctl::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 0%,
+      transparent 35%,
+      rgba(99, 102, 241, 0.18) 50%,
+      transparent 65%,
+      transparent 100%
+    );
+    background-size: 250% 100%;
+    animation: trd-shimmer 1.6s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes trd-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -100% 0; }
+  }
 </style>
 {% endblock %}
 
 {% block scripts %}
 <script>
+const LLM_MODEL = {{ llm_model|tojson }};
 const $ = (id) => document.getElementById(id);
 const srcText = $('srcText');
 const srcLang = $('srcLang');
@@ -195,6 +255,9 @@ function escapeHTML(s) {
   }[c]));
 }
 
+// 內嵌單一複製按鈕（出現在 src / tgt cell 右下，hover 才浮現）
+const COPY_ICON_SVG = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+
 function renderRow(idx, src, translated, error) {
   const row = document.createElement('div');
   row.className = 'trd-row';
@@ -210,15 +273,31 @@ function renderRow(idx, src, translated, error) {
   } else {
     tgtHtml = escapeHTML(translated);
   }
+  const copyBtn = (which) =>
+    `<button type="button" class="cell-copy" data-act="copy-cell" data-which="${which}" title="複製到剪貼簿">${COPY_ICON_SVG}</button>`;
   row.innerHTML = `
-    <div class="src">${escapeHTML(src) || '<span style="color:#cbd5e1;">（空行）</span>'}</div>
-    <div class="tgt ${tgtCls}">${tgtHtml}</div>
+    <div class="src">${escapeHTML(src) || '<span style="color:#cbd5e1;">（空行）</span>'}${copyBtn('src')}</div>
+    <div class="tgt ${tgtCls}">${tgtHtml}${copyBtn('tgt')}</div>
     <div class="ctl"><button type="button" data-act="retry" title="重新翻譯本句">↻</button></div>
   `;
   return row;
 }
 
 trdGrid.addEventListener('click', async (e) => {
+  // 點到單格複製按鈕
+  const copyBtn = e.target.closest('button[data-act=copy-cell]');
+  if (copyBtn) {
+    const cell = copyBtn.parentElement;
+    // 取 cell 內的純文字（排除按鈕本身的內容）
+    const clone = cell.cloneNode(true);
+    clone.querySelectorAll('.cell-copy').forEach(b => b.remove());
+    const text = (clone.textContent || '').trim();
+    if (!text) return;
+    try { await navigator.clipboard.writeText(text); } catch (_) {}
+    copyBtn.classList.add('is-copied');
+    setTimeout(() => copyBtn.classList.remove('is-copied'), 900);
+    return;
+  }
   const btn = e.target.closest('button[data-act=retry]');
   if (!btn) return;
   const row = btn.closest('.trd-row');
@@ -263,10 +342,10 @@ btnTranslate.addEventListener('click', async () => {
     trdGrid.appendChild(row);
   });
   resultPanel.hidden = false;
-  resultMeta.textContent = `${currentSentences.length} 句送出，請稍候…`;
+  resultMeta.textContent = `${currentSentences.length} 句送出（模型：${LLM_MODEL || '?'}），請稍候…`;
   btnTranslate.disabled = true;
   btnTranslate.dataset.orig = btnTranslate.innerHTML;
-  btnTranslate.innerHTML = '翻譯中…';
+  btnTranslate.innerHTML = `翻譯中… (${LLM_MODEL || '?'})`;
 
   try {
     const r = await fetch('/tools/translate-doc/translate-batch', {
@@ -287,7 +366,7 @@ btnTranslate.addEventListener('click', async () => {
     j.results.forEach((res, i) => {
       trdGrid.appendChild(renderRow(i, res.src, res.translated, res.error));
     });
-    resultMeta.textContent = `共 ${j.results.length} 句 — 原文：${j.source_lang || '?'}, 譯文：${j.target_lang}`;
+    resultMeta.textContent = `共 ${j.results.length} 句 — 原文：${j.source_lang || '?'}, 譯文：${j.target_lang}, 模型：${LLM_MODEL || '?'}`;
   } catch (e) {
     alert('翻譯失敗：' + e.message);
   } finally {

@@ -31,7 +31,7 @@
   <div class="form-row">
     <label>Base URL</label>
     <div class="field" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-      <input type="text" id="base_url" class="field" style="flex:1; min-width:280px;"
+      <input type="text" id="base_url" class="field field-wide" style="flex:1; min-width:280px;"
              value="{{ settings.base_url }}"
              placeholder="http://localhost:11434/v1" />
       <button class="btn btn-primary" id="btn-test" type="button">
@@ -48,7 +48,7 @@
   <div class="form-row">
     <label>API Key</label>
     <div class="field">
-      <input type="password" id="api_key" class="field" style="max-width:400px;"
+      <input type="password" id="api_key" class="field field-wide"
              value="{{ settings.api_key or '' }}"
              placeholder="(空白 — Ollama 不需要)" />
       <div class="muted" style="font-size:12px; margin-top:4px;">
@@ -60,7 +60,7 @@
     <label>單次 Timeout</label>
     <div class="field" style="display:flex; gap:8px; align-items:center;">
       <input type="number" id="timeout_seconds" min="10" max="600" step="5"
-             value="{{ settings.timeout_seconds }}" style="width:90px;" />
+             value="{{ settings.timeout_seconds }}" style="width:100px;" />
       <span class="muted" style="font-size:12px;">秒（單次 HTTP call 上限；冷啟動 model 可能要 30-90s）</span>
     </div>
   </div>
@@ -85,6 +85,33 @@
     <code>qwen3-vl:8b</code>（低 VRAM 備案；~8GB、筆電部署用）。<br>
     <span style="color:#b91c1c;">⚠️ gemma4:e4b 對繁中人名/公司名多處誤判（58% 準），qwen3-vl:2b/4b 會 timeout，皆不建議。</span>
   </div>
+
+  <h3 style="margin:18px 0 6px 0; font-size:14px;">各工具個別模型（可選）</h3>
+  <p class="muted" style="font-size:12px; margin:0 0 10px 0;">
+    依工具用途指定不同模型 — 例如純文字翻譯用文字模型、PDF 校驗用視覺模型。
+    留空白 / 選「（用上方預設）」就跟隨上方的預設模型。每次「重新整理清單」抓回的 model 都會出現在下拉。
+  </p>
+  <div id="perToolWrap" style="display:flex; flex-direction:column; gap:8px;">
+    {% for t in known_llm_tools %}
+    {% set _v = settings.model_per_tool.get(t.id) if settings.model_per_tool else '' %}
+    <div class="form-row" style="margin:0;">
+      <label style="min-width:200px;">
+        <b>{{ t.name }}</b>
+        <code style="font-size:11px; color:#6b7280; margin-left:6px;">{{ t.id }}</code>
+        <span class="muted" style="display:block; font-size:11px; font-weight:normal;">{{ t.use }}</span>
+      </label>
+      <div class="field" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <select class="field per-tool-model" data-tool-id="{{ t.id }}" data-kind="{{ t.kind }}" style="flex:1; min-width:280px; max-width:400px;">
+          <option value="">（用上方預設：{{ settings.model }}）</option>
+          {% if _v and _v != settings.model %}
+          <option value="{{ _v }}" selected>{{ _v }}</option>
+          {% endif %}
+        </select>
+        <span class="muted" style="font-size:11px;">{% if t.kind == 'vision' %}建議視覺模型{% else %}文字模型即可{% endif %}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
 </div>
 
 <div class="panel">
@@ -93,7 +120,7 @@
     <label>預設審查輪數</label>
     <div class="field" style="display:flex; gap:8px; align-items:center;">
       <input type="number" id="default_review_rounds" min="1" max="5" step="1"
-             value="{{ settings.default_review_rounds }}" style="width:80px;" />
+             value="{{ settings.default_review_rounds }}" style="width:100px;" />
       <span class="muted" style="font-size:12px;">輪 (1-5)；每輪是一次 LLM 來回</span>
     </div>
   </div>
@@ -101,7 +128,7 @@
     <label>Confidence 門檻</label>
     <div class="field" style="display:flex; gap:8px; align-items:center;">
       <input type="number" id="confidence_threshold" min="0.5" max="1.0" step="0.05"
-             value="{{ settings.confidence_threshold }}" style="width:80px;" />
+             value="{{ settings.confidence_threshold }}" style="width:100px;" />
       <span class="muted" style="font-size:12px;">(0.0-1.0) — 影響自動採納門檻（UI 顯示全部）</span>
     </div>
   </div>
@@ -109,7 +136,7 @@
     <label>連續 N 次同錯才接受</label>
     <div class="field" style="display:flex; gap:8px; align-items:center;">
       <input type="number" id="consecutive_required" min="1" max="3" step="1"
-             value="{{ settings.consecutive_required }}" style="width:80px;" />
+             value="{{ settings.consecutive_required }}" style="width:100px;" />
       <span class="muted" style="font-size:12px;">保守規則，避免 LLM 抖動造成誤改</span>
     </div>
   </div>
@@ -117,7 +144,7 @@
     <label>整體 Timeout</label>
     <div class="field" style="display:flex; gap:8px; align-items:center;">
       <input type="number" id="overall_timeout_seconds" min="30" max="600" step="10"
-             value="{{ settings.overall_timeout_seconds }}" style="width:90px;" />
+             value="{{ settings.overall_timeout_seconds }}" style="width:100px;" />
       <span class="muted" style="font-size:12px;">秒 — review loop 上限，避免死循環</span>
     </div>
   </div>
@@ -154,9 +181,17 @@
 .conn-ok   { background:#d1fae5; color:#065f46; border:1px solid #6ee7b7; }
 .conn-fail { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
 .conn-pend { background:#dbeafe; color:#1e40af; border:1px solid #93c5fd; }
-/* Override platform.css `.form-row input[type=number] { flex: 1 }` so our
-   small numeric inputs stay 80px wide and unit/hint text sits next to them. */
-.llm-page .form-row input[type=number] { flex: 0 0 auto; max-width: 90px; }
+/* 統一所有「短輸入」寬度 100px，整面對齊；hint 文字接在右邊。
+   Override platform.css `.form-row input[type=number] { flex: 1 }`。
+   有 .field-wide class 的不適用（base_url / api_key 要長） */
+.llm-page .form-row input[type=number]:not(.field-wide),
+.llm-page .form-row input[type=text]:not(.field-wide),
+.llm-page .form-row input[type=password]:not(.field-wide) {
+  flex: 0 0 auto; width: 100px;
+}
+.llm-page .form-row input.field-wide { width: 100%; max-width: 460px; }
+/* 統一左側標籤欄寬度，整列起始位置對齊 */
+.llm-page .form-row > label:first-child { min-width: 200px; max-width: 200px; }
 .llm-page .form-row input[type=text]   { flex: 1 1 auto; }
 .llm-page .form-row label              { min-width: 160px; width: auto; }
 </style>
@@ -202,36 +237,51 @@ async function testConnection() {
 }
 
 function fillModelDropdown(models) {
+  // 1. 預設模型 select
   const sel = $('model');
-  const current = sel.value;  // preserve current selection if still in list
-  sel.innerHTML = '';
+  _fillSelectGrouped(sel, models, /* includeBlank */ false, sel.value);
+  // 2. 每個 per-tool select — 各自記住已選值，並插入「（用預設）」blank option
+  const defaultModel = sel.value;
+  document.querySelectorAll('.per-tool-model').forEach(s => {
+    _fillSelectGrouped(s, models, /* includeBlank */ true, s.value, defaultModel);
+  });
+}
 
-  // Sort: vision models first, alphabetical within each group
+// helper：把 models 依「視覺 / 其他」分組灌進 select；preserveValue 若還在
+// 清單裡會保留；includeBlank 會加一個「（用預設：xxx）」value=""。
+function _fillSelectGrouped(sel, models, includeBlank, preserveValue, defaultModel) {
+  sel.innerHTML = '';
+  if (includeBlank) {
+    const o = document.createElement('option');
+    o.value = '';
+    o.textContent = `（用上方預設：${defaultModel || '?'}）`;
+    sel.appendChild(o);
+  }
   const vision = models.filter(m => m.looks_vision).sort((a,b)=>a.id.localeCompare(b.id));
   const others = models.filter(m => !m.looks_vision).sort((a,b)=>a.id.localeCompare(b.id));
-
   if (vision.length) {
     const grp = document.createElement('optgroup');
-    grp.label = '✨ 視覺模型（推薦）';
+    grp.label = '✨ 視覺模型';
     vision.forEach(m => grp.appendChild(makeOpt(m)));
     sel.appendChild(grp);
   }
   if (others.length) {
     const grp = document.createElement('optgroup');
-    grp.label = '其他模型（可能不支援圖片）';
+    grp.label = '文字 / 其他模型';
     others.forEach(m => grp.appendChild(makeOpt(m)));
     sel.appendChild(grp);
   }
-  if (!vision.length && !others.length) {
+  if (!vision.length && !others.length && !includeBlank) {
     const o = document.createElement('option');
     o.textContent = '(server 上沒有任何模型)';
     o.disabled = true;
     sel.appendChild(o);
   }
-
-  // Restore selection if still available
-  if ([...sel.options].some(o => o.value === current)) {
-    sel.value = current;
+  // 還原原本選擇（若還在）
+  if (preserveValue && [...sel.options].some(o => o.value === preserveValue)) {
+    sel.value = preserveValue;
+  } else if (includeBlank) {
+    sel.value = '';
   }
 }
 
@@ -270,11 +320,18 @@ async function refreshModels() {
 }
 
 async function saveSettings() {
+  // Per-tool 模型：只送有指定值的（空字串 = 跟隨預設，不存到 dict）
+  const perTool = {};
+  document.querySelectorAll('.per-tool-model').forEach(s => {
+    const v = (s.value || '').trim();
+    if (v) perTool[s.dataset.toolId] = v;
+  });
   const body = {
     enabled:                  $('enabled').checked,
     base_url:                 $('base_url').value.trim(),
     api_key:                  $('api_key').value.trim() || null,
     model:                    $('model').value,
+    model_per_tool:           perTool,
     timeout_seconds:          parseFloat($('timeout_seconds').value),
     default_review_rounds:    parseInt($('default_review_rounds').value),
     confidence_threshold:     parseFloat($('confidence_threshold').value),
