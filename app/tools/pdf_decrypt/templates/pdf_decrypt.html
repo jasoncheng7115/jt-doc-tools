@@ -78,7 +78,7 @@
           <input id="thsrFrom" type="month" class="field thsr-input" />
           <span class="thsr-sep">至</span>
           <input id="thsrTo" type="month" class="field thsr-input" />
-          <span class="muted thsr-hint">預設最近 2 個月；最多約 3 個月範圍</span>
+          <span class="muted thsr-hint">預設最近 2 個月；最多 6 個月範圍</span>
         </div>
         <div class="thsr-row">
           <span class="thsr-label">日期格式</span>
@@ -115,13 +115,20 @@
   .mode-head {
     display: grid;
     grid-template-columns: auto auto auto 1fr;
-    align-items: baseline;
+    align-items: center;            /* checkbox / 標題 / tag / 說明全部垂直置中 */
     gap: 8px;
     padding: 10px 14px;
     cursor: pointer; user-select: none;
   }
-  .mode-head input[type=checkbox] { transform: scale(1.15); cursor: pointer; align-self: center; }
-  .mode-title { font-weight: 600; font-size: 14px; color: #0f172a; white-space: nowrap; }
+  .mode-head input[type=checkbox] {
+    transform: scale(1.15); cursor: pointer;
+    margin: 0;                       /* 重置 user-agent margin 讓對齊更精確 */
+  }
+  .mode-title {
+    font-weight: 600; font-size: 14px; color: #0f172a;
+    white-space: nowrap;
+    line-height: 1.4;
+  }
   .mode-tag {
     font-size: 10.5px; padding: 2px 7px; border-radius: 10px;
     font-weight: 600; white-space: nowrap;

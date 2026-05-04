@@ -56,8 +56,8 @@ async def submit(
             raise HTTPException(400, "高鐵模式：請選擇起迄日期")
         if d_from > d_to:
             d_from, d_to = d_to, d_from
-        if (d_to - d_from).days > 100:
-            raise HTTPException(400, "高鐵模式：日期範圍最多約 3 個月")
+        if (d_to - d_from).days > 200:
+            raise HTTPException(400, "高鐵模式：日期範圍最多約 6 個月")
         # 把 user 給的日期格式 token 轉成 strftime pattern。預設 YYYYMMDD。
         # 接受 user 自訂任意 token 組合（例如 `YYYY/MM/DD`、`DD-MM-YY` 等）。
         fmt = (thsr_date_format or "YYYYMMDD")
