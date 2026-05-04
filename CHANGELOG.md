@@ -4,6 +4,62 @@
 
 ---
 
+## [1.4.2] - 2026-05-04
+
+### 大改版 — 客戶慘案修復 + 升級安全 + 多項 UX 強化
+
+#### 🚨 重大修正 — 升級流程不准弄壞既有設定
+
+- **`auth_settings.json` 變 root:root mode 600 → 服務讀不到、客戶以為 LDAP 設定消失**：根因是 `_run_auth_helper` 跑 sudo 寫檔後沒 chown 回 service user。修法：
+  - `_run_auth_helper` 結尾固定呼叫 `_chown_data_files_back()` 把整個 data dir 還給原 owner
+  - `svc_update` 結尾也跑一次 — **既有客戶機只要 `jtdt update` 一次就會 self-heal**，不必手動 chown
+  - 新加 memory rule「客戶升級版本，原有設定必需留存」永久遵循
+- **`/setup-admin` 偵測既有 user 時提供「沿用既有 admin」恢復路徑**：避免「停用認證 → 再啟用 → 撞既有 user → 報資料庫狀態異常」這個無路可走的死局。新 endpoint `POST /setup-admin/reuse-existing` 直接 flip backend=local 不建新帳號、清舊 sessions。
+
+#### 🚨 GitHub issue #1 — Windows install 卡 NSSM 下載
+
+- **NSSM bundled 在 repo 內**：`packaging/windows/nssm.exe`（NSSM 2.24 win64 官方版，BSD 授權允許 redistribute）。`install.ps1` 在 `Fetch-Code` 之後執行 `Install-Nssm`，優先使用 bundled，網路下載成 fallback。
+- **SHA-256 校驗**：寫死 `f689ee9af94b00e9e3f0bb072b34caaf207f32dcb4f5782fc9ca351df9a06c97` 在 install.ps1，被改過就拒絕。任何人可獨立用 `Get-FileHash` 驗證。
+- **網路 fallback 改用 `Invoke-WebRequest -TimeoutSec 20`** 取代老 `Net.WebClient.DownloadFile`（沒 timeout，公司 firewall 擋會卡好幾分鐘才出錯）。
+- **AV 誤判處理**：詳細文件 `packaging/windows/README.md` + `THIRD-PARTY-NOTICES.md` 說明 NSSM 來源、授權、SHA-256、誤判處理路徑。
+
+#### 友善錯誤頁
+
+- 預設 FastAPI 把 401 / 403 / 404 渲成 raw JSON `{"detail": "..."}`，使用者看到光禿一行 JSON 像系統壞掉。新增 exception handler — 只攔瀏覽器導航 (Accept: text/html) 改成友善 HTML 頁（含「回首頁」/「去登入」按鈕）；API client (Accept: application/json) 維持 JSON 行為不變。
+
+#### 逐句翻譯增強
+
+- **並行翻譯 (k=4 預設)**：`_translate_sentences` 改用 `ThreadPoolExecutor`，10 句翻譯時間從 ~30s → ~8s（4 並行、本機 Ollama）。並行數可在 admin LLM 設定調整（1-16），高 VRAM 可拉到 12+，雲端 API 設小避免 rate-limit。
+- **顯示使用模型**：頁面上方藍底 banner 顯示「使用模型：xxx @ url」；翻譯中按鈕、結果 meta 也顯示。
+- **整列 hover 光棒**：滑鼠移到並排對照任一列，左原文 + 右譯文 + 中央按鈕欄整列流動高光（CSS shimmer）。
+- **每格小複製按鈕**：hover cell 時右下浮現半透明複製按鈕，點下變綠 0.9s 表示複製成功。
+- **drag-drop 檔案上傳美化**：替代醜醜的 `<input type="file">`，改成大 icon + 「點此挑選或拖曳檔案到此」zone；拖檔變綠、選好顯示檔名 + 解析統計。
+- **語言下拉套平台 `.field` 樣式**：跟其他工具頁一致；解決三欄 label 重疊問題。
+- **LLM 設定頁加隱私 banner**：強烈建議接地端自架 LLM Server（Ollama / vLLM / LM Studio）— 雲端 API 會把所有送 LLM 的原始文件內容外傳，違反個資法 / 營業秘密 / NDA。
+- **非 admin 看不到 LLM 設定連結**：`is_admin(request)` jinja global gate；非 admin 改顯示「如要更換模型請聯絡管理員」。
+
+#### 各工具個別 LLM 模型
+
+- admin 在 LLM 設定頁可為 `translate-doc` / `pdf-extract-text` / `pdf-fill` 各自指定不同模型（例：純文字翻譯用 qwen3:32b、視覺校驗用 gemma4:26b）。`llm_settings.get_model_for(tool_id)` 統一解析；新加 LLM-using tool 加進 `KNOWN_LLM_TOOLS` 即可自動出現在 UI。
+- LLM 設定欄寬統一（短輸入 100px、左 label 200px），整面對齊。
+
+#### 「文書內容」分類併入「內容處理」
+
+- 原 v1.4.0 為了放逐句翻譯新開的「文書內容」分類只有一個工具，太單薄。重新命名「內容擷取」→「**內容處理**」（語意更廣），把 6 個工具（擷取文字 / 圖片 / 附件 / 字數統計 / 註解整理 / 逐句翻譯）放在一起。從 7 大類回到 6 大類。
+
+#### pdf-rotate 預覽個別轉向 UX
+
+- 點同一方向不再 toggle off（反直覺）；每個按鈕都是「設成那個方向」，要清掉用「─」。
+- 縮圖改用 server-side 預先 render（PIL transpose）取代 CSS `transform`，視覺直接顯示旋轉後結果，跟 lightbox 一致。
+
+#### pdf-editor 文字物件變空白 deeper fix (#6)
+
+- 客戶端 safety net：若 IText 是從原 PDF 擷取（有 `_origBbox`）但 `text` 變空，**不送上 backend** — 否則會 redact 原文留白，看起來像「文字消失」。
+- Backend 同樣 safety net：empty text + original_bbox 直接跳過 redact，原文保留。
+- `_insert_mixed_text` 多層 CJK font fallback — 不再直接掉到 helv（Helvetica 沒 CJK glyphs，會渲成 .notdef tofu 或完全不顯示）。失敗時 log warning。
+
+---
+
 ## [1.4.1] - 2026-05-04
 
 ### 新增 — 使用者後續回饋整合

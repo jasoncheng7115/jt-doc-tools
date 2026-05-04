@@ -175,38 +175,79 @@ function Install-Uv {
 }
 
 # NSSM (Windows Service wrapper)
+# v1.4.2: 改用 bundled-first 策略 — nssm.exe 直接 commit 在 repo 裡
+# (packaging/windows/nssm.exe，BSD 授權允許 redistribute)。git clone 完就有，
+# 不需要網路下載；nssm.cc 503 / chocolatey 認證問題都不再 block 客戶安裝。
+#
+# 安全保證：
+#   1. SHA256 寫死在這個 script 內 ($NssmBundledSha256)，與 bundled 檔對比；
+#      被改過 (例如惡意 PR fork) 就拒絕拷貝
+#   2. SHA256 = NSSM 2.24 win64 官方版 (https://nssm.cc/release/nssm-2.24.zip
+#      解壓後 win64\nssm.exe 的 hash)；任何人可獨立驗證
+#   3. 萬一 bundled 不見 (tarball mode 抽掉了) 或 hash 不符，退到網路下載
+#
+# 若公司 AV 擋掉 nssm.exe (heuristic flag for service-wrapper PUA)：
+#   - bundled copy 被 AV quarantine → fallback 網路下載
+#   - 網路也擋 → 印明確訊息請 IT 加白名單或手動下載
+$NssmBundledSha256 = 'f689ee9af94b00e9e3f0bb072b34caaf207f32dcb4f5782fc9ca351df9a06c97'
+
 function Install-Nssm {
     if (Test-Path $NssmExe) { Ok "nssm already present"; return }
-    Log "Downloading NSSM (Windows Service wrapper) ..."
     New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
+    $bundled = Join-Path $InstallDir 'packaging\windows\nssm.exe'
+    if (Test-Path $bundled) {
+        # SHA256 校驗 — 防止 repo 被改包 / 中間人替換
+        $actualHash = (Get-FileHash -Path $bundled -Algorithm SHA256).Hash.ToLower()
+        if ($actualHash -ne $NssmBundledSha256) {
+            Warn "Bundled nssm.exe SHA256 mismatch — expected $NssmBundledSha256 got $actualHash"
+            Warn "Possibly tampered repo or AV quarantine; falling back to network download"
+        } else {
+            Log "Using bundled nssm.exe ($([int]((Get-Item $bundled).Length / 1KB)) KB, SHA256 verified)"
+            Copy-Item -Path $bundled -Destination $NssmExe -Force
+            Ok "nssm installed at $NssmExe (bundled, signature verified)"
+            return
+        }
+    }
+    # Bundled binary missing (tarball mode might have stripped it, or older
+    # repo) — fall back to network. 用 Invoke-WebRequest + -TimeoutSec 而非
+    # 老 Net.WebClient.DownloadFile (沒 timeout 會卡好幾分鐘才出錯)。
+    Warn "Bundled nssm.exe not found at $bundled — falling back to network download"
+    Log "Downloading NSSM (Windows Service wrapper) ..."
     $tmp = Join-Path $env:TEMP "nssm.zip"
-    # NSSM 2.24 is the last stable release. nssm.cc returns 503 intermittently, try mirrors.
     $urls = @(
         'https://nssm.cc/release/nssm-2.24.zip',
-        'https://web.archive.org/web/2024/https://nssm.cc/release/nssm-2.24.zip',
-        'https://github.com/jasoncheng7115/jt-doc-tools/releases/download/deps/nssm-2.24.zip'
+        'https://archive.org/download/nssm-2.24/nssm-2.24.zip',
+        'https://web.archive.org/web/2024/https://nssm.cc/release/nssm-2.24.zip'
     )
     $ok = $false
     foreach ($url in $urls) {
         Log "  Trying $url"
         for ($i = 0; $i -lt 3; $i++) {
             try {
-                (New-Object Net.WebClient).DownloadFile($url, $tmp)
+                Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -TimeoutSec 20 -ErrorAction Stop
                 if ((Get-Item $tmp).Length -gt 100000) { $ok = $true; break }
             } catch {
                 Warn "    Attempt $($i+1) failed: $($_.Exception.Message.Split([Environment]::NewLine)[0])"
-                Start-Sleep -Seconds 2
+                Start-Sleep -Seconds 3
             }
         }
         if ($ok) { Ok "  Download succeeded"; break }
     }
-    if (-not $ok) { Die "NSSM download failed (all mirrors unreachable). Retry later, or place nssm-2.24.zip at $tmp manually and re-run." }
+    if (-not $ok) {
+        Die @"
+NSSM download failed (all mirrors unreachable + bundled copy missing).
+此情境通常代表 git clone 失敗或 repo 結構異常。請手動：
+  1. 從 https://nssm.cc/release/nssm-2.24.zip 下載
+  2. 解壓後把 nssm-2.24\win64\nssm.exe 複製到 $NssmExe
+  3. 重跑此安裝腳本
+"@
+    }
     $extractDir = Join-Path $env:TEMP "nssm-extract"
     if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
     Expand-Archive -Path $tmp -DestinationPath $extractDir -Force
     Copy-Item -Path (Join-Path $extractDir 'nssm-2.24\win64\nssm.exe') -Destination $NssmExe -Force
     Remove-Item $tmp, $extractDir -Recurse -Force -ErrorAction SilentlyContinue
-    Ok "nssm installed at $NssmExe"
+    Ok "nssm installed at $NssmExe (from network)"
 }
 
 # Source code
@@ -436,8 +477,11 @@ Ensure-Office
 Install-Tesseract
 Install-Git
 Install-Uv
-Install-Nssm
 Fetch-Code
+# IMPORTANT: Install-Nssm 必須在 Fetch-Code 之後 — 我們把 nssm.exe bundle 在 repo
+# 內 (github/packaging/windows/nssm.exe)，所以 git clone 完才有 binary 可用。
+# 不再依賴 nssm.cc / web.archive.org / chocolatey 等網路下載 (常 503 / 404)。
+Install-Nssm
 Setup-Python
 Prepare-Data
 Install-Service

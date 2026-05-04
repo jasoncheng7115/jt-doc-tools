@@ -30,9 +30,74 @@
     .setup-btn:hover { background:#15803d; }
     .warn-box { background:#fffbeb; border:1px solid #fde68a; padding:10px 12px;
                 border-radius:6px; font-size:12px; color:#92400e; margin-bottom:18px; }
+    .reuse-box { background:#eff6ff; border:1px solid #93c5fd; padding:14px 16px;
+                 border-radius:8px; margin-bottom:18px; }
+    .reuse-box h2 { margin:0 0 8px 0; font-size:15px; color:#1e40af; }
+    .reuse-box p { margin:0 0 10px 0; font-size:12.5px; color:#1e3a8a; line-height:1.55; }
+    .reuse-box ul { margin:6px 0 12px 18px; padding:0; font-size:12.5px; color:#1e3a8a; }
+    .reuse-box ul li { margin:2px 0; }
+    .reuse-box ul li code { background:#dbeafe; padding:1px 5px; border-radius:3px; font-size:11.5px; }
+    .reuse-btn { display:block; width:100%; padding:11px; background:#3b82f6; color:#fff;
+                 border:none; border-radius:6px; font-weight:600; font-size:14px;
+                 cursor:pointer; text-align:center; }
+    .reuse-btn:hover { background:#2563eb; }
+    .or-divider { text-align:center; color:#9ca3af; font-size:12px; margin:14px 0; position:relative; }
+    .or-divider::before, .or-divider::after { content:''; position:absolute; top:50%; width:42%; height:1px; background:#e5e7eb; }
+    .or-divider::before { left:0; }
+    .or-divider::after { right:0; }
   </style>
 </head>
 <body>
+  {% if has_existing %}
+  <div class="setup-card" style="max-width:520px;">
+    <h1>🔐 啟用認證</h1>
+    <p class="lead">系統偵測到本機已有既有的管理員帳號（先前曾啟用後又停用）。可以直接恢復、不必重建。</p>
+
+    <div class="reuse-box">
+      <h2>偵測到 {{ existing_users|length }} 個既有帳號</h2>
+      <ul>
+        {% for u in existing_users[:5] %}
+        <li><code>{{ u.username }}</code>{% if u.is_admin_seed %}（admin{% if u.source != 'local' %}@{{ u.source }}{% endif %}）{% else %}（{{ u.source }}）{% endif %}{% if not u.enabled %} <span style="color:#dc2626;">已停用</span>{% endif %}</li>
+        {% endfor %}
+        {% if existing_users|length > 5 %}<li>… 共 {{ existing_users|length }} 個</li>{% endif %}
+      </ul>
+      <p style="font-size:12px; color:#475569;">
+        <b>建議</b>：直接恢復本機認證，沿用既有帳號 + 密碼登入。<br>
+        如果忘記密碼，請以系統管理員身分在主機上跑 <code>sudo jtdt reset-password &lt;帳號&gt;</code> 重設。
+      </p>
+      <form method="post" action="/setup-admin/reuse-existing">
+        <button class="reuse-btn" type="submit">恢復本機認證（沿用既有 admin）</button>
+      </form>
+    </div>
+
+    <div class="or-divider">或</div>
+    <details style="margin-bottom:14px;">
+      <summary style="cursor:pointer; font-size:13px; color:#374151; padding:8px 0;">建立新管理員帳號（會與既有帳號並存）</summary>
+      <form method="post" action="/setup-admin" autocomplete="off" style="margin-top:14px;">
+        {% if error %}<div class="setup-error">{{ error }}</div>{% endif %}
+        <div class="form-row">
+          <label for="username">管理員帳號</label>
+          <input type="text" id="username" name="username" value="{{ username|default('jtdt-admin') }}" pattern="[A-Za-z0-9._\-]+" maxlength="64" required />
+          <div class="hint">英數、點、底線、減號；最長 64 字元（避免跟既有帳號重複）</div>
+        </div>
+        <div class="form-row">
+          <label for="display_name">顯示名稱（可選）</label>
+          <input type="text" id="display_name" name="display_name" value="{{ display_name|default('') }}" maxlength="64" />
+        </div>
+        <div class="form-row">
+          <label for="password">密碼</label>
+          <input type="password" id="password" name="password" minlength="8" maxlength="128" required />
+          <div class="hint">至少 8 字元；建議用 passphrase</div>
+        </div>
+        <div class="form-row">
+          <label for="password_confirm">再輸入一次密碼</label>
+          <input type="password" id="password_confirm" name="password_confirm" minlength="8" maxlength="128" required />
+        </div>
+        <button class="setup-btn" type="submit">建立新管理員並啟用</button>
+      </form>
+    </details>
+  </div>
+  {% else %}
   <form class="setup-card" method="post" action="/setup-admin" autocomplete="off">
     <h1>🔐 啟用認證</h1>
     <p class="lead">啟用後，所有頁面都需要登入。請先建立第一個管理員帳號。</p>

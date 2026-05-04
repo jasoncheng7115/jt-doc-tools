@@ -10,24 +10,33 @@
 {% if not llm_enabled %}
 <div class="panel" style="border-left:4px solid #f59e0b; background:#fffbeb;">
   <p style="margin:0;"><b>{{ icon('alert', size=16) }} LLM 服務尚未啟用</b></p>
-  <p class="muted" style="margin:6px 0 0 0;">本工具需要連到 LLM server。請管理員到「<a href="/admin/llm-settings">設定 → LLM 設定</a>」開啟。
+  {% if is_admin(request) %}
+  <p class="muted" style="margin:6px 0 0 0;">本工具需要連到 LLM server。請到「<a href="/admin/llm-settings">設定 → LLM 設定</a>」開啟。
     啟用後本頁的翻譯功能就可以直接使用，不需要再額外設定。</p>
+  {% else %}
+  <p class="muted" style="margin:6px 0 0 0;">本工具需要連到 LLM server。請聯絡管理員啟用 LLM 設定後，本頁的翻譯功能即可使用。</p>
+  {% endif %}
 </div>
 {% else %}
 <div class="panel" style="border-left:4px solid #3b82f6; background:#eff6ff; padding:10px 14px;">
   <p style="margin:0; font-size:13px;">
     {{ icon('globe', size=14) }} <b>使用模型：</b><code style="background:#dbeafe; color:#1e40af; padding:2px 8px; border-radius:4px; font-family: ui-monospace, monospace;">{{ llm_model }}</code>
     <span class="muted" style="margin-left:10px; font-size:12px;">@ <code>{{ llm_url }}</code></span>
+    {% if is_admin(request) %}
     <span class="muted" style="margin-left:10px; font-size:12px;">（要換模型請到 <a href="/admin/llm-settings">LLM 設定</a>）</span>
+    {% else %}
+    <span class="muted" style="margin-left:10px; font-size:12px;">（如要更換模型，請聯絡管理員）</span>
+    {% endif %}
   </p>
 </div>
 {% endif %}
 
 <div class="panel">
   <h2 style="margin-top:0;">1. 來源文字</h2>
-  <div class="form-row" style="margin-bottom:14px;">
-    <label>原文語言
-      <select class="field" id="srcLang" style="min-width:170px;">
+  <div class="trd-form-grid">
+    <div class="trd-form-cell">
+      <label class="trd-label" for="srcLang">原文語言</label>
+      <select class="field" id="srcLang">
         <option value="auto">自動偵測</option>
         <option value="en">英文 (English)</option>
         <option value="zh">中文 (簡 / 繁混合)</option>
@@ -43,9 +52,10 @@
         <option value="id">印尼文</option>
         <option value="ru">俄文</option>
       </select>
-    </label>
-    <label>目標語言
-      <select class="field" id="tgtLang" style="min-width:170px;">
+    </div>
+    <div class="trd-form-cell">
+      <label class="trd-label" for="tgtLang">目標語言</label>
+      <select class="field" id="tgtLang">
         <option value="zh-TW" selected>繁體中文</option>
         <option value="zh-CN">簡體中文</option>
         <option value="en">英文</option>
@@ -57,12 +67,26 @@
         <option value="vi">越南文</option>
         <option value="th">泰文</option>
       </select>
-    </label>
-    <label>或上傳檔案 (PDF / DOCX / TXT)
-      <input type="file" class="field" id="fileInput" accept=".pdf,.docx,.txt,.md" />
-    </label>
+    </div>
+    <div class="trd-form-cell trd-form-cell-wide">
+      <label class="trd-label">或上傳檔案</label>
+      <label class="trd-drop-zone" id="dropZone" for="fileInput">
+        <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.md" hidden />
+        <div class="trd-drop-icon">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div class="trd-drop-text">
+          <b>點此挑選</b>，或拖曳檔案到此
+          <div class="trd-drop-hint">支援 PDF / DOCX / TXT / Markdown</div>
+        </div>
+      </label>
+    </div>
   </div>
-  <textarea class="field" id="srcText" rows="10" style="width:100%; resize:vertical; font-family: -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;" placeholder="貼上要翻譯的文字，或上傳檔案到上方欄位…"></textarea>
+  <textarea class="field" id="srcText" rows="10" style="margin-top:14px; width:100%; resize:vertical; font-family: -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;" placeholder="貼上要翻譯的文字，或上傳檔案到上方欄位…"></textarea>
   <div style="margin-top:8px; display:flex; align-items:center; gap:14px;">
     <button class="btn btn-primary" id="btnTranslate" {% if not llm_enabled %}disabled title="LLM 未啟用"{% endif %}>{{ icon('play', size=14) }} 開始翻譯</button>
     <button class="btn" type="button" id="btnClear">{{ icon('reset', size=14) }} 清空</button>
@@ -85,6 +109,40 @@
 </div>
 
 <style>
+  /* === 來源文字三欄 grid（語言 / 語言 / 檔案上傳）=== */
+  .trd-form-grid {
+    display: grid;
+    grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) minmax(280px, 2fr);
+    gap: 14px;
+    align-items: end;
+  }
+  .trd-form-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .trd-form-cell .field { width: 100%; box-sizing: border-box; }
+  .trd-label { font-size: 12.5px; color: #475569; font-weight: 500; }
+  @media (max-width: 720px) {
+    .trd-form-grid { grid-template-columns: 1fr; }
+  }
+  /* drag-drop file zone */
+  .trd-drop-zone {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    border: 1.5px dashed #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, transform 0.05s;
+    min-height: 56px;
+    box-sizing: border-box;
+  }
+  .trd-drop-zone:hover { border-color: #6366f1; background: #eef2ff; }
+  .trd-drop-zone.is-dragover { border-color: #16a34a; background: #dcfce7; border-style: solid; }
+  .trd-drop-zone.has-file { border-color: #16a34a; background: #f0fdf4; border-style: solid; }
+  .trd-drop-icon { color: #6366f1; flex-shrink: 0; }
+  .trd-drop-zone.has-file .trd-drop-icon { color: #16a34a; }
+  .trd-drop-text { font-size: 12.5px; color: #475569; line-height: 1.4; }
+  .trd-drop-text b { color: #1e40af; }
+  .trd-drop-hint { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+
   .trd-grid {
     display: grid;
     grid-template-columns: 1fr 1fr 32px;
@@ -177,6 +235,35 @@
     0%   { background-position: 200% 0; }
     100% { background-position: -100% 0; }
   }
+
+  /* 整列 hover 高亮 — 因為 .trd-row 是 display:contents 沒實體 box，
+     用 JS 在滑鼠進入任一格時把 .is-hover class 加到該列所有 cell */
+  .trd-row.is-hover .src,
+  .trd-row.is-hover .tgt,
+  .trd-row.is-hover .ctl {
+    background: #eef2ff !important;
+    position: relative;
+  }
+  .trd-row.is-hover .src::after,
+  .trd-row.is-hover .tgt::after,
+  .trd-row.is-hover .ctl::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 0%, transparent 38%,
+      rgba(99, 102, 241, 0.22) 50%,
+      transparent 62%, transparent 100%
+    );
+    background-size: 250% 100%;
+    animation: trd-shimmer 2s linear infinite;
+    pointer-events: none;
+  }
+  /* 已 loading 的列正在動畫中，hover 不再加第二層 (避免兩個動畫疊合) */
+  .trd-row.is-loading.is-hover .src::after,
+  .trd-row.is-loading.is-hover .tgt::after,
+  .trd-row.is-loading.is-hover .ctl::after { display: none; }
 </style>
 {% endblock %}
 
@@ -213,34 +300,62 @@ function refreshCounter() {
 srcText.addEventListener('input', refreshCounter);
 refreshCounter();
 
-fileInput.addEventListener('change', async (e) => {
-  const f = e.target.files[0];
+async function handleUploadedFile(f) {
   if (!f) return;
   const fd = new FormData();
   fd.append('file', f);
+  const dropZone = document.getElementById('dropZone');
+  const dropText = dropZone.querySelector('.trd-drop-text');
+  const origText = dropText.innerHTML;
+  dropZone.classList.add('has-file');
+  dropText.innerHTML = `<b>${escapeHTML(f.name)}</b><div class="trd-drop-hint">解析中…</div>`;
   charCounter.textContent = '檔案解析中…';
   try {
     const r = await fetch('/tools/translate-doc/extract-text', {method:'POST', body: fd});
     if (!r.ok) {
       const t = await r.text();
       alert('解析失敗：' + t);
+      dropZone.classList.remove('has-file');
+      dropText.innerHTML = origText;
       return;
     }
     const j = await r.json();
     srcText.value = j.sentences.join('\n');
-    if (j.detected_lang && srcLang.value === 'auto') {
-      // Update label only — keep srcLang on auto so backend re-detects
-    }
     if (j.truncated) {
       alert(`原文超過上限，僅取前 ${j.sentences.length} 句翻譯。`);
     }
+    dropText.innerHTML = `<b>${escapeHTML(f.name)}</b><div class="trd-drop-hint">已載入 ${j.sentence_count} 句、${j.char_count} 字</div>`;
     refreshCounter();
   } catch (err) {
     alert('上傳失敗：' + err.message);
+    dropZone.classList.remove('has-file');
+    dropText.innerHTML = origText;
   } finally {
     fileInput.value = '';
   }
-});
+}
+
+fileInput.addEventListener('change', (e) => handleUploadedFile(e.target.files[0]));
+
+// Drag-and-drop wiring on the entire drop zone label
+(function() {
+  const dz = document.getElementById('dropZone');
+  if (!dz) return;
+  ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, (e) => {
+    e.preventDefault(); e.stopPropagation();
+    dz.classList.add('is-dragover');
+  }));
+  ['dragleave','dragend'].forEach(ev => dz.addEventListener(ev, (e) => {
+    e.preventDefault(); e.stopPropagation();
+    dz.classList.remove('is-dragover');
+  }));
+  dz.addEventListener('drop', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    dz.classList.remove('is-dragover');
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) handleUploadedFile(f);
+  });
+})();
 
 btnClear.addEventListener('click', () => {
   srcText.value = '';
@@ -282,6 +397,28 @@ function renderRow(idx, src, translated, error) {
   `;
   return row;
 }
+
+// 整列 hover 高亮 — .trd-row 是 display:contents 沒實體 box，:hover
+// 不會起作用。改用 mouseover/mouseout event delegation：滑鼠進入任一
+// cell 就把 .is-hover 加到該列所有 cell（透過 data-idx 找兄弟）。
+let _hoverIdx = null;
+function _setHoverRow(idx) {
+  if (_hoverIdx === idx) return;
+  if (_hoverIdx !== null) {
+    trdGrid.querySelectorAll(`.trd-row[data-idx="${_hoverIdx}"]`).forEach(r =>
+      r.classList.remove('is-hover'));
+  }
+  _hoverIdx = idx;
+  if (idx !== null) {
+    trdGrid.querySelectorAll(`.trd-row[data-idx="${idx}"]`).forEach(r =>
+      r.classList.add('is-hover'));
+  }
+}
+trdGrid.addEventListener('mouseover', (e) => {
+  const row = e.target.closest('.trd-row');
+  _setHoverRow(row ? row.dataset.idx : null);
+});
+trdGrid.addEventListener('mouseleave', () => _setHoverRow(null));
 
 trdGrid.addEventListener('click', async (e) => {
   // 點到單格複製按鈕

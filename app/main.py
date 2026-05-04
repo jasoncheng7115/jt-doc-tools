@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.4.1"
+VERSION = "1.4.2"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -53,6 +53,27 @@ def _tpl_current_user(request) -> dict | None:
 
 
 templates.env.globals["current_user"] = _tpl_current_user
+
+
+def _tpl_is_admin(request) -> bool:
+    """Jinja global: True 當下使用者是 admin（或 auth OFF 也視為 admin）。
+    範本用此 gate 「LLM 設定」「資產管理」等只有管理員能進的連結，
+    避免一般使用者點下去吃 403 錯誤頁。"""
+    user = _tpl_current_user(request)
+    if user is None:
+        # auth off — anyone is "admin" (single-user mode)
+        from .core import auth_settings as _as
+        return not _as.is_enabled()
+    if user.get("source") == "off":
+        return True
+    try:
+        from .core import permissions as _perm
+        return bool(_perm.is_admin(user.get("user_id", 0)))
+    except Exception:
+        return False
+
+
+templates.env.globals["is_admin"] = _tpl_is_admin
 # Per-tool English keyword aliases — typed in the sidebar search to find a
 # tool by its English term (e.g. "stamp" → PDF 蓋章).
 _TOOL_ALIASES = {
@@ -330,6 +351,66 @@ def _branding_logo_url() -> str:
 
 
 templates.env.globals["branding_logo_url"] = _branding_logo_url
+
+
+# ---- Friendly HTML error pages for 401/403/404 (browser navigations only) ----
+# FastAPI 預設把 HTTPException 渲成 JSON `{"detail": "..."}`，瀏覽器 user 點到
+# /admin/llm-settings 卻沒 admin 權限會看到光禿禿的一行 JSON，看起來像系統壞掉。
+# 這個 handler 只攔 HTML navigation request（Accept: text/html），其他（API
+# / fetch / curl）維持 JSON 行為不變。
+from fastapi.exceptions import HTTPException as _HTTPException2  # noqa: E402
+
+@app.exception_handler(_HTTPException2)
+async def _friendly_http_exc(request: Request, exc: _HTTPException2):
+    # 只對「瀏覽器導航」改成 HTML；JSON / XHR / API 維持原本行為
+    accept = (request.headers.get("Accept") or "").lower()
+    is_html_nav = ("text/html" in accept and not _looks_like_xhr(request))
+    if not is_html_nav or exc.status_code not in (401, 403, 404):
+        # default JSON behaviour
+        return _JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+    titles = {
+        401: ("需要登入", "請先登入後再使用此頁。"),
+        403: ("沒有存取權限", str(exc.detail or "您的角色沒有使用此頁的權限。如有需要請聯絡管理員。")),
+        404: ("找不到頁面", "請確認網址是否正確，或回首頁重新導覽。"),
+    }
+    title, msg = titles.get(exc.status_code, ("錯誤", str(exc.detail or "")))
+    # 401 多一個「去登入」按鈕；其他都給「回首頁」按鈕
+    extra_btn = ""
+    if exc.status_code == 401:
+        extra_btn = '<a class="err-btn err-btn-primary" href="/login">去登入</a>'
+    html = f"""<!doctype html>
+<html lang="zh-Hant"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{exc.status_code} {title} · {settings.app_name}</title>
+<link rel="stylesheet" href="/static/css/platform.css">
+<style>
+  body {{ display:flex; align-items:center; justify-content:center; min-height:100vh;
+         margin:0; background:#0f172a; font-family:-apple-system, 'PingFang TC',
+         'Microsoft JhengHei', sans-serif; }}
+  .err-card {{ background:#fff; border-radius:12px; padding:36px 40px; max-width:480px;
+              text-align:center; box-shadow:0 12px 40px rgba(0,0,0,.4); }}
+  .err-code {{ font-size:64px; font-weight:700; color:#cbd5e1; line-height:1; margin-bottom:8px; }}
+  .err-title {{ font-size:20px; color:#0f172a; margin:8px 0 12px; }}
+  .err-msg {{ color:#475569; font-size:14px; line-height:1.6; margin-bottom:24px; }}
+  .err-btn {{ display:inline-block; padding:10px 22px; border-radius:6px; font-size:14px;
+            font-weight:500; text-decoration:none; margin:0 4px; transition:background .12s; }}
+  .err-btn-primary {{ background:#3b82f6; color:#fff; }}
+  .err-btn-primary:hover {{ background:#2563eb; }}
+  .err-btn-secondary {{ background:#f1f5f9; color:#1e293b; }}
+  .err-btn-secondary:hover {{ background:#e2e8f0; }}
+</style></head><body>
+<div class="err-card">
+  <div class="err-code">{exc.status_code}</div>
+  <h1 class="err-title">{title}</h1>
+  <p class="err-msg">{msg}</p>
+  {extra_btn}
+  <a class="err-btn err-btn-secondary" href="/">回首頁</a>
+</div></body></html>"""
+    return HTMLResponse(html, status_code=exc.status_code)
+
+
+# Need HTMLResponse import for the handler above
+from fastapi.responses import HTMLResponse  # noqa: E402
 
 
 # ---- Auth gate middleware ----

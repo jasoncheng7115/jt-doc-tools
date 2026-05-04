@@ -1798,6 +1798,15 @@ async function savePdf(isAuto) {
         // least 1.5× font_size as height, 2× as width.
         const hSafe = Math.max(h_pt, fontPt * 1.6, 14);
         const wSafe = Math.max(w_pt, fontPt * 2, 20);
+        const textVal = (o.text || '').trim();
+        // SAFETY NET (#6 deeper fix v1.4.2): 如果是從原 PDF 擷取的 text 物件
+        // (有 _origBbox)，但 text 不知為何變空了，不要送到 backend — 否則
+        // 會 redact 原文位置但沒插入新字 → 留下完全空白看起來像「文字消失」。
+        // 跳過該物件等於該次 save 不動原文。使用者重 pick 一次即可救回。
+        if (origBbox && !textVal) {
+          console.warn('[pdf-editor] skipping text obj with empty text but has _origBbox to avoid blanking original', o);
+          return;  // skip this obj entirely from this save
+        }
         objs.push({ id: rid(), type: 'text',
           x: x_pt, y: y_pt, w: wSafe, h: hSafe,
           text: o.text || '',

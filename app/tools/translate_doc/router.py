@@ -135,6 +135,26 @@ def _build_prompt(src_text: str, source_lang: str, target_lang: str) -> str:
     )
 
 
+def _translate_one(client, model: str, src: str,
+                   source_lang: str, target_lang: str) -> dict:
+    """單句翻譯 worker（給並行 executor 用）。
+    空字串直接回 empty，不發 LLM call。任何 exception 回 error 字串，
+    不 raise — caller 用 list 收集所有結果。"""
+    if not src.strip():
+        return {"src": src, "translated": "", "error": ""}
+    prompt = _build_prompt(src, source_lang, target_lang)
+    try:
+        resp = client.text_query(
+            prompt=prompt, model=model, temperature=0.0, think=False,
+        )
+        translated = (resp or "").strip()
+        translated = re.sub(r"^(翻譯[:：]?\s*|Translation:\s*)",
+                            "", translated, flags=re.IGNORECASE)
+        return {"src": src, "translated": translated, "error": ""}
+    except Exception as e:
+        return {"src": src, "translated": "", "error": f"LLM 失敗：{e}"}
+
+
 def _translate_sentences(
     sentences: list[str], source_lang: str, target_lang: str,
 ) -> list[dict]:
@@ -144,26 +164,23 @@ def _translate_sentences(
     # Per-tool 模型覆寫優先；admin 在 LLM 設定頁可以給 translate-doc 指定
     # 不同模型（例如純文字翻譯用 qwen3:32b，校驗仍用 gemma4:26b）
     model = llm_settings.get_model_for("translate-doc")
-    out: list[dict] = []
-    for i, src in enumerate(sentences):
-        if not src.strip():
-            out.append({"src": src, "translated": "", "error": ""})
-            continue
-        prompt = _build_prompt(src, source_lang, target_lang)
-        try:
-            resp = client.text_query(
-                prompt=prompt, model=model, temperature=0.0,
-                think=False,
-            )
-            translated = (resp or "").strip()
-            # Strip "翻譯：" / "Translation:" prefix if model added it
-            translated = re.sub(r"^(翻譯[:：]?\s*|Translation:\s*)",
-                                "", translated, flags=re.IGNORECASE)
-            out.append({"src": src, "translated": translated, "error": ""})
-        except Exception as e:
-            out.append({"src": src, "translated": "",
-                        "error": f"LLM 失敗：{e}"})
-    return out
+    conf = llm_settings.get()
+    # 並行數 — admin 在 LLM 設定可調，預設 4。對 1-句 case 退化成同步呼叫。
+    concurrency = max(1, min(16, int(conf.get("translate_concurrency", 4))))
+    n = len(sentences)
+    if n <= 1 or concurrency == 1:
+        return [_translate_one(client, model, src, source_lang, target_lang)
+                for src in sentences]
+    # ThreadPoolExecutor.map 保證 output 順序對應 input 順序（重要 — UI
+    # 是依索引貼回原文位置）。內部 LLMClient 的 httpx 是同步的，所以用
+    # thread pool 而不是 asyncio.gather。
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=concurrency) as ex:
+        results = list(ex.map(
+            lambda src: _translate_one(client, model, src, source_lang, target_lang),
+            sentences,
+        ))
+    return results
 
 
 # ---- routes -----------------------------------------------------------------
