@@ -107,6 +107,14 @@ class LLMSettingsManager:
          "use": "把 PDF 版面切斷的句子重排回來", "kind": "text"},
         {"id": "pdf-fill",         "name": "表單自動填寫（LLM 校驗）",
          "use": "校驗欄位填值正確（看 PNG → 給 yes/no）", "kind": "vision"},
+        {"id": "doc-deident",      "name": "文件去識別化（LLM 補偵測）",
+         "use": "regex 抓不到的人名 / 職稱 / 客戶代號等 context-sensitive 案例", "kind": "text"},
+        {"id": "pdf-wordcount",    "name": "字數統計（LLM 摘要 / 關鍵字）",
+         "use": "依文章內容生成 3-5 句摘要 + TOP 10 關鍵概念", "kind": "text"},
+        {"id": "pdf-annotations",  "name": "註解整理（LLM 自動分組）",
+         "use": "把多筆審閱意見自動分『重大 / 一般 / 提問』三類", "kind": "text"},
+        {"id": "doc-diff",         "name": "文件差異比對（LLM 變動摘要）",
+         "use": "比對行差異後，告訴使用者主要修改了哪幾條條款 / 段落", "kind": "text"},
     ]
 
     def get_model_for(self, tool_id: str) -> str:
