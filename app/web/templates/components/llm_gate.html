@@ -1,0 +1,181 @@
+{# ====================================================================
+   llm_gate — 統一 LLM 啟用狀態 UI（pattern-A 全擋 / pattern-B 加值）
+
+   Why a macro: 多個工具（translate-doc / doc-deident / pdf-wordcount /
+   pdf-annotations / doc-diff …）都要依「LLM 啟用 / 未啟用 / 是否 admin」
+   呈現不同 UI；散在各 template 改一次要動 N 處。集中到這個 macro，
+   未來 UX 改動一處改全部。
+
+   Required jinja globals (already provided by app/main.py):
+     - is_admin(request)   : True/False
+     - icon('name', size=) : SVG icon helper
+
+   Caller passes:
+     - tool_id    : 對應 KNOWN_LLM_TOOLS 的 id（用於 admin link 文案）
+     - llm_enabled: bool — admin 是否已開啟 LLM 服務
+     - llm_model  : str  — 目前該工具實際會用的 model 名稱（admin 才看）
+     - mode       : 'only' | 'augment'
+        only    : LLM 是該工具唯一功能。沒啟用就大資訊卡 + hide 主介面
+        augment : LLM 是加值。沒啟用顯示「灰色 disabled checkbox + 提示」
+                  有啟用顯示「可勾選 checkbox + 模型 badge」
+     - feature_label : (augment 模式) checkbox 旁的功能名，例如「LLM 補偵測」
+     - feature_desc  : (augment 模式) 一句話描述用途
+     - input_id      : (augment 模式) checkbox 的 id（呼叫端 JS 用）
+==================================================================== #}
+
+{% macro llm_gate(tool_id, llm_enabled, llm_model='', mode='augment',
+                  feature_label='LLM 加值', feature_desc='',
+                  input_id='') %}
+  {%- set _is_admin = is_admin(request) -%}
+
+  {%- if mode == 'only' -%}
+    {# Pattern A — LLM 是唯一功能，沒啟用就完全擋住 #}
+    {%- if not llm_enabled -%}
+      <div class="llm-gate-block">
+        <div class="llm-gate-icon">{{ icon('globe', size=28) }}</div>
+        <div class="llm-gate-body">
+          <h2 class="llm-gate-h">本工具需要 LLM 服務</h2>
+          <p class="llm-gate-p">
+            這個工具完全靠 LLM 運作 — 沒有設定 LLM server 就無法使用。
+          </p>
+          <p class="llm-gate-p llm-gate-privacy">
+            <b>強烈建議</b>使用<b>地端 LLM Server</b>（Ollama / vLLM / LM Studio…），
+            讓檔案內容只在公司內網流動。指向雲端 API 會把所有送 LLM 的<b>原始文件內容外傳</b>，
+            可能違反個資法、營業秘密、客戶 NDA。
+          </p>
+          {%- if _is_admin -%}
+          <div class="llm-gate-actions">
+            <a class="btn btn-primary" href="/admin/llm-settings">{{ icon('gear', size=14) }} 前往 LLM 設定</a>
+          </div>
+          {%- else -%}
+          <p class="llm-gate-contact">
+            請聯絡管理員到「LLM 設定」啟用後再使用本工具。
+          </p>
+          {%- endif -%}
+        </div>
+      </div>
+    {%- else -%}
+      {# 啟用狀態：頂端小 banner 顯示用了哪個 model；admin 才看 server URL #}
+      <div class="llm-gate-banner llm-gate-banner-on">
+        <span class="llm-gate-icon-sm">{{ icon('globe', size=14) }}</span>
+        <span><b>使用模型：</b><code class="llm-gate-model">{{ llm_model or '(預設)' }}</code></span>
+        {%- if _is_admin -%}
+        <span class="llm-gate-hint">（要換模型請到 <a href="/admin/llm-settings">LLM 設定</a>）</span>
+        {%- else -%}
+        <span class="llm-gate-hint">（如要更換模型，請聯絡管理員）</span>
+        {%- endif -%}
+      </div>
+    {%- endif -%}
+
+  {%- elif mode == 'augment' -%}
+    {# Pattern B — LLM 是加值。永遠顯示 checkbox，狀態依 llm_enabled 決定 #}
+    <div class="llm-gate-augment {% if not llm_enabled %}is-disabled{% endif %}">
+      <label class="llm-gate-aug-label" {% if not llm_enabled %}title="LLM 服務尚未啟用，請聯絡管理員"{% endif %}>
+        <input type="checkbox"
+               id="{{ input_id }}"
+               class="llm-gate-aug-cb"
+               {% if not llm_enabled %}disabled{% endif %}>
+        <span class="llm-gate-aug-text">
+          <b>{{ feature_label }}</b>
+          {%- if llm_enabled -%}
+          <span class="llm-gate-aug-tag llm-gate-aug-tag-on">已啟用 · {{ llm_model or '(預設)' }}</span>
+          {%- else -%}
+          <span class="llm-gate-aug-tag llm-gate-aug-tag-off">需 LLM 服務</span>
+          {%- endif -%}
+          {%- if feature_desc -%}
+          <span class="llm-gate-aug-desc">{{ feature_desc }}</span>
+          {%- endif -%}
+        </span>
+      </label>
+      {%- if not llm_enabled -%}
+      <div class="llm-gate-aug-hint">
+        {%- if _is_admin -%}
+        本功能需要 LLM 服務。請先到「<a href="/admin/llm-settings">LLM 設定</a>」啟用。
+        {%- else -%}
+        本功能需要 LLM 服務。請聯絡管理員啟用後再使用。
+        {%- endif -%}
+      </div>
+      {%- endif -%}
+    </div>
+  {%- endif -%}
+{% endmacro %}
+
+
+{# ============ Styles (loaded once per page that includes this) ============ #}
+{# Caller does {% from "components/llm_gate.html" import llm_gate, llm_gate_styles %}
+   then puts {{ llm_gate_styles() }} in <style> or extra-head block. #}
+{% macro llm_gate_styles() %}
+<style>
+  /* ---- pattern A: LLM-only block ---- */
+  .llm-gate-block {
+    display: flex; gap: 18px; align-items: flex-start;
+    padding: 24px 26px; margin: 16px 0 22px;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fcd34d; border-radius: 12px;
+  }
+  .llm-gate-icon {
+    flex: 0 0 auto; color: #92400e;
+    background: rgba(255,255,255,0.7); padding: 12px;
+    border-radius: 50%; line-height: 0;
+  }
+  .llm-gate-body { flex: 1 1 auto; min-width: 0; }
+  .llm-gate-h { margin: 0 0 6px; font-size: 18px; color: #78350f; }
+  .llm-gate-p { margin: 0 0 8px; font-size: 13.5px; color: #78350f; line-height: 1.55; }
+  .llm-gate-privacy {
+    background: rgba(255,255,255,0.55); padding: 10px 14px;
+    border-radius: 8px; border-left: 3px solid #d97706;
+    margin: 10px 0;
+  }
+  .llm-gate-actions { margin-top: 14px; }
+  .llm-gate-actions .btn .ic { stroke: currentColor; vertical-align: middle; margin-right: 4px; }
+  .llm-gate-contact {
+    margin: 14px 0 0; font-size: 13px; color: #78350f;
+    background: rgba(255,255,255,0.55); padding: 8px 12px; border-radius: 6px;
+  }
+
+  /* ---- pattern A: enabled banner (top of tool) ---- */
+  .llm-gate-banner-on {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 14px; margin: 0 0 14px;
+    background: #eff6ff; border-left: 4px solid #3b82f6;
+    border-radius: 0 6px 6px 0; font-size: 13px;
+  }
+  .llm-gate-icon-sm { color: #1e40af; line-height: 0; }
+  .llm-gate-icon-sm .ic { stroke: currentColor; }
+  .llm-gate-model {
+    background: #dbeafe; color: #1e40af; padding: 2px 8px;
+    border-radius: 4px; font-family: ui-monospace, SFMono-Regular, monospace;
+  }
+  .llm-gate-hint { color: #6b7280; font-size: 12px; }
+  .llm-gate-hint a { color: #2563eb; }
+
+  /* ---- pattern B: augment checkbox row ---- */
+  .llm-gate-augment {
+    margin: 8px 0 12px;
+    padding: 10px 14px;
+    background: #f8fafc; border: 1px solid var(--border, #e5e7eb);
+    border-radius: 8px;
+  }
+  .llm-gate-augment.is-disabled { background: #f3f4f6; opacity: 0.85; }
+  .llm-gate-aug-label {
+    display: flex; align-items: flex-start; gap: 10px;
+    cursor: pointer; user-select: none;
+  }
+  .llm-gate-augment.is-disabled .llm-gate-aug-label { cursor: not-allowed; }
+  .llm-gate-aug-cb { margin-top: 3px; transform: scale(1.15); }
+  .llm-gate-aug-text { flex: 1; font-size: 13.5px; line-height: 1.55; color: #1e293b; }
+  .llm-gate-aug-tag {
+    display: inline-block; margin-left: 8px;
+    font-size: 11px; padding: 2px 8px; border-radius: 10px;
+    font-weight: 600; vertical-align: 1px;
+  }
+  .llm-gate-aug-tag-on { background: #dcfce7; color: #166534; }
+  .llm-gate-aug-tag-off { background: #e5e7eb; color: #6b7280; }
+  .llm-gate-aug-desc { display: block; margin-top: 2px; font-size: 12px; color: #64748b; font-weight: normal; }
+  .llm-gate-aug-hint {
+    margin-top: 6px; padding-left: 24px;
+    font-size: 12px; color: #92400e;
+  }
+  .llm-gate-aug-hint a { color: #b45309; font-weight: 600; }
+</style>
+{% endmacro %}

@@ -16,6 +16,61 @@
     <label>密碼</label>
     <input id="pw" type="password" class="field" placeholder="開啟密碼或擁有者密碼都可以" />
   </div>
+  <div class="form-row">
+    <label></label>
+    <label class="field" style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; padding:8px 10px; background:#f8fafc; border:1px solid var(--border); border-radius:6px;">
+      <input id="useFnamePw" type="checkbox" style="margin-top:3px;" />
+      <span style="font-size:13px; line-height:1.55;">
+        <b>以檔名為密碼</b>
+        <span style="display:block; font-size:11.5px; color:#64748b; margin-top:2px;">
+          每個檔用自己的<b>主檔名</b>（去掉 <code>.pdf</code>）當作密碼。例如 <code>report-2026.pdf</code> 會試 <code>report-2026</code>。<br>
+          如同時也填了上方密碼，先試檔名失敗再試手動密碼，先成功的用。多份檔密碼不同時很方便。
+        </span>
+      </span>
+    </label>
+  </div>
+  <div class="form-row">
+    <label></label>
+    <label class="field" style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; padding:8px 10px; background:#fff7ed; border:1px solid #fdba74; border-radius:6px;">
+      <input id="useThsrMode" type="checkbox" style="margin-top:3px;" />
+      <span style="font-size:13px; line-height:1.55;">
+        <b>高鐵模式</b>
+        <span style="display:block; font-size:11.5px; color:#7c2d12; margin-top:2px;">
+          台灣高鐵電子車票 PDF 的密碼是<b>出發日期</b>（例：2024/03/15 → 密碼 <code>20240315</code>）。
+          勾選後在下方挑選日期範圍，工具會對每個檔嘗試該範圍內的每一天，成功就解密。
+          輸出檔名會自動改成「<code>20240315.pdf</code>」（可從檔名直接看出該票的搭乘日期）。
+        </span>
+      </span>
+    </label>
+  </div>
+  <div class="form-row" id="thsrDateRow" style="display:none;">
+    <label>搜尋日期範圍</label>
+    <div class="field" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <input id="thsrFrom" type="date" class="field" style="width:auto;" />
+      <span style="color:#64748b;">至</span>
+      <input id="thsrTo" type="date" class="field" style="width:auto;" />
+      <span class="muted" style="font-size:11.5px;">
+        預設最近 2 個月；最多 90 天範圍
+      </span>
+    </div>
+  </div>
+  <div class="form-row" id="thsrFmtRow" style="display:none;">
+    <label>日期格式</label>
+    <div class="field" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <select id="thsrFmtPreset" class="field" style="width:auto;">
+        <option value="YYYYMMDD" selected>YYYYMMDD（高鐵預設）</option>
+        <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+        <option value="YYYY/MM/DD">YYYY/MM/DD</option>
+        <option value="DDMMYYYY">DDMMYYYY</option>
+        <option value="DD-MM-YYYY">DD-MM-YYYY</option>
+        <option value="MMDDYYYY">MMDDYYYY</option>
+        <option value="YYMMDD">YYMMDD</option>
+        <option value="__custom__">自訂…</option>
+      </select>
+      <input id="thsrFmtCustom" type="text" class="field" placeholder="自訂格式 (Y/M/D 與 - / . _ 空白)" style="width:240px; display:none;" />
+      <span class="muted" style="font-size:11.5px;" id="thsrFmtPreview">預覽：<code id="thsrFmtSample">—</code></span>
+    </div>
+  </div>
   <p class="muted" style="font-size:12px;">如果 PDF 沒有開啟密碼但有權限限制（禁列印 / 禁複製），此處留空即可送出；工具會直接去掉權限限制。</p>
 </div>
 
@@ -38,11 +93,64 @@ const fu = new FileUpload($('decUp'), (_first, fs) => {
 });
 const jp = new JobProgress($('decJob'), { onReset: () => { fu.reset(); files = []; } });
 
+// 高鐵模式：toggle 顯示日期範圍 + 預設最近 2 個月
+function _isoDate(d) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+function _setDefaultThsrRange() {
+  const today = new Date();
+  const twoMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 2, today.getDate());
+  if (!$('thsrFrom').value) $('thsrFrom').value = _isoDate(twoMonthsAgo);
+  if (!$('thsrTo').value) $('thsrTo').value = _isoDate(today);
+}
+$('useThsrMode').addEventListener('change', () => {
+  const on = $('useThsrMode').checked;
+  $('thsrDateRow').style.display = on ? '' : 'none';
+  $('thsrFmtRow').style.display = on ? '' : 'none';
+  if (on) { _setDefaultThsrRange(); _refreshFmtPreview(); }
+});
+
+// 日期格式：preset 下拉 / 自訂輸入；即時預覽今天的日期看起來怎樣
+function _getThsrFormat() {
+  const sel = $('thsrFmtPreset').value;
+  if (sel === '__custom__') return $('thsrFmtCustom').value.trim() || 'YYYYMMDD';
+  return sel;
+}
+function _refreshFmtPreview() {
+  const fmt = _getThsrFormat();
+  const today = new Date();
+  const yyyy = String(today.getFullYear());
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const out = fmt
+    .replace(/YYYY/g, yyyy).replace(/YY/g, yyyy.slice(-2))
+    .replace(/MM/g, mm).replace(/DD/g, dd);
+  $('thsrFmtSample').textContent = out;
+}
+$('thsrFmtPreset').addEventListener('change', () => {
+  $('thsrFmtCustom').style.display = ($('thsrFmtPreset').value === '__custom__') ? '' : 'none';
+  _refreshFmtPreview();
+});
+$('thsrFmtCustom').addEventListener('input', _refreshFmtPreview);
+
 $('btn-submit').addEventListener('click', async () => {
   if (!files.length) return alert('請上傳 PDF');
   const fd = new FormData();
   for (const f of files) fd.append('file', f);
   fd.append('password', $('pw').value);
+  fd.append('use_filename_as_password', $('useFnamePw').checked ? '1' : '');
+  if ($('useThsrMode').checked) {
+    if (!$('thsrFrom').value || !$('thsrTo').value) {
+      return alert('高鐵模式：請選擇起迄日期');
+    }
+    fd.append('thsr_mode', '1');
+    fd.append('thsr_date_from', $('thsrFrom').value);
+    fd.append('thsr_date_to', $('thsrTo').value);
+    fd.append('thsr_date_format', _getThsrFormat());
+  }
   const r = await fu.upload('/tools/pdf-decrypt/submit', fd, {processingLabel: '排隊解密中…'});
   if (!r.ok) return alert('失敗：' + await r.text());
   const j = await r.json();

@@ -1,36 +1,18 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
+{% from "components/llm_gate.html" import llm_gate, llm_gate_styles with context %}
 {% block title %}逐句翻譯 · {{ app_name }}{% endblock %}
+{% block head %}{{ llm_gate_styles() }}{% endblock %}
 {% block content %}
 <h1>{{ icon('globe', size=22) }} 逐句翻譯</h1>
 <p class="muted">把長段文字或上傳檔案（PDF / DOCX / TXT）逐句送到 LLM 翻譯，
 左原文右譯文並排對照。每句可單獨重新翻譯。
 語言自動偵測或手動指定，目標語言預設繁體中文。</p>
 
-{% if not llm_enabled %}
-<div class="panel" style="border-left:4px solid #f59e0b; background:#fffbeb;">
-  <p style="margin:0;"><b>{{ icon('alert', size=16) }} LLM 服務尚未啟用</b></p>
-  {% if is_admin(request) %}
-  <p class="muted" style="margin:6px 0 0 0;">本工具需要連到 LLM server。請到「<a href="/admin/llm-settings">設定 → LLM 設定</a>」開啟。
-    啟用後本頁的翻譯功能就可以直接使用，不需要再額外設定。</p>
-  {% else %}
-  <p class="muted" style="margin:6px 0 0 0;">本工具需要連到 LLM server。請聯絡管理員啟用 LLM 設定後，本頁的翻譯功能即可使用。</p>
-  {% endif %}
-</div>
-{% else %}
-<div class="panel" style="border-left:4px solid #3b82f6; background:#eff6ff; padding:10px 14px;">
-  <p style="margin:0; font-size:13px;">
-    {{ icon('globe', size=14) }} <b>使用模型：</b><code style="background:#dbeafe; color:#1e40af; padding:2px 8px; border-radius:4px; font-family: ui-monospace, monospace;">{{ llm_model }}</code>
-    {% if is_admin(request) %}
-    {# admin 才顯示 server URL — 內網 IP 對一般使用者是敏感資訊 #}
-    <span class="muted" style="margin-left:10px; font-size:12px;">@ <code>{{ llm_url }}</code></span>
-    <span class="muted" style="margin-left:10px; font-size:12px;">（要換模型請到 <a href="/admin/llm-settings">LLM 設定</a>）</span>
-    {% else %}
-    <span class="muted" style="margin-left:10px; font-size:12px;">（如要更換模型，請聯絡管理員）</span>
-    {% endif %}
-  </p>
-</div>
-{% endif %}
+{{ llm_gate('translate-doc', llm_enabled, llm_model, mode='only') }}
+
+{# 主介面：LLM 沒啟用就藏起來，不讓使用者貼字按按鈕才發現失敗 #}
+{% if llm_enabled %}
 
 <div class="panel">
   <h2 style="margin-top:0;">1. 來源文字</h2>
@@ -280,9 +262,11 @@
   .trd-row.is-loading.is-hover .tgt::after,
   .trd-row.is-loading.is-hover .ctl::after { display: none; }
 </style>
+{% endif %}{# end of {% if llm_enabled %} — pattern A: hide tool UI when LLM not enabled #}
 {% endblock %}
 
 {% block scripts %}
+{% if llm_enabled %}
 <script>
 const LLM_MODEL = {{ llm_model|tojson }};
 const $ = (id) => document.getElementById(id);
@@ -578,4 +562,5 @@ $('btnCopySxs').addEventListener('click', () => {
   showToast?.('已複製對照', 'ok');
 });
 </script>
+{% endif %}{# end of {% if llm_enabled %} for scripts block #}
 {% endblock %}

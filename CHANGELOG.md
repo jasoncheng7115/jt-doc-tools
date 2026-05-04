@@ -4,6 +4,34 @@
 
 ---
 
+## [1.4.19] - 2026-05-04
+
+### 新增
+
+- **PDF 密碼解除：「以檔名為密碼」勾選**：每個檔案用自己的主檔名（無 `.pdf`）當作密碼。同時填了上方密碼則先試檔名失敗再試手動，先成功的用。多份檔不同密碼批次解密很方便。
+- **PDF 密碼解除：「高鐵模式」**：台灣高鐵電子車票 PDF 的開啟密碼是出發日期。勾選後挑選日期範圍（預設最近 2 個月、最多 90 天），對每個檔嘗試該範圍內每一天的日期作為密碼；成功後輸出檔名自動改為「<該日期>.pdf」（直接看出搭乘日期）。
+- **高鐵模式：日期格式可選 / 自訂**：預設 `YYYYMMDD`（高鐵真正用的格式），下拉可選 `YYYY-MM-DD` / `YYYY/MM/DD` / `DDMMYYYY` / `DD-MM-YYYY` / `MMDDYYYY` / `YYMMDD`，或選「自訂…」自填任意 `Y/M/D` 與分隔符組合（- / . _ 空白）。即時預覽今天的日期看起來怎樣。
+
+### LLM UX
+
+- 新建 `components/llm_gate.html` jinja macro：兩種模式 `only`（LLM 是工具唯一功能、未啟用就大資訊卡擋住）、`augment`（LLM 是加值、checkbox 灰色 disabled + 提示）。所有 LLM-using 工具未來統一接這個 macro，改 UX 一處改全部。
+- `translate-doc` 改用 `llm_gate(only)` — 未啟用 LLM 時整個工具 UI hidden，避免使用者貼字按按鈕才發現失敗；資訊卡內含「強烈建議地端 LLM」隱私說明 + admin 連結（非 admin 看到「請聯絡管理員」）。
+
+---
+
+## [1.4.18] - 2026-05-04
+
+### 新增
+
+- **權限矩陣（admin/permissions）右側「角色」「進階：直接 grant 工具」兩段都加全選 / 取消全選 / 反向選取按鈕**：跟「角色管理」頁一致的批次操作 UX。bulk 操作只影響搜尋結果可見的項目（避免誤勾被過濾隱藏的工具）。
+
+### 改善
+
+- **批次選取按鈕用語統一為「全選 / 取消全選 / 反向選取」**：權限矩陣與角色管理兩頁同一套用語。
+- **CHANGELOG 拿掉所有裝飾性 emoji**（一致風格、grep 友善）。
+
+---
+
 ## [1.4.17] - 2026-05-04
 
 ### 改善
@@ -15,7 +43,7 @@
 
 ## [1.4.16] - 2026-05-04
 
-### #6 ✅ pdf-editor 文字物件變空白 — 真正根因 + 修復
+### #6 pdf-editor 文字物件變空白 — 真正根因 + 修復
 
 從 v1.4.0 ~ v1.4.15 多次嘗試都沒解。今天透過 backend log + 直接讀 PNG 預覽，**確認 backend 完全正確**：redact + insert text 都成功，PDF 內含正確文字、PNG render 也清楚顯示文字。問題在**前端的 redact marker**：
 
@@ -99,7 +127,7 @@
 
 ### 改善
 
-- **各工具個別模型下拉：視覺工具自動 disable 純文字模型**：例如 `pdf-fill`（標 vision）的下拉打開時，`deepseek-r1:70b` / `gpt-oss:120b` 等純文字模型整組變灰、不可選，前面加 🚫 標示，optgroup label 改為「文字 / 其他模型（此工具需視覺模型，無法使用）」。避免 admin 誤選導致 LLM 校驗永遠失敗（純文字模型看不到圖）。原本選的值若被 disable，自動 fallback 到「（用上方預設）」。
+- **各工具個別模型下拉：視覺工具自動 disable 純文字模型**：例如 `pdf-fill`（標 vision）的下拉打開時，`deepseek-r1:70b` / `gpt-oss:120b` 等純文字模型整組變灰、不可選，前面加禁用標示，optgroup label 改為「文字 / 其他模型（此工具需視覺模型，無法使用）」。避免 admin 誤選導致 LLM 校驗永遠失敗（純文字模型看不到圖）。原本選的值若被 disable，自動 fallback 到「（用上方預設）」。
 
 ---
 
@@ -161,7 +189,7 @@
 
 ### 大改版 — 客戶慘案修復 + 升級安全 + 多項 UX 強化
 
-#### 🚨 重大修正 — 升級流程不准弄壞既有設定
+#### 重大修正 — 升級流程不准弄壞既有設定
 
 - **`auth_settings.json` 變 root:root mode 600 → 服務讀不到、客戶以為 LDAP 設定消失**：根因是 `_run_auth_helper` 跑 sudo 寫檔後沒 chown 回 service user。修法：
   - `_run_auth_helper` 結尾固定呼叫 `_chown_data_files_back()` 把整個 data dir 還給原 owner
@@ -169,7 +197,7 @@
   - 新加 memory rule「客戶升級版本，原有設定必需留存」永久遵循
 - **`/setup-admin` 偵測既有 user 時提供「沿用既有 admin」恢復路徑**：避免「停用認證 → 再啟用 → 撞既有 user → 報資料庫狀態異常」這個無路可走的死局。新 endpoint `POST /setup-admin/reuse-existing` 直接 flip backend=local 不建新帳號、清舊 sessions。
 
-#### 🚨 GitHub issue #1 — Windows install 卡 NSSM 下載
+#### GitHub issue #1 — Windows install 卡 NSSM 下載
 
 - **NSSM bundled 在 repo 內**：`packaging/windows/nssm.exe`（NSSM 2.24 win64 官方版，BSD 授權允許 redistribute）。`install.ps1` 在 `Fetch-Code` 之後執行 `Install-Nssm`，優先使用 bundled，網路下載成 fallback。
 - **SHA-256 校驗**：寫死 `f689ee9af94b00e9e3f0bb072b34caaf207f32dcb4f5782fc9ca351df9a06c97` 在 install.ps1，被改過就拒絕。任何人可獨立用 `Get-FileHash` 驗證。
@@ -344,8 +372,8 @@
 
 - **`jtdt` 無參數印的指令清單改用英文**：純文字 TTY / minimal container / Windows console 沒切 UTF-8 codepage 都渲染不出 CJK，CLI 訊息一律英文 ASCII 比較通用。argparse 的 description / usage 同步改英文。GUI / web UI 仍維持台灣繁中。
 - **README 新增「圖片轉 PDF」到「格式轉換」段**，並修正其他 22 個工具的計數 (原 21)。
-- **README 拿掉所有 emoji**：`🔧` 標記改成文字 `[需 OxOffice/LibreOffice]`，更明確且 grep 友善。Office 引擎相依說明的 `🔧` 同步移除。
-- **landing page (`docs/index.html`) 拿掉模式說明卡的 `🏠` / `🏢` emoji**。
+- **README 拿掉所有 emoji**：「Office 引擎相依」標記改成文字 `[需 OxOffice/LibreOffice]`，更明確且 grep 友善。
+- **landing page (`docs/index.html`) 拿掉模式說明卡的 home / office building emoji**。
 - **landing page 「自架」slogan 文案調整**：「所有檔案處理只發生在你的伺服器，原始碼公開」→「所有檔案處理只發生在你的伺服器，**且原始碼完全公開**」更強調。
 
 ---
@@ -835,7 +863,7 @@
 ### 修正（diff 對齊 + emoji → icon）
 
 - **左右兩欄文字對齊壞掉**：text-diff / doc-diff 兩邊原本是獨立的 `.df-col`，當一邊文字長到換行（visual wrap）時，另一邊的對應行高度沒跟著漲，後面整段就垂直歪掉。改用「整個 diff 是一張 2-column grid，每行 = grid 的一個 row」結構，row height 自動取 max(left, right)，wrap 後仍對齊。
-- **emoji 換成 SVG icon**：`📝 / 📄 / ⇄` 改成 icon macro `edit / page / swap`。`swap` 是新加的 icon，雙箭頭 left↔right。
+- **emoji 換成 SVG icon**：`memo / page / swap` 三個 emoji 改成 icon macro `edit / page / swap`。`swap` 是新加的 icon，雙箭頭 left↔right。
 
 ---
 
@@ -1087,7 +1115,7 @@
 ### 新增（上傳檔案記錄頁）
 
 - **新設定頁 `/admin/uploads`**：列出所有透過工具上傳的檔案 — 從 `audit_events` 表 SELECT `event_type='tool_invoke' AND details_json LIKE '%filename%'` 過濾出來（不另外建表）。
-- **欄位**：時間 （yyyy/MM/dd HH:mm:ss） / 使用者 / IP / 工具 （pill） / 檔名 （📄 icon + action） / 大小 （KB/MB/GB human-formatted， 右對齊） / 狀態 （HTTP code 著色：2xx 綠 / 4xx-5xx 紅）。
+- **欄位**：時間 （yyyy/MM/dd HH:mm:ss） / 使用者 / IP / 工具 （pill） / 檔名 （icon + action） / 大小 （KB/MB/GB human-formatted， 右對齊） / 狀態 （HTTP code 著色：2xx 綠 / 4xx-5xx 紅）。
 - **篩選**：使用者下拉、工具下拉、檔名包含關鍵字、起訖時間範圍。共筆數 + 本頁總大小顯示。
 - **保留**：跟稽核記錄共用 `audit_events` 表，90 天自動清除（在「檔案保留 / 清理」可調）。
 - Sidebar 加 nav 項目「上傳檔案記錄」（icon=upload，需 auth）。
@@ -1367,7 +1395,7 @@
 
 ### 變更
 
-- **每個分區標題加 icon**：Backend 模式 ⚙、連線 🌐、搜尋 🔍、屬性對應 📋。
+- **每個分區標題加 icon**：Backend 模式 / 連線 / 搜尋 / 屬性對應 各加對應 icon（gear / globe / search / clipboard）。
 
 ---
 
@@ -1503,7 +1531,7 @@
 
 ### 變更
 
-- **使用者管理：「內建」改成 disabled 按鈕**：原本 `🔒 內建` 是 inline span，跟其他列的按鈕不對齊。改成 `<button disabled>`，跟「編輯」「重設密碼」「刪除」一致排列。
+- **使用者管理：「內建」改成 disabled 按鈕**：原本 `[內建]` 是 inline span，跟其他列的按鈕不對齊。改成 `<button disabled>`，跟「編輯」「重設密碼」「刪除」一致排列。
 - **登出確認改用 in-app modal**：原本用 `window.confirm()` 跳瀏覽器原生對話框（與專案規範「所有對話框走 in-app」抵觸）。改走 `window.showConfirm()`（`static/js/modal.js`），跟其他二次確認一致。
 
 ---
@@ -1548,7 +1576,7 @@
 - **登入頁認證領域選擇**：啟用 LDAP/AD 後，本機帳號仍能登入（rescue path）。登入頁多一個下拉選單，預設選外部目錄，使用者可切「本機帳號」用本機密碼登入（jtdt-admin 永遠走得通）。
 - **左上角顯示登入帳號 + 登出按鈕**：base.html sidebar 頂端，登入後就出現使用者名稱 + 一鍵登出。
 - **使用者管理：搜尋框 + In-page 編輯 modal + 重設密碼 modal**：取代瀏覽器 prompt。編輯 modal 含顯示名稱、啟用、角色多選 （checkboxes）、群組多選。
-- **內建管理員 （jtdt-admin / `is_admin_seed=1`） 不可被編輯角色或停用**：UI 隱藏編輯按鈕、顯示 🔒 內建標記，後端也 raise 拒絕。
+- **內建管理員 （jtdt-admin / `is_admin_seed=1`） 不可被編輯角色或停用**：UI 隱藏編輯按鈕、顯示「內建」標記，後端也 raise 拒絕。
 
 ### 修正
 
@@ -1633,7 +1661,7 @@
 
 ### 新增
 
-- **字型管理頁可隱藏不要的字型**：每個字型旁加「🚫 隱藏」/「👁 顯示」按鈕。隱藏後 PDF 編輯器的字型下拉選單不會出現該字型，**檔案保留**隨時可取消隱藏。隱藏狀態存在 `data/font_settings.json`（`hidden: [...font ids...]`）。
+- **字型管理頁可隱藏不要的字型**：每個字型旁加「隱藏」/「顯示」按鈕。隱藏後 PDF 編輯器的字型下拉選單不會出現該字型，**檔案保留**隨時可取消隱藏。隱藏狀態存在 `data/font_settings.json`（`hidden: [...font ids...]`）。
 - 字型清單頁標題顯示「總計 N 個（X 顯示、Y 隱藏）」
 - 後端 `font_catalog.list_fonts(include_hidden=False)`：預設過濾隱藏的；admin 頁傳 `True` 看完整清單 + 每筆帶 `hidden` flag
 - API：`POST /admin/fonts/toggle-hidden` (`{id}` → `{ok, id, hidden, hidden_count}`)

@@ -76,6 +76,9 @@
           <div class="picker-toolbar">
             <input class="field picker-search" type="search" id="pdRoleSearch" placeholder="搜尋角色…">
             <span class="picker-count" id="pdRoleCount">0 / 0</span>
+            <button type="button" class="btn btn-small" data-bulk="all" data-target="pdRoleList" title="全選">全選</button>
+            <button type="button" class="btn btn-small" data-bulk="none" data-target="pdRoleList" title="取消全選">取消全選</button>
+            <button type="button" class="btn btn-small" data-bulk="invert" data-target="pdRoleList" title="反向選取">反向選取</button>
             <button type="button" class="btn btn-small picker-clear" id="pdRoleClear">清除</button>
           </div>
           <div class="picker-list" id="pdRoleList"></div>
@@ -88,6 +91,9 @@
           <div class="picker-toolbar">
             <input class="field picker-search" type="search" id="pdToolSearch" placeholder="搜尋工具…">
             <span class="picker-count" id="pdToolCount">0 / 0</span>
+            <button type="button" class="btn btn-small" data-bulk="all" data-target="pdToolList" title="全選（只影響目前搜尋結果可見的）">全選</button>
+            <button type="button" class="btn btn-small" data-bulk="none" data-target="pdToolList" title="取消全選">取消全選</button>
+            <button type="button" class="btn btn-small" data-bulk="invert" data-target="pdToolList" title="反向選取">反向選取</button>
             <button type="button" class="btn btn-small picker-clear" id="pdToolClear">清除</button>
           </div>
           <div class="picker-list" id="pdToolList"></div>
@@ -245,6 +251,22 @@ function bindPicker(listId, searchId, countId, clearId) {
     list.querySelectorAll('input:checked').forEach(c => c.checked = false);
     refresh(); markDirty(true);
   };
+  // Bulk select 按鈕（全選 / 取消全選 / 反向選取）— 只影響「目前可見」的項目
+  // （hidden=true 的搜尋過濾結果不動，避免誤勾被搜尋隱藏的工具）。
+  document.querySelectorAll(`button[data-bulk][data-target="${listId}"]`).forEach(btn => {
+    btn.onclick = () => {
+      const mode = btn.dataset.bulk;
+      list.querySelectorAll('.picker-item').forEach(el => {
+        if (el.hidden) return;
+        const cb = el.querySelector('input[type=checkbox]');
+        if (!cb) return;
+        if (mode === 'all') cb.checked = true;
+        else if (mode === 'none') cb.checked = false;
+        else if (mode === 'invert') cb.checked = !cb.checked;
+      });
+      refresh(); markDirty(true);
+    };
+  });
   return refresh;
 }
 
