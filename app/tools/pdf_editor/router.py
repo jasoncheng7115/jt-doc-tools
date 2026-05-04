@@ -1291,8 +1291,30 @@ async def save(request: Request):
                     )
                 elif ot == "text":
                     text = str(obj.get("text") or "")
+                    has_orig = obj.get("original_bbox") is not None
                     if not text:
+                        # Empty text — should never reach here because the
+                        # frontend safety net + Pass 1 redact safety both
+                        # filter empty-text+orig_bbox combinations.
+                        # Log if it does so we can find the path.
+                        import logging as _lg
+                        _lg.getLogger(__name__).warning(
+                            "text obj reached Pass 2 with empty text "
+                            "(has_orig_bbox=%s, page=%d) — skipping",
+                            has_orig, pno)
                         continue
+                    # 診斷：印出每個 text obj 的關鍵欄位（v1.4.13 #6 偵錯用）
+                    import logging as _lg
+                    _lg.getLogger(__name__).info(
+                        "pdf-editor insert text page=%d rect=%s text=%r "
+                        "font_pref=%s font_size=%.1f color=%r has_orig_bbox=%s",
+                        pno, [round(rect.x0,1), round(rect.y0,1),
+                              round(rect.x1,1), round(rect.y1,1)],
+                        text[:50],
+                        obj.get("font") or "default",
+                        float(obj.get("font_size") or 11),
+                        obj.get("color"),
+                        has_orig)
                     font_size = float(obj.get("font_size") or 11)
                     col = _hex_rgb01(str(obj.get("color") or "#000000"))
                     bold = bool(obj.get("bold"))

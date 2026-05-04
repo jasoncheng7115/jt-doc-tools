@@ -84,11 +84,16 @@
       </button>
     </div>
   </div>
-  <div class="muted" style="font-size:12px; margin-left:208px;">
-    清單會在<a href="#" id="lnkTestConn" class="hint-test-conn">{{ icon('refresh', size=12) }} 點此測試連線</a>後從 server 抓取。視覺模型 (vl/vision/llava/gemma 等) 會標 ✨。<br>
-    建議：<b><code>gemma4:26b</code></b>（預設；MoE 架構、4 張廠商表單實測 100% 準、平均 11 秒）、
-    <code>qwen3-vl:8b</code>（低 VRAM 備案；~8GB、筆電部署用）。<br>
-    <span style="color:#b91c1c;">⚠️ gemma4:e4b 對繁中人名/公司名多處誤判（58% 準），qwen3-vl:2b/4b 會 timeout，皆不建議。</span>
+  <div class="model-hint">
+    <p class="model-hint-line">
+      清單會在<a href="#" id="lnkTestConn" class="hint-test-conn">{{ icon('refresh', size=12) }} 點此測試連線</a>後從 server 抓取。視覺模型 (vl/vision/llava/gemma 等) 會標 ✨。
+    </p>
+    <p class="model-hint-line">
+      <b>建議</b>：<code>gemma4:26b</code>（預設；MoE 架構、4 張廠商表單實測 100% 準、平均 11 秒）、<code>qwen3-vl:8b</code>（低 VRAM 備案；~8GB、筆電部署用）。
+    </p>
+    <p class="model-hint-line model-hint-warn">
+      ⚠️ <code>gemma4:e4b</code> 對繁中人名 / 公司名多處誤判（58% 準），<code>qwen3-vl:2b/4b</code> 會 timeout，皆不建議。
+    </p>
   </div>
 
   <div class="per-tool-section">
@@ -99,29 +104,24 @@
         選「（用上方預設）」就跟隨預設。重新整理清單後，新抓回的 model 會自動出現在下拉。
       </p>
     </div>
-    <div class="per-tool-table">
-      <div class="ptt-head">
-        <span>工具</span>
-        <span>個別模型</span>
-        <span>建議</span>
-      </div>
+    <div class="per-tool-cards">
       {% for t in known_llm_tools %}
       {% set _v = settings.model_per_tool.get(t.id) if settings.model_per_tool else '' %}
-      <div class="ptt-row">
-        <div class="ptt-tool">
-          <div class="ptt-tool-name">{{ t.name }}</div>
-          <div class="ptt-tool-meta"><code>{{ t.id }}</code> · {{ t.use }}</div>
+      <div class="ptc-card">
+        <div class="ptc-head">
+          <span class="ptc-icon">{{ icon(t.icon|default('tool'), size=16) }}</span>
+          <span class="ptc-name">{{ t.name }}</span>
+          {% if t.kind == 'vision' %}<span class="ptc-tag ptc-tag-vision">需視覺</span>{% else %}<span class="ptc-tag ptc-tag-text">文字</span>{% endif %}
+          <code class="ptc-id">{{ t.id }}</code>
         </div>
-        <div class="ptt-model">
+        <div class="ptc-desc">{{ t.use }}</div>
+        <div class="ptc-select">
           <select class="field per-tool-model" data-tool-id="{{ t.id }}" data-kind="{{ t.kind }}">
             <option value="">（用上方預設：{{ settings.model }}）</option>
             {% if _v and _v != settings.model %}
             <option value="{{ _v }}" selected>{{ _v }}</option>
             {% endif %}
           </select>
-        </div>
-        <div class="ptt-hint">
-          {% if t.kind == 'vision' %}<span class="ptt-tag ptt-tag-vision">視覺</span>{% else %}<span class="ptt-tag ptt-tag-text">文字</span>{% endif %}
         </div>
       </div>
       {% endfor %}
