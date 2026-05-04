@@ -4,6 +4,22 @@
 
 ---
 
+## [1.4.16] - 2026-05-04
+
+### #6 ✅ pdf-editor 文字物件變空白 — 真正根因 + 修復
+
+從 v1.4.0 ~ v1.4.15 多次嘗試都沒解。今天透過 backend log + 直接讀 PNG 預覽，**確認 backend 完全正確**：redact + insert text 都成功，PDF 內含正確文字、PNG render 也清楚顯示文字。問題在**前端的 redact marker**：
+
+- `addRedactMarker()` 建立的 `fabric.Rect` 用 `fill: '#ffffff'`（**完全不透明白色**）
+- 這個 marker `_peMarker=true`，永遠不會被 fade，也不會被移除
+- 物件 baked 後，BG 已經有新文字，但白色 marker 蓋在 BG 上 → 把 BG 的新文字整個遮住 → 使用者看到「白色 + 紅虛線框」
+
+**修法**：savePdf 結束、把物件標 `_peSaved=true` 時，同時找出該物件對應的 marker（用 `_ownerId` 配對 `_peId`），把 fill 改成 `rgba(255,255,255,0)` 透明 — 紅虛線框保留（讓使用者知道這是 redact 區），但讓 BG 的烙進文字看得到。
+
+> 教訓：每次「視覺看不到」的 bug，要分清楚是 backend 沒寫 / PDF 沒寫 / PNG 沒 render / 還是前端 layer 蓋住。`curl preview_url` 看 PNG 一刀切，比一直猜 backend 邏輯有效率很多。
+
+---
+
 ## [1.4.15] - 2026-05-04
 
 ### #6 偵錯強化

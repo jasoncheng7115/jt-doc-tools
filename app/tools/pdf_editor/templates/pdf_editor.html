@@ -1951,6 +1951,8 @@ async function savePdf(isAuto) {
       // background PDF doesn't have it baked, making the object look
       // blank/empty after deselecting (#6 bug regression 2026-05).
       const skippedActive = activePerCanvas[pIdx];
+      // Track which obj _peId got baked, so we can dim their markers below
+      const bakedOwnerIds = new Set();
       fc.getObjects().forEach(o => {
         if (o._peMarker) return;
         if (o === skippedActive) {
@@ -1960,10 +1962,21 @@ async function savePdf(isAuto) {
           return;
         }
         o._peSaved = true;
+        if (o._peId) bakedOwnerIds.add(o._peId);
         if (o === stillSelected) {
           o.set('opacity', 1);
         } else {
           o.set('opacity', 0.01);
+        }
+      });
+      // Dim markers whose owner has been baked — once redact applied + new
+      // text inserted into BG, the white-filled marker would HIDE the new
+      // baked text from the user (#6 root cause v1.4.16). Keep red dashed
+      // border visible (so user knows redact zone) but make fill transparent.
+      fc.getObjects().forEach(o => {
+        if (!o._peMarker) return;
+        if (o._ownerId && bakedOwnerIds.has(o._ownerId)) {
+          o.set({fill: 'rgba(255,255,255,0)'});  // 透明 fill，邊框保留
         }
       });
       if (stillSelected) fc.setActiveObject(stillSelected);
