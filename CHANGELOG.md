@@ -4,6 +4,14 @@
 
 ---
 
+## [1.4.11] - 2026-05-04
+
+### 緊急修正
+
+- **`/setup-admin` 500 Internal Server Error**：v1.4.2 加「沿用既有 admin」reuse 路徑時 `setup_admin.html` 漏了一個 `{% endif %}` 對應 `{% if has_existing %}`。客戶按「啟用認證」直接撞 500。Hotfix 補上。
+
+---
+
 ## [1.4.10] - 2026-05-04
 
 ### 改善
