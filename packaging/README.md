@@ -5,6 +5,8 @@
 | 檔案 | 平台 | 安裝位置 |
 |------|------|---------|
 | `jt-doc-tools.service`        | Linux   | `/etc/systemd/system/` |
-| `com.jasontools.doctools.plist` | macOS | `/Library/LaunchDaemons/` |
+| `windows/winsw.exe`           | Windows | `C:\Program Files\jt-doc-tools\bin\jtdt-svc.exe`（重新命名） + 動態產生的 `jtdt-svc.xml`；service name `jt-doc-tools` |
 
-Windows 採用 NSSM 包裝（不需 unit 檔），由 install.ps1 直接呼叫 `nssm.exe set` 設定。
+macOS 不用 LaunchDaemon — 改裝 `/Applications/Jason Tools 文件工具箱.app`，由 LaunchServices 啟動 + 登入項目自動執行。原因見 `feedback_macos_aqua_subprocess.md`：OxOffice/LibreOffice 子行程需 GUI Aqua context，LaunchDaemon 在 daemon session 拿不到。
+
+Windows 自 v1.4.44 起改用 WinSW（之前是 NSSM）。原因：NSSM 2014 後無更新、nssm.cc 不時 503/404、AV 標 PUA。WinSW 配置由 `bin/jtdt-svc.xml` 管理，舊客戶升級時自動移轉（service name + env 變數都保留）。
