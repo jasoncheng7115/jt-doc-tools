@@ -4,6 +4,15 @@
 
 ---
 
+## [1.4.81] - 2026-05-05
+
+### 改善
+
+- **PDF 編輯器字型下拉支援動態高度**：原本寫死 `max-height: 360px`，下方視窗還有空間也撐不開。改成依 `getBoundingClientRect()` 動態算可用空間（上限 600px），下方夠就往下展，不夠才取上方空間
+- **挑完字型立即 bake，不等 800ms debounce**：CSS generic 的 `serif`/`sans-serif` 在 Fabric 即時預覽看起來常常一樣（系統 fallback 不固定），真正的視覺差別在後端 bake 後 PNG 才看得到。改成 `pfFont` / `pfBatchFont` 的 change handler 直接呼叫 `doAutoSave()` 立刻 trigger bake（自動預覽關閉時尊重設定不觸發）
+
+---
+
 ## [1.4.80] - 2026-05-05
 
 ### 修正
