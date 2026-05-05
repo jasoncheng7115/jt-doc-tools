@@ -246,22 +246,47 @@ detect_office() {
 }
 
 install_oxoffice_x11_runtime_libs_linux() {
-    # OxOffice / LibreOffice oosplash 啟動時 dlopen 這些 X11 client lib，
-    # 即使是 --headless 模式也會。Debian / Ubuntu 的 minimal / server 安裝
-    # 沒有這些 lib，缺的話 office-to-pdf 一執行就掛：
-    #   "libXinerama.so.1: cannot open shared object file: No such file or directory"
+    # OxOffice / LibreOffice oosplash + cairo + GTK 啟動時 dlopen 整套 lib，
+    # 即使是 --headless 模式也會。Debian / Ubuntu minimal / server 安裝缺很多，
+    # apt 預設又被 --no-install-recommends 削減，會導致 office-to-pdf 一執行就掛
+    # （錯誤訊息類似「libX11-xcb.so.1: cannot open shared object file」）。
+    # 一次裝齊比客戶踩一個補一個好；列表須跟 app/core/sys_deps.py:_OXOFFICE_X11_LIBS
+    # 同步維護。
     [ "$PLATFORM" = "linux" ] || return 0
     local pkgs="libxinerama1 libxrandr2 libxcursor1 libxi6 libxtst6 \
-                libsm6 libxext6 libxrender1 libdbus-1-3 libcups2"
-    log "安裝 OxOffice / LibreOffice X11 執行時依賴 ..."
+                libsm6 libxext6 libxrender1 \
+                libx11-xcb1 libxcomposite1 libxdamage1 libxfixes3 \
+                libxkbcommon0 \
+                libdbus-1-3 libcups2 \
+                libfontconfig1 libfreetype6 libcairo2 \
+                libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
+                libnss3 \
+                default-jre-headless"
+    log "安裝 OxOffice / LibreOffice 執行時依賴 (X11 / 字型 / Java JRE) ..."
     if command -v apt-get >/dev/null 2>&1; then
         # shellcheck disable=SC2086
         DEBIAN_FRONTEND=noninteractive apt-get install -y $pkgs \
-            || warn "X11 執行時依賴部分安裝失敗（OxOffice 可能無法啟動）"
+            || warn "OxOffice 執行時依賴部分安裝失敗（office-to-pdf 可能無法啟動）"
     elif command -v dnf >/dev/null 2>&1; then
-        dnf install -y libXinerama libXrandr libXcursor libXi libXtst \
-                       libSM libXext libXrender dbus-libs cups-libs \
-            || warn "X11 執行時依賴部分安裝失敗（OxOffice 可能無法啟動）"
+        dnf install -y \
+            libXinerama libXrandr libXcursor libXi libXtst \
+            libSM libXext libXrender \
+            libX11-xcb libXcomposite libXdamage libXfixes \
+            libxkbcommon \
+            dbus-libs cups-libs \
+            fontconfig freetype cairo \
+            pango gdk-pixbuf2 nss \
+            java-21-openjdk-headless 2>/dev/null \
+            || dnf install -y \
+                libXinerama libXrandr libXcursor libXi libXtst \
+                libSM libXext libXrender \
+                libX11-xcb libXcomposite libXdamage libXfixes \
+                libxkbcommon \
+                dbus-libs cups-libs \
+                fontconfig freetype cairo \
+                pango gdk-pixbuf2 nss \
+                java-17-openjdk-headless \
+            || warn "OxOffice 執行時依賴部分安裝失敗（office-to-pdf 可能無法啟動）"
     fi
 }
 

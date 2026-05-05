@@ -4,6 +4,24 @@
 
 ---
 
+## [1.4.40] - 2026-05-04
+
+### 新增
+
+- **OxOffice / LibreOffice 執行時依賴一次裝齊**（客戶 v1.4.39 回報「javaldx: Could not find a Java Runtime Environment! / libX11-xcb.so.1: cannot open shared object file」）：
+  - 加入 `libx11-xcb1`、`libxcomposite1`、`libxdamage1`、`libxfixes3`、`libxkbcommon0`、`libfontconfig1`、`libfreetype6`、`libcairo2`、`libpango-1.0-0`、`libpangocairo-1.0-0`、`libgdk-pixbuf-2.0-0`、`libnss3` 到自動安裝清單
+  - 新增 Java JRE (`default-jre-headless` / RHEL `java-21-openjdk-headless`) 自動安裝
+  - install.sh + jtdt update + sys_deps probe 三處同步維護同一份清單；客戶不用再一個一個補
+- **`_probe_java_runtime` 系統依賴探針**：admin 系統依賴頁可看到 Java JRE 安裝狀態與版本
+
+### 修正
+
+- **頁面轉向：選擇全頁套用方式後個別頁殘留覆寫導致只有第一頁變更**：
+  - 之前 per-page override 永遠優先於全頁設定，使用者切「左右鏡向」後若第 2 頁有舊的 180° 個別覆寫，第 2 頁不會跟著變
+  - 改成：切「套用方式」或「套用頁面」時自動清掉所有 per-page override，全頁設定真正生效。要再個別調整可再點縮圖工具列
+
+---
+
 ## [1.4.39] - 2026-05-04
 
 ### 改善

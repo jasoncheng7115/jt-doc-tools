@@ -153,15 +153,27 @@ const jp = new JobProgress(document.getElementById('jp'), {
 const pmSel = document.getElementById('pages-mode');
 const pmInp = document.getElementById('pages-custom');
 const pmHint = document.getElementById('pages-hint');
+// 改全頁設定（套用方式 / 套用頁面）時，清掉所有 per-page override —
+// 否則使用者直覺「全頁套左右鏡向」會被殘留的個別覆寫卡住，看起來只有部分頁變動
+// (客戶 v1.4.39 回報：第 2 頁有舊的 180° 個別覆寫，切到「左右鏡向」後第 2 頁不變)。
+function _clearPerPageOverrides() {
+  if (perPageMode.size === 0) return;
+  perPageMode.clear();
+}
 pmSel.addEventListener('change', () => {
   const custom = pmSel.value === 'custom';
   pmInp.hidden = !custom;
   pmHint.hidden = !custom;
   if (custom) pmInp.focus();
+  _clearPerPageOverrides();
   if (pages.length) refreshThumbStates();
 });
-pmInp.addEventListener('input', () => { if (pages.length) refreshThumbStates(); });
+pmInp.addEventListener('input', () => {
+  _clearPerPageOverrides();
+  if (pages.length) refreshThumbStates();
+});
 document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => {
+  _clearPerPageOverrides();
   if (pages.length) refreshThumbStates();
 }));
 
