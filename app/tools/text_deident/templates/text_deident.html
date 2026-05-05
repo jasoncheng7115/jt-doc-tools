@@ -1,20 +1,22 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
+{% from "components/llm_gate.html" import llm_gate, llm_gate_styles with context %}
 {% block title %}文字去識別化 · {{ app_name }}{% endblock %}
 {% block head %}
+{{ llm_gate_styles() }}
 <style>
 .td-grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
 @media (max-width: 900px) { .td-grid { grid-template-columns: 1fr; } }
 
-.td-input-area, .td-output-area { display:flex; flex-direction:column; min-width:0; }
-.td-input-area textarea, .td-output-area textarea {
+.td-input-area { display:flex; flex-direction:column; min-width:0; }
+.td-input-area textarea, #outText {
   width:100%; box-sizing:border-box; min-height:300px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size:13px; line-height:1.55; padding:10px 12px;
   border:1px solid var(--border); border-radius:6px;
   resize: vertical; word-break: break-word; overflow-wrap: anywhere;
 }
-.td-input-area textarea:focus { outline:2px solid #3b82f6; outline-offset:-1px; border-color:transparent; }
+.td-input-area textarea:focus, #outText:focus { outline:2px solid #3b82f6; outline-offset:-1px; border-color:transparent; }
 
 .td-drop-zone {
   display:flex; align-items:center; gap:10px;
@@ -35,8 +37,17 @@
   gap:10px; margin-top:8px; }
 .td-cat { background:#fff; border:1px solid var(--border); border-radius:8px;
   padding:8px 10px; }
-.td-cat h4 { margin:0 0 6px; font-size:12.5px; color:#475569;
-  border-bottom:1px solid #f1f5f9; padding-bottom:4px; }
+.td-cat h4 { margin:0 0 6px; font-size:13px; color:#1e293b; font-weight:600;
+  border-bottom:1px solid #f1f5f9; padding-bottom:4px;
+  display:flex; align-items:center; gap:6px; }
+.td-cat-icon { display:inline-flex; align-items:center; color:#1e40af;
+  background:#eff6ff; padding:3px; border-radius:5px; line-height:0; }
+.td-cat-icon .ic { stroke: currentColor; }
+.td-cat .td-cat-tools { margin-left:auto; display:flex; gap:3px; }
+.td-cat .td-cat-tools button { background:#f1f5f9; border:0; padding:1px 7px;
+  border-radius:4px; font-size:10.5px; color:#475569; cursor:pointer;
+  font-weight:normal; }
+.td-cat .td-cat-tools button:hover { background:#e0e7ff; color:#3730a3; }
 .td-cat label { display:flex; align-items:center; gap:6px; padding:2px 0;
   font-size:12.5px; cursor:pointer; }
 
@@ -51,10 +62,36 @@
   font-size:11.5px; color:#334155; font-weight:600; }
 .td-counts .pill .ct { background:#1e40af; color:#fff; padding:0 6px; border-radius:8px; }
 
-.td-modes { display:flex; gap:4px; margin:8px 0; flex-wrap:wrap; }
-.td-modes button { background:#f1f5f9; border:0; padding:6px 14px; border-radius:6px;
-  font-size:13px; cursor:pointer; color:#475569; }
-.td-modes button.active { background:#1e40af; color:#fff; }
+/* 處理方式 — 三選一 segmented control，每張卡片色系不同表示效果差異 */
+.td-modes { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap:8px; margin:10px 0 14px; }
+.td-mode-btn {
+  display:flex; align-items:center; gap:10px;
+  background:#fff; border:1.5px solid #e5e7eb; border-radius:10px;
+  padding:11px 14px; cursor:pointer; transition: all 0.12s;
+  text-align:left; font-family:inherit;
+}
+.td-mode-btn:hover { border-color:#94a3b8; transform:translateY(-1px);
+  box-shadow:0 2px 6px rgba(15,23,42,0.06); }
+.td-mode-btn .ic-wrap {
+  display:flex; align-items:center; justify-content:center;
+  width:34px; height:34px; border-radius:8px; flex-shrink:0;
+  font-size:18px; line-height:1;
+}
+.td-mode-btn .ic-wrap .ic { stroke:currentColor; }
+.td-mode-btn .lbl-main { font-weight:600; font-size:13.5px; color:#0f172a; line-height:1.2; }
+.td-mode-btn .lbl-sub { font-size:11.5px; color:#64748b; margin-top:2px; line-height:1.3; }
+/* per-mode accent colours */
+.td-mode-btn[data-mode="mask"] .ic-wrap   { background:#dbeafe; color:#1e40af; }
+.td-mode-btn[data-mode="redact"] .ic-wrap { background:#1f2937; color:#fff; }
+.td-mode-btn[data-mode="fake"] .ic-wrap   { background:#fef3c7; color:#92400e; }
+/* active state — bordered + tinted */
+.td-mode-btn.active { border-color:#1e40af; background:#eff6ff;
+  box-shadow:0 0 0 2px rgba(59,130,246,0.18); }
+.td-mode-btn[data-mode="redact"].active { border-color:#1f2937; background:#f3f4f6;
+  box-shadow:0 0 0 2px rgba(31,41,55,0.18); }
+.td-mode-btn[data-mode="fake"].active { border-color:#d97706; background:#fffbeb;
+  box-shadow:0 0 0 2px rgba(217,119,6,0.18); }
 
 .td-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
 
@@ -84,42 +121,50 @@
 
 {% block content %}
 <h1>{{ icon('shield', size=22) }} 文字去識別化</h1>
-<p class="muted">貼上文字，或上傳 .txt / .md / .docx / .doc / .odt / .pdf 等檔案，自動偵測敏感資料（身分證 / 手機 / Email / 統編 / 信用卡 / 銀行帳號 / 地址 …），可選擇<b>遮罩</b>（王*明）、<b>編修</b>（█）或<b>替換假資料</b>（陳明翰、新隨機 ID）後輸出。</p>
+<p class="muted">貼上文字，或上傳 .txt / .md / .docx / .doc / .odt / .pdf 等檔案，自動偵測敏感資料（身分證 / 手機 / Email / 統編 / 信用卡 / 銀行帳號 / 地址 …），可選擇<b>遮罩</b>（保留邊緣字元，例如「王*明」）、<b>編修</b>（整段塗黑「█」）或<b>替換假資料</b>（產生新的假姓名 / 假號碼，保留格式）後輸出。</p>
 
 <div class="panel">
   <h2 style="margin-top:0;">1. 來源文字</h2>
-  <div class="td-grid">
-    <div class="td-input-area">
-      <label class="td-drop-zone" id="dropZone" for="fileInput">
-        <input type="file" id="fileInput" accept=".txt,.md,.docx,.doc,.odt,.ods,.odp,.rtf,.pdf" hidden />
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#6366f1"
-             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="17 8 12 3 7 8"/>
-          <line x1="12" y1="3" x2="12" y2="15"/>
-        </svg>
-        <span class="td-drop-text"><b>點此挑選</b>或拖曳檔案到此
-          <span class="hint">.txt / .md / .docx / .odt / .pdf …</span></span>
-      </label>
-      <textarea id="srcText" placeholder="把要處理的文字貼上來，或從上方上傳檔案…"></textarea>
-      <div class="td-help"><span id="srcCount">0</span> 字</div>
-    </div>
-    <div class="td-output-area">
-      <div style="font-size:12.5px; color:#475569; margin-bottom:8px; height:36px; display:flex; align-items:center;">
-        處理後文字（按下「偵測」與「套用」後顯示在此）
-      </div>
-      <textarea id="outText" placeholder="處理後文字會顯示在這裡。" readonly></textarea>
-      <div class="td-help"><span id="outCount">0</span> 字</div>
-    </div>
+  <div class="td-input-area">
+    <label class="td-drop-zone" id="dropZone" for="fileInput">
+      <input type="file" id="fileInput" accept=".txt,.md,.docx,.doc,.odt,.ods,.odp,.rtf,.pdf" hidden />
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#6366f1"
+           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <span class="td-drop-text"><b>點此挑選</b>或拖曳檔案到此
+        <span class="hint">.txt / .md / .docx / .odt / .pdf …</span></span>
+    </label>
+    <textarea id="srcText" placeholder="把要處理的文字貼上來，或從上方上傳檔案…"></textarea>
+    <div class="td-help"><span id="srcCount">0</span> 字</div>
   </div>
 </div>
 
 <div class="panel">
   <h2 style="margin-top:0;">2. 設定要偵測的資料類型</h2>
   <div class="td-pattern-cats">
+    {% set cat_icons = {
+      '個人身分': 'id-card',
+      '聯絡方式': 'mail',
+      '金融資訊': 'credit-card',
+      '企業資料': 'building',
+      '其他':     'tool',
+      'IT 資料':  'globe',
+      '自訂':     'edit',
+    } %}
     {% for grp_name, items in grouped.items() %}
-    <div class="td-cat">
-      <h4>{{ grp_name }}</h4>
+    <div class="td-cat" data-cat="{{ loop.index }}">
+      <h4>
+        <span class="td-cat-icon">{{ icon(cat_icons.get(grp_name, 'tool'), size=15) }}</span>
+        {{ grp_name }}
+        <span class="td-cat-tools">
+          <button type="button" data-cat-act="all">全選</button>
+          <button type="button" data-cat-act="none">取消</button>
+          <button type="button" data-cat-act="invert">反向</button>
+        </span>
+      </h4>
       {% for p in items %}
       <label>
         <input type="checkbox" data-pat-id="{{ p.id }}" {% if p.default_on %}checked{% endif %}>
@@ -131,27 +176,41 @@
   </div>
   <details style="margin-top:10px;">
     <summary style="cursor:pointer; font-size:12.5px; color:#475569;">
-      ▸ 自訂 regex（一行一條，格式：<code>標籤 | 正則式</code>）
+      自訂 regex（一行一條，格式：<code>標籤 | 正則式</code>）
     </summary>
     <textarea id="customRx" rows="4" style="width:100%; box-sizing:border-box; margin-top:6px;
       font-family: ui-monospace, monospace; font-size:12px; padding:8px;
       border:1px solid var(--border); border-radius:6px;"
       placeholder="員工編號 | EMP-\d{6}&#10;客戶代號 | CUS-[A-Z0-9]{4,8}"></textarea>
   </details>
+
+  {{ llm_gate('text-deident', llm_enabled, llm_model, mode='augment',
+              feature_label='LLM 補偵測（找 regex 漏掉的）',
+              feature_desc='regex 抓不到的 context-sensitive 案例：人名（含「先生 / 經理」等稱謂）、職稱、客戶代號、產品代號、特殊地址簡稱等。會多送一次 LLM call，會稍慢但找回率高。',
+              input_id='tdLlmAugment') }}
 </div>
 
 <div class="panel">
   <h2 style="margin-top:0;">3. 處理方式</h2>
   <div class="td-modes" id="modeBar">
-    <button type="button" data-mode="mask" class="active">遮罩（王*明）</button>
-    <button type="button" data-mode="redact">編修（黑色 █）</button>
-    <button type="button" data-mode="fake">替換假資料（陳明翰）</button>
+    <button type="button" class="td-mode-btn active" data-mode="mask">
+      <span class="ic-wrap">{{ icon('shield', size=18) }}</span>
+      <span><span class="lbl-main">遮罩</span>
+        <span class="lbl-sub">保留邊緣字元 · 例：王*明</span></span>
+    </button>
+    <button type="button" class="td-mode-btn" data-mode="redact">
+      <span class="ic-wrap">{{ icon('lock', size=18) }}</span>
+      <span><span class="lbl-main">編修</span>
+        <span class="lbl-sub">整段塗黑</span></span>
+    </button>
+    <button type="button" class="td-mode-btn" data-mode="fake">
+      <span class="ic-wrap">{{ icon('refresh', size=18) }}</span>
+      <span><span class="lbl-main">替換假資料</span>
+        <span class="lbl-sub">置換成擬造資訊</span></span>
+    </button>
   </div>
   <div class="td-actions">
     <button class="btn btn-primary" type="button" id="btnDetect">{{ icon('search', size=14) }} 偵測敏感資料</button>
-    <button class="btn" type="button" id="btnApply" disabled>{{ icon('shield', size=14) }} 套用至全部</button>
-    <button class="btn" type="button" id="btnDownload" disabled>{{ icon('download', size=14) }} 下載結果 (.txt)</button>
-    <button class="btn" type="button" id="btnCopy" disabled>{{ icon('paperclip', size=14) }} 複製到剪貼簿</button>
   </div>
   <div id="errBox" class="td-help" style="color:#b91c1c;" hidden></div>
 </div>
@@ -163,6 +222,24 @@
   <div class="td-counts" id="counts"></div>
   <div class="td-finding-list" id="findings"></div>
   <div class="td-help">每筆預設都會被處理。要排除某筆？取消左側勾選後再按「套用至全部」。</div>
+</div>
+
+<div class="panel" id="applyPanel" hidden>
+  <h2 style="margin-top:0;">5. 套用 / 輸出</h2>
+  <div class="td-actions">
+    <button class="btn btn-primary" type="button" id="btnApply">{{ icon('shield', size=14) }} 套用至全部</button>
+    <button class="btn" type="button" id="btnDownload" disabled>{{ icon('download', size=14) }} 下載結果 (.txt)</button>
+    <button class="btn" type="button" id="btnCopy" disabled>{{ icon('paperclip', size=14) }} 複製到剪貼簿</button>
+  </div>
+</div>
+
+<div class="panel" id="outputPanel" hidden>
+  <h2 style="margin-top:0;">6. 處理後文字
+    <span class="muted" style="font-size:12.5px; font-weight:400; margin-left:8px;">
+      <span id="outCount">0</span> 字
+    </span>
+  </h2>
+  <textarea id="outText" placeholder="按下「套用至全部」後處理結果會顯示在這裡。" readonly></textarea>
 </div>
 
 {% endblock %}
@@ -238,10 +315,24 @@ dropZone.addEventListener('drop', (e) => {
   }
 });
 
-// ---- mode picker ----
-$('modeBar').querySelectorAll('button').forEach(btn => {
+// ---- per-category 全選 / 取消 / 反向 ----
+document.querySelectorAll('.td-cat .td-cat-tools button').forEach(btn => {
   btn.addEventListener('click', () => {
-    $('modeBar').querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    const cat = btn.closest('.td-cat');
+    const boxes = cat.querySelectorAll('input[type=checkbox][data-pat-id]');
+    const act = btn.dataset.catAct;
+    boxes.forEach(b => {
+      if (act === 'all')      b.checked = true;
+      else if (act === 'none') b.checked = false;
+      else if (act === 'invert') b.checked = !b.checked;
+    });
+  });
+});
+
+// ---- mode picker ----
+$('modeBar').querySelectorAll('.td-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $('modeBar').querySelectorAll('.td-mode-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     lastMode = btn.dataset.mode;
     if (lastFindings.length) renderFindings(lastFindings);
@@ -267,12 +358,15 @@ $('btnDetect').addEventListener('click', async () => {
   $('btnDetect').disabled = true;
   $('btnDetect').innerHTML = '<span class="spinner"></span>偵測中…';
   try {
+    const llmCb = $('tdLlmAugment');
+    const llmAug = !!(llmCb && llmCb.checked);
     const r = await fetch('/tools/text-deident/detect', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         text: srcEl.value,
         types: selectedTypes(),
         custom_regex: $('customRx').value,
+        llm_augment: llmAug,
       }),
     });
     if (!r.ok) {
@@ -282,13 +376,16 @@ $('btnDetect').addEventListener('click', async () => {
     const j = await r.json();
     lastFindings = j.findings || [];
     $('resultPanel').hidden = false;
-    $('resultMeta').textContent = `共找到 ${lastFindings.length} 筆，原文 ${j.char_count.toLocaleString()} 字`;
+    let metaTxt = `共找到 ${lastFindings.length} 筆，原文 ${j.char_count.toLocaleString()} 字`;
+    if (j.llm_warning) metaTxt += `（${j.llm_warning}）`;
+    $('resultMeta').textContent = metaTxt;
     // counts pills
     $('counts').innerHTML = (j.counts || []).map(c =>
       `<span class="pill">${escapeHTML(c.label)}<span class="ct">${c.count}</span></span>`
     ).join('');
     renderFindings(lastFindings);
     $('btnApply').disabled = lastFindings.length === 0;
+    $('applyPanel').hidden = lastFindings.length === 0;
   } catch (e) {
     showErr('偵測失敗：' + e.message);
   } finally {
@@ -353,8 +450,11 @@ $('btnApply').addEventListener('click', async () => {
     const j = await r.json();
     outEl.value = j.text || '';
     refreshCount(outEl, $('outCount'));
+    $('outputPanel').hidden = false;
     $('btnDownload').disabled = false;
     $('btnCopy').disabled = false;
+    // Scroll the output panel into view so user sees the result immediately
+    $('outputPanel').scrollIntoView({behavior: 'smooth', block: 'start'});
     // For fake mode: re-render the list with the actual replacements that
     // were applied. Server already substituted; we don't have per-finding
     // replacement strings back, so leave preview as "(套用後產生)".

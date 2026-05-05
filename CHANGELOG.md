@@ -4,6 +4,112 @@
 
 ---
 
+## [1.4.54] - 2026-05-05
+
+### 新增
+
+- **`text-deident` / `doc-deident` 偵測「帳號 / 密碼」**：客戶 log 範例 `admin / qazwsxedc` 之前抓不到。新增兩個 IT 資料 pattern：
+  - `cred_label` — 標籤式 `password: xxx` / `密碼: yyy` / `api_key=zzz`
+  - `cred_pair` — 斜線對 `admin/pass` / `user / password`（兩側必須像帳號密碼，避免吃到 URL path 或日期）
+
+### 改善
+
+- **`text-deident` 操作流程重整**：套用 / 下載 / 複製按鈕從「處理方式」搬到新「5. 套用 / 輸出」步驟，跟「3. 處理方式」職責切清楚。處理後文字往下移為「6. 處理後文字」
+- **`pdf-rotate` 套用範圍 layout 修正**：之前選「自填頁碼」會把計數「N 頁將被套用」擠到第二行，現在計數固定獨立一行，左 70px 內縮對齊輸入框
+- **`pdf-rotate` 轉向按鈕重新設計**：原本扁平單色按鈕；改成 gradient 背景 + 圓形 icon-wrap + per-mode hover 配色（旋轉藍 / 鏡像紫 / 清除紅）+ hover lift 動畫
+
+---
+
+## [1.4.53] - 2026-05-05
+
+### 重大變更
+
+- **頁面轉向工具大改 UX**：
+  - 上傳後**自動顯示縮圖**（不再需要按「開始」）
+  - 縮圖區上方加 toolbar：6 個轉向按鈕（90 / 180 / 270 / 左右 / 上下 / 清除）+ 套用範圍下拉（**所有頁 / 偶數頁 / 奇數頁 / 自填頁碼**，例 `1,3-5,8-10`）
+  - 每張縮圖下方有獨立轉向小按鈕，可單頁覆寫
+  - 完成區三個按鈕：**下載 PDF / 下載 ZIP（每頁 PNG，150 DPI）/ 處理新檔案**
+  - 後端新增 `/finalize` (PDF 輸出) 跟 `/finalize-png` (PNG ZIP) 同步 endpoint，從 `/load` 暫存的檔案直接出結果，不再走 job manager
+
+### 新增
+
+- **文字去識別化每個分組加 icon**：個人身分 / 聯絡方式 / 金融資訊 / 企業資料 / 其他 / IT 資料 各自配色 icon
+
+### 改善
+
+- **macOS install.sh 直接 root 登入時自動偵測 GUI 桌面 user**：之前直接 root 跑會 die「不能用 root」；現在用 `stat /dev/console` 抓出登入桌面的 user 當 .app 擁有者，並 warn 建議下次改用 sudo
+- **文字去識別化 UI 文字 / 樣式**：
+  - 替換假資料副標改「置換成擬造資訊」（更精準）
+  - 「自訂 regex」前面拿掉手寫 `▸`（跟原生 `<details>` triangle 重複）
+  - 整段塗黑副標精簡掉「不可還原」（看圖示就懂）
+
+---
+
+## [1.4.52] - 2026-05-05
+
+### 改善
+
+- **文字去識別化「編修」說明簡化**：「整段塗黑 · 不可還原」改為「整段塗黑」 — 直接看圖示就懂，後半句多餘
+
+---
+
+## [1.4.51] - 2026-05-05
+
+### 改善
+
+- **使用者顯示名稱統一加上認證領域 (`username@realm`)**：歷史記錄 / 稽核記錄 / 其他「使用者」欄位之前只顯示 `jason`，現在會顯示 `jason@local` 或 `jason@ldap`。多領域同名（PVE 風格）情境下才能分清是誰
+- **新增 `sessions.user_label()` 共用 helper**：處理 dict / object 兩種 session user 結構，集中格式化邏輯，避免每個工具重新拼字串
+- **新工具會自動加入適合的預設角色**：之前加新 tool 後，已存在客戶的 `default-user` / `clerk` / `finance` / `sales` / `legal-sec` 內部 role row 不會更新，新 tool 沒人看得到。`seed_builtin_roles` 改成 startup 時 top-up（只 ADD 不 REMOVE，admin 自訂的 grants 不會被洗掉）
+- **文字去識別化處理方式按鈕重新設計**：之前像三顆普通 .btn，改成 segmented card（icon + 標題 + 副標、per-mode 配色：藍 / 黑 / 橘、active 帶外光暈），更直覺看出三個模式是「擇一」
+
+### 修正
+
+- **`pdf-watermark` `submit` handler 第二處 actor 取值仍是壞掉的舊 getattr-on-dict pattern**：v1.4.50 sed 替換時漏掉一處且結尾縮排破掉。改用集中 helper 一勞永逸
+
+---
+
+## [1.4.50] - 2026-05-05
+
+### 修正
+
+- **LDAP 使用者操作的 history 記錄仍顯示「(匿名)」** — v1.4.43 沒修對：
+  - v1.4.43 把 `actor = getattr(getattr(request.state, "user", None), "username", "") or ""` 留著當「修正版」，但 `request.state.user` **是 dict 不是 object**（`sessions.lookup()` 回 dict），`getattr(dict, "username", "")` 永遠回 `""` → 永遠匿名
+  - 修：`_u = getattr(request.state, "user", None); actor = (_u.get("username") if isinstance(_u, dict) else getattr(_u, "username", "")) or ""` — 同時相容 dict 與 object
+  - 修了三個 stamp + 兩個 watermark 共 5 處
+- **歷史記錄的「表單填寫 / 用印簽名 / 浮水印」切換改為 tab 樣式**：之前用 `.btn` 看起來像三顆獨立按鈕，現在改成下劃底線分頁、active 有藍底，視覺更清楚是「分頁切換」
+
+### 文件
+
+- README + docs/index.html 工具數從 29 → 30（含 text-deident 文字去識別化）
+
+---
+
+## [1.4.49] - 2026-05-05
+
+### 新增
+
+- **新工具：文字去識別化（text-deident）**：貼文字 / 上傳 .txt .md .docx .doc .odt .pdf 等檔案，偵測敏感資料後可選 **遮罩**（王*明）/ **編修**（█）/ **替換假資料**（產生新假姓名 / 假號碼，保留格式）。流程同 doc-deident 但走純文字（不需 PDF coord 處理），結果可下載成 .txt / 複製到剪貼簿
+- **新增「IT 資料」類別偵測**（給 log / 設定檔 / debug 訊息貼到 AI 前先去識別化用）：
+  - 主機名稱 (FQDN，內網 TLD 慣例)
+  - MAC 位址
+  - AD / LDAP DN（CN= / OU= / DC= …）
+  - Windows 帳號（DOMAIN\\user）
+  - UUID / GUID
+  - 內網 URL / 任意 URL（含公開域名）
+  - 域名 / FQDN（含公開域名）
+  - 本機路徑（含使用者名，例如 /home/jcheng/、C:\\Users\\admin\\）
+  - API token / 金鑰（mixed-case 高熵 ≥ 32 字 + 已知 prefix 如 sk-、ghp_、AIza、AKIA …）
+  - 全部 default off — 一般商務文件容易誤抓，使用者自選開啟
+- **`text-deident` 加入 LLM 補偵測**：跟 doc-deident 同型，可勾選「LLM 補偵測（找 regex 漏掉的）」抓人名 / 職稱 / 客戶代號等 context-sensitive 案例
+- **每個偵測分組卡片加入「全選 / 取消 / 反向」按鈕**：之前每組要一個個勾，現在每張卡片右上角有微型 toolbar
+- **處理後文字搬到最下方專屬 panel**：之前左右並排佔版面，按下「套用至全部」後新 panel 出現並自動捲動到視野中
+
+### 修正
+
+- **`api_token` regex 誤抓 UUID**：之前用 `re.IGNORECASE`，導致「混大小寫」lookahead 對全 lowercase UUID 也成立。移除 IGNORECASE，prefix-based 匹配保留 case-sensitive
+
+---
+
 ## [1.4.48] - 2026-05-05
 
 ### 改善

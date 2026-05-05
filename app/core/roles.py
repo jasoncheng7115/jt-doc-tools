@@ -114,15 +114,39 @@ SEED_ROLES: list[dict] = [
 
 def seed_builtin_roles() -> None:
     """Insert built-in roles + their tool grants if not already present.
-    Existing role rows (e.g. from a previous boot, possibly admin-edited)
-    are left alone so admin's customisations persist across restarts."""
+    For roles that ALREADY exist, top-up with any new tools that have been
+    added to SEED_ROLES since the last seed (e.g. when a new release adds
+    a tool that should be available to default-user / finance / etc.).
+    Only ADDs — never removes a tool, so admin's prior 'unselect' edits
+    can be reversed by upgrade if a new release adds it back, but admin's
+    own ADDITIONS to built-in roles are preserved across upgrades.
+
+    This is what fixes the "升級後新工具沒人看得見" bug — without this
+    top-up, customers who installed BEFORE a new tool was introduced never
+    got the tool in their built-in roles, even though new SEED_ROLES code
+    listed it.
+    """
     conn = auth_db.conn()
     now = time.time()
     with db.tx(conn):
         for r in SEED_ROLES:
             row = conn.execute("SELECT 1 FROM roles WHERE id=?", (r["id"],)).fetchone()
             if row:
+                # Existing role — top up with any tools added since last seed.
+                # Read what's currently granted, compute diff, INSERT OR IGNORE
+                # the rest. Tools removed by admin won't come back here unless
+                # they're in SEED_ROLES (then they return — accepted trade-off
+                # so new tools propagate to existing customers).
+                current = {x["tool_id"] for x in conn.execute(
+                    "SELECT tool_id FROM role_perms WHERE role_id=?", (r["id"],)
+                ).fetchall()}
+                for tool_id in r["tools"]:
+                    if tool_id not in current:
+                        conn.execute(
+                            "INSERT OR IGNORE INTO role_perms(role_id, tool_id) "
+                            "VALUES (?,?)", (r["id"], tool_id))
                 continue
+            # Brand-new role — insert metadata + tools.
             conn.execute(
                 "INSERT INTO roles(id, display_name, description, is_builtin, "
                 "is_protected, created_at) VALUES (?,?,?,?,?,?)",
@@ -132,6 +156,12 @@ def seed_builtin_roles() -> None:
             for tool_id in r["tools"]:
                 conn.execute("INSERT OR IGNORE INTO role_perms(role_id, tool_id) "
                              "VALUES (?,?)", (r["id"], tool_id))
+    # Invalidate the in-memory permissions cache so changes take effect immediately
+    try:
+        from . import permissions as _perm
+        _perm.invalidate_cache()
+    except Exception:
+        pass
 
 
 # ---------- CRUD ----------

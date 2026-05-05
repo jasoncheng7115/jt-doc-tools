@@ -83,6 +83,27 @@ def lookup(raw_token: str) -> Optional[dict]:
     }
 
 
+def user_label(user: Optional[dict]) -> str:
+    """Format a session-user dict as `username@realm` for audit / history /
+    UI display. Same name `jason` may exist in both `local` and `ldap`
+    realms, so the realm suffix is essential to know who acted.
+
+    Returns "" if user is None / lacks expected fields. Empty source
+    falls back to plain username (back-compat for old session shapes /
+    callers that pass partial dicts)."""
+    if not user:
+        return ""
+    if isinstance(user, dict):
+        username = user.get("username") or ""
+        source = user.get("source") or ""
+    else:
+        username = getattr(user, "username", "") or ""
+        source = getattr(user, "source", "") or ""
+    if not username:
+        return ""
+    return f"{username}@{source}" if source else username
+
+
 def revoke(raw_token: str) -> None:
     """Delete the session row matching this token (idempotent)."""
     if not raw_token:

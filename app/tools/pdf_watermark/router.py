@@ -179,7 +179,8 @@ async def preview_watermarked(
     if not (p.text and p.text.strip()):
         if not asset_id:
             raise HTTPException(400, "需要 asset_id 或 text")
-        actor = getattr(getattr(request.state, "user", None), "username", "") or ""
+        from ...core import sessions as _sessions
+        actor = _sessions.user_label(getattr(request.state, "user", None))
         wm_path = await _resolve_watermark_source(
             asset_id, temp_asset_file, request=request, actor_username=actor)
         if wm_path is None:
@@ -226,7 +227,8 @@ async def submit(
     # the entry to the right user. v1.4.43 bug fix: previously only captured
     # in the asset-mode branch, so text-mode watermarks always logged
     # username="" → 歷史記錄全變「(匿名)」.
-    actor = getattr(getattr(request.state, "user", None), "username", "") or ""
+    from ...core import sessions as _sessions
+    actor = _sessions.user_label(getattr(request.state, "user", None))
     wm_png: Optional[Path] = None
     if not (base_params.text and base_params.text.strip()):
         if not asset_id:

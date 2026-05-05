@@ -5,11 +5,28 @@
 <h1>{{ icon('page', size=22) }} {{ title }} 歷史記錄</h1>
 <p class="muted">所有透過 <a href="{{ tool_url }}">{{ title }}</a> 處理過的檔案都會留存於此（除非超過保留期限被自動清掉）。</p>
 
-<div class="kind-tabs" style="margin-bottom:14px;">
-  <a class="btn btn-small {% if kind=='fill' %}btn-primary{% endif %}" href="/admin/history/fill">表單填寫</a>
-  <a class="btn btn-small {% if kind=='stamp' %}btn-primary{% endif %}" href="/admin/history/stamp">用印簽名</a>
-  <a class="btn btn-small {% if kind=='watermark' %}btn-primary{% endif %}" href="/admin/history/watermark">浮水印</a>
-</div>
+<nav class="kind-tabs">
+  <a class="kt-tab {% if kind=='fill' %}is-active{% endif %}" href="/admin/history/fill">
+    {{ icon('page', size=14) }} 表單填寫</a>
+  <a class="kt-tab {% if kind=='stamp' %}is-active{% endif %}" href="/admin/history/stamp">
+    {{ icon('shield', size=14) }} 用印簽名</a>
+  <a class="kt-tab {% if kind=='watermark' %}is-active{% endif %}" href="/admin/history/watermark">
+    {{ icon('image', size=14) }} 浮水印</a>
+</nav>
+
+<style>
+.kind-tabs { display:flex; gap:0; margin: 6px 0 18px;
+  border-bottom: 2px solid var(--border, #e5e7eb); }
+.kt-tab { display:inline-flex; align-items:center; gap:6px;
+  padding: 9px 18px; font-size: 13.5px; color: #64748b; text-decoration: none;
+  border-bottom: 2px solid transparent; margin-bottom: -2px;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  border-radius: 6px 6px 0 0; }
+.kt-tab:hover { color: #1e293b; background: #f8fafc; }
+.kt-tab .ic { stroke: currentColor; vertical-align: middle; }
+.kt-tab.is-active { color: #1e40af; border-bottom-color: #1e40af;
+  font-weight: 600; background: #eff6ff; }
+</style>
 
 <form method="get" style="margin-bottom:10px;">
   <label>

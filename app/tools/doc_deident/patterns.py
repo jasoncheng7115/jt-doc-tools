@@ -243,6 +243,103 @@ RE_LANDLINE = re.compile(
 RE_EMAIL = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
 RE_CC = re.compile(r"\b(?:\d[ \-]?){13,19}\b")
 RE_IP = re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\b")
+
+# --- IT / DevOps patterns ---
+# 用於：把 log / 設定檔 / debug 訊息貼給 AI 問問題前，先把內網資訊塗掉。
+# 這些 default_on=False，使用者要自己勾選 — 一般商務文件容易誤抓。
+
+# Hostname / FQDN — 至少 2 個 dot，避免抓「example.com」這種公開域名。
+# 主要是內網 host 像 srv01.corp.acme.local、db-prod-01.aws.internal
+RE_HOSTNAME = re.compile(
+    r"\b(?=[a-z0-9])(?:[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?\.){2,}"
+    r"(?:local|internal|corp|lan|intra|intranet|dev|test|staging|prod|"
+    r"private|home|domain|ad|company|office|[a-z]{2,10})\b",
+    re.IGNORECASE,
+)
+
+# MAC address — xx:xx:xx:xx:xx:xx 或 xx-xx-xx-xx-xx-xx
+RE_MAC = re.compile(r"\b(?:[0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}\b")
+
+# AD / LDAP DN — 含 CN= / OU= / DC= 任意組合
+RE_AD_DN = re.compile(
+    r"\b(?:CN|OU|DC|UID|O|L|ST|C|UID|E)=[^,\s]+(?:,\s*(?:CN|OU|DC|UID|O|L|ST|C|UID|E)=[^,\s]+){1,}\b",
+    re.IGNORECASE,
+)
+
+# Windows domain user — DOMAIN\user 或 user@domain（後者跟 email 重疊，這裡只抓
+# DOMAIN\user 形式避免衝突）
+RE_WIN_USER = re.compile(r"\b[A-Za-z][A-Za-z0-9\-]{1,30}\\[A-Za-z][A-Za-z0-9\-_.]{1,40}\b")
+
+# UUID / GUID — 8-4-4-4-12 hex (含或不含 braces)
+RE_UUID = re.compile(
+    r"\{?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}?"
+)
+
+# 內網 URL — http(s) 後接 hostname (FQDN 結尾為內網 TLD 或 IP)，可帶 path
+RE_URL_INTERNAL = re.compile(
+    r"https?://(?:"
+    # 1) IP-based URL
+    r"(?:25[0-5]|2[0-4]\d|[01]?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|[01]?\d?\d)){3}"
+    r"|"
+    # 2) host with internal-looking TLD
+    r"[a-zA-Z0-9\-.]+\.(?:local|internal|corp|lan|intra|intranet|dev|test|staging|prod|private|home|domain|ad|company|office)"
+    r")"
+    r"(?::\d{1,5})?(?:/[^\s\"'<>]*)?"
+)
+
+# 任何 URL — http / https 後接合法 hostname (含公開域名)，可帶 path / query
+RE_URL_ANY = re.compile(
+    r"https?://[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+",
+)
+
+# 任何域名 / FQDN — 2+ part，最後一部分至少 2 字元 alpha，避免抓檔名
+# 不抓 IP（IP 由 RE_IP 抓）。例如：example.com、github.com、my-service.acme.io
+RE_DOMAIN_ANY = re.compile(
+    r"\b(?<![@/])"
+    r"(?:[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?\.)+"
+    r"[a-z]{2,24}"
+    r"\b(?![@/.])",
+    re.IGNORECASE,
+)
+
+# Linux / macOS path with username — /home/<user>/... or /Users/<user>/...
+# 主要避免把 username 跟個人資料夾結構洩漏
+RE_USER_PATH = re.compile(
+    r"(?:/home/|/Users/|C:\\Users\\|%USERPROFILE%\\?)([A-Za-z][A-Za-z0-9._\-]{1,30})(?:[/\\][^\s\"'<>]*)?"
+)
+
+# 帳號 / 密碼 — 標籤式：「password: xxx」「密碼: xxx」「user/pass: xxx」等
+# 涵蓋 admin/CLI 常見的 username:value 或 password:value 寫法
+RE_CRED_LABEL = re.compile(
+    r"(?:password|passwd|pwd|secret|api[_-]?key|token"
+    r"|帳號|密碼|使用者名稱|登入帳號|登入密碼|金鑰|憑證)"
+    r"\s*[:：=]\s*"
+    r"(\S+)",
+    re.IGNORECASE,
+)
+
+# 帳號 / 密碼 — 斜線對：「admin/qazwsxedc」、「user / password」
+# 需要兩側都看起來像密碼或帳號（≥ 3 字元、無 path 字元）
+# 避免吃到 URL path 或日期 (e.g., 2026/01/01)，要求兩側其一含字母
+RE_CRED_PAIR = re.compile(
+    r"(?<![/\w@.])"          # 前面不接 / 或 word/@/. 字元（避免 URL path）
+    r"([A-Za-z][A-Za-z0-9._\-]{2,30})"   # 第一段：字母開頭
+    r"\s*/\s*"
+    r"([A-Za-z0-9!@#$%^&*._\-+=]{4,40})"  # 第二段：含特殊字元 (密碼)
+    r"(?![/\w@.])"           # 後面不接 / 或 word
+)
+
+
+# Long random tokens — API key / bearer token / session id.
+# 不能用 re.IGNORECASE，因為前段要靠「混大小寫」過濾掉 UUID（全小寫 hex）這類
+# false positive。所以這裡用兩個獨立的 alternation：
+#   1) 通用：≥ 32 字 + 真混大小寫 + 含數字（顯式不接受全 lowercase）
+#   2) 特定 prefix：sk-, ghp_, AIza 等知名 token format（保留 case-sensitive 匹配）
+RE_API_TOKEN = re.compile(
+    r"\b(?=.*[A-Z])(?=.*[a-z])(?=.*\d)[A-Za-z0-9+/=_\-]{32,}\b"
+    r"|"
+    r"\b(?:sk|pk|ghp|gho|ghs|ghu|ghr|github_pat|xox[bps]|AIza|AKIA|ASIA|hf_|hub_)[\-_][A-Za-z0-9_\-]{16,}\b"
+)
 # 車牌：強化 — 必須要在前後出現非字母情境（避免吃掉 "FROM 123"），格式
 # AAA-1234 / AAA1234 / 1234-AB / 新式 ABC-1234 / 機車 XX-123 / XX-1234
 RE_PLATE = re.compile(
@@ -389,6 +486,37 @@ CATALOG: list[Pattern] = [
             False, value_group=1, group="其他", icon="user"),
     Pattern("ip",        "IP 位址",       RE_IP,        _always,       _mask_ip,    False, group="其他", icon="globe"),
     Pattern("plate",     "車牌",          RE_PLATE,     _always,       _mask_plate, False, group="其他", icon="car"),
+    # IT / DevOps — 預設關，使用者要貼 log/設定檔給 AI 時自己勾。一般商務文件
+    # 容易誤抓 (例如「2026.04.30 公司決議」會被當成 UUID-like)
+    Pattern("hostname",  "主機名稱 (FQDN)", RE_HOSTNAME, _always,
+            lambda v: _mask_keep_edges(v, 2, 4), False, group="IT 資料", icon="globe"),
+    Pattern("mac",       "MAC 位址",      RE_MAC,       _always,
+            lambda v: _mask_keep_edges(v, 2, 2), False, group="IT 資料", icon="hash"),
+    Pattern("ad_dn",     "AD / LDAP DN", RE_AD_DN,     _always,
+            lambda v: "[AD-DN-REDACTED]", False, group="IT 資料", icon="user"),
+    Pattern("win_user",  "Windows 帳號 (DOMAIN\\user)", RE_WIN_USER, _always,
+            lambda v: _mask_keep_edges(v, 2, 2), False, group="IT 資料", icon="user"),
+    Pattern("uuid",      "UUID / GUID",   RE_UUID,      _always,
+            lambda v: _mask_keep_edges(v, 4, 4), False, group="IT 資料", icon="hash"),
+    Pattern("url_internal", "內網 URL",   RE_URL_INTERNAL, _always,
+            lambda v: "[INTERNAL-URL-REDACTED]", False, group="IT 資料", icon="globe"),
+    Pattern("url_any",   "URL（含公開域名）", RE_URL_ANY, _always,
+            lambda v: re.match(r"^https?://", v).group(0) + "***", False,
+            group="IT 資料", icon="globe"),
+    Pattern("domain",    "域名 / FQDN（含公開域名）", RE_DOMAIN_ANY, _always,
+            lambda v: _mask_keep_edges(v, 2, 4), False, group="IT 資料", icon="globe"),
+    Pattern("user_path", "本機路徑 (含使用者名)", RE_USER_PATH, _always,
+            lambda v: re.sub(r"(/home/|/Users/|C:\\Users\\|%USERPROFILE%\\?)[^/\\]+",
+                              r"\1USER", v), False,
+            group="IT 資料", icon="folder"),
+    Pattern("api_token", "API token / 金鑰", RE_API_TOKEN, _always,
+            lambda v: _mask_keep_edges(v, 4, 4), False, group="IT 資料", icon="lock"),
+    Pattern("cred_label", "標籤式密碼 / 帳號 (password: xxx)", RE_CRED_LABEL, _always,
+            lambda v: _mask_keep_edges(v, 1, 1), False, value_group=1,
+            group="IT 資料", icon="lock"),
+    Pattern("cred_pair",  "帳號/密碼斜線對 (admin/pass)", RE_CRED_PAIR, _always,
+            lambda v: _mask_keep_edges(v, 1, 1), False,
+            group="IT 資料", icon="lock"),
 ]
 
 
