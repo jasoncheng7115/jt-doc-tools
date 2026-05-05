@@ -624,6 +624,13 @@ WorkingDirectory=$INSTALL_DIR
 Environment=JTDT_DATA_DIR=$DATA_DIR
 Environment=JTDT_HOST=$BIND_HOST
 Environment=JTDT_PORT=$BIND_PORT
+# 強制 UTF-8 — 客戶若 host 沒裝 zh_TW.UTF-8 / 用 LANG=C 跑，
+# 上傳中文檔名字型 / 處理中文檔名 PDF 會踩 ascii encoding 雷。
+# C.UTF-8 是 glibc 內建（Debian 11+/RHEL 8+/Ubuntu 18+），不需另裝中文 locale。
+Environment=LANG=C.UTF-8
+Environment=LC_ALL=C.UTF-8
+Environment=PYTHONIOENCODING=utf-8
+Environment=PYTHONUTF8=1
 ExecStart=$INSTALL_DIR/.venv/bin/python -m app.main
 Restart=on-failure
 RestartSec=5

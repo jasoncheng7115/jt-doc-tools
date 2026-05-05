@@ -743,6 +743,28 @@ def build_router(templates) -> APIRouter:
         return {"ok": True, "id": font_id, "hidden": new_state,
                 "hidden_count": len(hidden)}
 
+    @router.post("/fonts/bulk-hidden")
+    async def fonts_bulk_hidden(request: Request):
+        """批次設定一組 font id 的隱藏狀態（給「全部隱藏 / 全部顯示」用）。
+        body: {ids: [...], hidden: bool}"""
+        from ..core import font_catalog
+        body = await request.json()
+        ids = body.get("ids") or []
+        if not isinstance(ids, list):
+            raise HTTPException(400, "ids must be a list")
+        target_hidden = bool(body.get("hidden"))
+        hidden = font_catalog.get_hidden_ids()
+        for fid in ids:
+            sid = str(fid or "")
+            if not sid:
+                continue
+            if target_hidden:
+                hidden.add(sid)
+            else:
+                hidden.discard(sid)
+        font_catalog.set_hidden_ids(list(hidden))
+        return {"ok": True, "hidden_count": len(hidden), "applied": len(ids)}
+
     @router.post("/fonts/upload")
     async def fonts_upload(file: UploadFile = File(...)):
         from ..core import font_catalog
@@ -757,6 +779,19 @@ def build_router(templates) -> APIRouter:
         cdir = font_catalog.custom_fonts_dir()
         # Sanitize filename — keep stem + extension, strip path components.
         safe_name = Path(file.filename).name.replace("/", "_").replace("\\", "_")
+        # 防 ascii filesystem encoding（host 沒設 UTF-8 locale）— 若原檔名是
+        # CJK 但 sys.getfilesystemencoding() 是 ascii，write_bytes 會炸。
+        # 偵測到就改用 hash + 副檔名做檔名，但 family 顯示名仍從 TTF name table
+        # 讀（list_fonts 目前用 stem 顯示，未來再改）。新版 install.sh 已強制
+        # LANG=C.UTF-8，這裡只是給舊安裝的 fallback。
+        import sys as _sys
+        if _sys.getfilesystemencoding().lower() not in ("utf-8", "utf8"):
+            try:
+                safe_name.encode(_sys.getfilesystemencoding())
+            except UnicodeEncodeError:
+                import hashlib as _hl
+                ext = Path(safe_name).suffix.lower() or ".ttf"
+                safe_name = _hl.sha256(safe_name.encode("utf-8")).hexdigest()[:16] + ext
         dst = cdir / safe_name
         # Avoid overwriting different files with the same name.
         if dst.exists():

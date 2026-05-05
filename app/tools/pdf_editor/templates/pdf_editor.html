@@ -148,10 +148,13 @@
 .fp-cur { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fp-caret { color: #94a3b8; font-size: 11px; }
 .fp-pop {
-  position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+  /* position:fixed → 不被祖先 overflow:hidden 裁切（右屬性面板會裁）。
+     座標由 JS 在 openPop() 即時計算（trigger.getBoundingClientRect()）。 */
+  position: fixed;
   background: #fff; border: 1px solid var(--border); border-radius: 8px;
   box-shadow: 0 12px 28px rgba(15,23,42,0.16);
-  z-index: 1400;
+  z-index: 9500;
+  width: max-content; max-width: 360px;
   max-height: 360px; display: flex; flex-direction: column;
   overflow: hidden;
 }
@@ -166,12 +169,19 @@
 }
 .fp-search:focus { border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
-.fp-list { overflow: auto; padding: 4px 0; }
+.fp-list { overflow: auto; padding: 0; }
 .fp-group {
-  padding: 8px 12px 4px; font-size: 11.5px; font-weight: 600;
-  color: #64748b; text-transform: none; letter-spacing: 0.02em;
-  position: sticky; top: 0; background: #fff;
+  padding: 7px 12px 7px 14px; font-size: 12px; font-weight: 700;
+  color: #1e40af; letter-spacing: 0.04em;
+  position: sticky; top: 0;
+  /* 飽和度更高的藍灰背景 + 左邊主色 accent bar + 上下分隔線，
+     讓分類標題在白底字型項目間明顯跳出來 */
+  background: #dbeafe;
+  border-top: 1px solid #93c5fd;
+  border-bottom: 1px solid #93c5fd;
+  box-shadow: inset 4px 0 0 0 #2563eb;
 }
+.fp-list > .fp-group:first-child { border-top: none; }
 .fp-item {
   display: flex; justify-content: space-between; align-items: center;
   padding: 7px 12px; gap: 12px; cursor: pointer; font-size: 13px;
@@ -1388,15 +1398,49 @@ function installFontPicker(selectEl, currentId) {
     }
   }
 
+  function _positionPop() {
+    // 以 trigger 在 viewport 的座標為錨，預設 trigger.left 對齊 pop.left
+    // (往右展)。算到右邊會超出 viewport 就改成 trigger.right 對齊 pop.right
+    // (往左展)。trigger 也設一個 min-width 來源避免 popup 太窄看不下字。
+    const tRect = trig.getBoundingClientRect();
+    const margin = 8;
+    const minW = Math.max(tRect.width, 220);
+    pop.style.minWidth = minW + 'px';
+    // 量 popup 內容 natural 寬度（max-width 360 + max-content）
+    const popW = pop.getBoundingClientRect().width || minW;
+    let left = tRect.left;
+    // 若往右展會超出 viewport → 嘗試往左展（pop 右緣對齊 trigger 右緣）
+    if (left + popW > window.innerWidth - margin) {
+      left = tRect.right - popW;
+      // 若往左展又會超出 viewport 左緣 → 兩邊都不夠就靠右邊界
+      if (left < margin) left = Math.max(margin, window.innerWidth - margin - popW);
+    }
+    let top = tRect.bottom + 4;
+    // 下方空間不夠 → 改開到 trigger 上方
+    const popH = pop.getBoundingClientRect().height || 320;
+    if (top + popH > window.innerHeight - margin) {
+      const above = tRect.top - 4 - popH;
+      if (above >= margin) top = above;
+    }
+    pop.style.left = left + 'px';
+    pop.style.top = top + 'px';
+  }
   function openPop() {
     renderList(search.value);
     pop.hidden = false;
+    // 先粗算一次（讓 max-content 撐開內容）；下個 frame 拿到真寬度再精算
+    _positionPop();
+    requestAnimationFrame(_positionPop);
     setTimeout(() => search.focus(), 20);
     document.addEventListener('click', onDocClick, true);
+    window.addEventListener('resize', _positionPop);
+    window.addEventListener('scroll', _positionPop, true);
   }
   function closePop() {
     pop.hidden = true;
     document.removeEventListener('click', onDocClick, true);
+    window.removeEventListener('resize', _positionPop);
+    window.removeEventListener('scroll', _positionPop, true);
   }
   function onDocClick(e) {
     if (!wrap.contains(e.target)) closePop();
