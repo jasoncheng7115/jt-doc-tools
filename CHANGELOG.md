@@ -4,6 +4,14 @@
 
 ---
 
+## [1.4.82] - 2026-05-05
+
+### 修正
+
+- **表單填寫沒在 admin/history/fill 留下記錄**：`pdf_fill/router.py:preview()` 與 `submit()` 內被標註「History persistence disabled」沒呼叫 `history_manager.save()`，admin 進歷史記錄頁永遠看到「尚無歷史記錄」。`history_refill` 路徑（已停用）才有 save。修正後兩個入口都會 best-effort 寫入 history（含 actor username 經 `sessions.user_label()`、template_id、company_id、報告 stats）
+
+---
+
 ## [1.4.81] - 2026-05-05
 
 ### 改善
