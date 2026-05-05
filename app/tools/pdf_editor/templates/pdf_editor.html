@@ -1171,14 +1171,20 @@ function wirePropsPanel(active) {
   if (pfFont) {
     populateFontDropdown(pfFont, active._peFont || 'pymupdf:default');
     pfFont.addEventListener('change', (e) => {
-    const v = e.target.value;
-    active._peFont = v;
-    // Update Fabric fontFamily for on-screen preview too
-    const ff = fontFamilyForKey(v);
-    active.set('fontFamily', ff);
-    rerender();
-    scheduleAutoSave();
-  });
+      const v = e.target.value;
+      active._peFont = v;
+      // Update Fabric fontFamily for on-screen preview too
+      const ff = fontFamilyForKey(v);
+      active.set('fontFamily', ff);
+      rerender();
+      // 字型變更要立即重繪（CSS generic 的 serif/sans-serif 看起來常常一樣，
+      // 真正的視覺差別在後端 bake 後 PNG 上看到）— 立刻 trigger save 不
+      // 等 800ms debounce。autoSave 關閉時尊重使用者選擇，需手動按儲存。
+      if ($('peAutoSave')?.checked) {
+        if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
+        doAutoSave();
+      }
+    });
   }
   const pfColorHex = $('pfColorHex');
   if (pfColorHex) pfColorHex.addEventListener('change', (e) => {
@@ -1247,6 +1253,11 @@ function wireBatchPanel(sel, textKids) {
     const v = e.target.value;
     textKids.forEach(o => { o._peFont = v; o.set('fontFamily', fontFamilyForKey(v)); });
     bump();
+    // 立即 trigger save（同單選 pfFont），讓字型變更馬上 bake 進 BG PNG
+    if ($('peAutoSave')?.checked) {
+      if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
+      doAutoSave();
+    }
   });
   const sizeEl = $('pfBatchSize');
   if (sizeEl) sizeEl.addEventListener('input', (e) => {
@@ -1427,6 +1438,12 @@ function installFontPicker(selectEl, currentId) {
     const margin = 8;
     const minW = Math.max(tRect.width, 220);
     pop.style.minWidth = minW + 'px';
+    // 動態 max-height：依 viewport 上下可用空間決定（以較大的一邊為主），
+    // 上限 600px。原本寫死 360px，下方還有空間也撐不開。
+    const spaceBelow = Math.max(120, window.innerHeight - tRect.bottom - margin - 4);
+    const spaceAbove = Math.max(120, tRect.top - margin - 4);
+    const maxH = Math.min(600, Math.max(spaceBelow, spaceAbove));
+    pop.style.maxHeight = maxH + 'px';
     // 量 popup 內容 natural 寬度（max-width 360 + max-content）
     const popW = pop.getBoundingClientRect().width || minW;
     let left = tRect.left;
