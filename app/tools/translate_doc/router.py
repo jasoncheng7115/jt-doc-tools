@@ -125,9 +125,33 @@ _LANG_NAMES = {
 def _build_prompt(src_text: str, source_lang: str, target_lang: str) -> str:
     src_name = _LANG_NAMES.get(source_lang, source_lang or "原文")
     tgt_name = _LANG_NAMES.get(target_lang, target_lang or "目標語言")
+    # 針對台灣繁體要求 LLM 用台灣慣用 IT 術語（避免大陸用語滲入）
+    tw_terminology = ""
+    if target_lang in ("zh-TW", "zh"):
+        tw_terminology = (
+            "**重要**：請使用「台灣繁體中文」用語，IT / 技術術語請用台灣業界習慣翻譯，**禁止**用大陸 / 香港用詞。對照表："
+            "kernel→核心（不是「內核」）、software→軟體（不是「軟件」）、hardware→硬體（不是「硬件」）、"
+            "image→圖片 / 影像（不是「圖像」）、video→影片（不是「視頻」）、network→網路（不是「網絡」）、"
+            "server→伺服器（不是「服務器」）、menu→選單（不是「菜單」）、screen→螢幕（不是「屏幕」）、"
+            "save→儲存（不是「保存」）、default→預設（不是「默認」）、setting→設定（不是「設置」）、"
+            "file→檔案（不是「文件」）、information→訊息 / 資訊（不是「信息」）、"
+            "print→列印（不是「打印」）、font→字型（不是「字體」）、document→文件（不是「文檔」）、"
+            "code→程式碼（不是「代碼」）、program→程式（不是「程序」）、function→函式 / 功能（不是「函數」當動詞）、"
+            "data→資料（不是「數據」）、object→物件（不是「對象」當程式術語）、array→陣列（不是「數組」）、"
+            "queue→佇列（不是「隊列」）、cache→快取（不是「緩存」）、download→下載（OK 兩岸通用）、"
+            "upload→上傳、login→登入（不是「登錄」）、logout→登出、user→使用者（不是「用戶」當主語）、"
+            "browser→瀏覽器、driver→驅動程式、interface→介面（不是「界面」）、"
+            "framework→框架、library→程式庫 / 函式庫（IT 上下文，不是「圖書館」）、"
+            "feature→功能 / 特色（不是「特性」）、bug→錯誤 / 臭蟲、release→版本 / 釋出、deploy→部署、"
+            "click→點擊 / 按、support→支援（不是「支持」當技術動詞）、"
+            "performance→效能（不是「性能」）、optimize→最佳化（不是「優化」當形容詞）、"
+            "address→位址（IP/記憶體上下文，不是「地址」）、port→連接埠 / 通訊埠（不是「端口」）、"
+            "container→容器（OK）、virtualization→虛擬化、virtual machine→虛擬機（OK）。"
+        )
     return (
         f"請把下面這句從「{src_name}」翻譯為「{tgt_name}」，"
         "翻譯要忠實、通順、符合該語言慣用的書寫風格。"
+        + tw_terminology +
         "只輸出翻譯結果，不要附上原文、不要加任何標記、不要解釋、"
         "不要 markdown、不要前綴、不要後綴。"
         "如果原文是專有名詞或無法翻譯，照原樣輸出即可。\n\n"
