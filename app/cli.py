@@ -505,6 +505,14 @@ def svc_update() -> int:
     # 5b. Ensure system-level deps for new features (auto best-effort).
     _ensure_system_deps_for_update()
 
+    # 5b1. Backfill UTF-8 locale env into systemd unit on Linux.
+    # 舊版安裝（< v1.4.71）的 jt-doc-tools.service 沒有 LANG/LC_ALL — 客戶 host
+    # 若用 LANG=C 跑（很多 minimal Debian / RHEL container 預設），上傳中文檔名
+    # 字型 / 處理中文檔名 PDF 會踩 ascii encoding。新安裝 install.sh 已加入；
+    # 升級時也順手補一次。Idempotent — 已有的不重加。
+    if _is_linux():
+        _ensure_systemd_utf8_locale()
+
     # 5c. Self-bootstrap: when upgrading, the NEW cli.py is on disk but
     # THIS process still has OLD cli.py in memory. So any helper that's
     # newer than what's running (esp. _migrate_nssm_to_winsw on Windows,
@@ -548,6 +556,47 @@ def svc_update() -> int:
     print("Health check timed out; check 'jtdt logs'", file=sys.stderr)
     _print_system_deps_summary()
     return 1
+
+
+def _ensure_systemd_utf8_locale() -> None:
+    """Ensure /etc/systemd/system/jt-doc-tools.service has LANG=C.UTF-8 etc.
+
+    舊安裝（< v1.4.71）的 unit 沒有這幾行；客戶 host 預設 LANG=C 時
+    Python 會把 filesystem encoding 當 ascii，上傳/處理中文檔名爆 Unicode
+    錯。這裡 idempotent 補插（已存在就不動）。"""
+    unit = Path("/etc/systemd/system/jt-doc-tools.service")
+    if not unit.exists():
+        return
+    try:
+        txt = unit.read_text(encoding="utf-8")
+    except Exception:
+        return
+    needed = [
+        ("LANG", "C.UTF-8"),
+        ("LC_ALL", "C.UTF-8"),
+        ("PYTHONIOENCODING", "utf-8"),
+        ("PYTHONUTF8", "1"),
+    ]
+    import re as _re
+    additions = []
+    for key, val in needed:
+        if not _re.search(rf"^Environment={_re.escape(key)}=", txt, _re.M):
+            additions.append(f"Environment={key}={val}")
+    if not additions:
+        return  # all present
+    # Insert right before the ExecStart line so it's grouped with other Environment= lines.
+    new_lines = "\n".join(additions) + "\n"
+    if "ExecStart=" in txt:
+        txt = txt.replace("ExecStart=", new_lines + "ExecStart=", 1)
+    else:
+        txt = txt.rstrip() + "\n" + new_lines
+    try:
+        unit.write_text(txt, encoding="utf-8")
+        subprocess.call(["systemctl", "daemon-reload"])
+        print("  Backfilled UTF-8 locale env into systemd unit (LANG=C.UTF-8 etc).")
+    except Exception as e:
+        print(f"  warning: could not patch systemd unit for UTF-8 locale: {e}",
+              file=sys.stderr)
 
 
 def _print_system_deps_summary() -> None:

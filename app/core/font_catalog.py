@@ -54,6 +54,10 @@ _HINTS = [
     ("notoseriftc",      "Noto Serif TC",            "serif",  "traditional", "free-cjk", "Noto Serif TC"),
     ("notosanscjktc",    "Noto Sans CJK TC",         "sans",   "traditional", "free-cjk", "Noto Sans CJK TC"),
     ("notoserifcjktc",   "Noto Serif CJK TC",        "serif",  "traditional", "free-cjk", "Noto Serif CJK TC"),
+    # Pan-CJK 多語 TTC（Debian / Ubuntu apt 裝的就是這個檔，沒 TC 後綴 —
+    # 內含 TC/SC/JP/KR 4 個 face，預設取 face 0 已涵蓋 CJK Unified glyph）
+    ("notosanscjk",      "Noto Sans CJK",            "sans",   "traditional", "free-cjk", "Noto Sans CJK"),
+    ("notoserifcjk",     "Noto Serif CJK",           "serif",  "traditional", "free-cjk", "Noto Serif CJK"),
     ("sourcehansans",    "Source Han Sans TC",       "sans",   "traditional", "free-cjk", "思源黑體 (Source Han Sans)"),
     ("sourcehansanstc",  "Source Han Sans TC",       "sans",   "traditional", "free-cjk", "思源黑體-繁"),
     ("sourcehanserif",   "Source Han Serif TC",      "serif",  "traditional", "free-cjk", "思源宋體 (Source Han Serif)"),
@@ -301,4 +305,60 @@ def resolve_font_id(font_id: str) -> Optional[dict]:
     for f in list_fonts():
         if f.get("id") == font_id:
             return f
+    return None
+
+
+# 偏好順序：相同分類內，越上面越優先（檔名子字串）。
+# 用來給 best_cjk_path() 升級 PyMuPDF 內建（china-t/ts/s/ss 在 Linux 上會
+# 渲染成厚實 sans，根本不是文件上寫的 MingLiU 宋體）。
+_BEST_CJK_PREFERENCES = {
+    ("traditional", "serif"): [
+        "notoseriftc", "notoserifcjk", "sourcehanseriftc", "sourcehanserif",
+        "lisong", "applelisung", "tw-sung", "cwtexming", "genyomin",
+        "pmingliu", "mingliu",
+    ],
+    ("traditional", "sans"): [
+        "notosanstc", "notosanscjk", "sourcehansanstc", "sourcehansans",
+        "msjh", "jhenghei", "pingfang", "heititc", "stheitimedium",
+        "applegothic", "lihei", "cwtexyen", "cwtexheib",
+    ],
+    ("simplified", "serif"): [
+        "notoserifcjksc", "sourcehanserifsc",
+    ],
+    ("simplified", "sans"): [
+        "notosanscjksc", "sourcehansanssc",
+    ],
+}
+
+
+def best_cjk_path(style: str = "sans",
+                  cjk: str = "traditional") -> Optional[tuple[Path, int]]:
+    """Return (path, ttc_idx) of the best available real CJK font for the
+    requested style, or None if nothing usable is installed.
+
+    Matches against `_BEST_CJK_PREFERENCES`; only considers fonts the catalog
+    has actually scanned (via list_fonts), so hidden / missing files are
+    auto-skipped. Idx is currently always 0 (we don't pin a sub-font of TTCs).
+    """
+    prefs = _BEST_CJK_PREFERENCES.get((cjk, style)) or []
+    if not prefs:
+        return None
+    fonts = list_fonts()
+    norm_keys = []
+    for entry in fonts:
+        path = entry.get("path")
+        if not path:
+            continue
+        if entry.get("style") != style:
+            continue
+        if entry.get("cjk") and entry["cjk"] != cjk:
+            continue
+        norm_name = Path(path).name.lower()\
+            .replace(" ", "").replace("-", "").replace("_", "")
+        norm_keys.append((norm_name, Path(path), int(entry.get("idx") or 0)))
+    for pat in prefs:
+        pat_norm = pat.replace(" ", "").replace("-", "").replace("_", "")
+        for norm_name, p, idx in norm_keys:
+            if pat_norm in norm_name and p.exists():
+                return (p, idx)
     return None

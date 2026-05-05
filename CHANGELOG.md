@@ -4,6 +4,72 @@
 
 ---
 
+## [1.4.77] - 2026-05-05
+
+### 修正
+
+- **PDF 編輯器：選 PyMuPDF Serif 後 bake 出來不是宋體（仍是 sans）**：根因是 PyMuPDF 內建 `china-t` / `china-ts` / `china-s` / `china-ss` 在 Linux host 上實際渲染**全部都是厚實 sans-serif**（與 PyMuPDF 文件所述 MingLiU / SimSun 不符），用 china-t 跟 china-ts bake 看起來一模一樣，使用者選 serif 跟 sans 看不出差別。修法：新增 `font_catalog.best_cjk_path(style, cjk)` 探測系統實際安裝的 CJK 字型（NotoSerif/SansCJK TC、Source Han Serif/Sans TC、TW-Sung、cwTeX-Ming/Yen 等），新增 `_upgrade_cjk_font()` 在 `save()` / `_resolve_fonts_for_pref()` 內把 china-* 升級為實際字型路徑（用 `page.insert_font` 註冊，per-page cache 不重複註冊）。如果 host 沒任何系統 CJK 字型才 fall back 到原 china-* 內建。Linux 客戶現在 PyMuPDF Serif → Noto Serif CJK TC，PyMuPDF Sans → Noto Sans CJK TC，視覺上才有差別
+
+---
+
+## [1.4.76] - 2026-05-05
+
+### 修正
+
+- **PDF 編輯器：「整份換字型」一按就 500 Internal Server Error**：`pdf_editor/router.py` 內 `_style_suffix()` 是 `save()` 的 nested function，閉包綁了 `bold`/`italic` 變數。但模組級的 `_insert_mixed_text()`（被 `_replace_all_fonts_sync` 透過 `_resolve_fonts_for_pref` 走到）也在用，跑到那條路徑時 `NameError: name '_style_suffix' is not defined`。把 `_style_suffix` hoist 到模組層級接受 `bold`/`italic` 顯式參數，所有 caller 同步補上 `, bold, italic`，並把 `_resolve_fonts_for_pref` 內重複定義的 `_style` 也清掉
+
+---
+
+## [1.4.75] - 2026-05-05
+
+### 修正
+
+- **PDF 編輯器：選自訂上傳字型畫面預覽對的、自動儲存後重畫卻跑掉變回 PyMuPDF 預設**：`pdf_editor/router.py:save()` 內 text 物件渲染只判斷 `font_pref.startswith("system:")`，漏了 `"custom:"` 分支，導致 admin 上傳的字型（如「微軟正黑體」）在後端 bake 時被 fall through 到 `china-t` built-in。同時補 `fontname.startswith("uc")` 進不分割 ASCII/CJK runs 的判斷
+- **字型分類標題背景太淺看不出區隔**：把分類 band 從 `#f1f5f9`（淺灰）換成 `#dbeafe`（藍 100）+ 左側 4px `#2563eb` accent bar + 上下 `#93c5fd` 邊線，文字色改 `#1e40af` 加粗，與下方字型項目視覺差距明顯
+
+---
+
+## [1.4.74] - 2026-05-05
+
+### 新增
+
+- **PDF 編輯器字型下拉，分類標題加整條淺灰背景帶**：「自訂上傳字型」/「PyMuPDF 內建」等分類標題視覺上與字型項目清楚分區，捲動時 sticky 定位讓使用者隨時知道目前在哪個分類
+
+---
+
+## [1.4.73] - 2026-05-05
+
+### 修正
+
+- **PDF 編輯器字型下拉清單仍被右屬性面板裁切**：v1.4.72 用 `position:absolute` + `right:0` 翻邊只是位移，沒解決根因 — 右屬性面板有 `overflow:hidden`，無論往左或往右展超出 trigger 範圍都會被切。改成 `position:fixed` + 由 JS 用 `getBoundingClientRect()` 即時計算座標，popup 完全脫離祖先 overflow。並加入：①下方空間不夠時自動往上開、②兩邊都不夠時夾在 viewport 邊界內、③`scroll`/`resize` 即時 reposition
+
+---
+
+## [1.4.72] - 2026-05-05
+
+### 修正
+
+- **PDF 編輯器加入文字時，自訂上傳的字型不出現在下拉選單**：`pdf_editor/router.py:list_fonts()` 的分類白名單少寫 `"custom"`，導致 admin 上傳的公司字型（例如客戶上傳的「微軟正黑體」）在 catalog 看得到、編輯器卻選不到。修正後 `custom` 分類排在最上方優先顯示
+- **字型下拉清單寬度不夠，長字型名稱被截掉看不到全貌**：右屬性面板窄、預設清單跟著 trigger 同寬導致 `PyMuPDF 內建 Sans（繁中黑體 + Helvetica）` 等長 label 被擠成 `PyMuPDF 內建 Sans (...)`。改成 `width:max-content; min-width:100%; max-width:360px` 讓清單依內容自動撐開；JS 量到右邊會超出 viewport 時自動翻邊改成右對齊（往左展），畫面無論在哪個寬度都看得完整
+
+---
+
+## [1.4.71] - 2026-05-05
+
+### 新增
+
+- **字型管理：上傳區美化（拖曳區 + 多選 + 即時檔名）**：與企業 Logo 上傳區同調性，虛線方框、滑入上浮陰影、選好檔變綠色，支援把多個 .ttf / .otf / .ttc 直接拖進來，已選清單即時顯示
+- **字型管理：每個分類獨立「全部顯示 / 全部隱藏」按鈕（眼睛 icon）**：例如想一鍵把 PyMuPDF 內建全藏，或把整個西文開源分類關掉，不需逐一點。新增 `POST /admin/fonts/bulk-hidden` 端點
+- 圖示庫加入 `eye-off`（給隱藏狀態用）
+
+### 修正
+
+- **Linux host 沒啟用 UTF-8 locale 時，上傳中文檔名字型 / 處理中文檔名 PDF 會炸**：systemd unit `jt-doc-tools.service` 加上 `LANG=C.UTF-8` / `LC_ALL=C.UTF-8` / `PYTHONIOENCODING=utf-8` / `PYTHONUTF8=1` 四個 Environment（C.UTF-8 是 glibc 內建，不需另裝 zh_TW locale）
+- `jtdt update` 現在會自動補全舊安裝（< v1.4.71）少掉的 locale Environment 行，idempotent，已存在不重加
+- 字型上傳端點加上 ascii filesystem fallback：若偵測到 host 的 `sys.getfilesystemencoding()` 不是 UTF-8 且檔名含 CJK，自動改用 sha256[:16] 當檔名避免 `UnicodeEncodeError`
+
+---
+
 ## [1.4.70] - 2026-05-05
 
 ### 修正

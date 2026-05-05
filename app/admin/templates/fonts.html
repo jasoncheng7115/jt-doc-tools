@@ -9,12 +9,20 @@
 
 <div class="panel">
   <h2 style="margin-top:0;">上傳自訂字型</h2>
-  <p class="muted" style="font-size:12.5px;">支援 .ttf / .otf / .ttc；上傳後會自動加入字型清單並顯示在 PDF 編輯器的字型下拉選單中（分類：<b>自訂</b>）。字型會存放於 <code>{{ '{data}/fonts' }}</code> 目錄。</p>
-  <form id="fontUploadForm" enctype="multipart/form-data" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-    <input type="file" id="fontFile" accept=".ttf,.otf,.ttc" multiple
-           style="padding:6px; border:1px solid var(--border); border-radius:6px; background:#fff;" />
-    <button class="btn btn-primary" type="submit">{{ icon('upload', size=14) }} 上傳</button>
-    <span id="uploadStatus" class="muted" style="font-size:12px;"></span>
+  <p class="muted" style="font-size:12.5px;">支援 .ttf / .otf / .ttc，可一次選多個檔。上傳後會自動加入字型清單並顯示在 PDF 編輯器的字型下拉選單最上方（分類：<b>自訂</b>）。字型存放於 <code>{{ '{data}/fonts' }}</code>。</p>
+  <form id="fontUploadForm" enctype="multipart/form-data">
+    <label class="fnt-drop-zone" id="fontDropZone" for="fontFile">
+      <input type="file" id="fontFile" accept=".ttf,.otf,.ttc" multiple hidden />
+      <span class="fnt-drop-icon">{{ icon('upload', size=22) }}</span>
+      <span class="fnt-drop-text">
+        <b>點此挑選</b>或拖曳字型檔到此
+        <span class="fnt-drop-hint">.ttf / .otf / .ttc，可多選</span>
+      </span>
+    </label>
+    <div class="fnt-upload-bar">
+      <button class="btn btn-primary" type="submit" id="btnUploadFont" disabled>{{ icon('upload', size=14) }} 上傳</button>
+      <span id="uploadStatus" class="muted" style="font-size:12px;"></span>
+    </div>
   </form>
 </div>
 
@@ -24,9 +32,24 @@
     <button class="btn" type="button" id="btnRefresh">{{ icon('refresh', size=14) }} 重新掃描</button>
   </div>
   {% for g in groups %}
+  {% set group_ids = g.fonts|map(attribute='id')|list %}
   <details open style="margin-bottom:16px; border:1px solid #e5e7eb; border-radius:6px; padding:8px 12px;">
     <summary style="cursor:pointer; font-weight:600; color:#374151; padding:4px 0;">
-      {{ g.title }} <span class="muted" style="font-weight:normal; font-size:12px;">({{ g.fonts|length }})</span>
+      <span class="fnt-group-head">
+        <span class="fnt-group-title">
+          {{ g.title }} <span class="muted" style="font-weight:normal; font-size:12px;">({{ g.fonts|length }})</span>
+        </span>
+        <span class="fnt-group-actions" onclick="event.preventDefault(); event.stopPropagation();">
+          <button type="button" class="btn btn-sm fnt-bulk-show" data-ids='{{ group_ids|tojson }}'
+                  title="這個分類全部設為顯示">
+            {{ icon('eye', size=13) }} 全部顯示
+          </button>
+          <button type="button" class="btn btn-sm fnt-bulk-hide" data-ids='{{ group_ids|tojson }}'
+                  title="這個分類全部設為隱藏">
+            {{ icon('eye-off', size=13) }} 全部隱藏
+          </button>
+        </span>
+      </span>
     </summary>
     <table style="width:100%; font-size:13px; margin-top:8px; border-collapse:collapse;">
       <thead>
@@ -34,7 +57,7 @@
           <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e5e7eb;">字型名稱</th>
           <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e5e7eb;">類型</th>
           <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e5e7eb; width:45%;">路徑 / ID</th>
-          <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e5e7eb; width:120px;">在工具中</th>
+          <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e5e7eb; width:160px;">在工具中</th>
         </tr>
       </thead>
       <tbody>
@@ -56,7 +79,7 @@
             <button type="button" class="btn btn-sm toggle-hidden-font" data-id="{{ f.id }}"
                     style="padding:3px 8px; font-size:11px;"
                     title="{% if f.hidden %}取消隱藏，讓工具的字型選單再次顯示這個字型{% else %}隱藏這個字型，工具的字型選單就不會出現它{% endif %}">
-              {% if f.hidden %}👁 顯示{% else %}🚫 隱藏{% endif %}
+              {% if f.hidden %}{{ icon('eye', size=12) }} 顯示{% else %}{{ icon('eye-off', size=12) }} 隱藏{% endif %}
             </button>
             {% if f.category == 'custom' %}
               <button type="button" class="btn btn-danger btn-sm del-custom-font" data-id="{{ f.id }}"
@@ -77,25 +100,112 @@
     <li><b>台灣系統字型</b>：macOS / Windows / Linux 預裝的繁體中文字型，如 PingFang TC、微軟正黑體、標楷體。</li>
     <li><b>開源 CJK 字型</b>：Noto Sans/Serif TC、思源黑體、cwTeX、TW-Kai/Sung 等符合開放字型授權 (OFL) 的字型。建議裝 Noto TC 可以獲得最佳的繁中顯示效果。</li>
     <li><b>PyMuPDF 內建</b>：`china-t / china-ts / china-s / china-ss / helv / tiro / cour` — 最輕量、100% 相容，但字體美感較差，只在系統沒有更好選擇時使用。</li>
-    <li><b>自訂字型</b>：用上面的上傳表單加入 .ttf / .otf / .ttc；自訂字型會顯示在 PDF 編輯器字型下拉選單的最上方，並可從表格直接刪除。</li>
+    <li><b>自訂字型</b>：用上面的上傳區加入 .ttf / .otf / .ttc；自訂字型會顯示在 PDF 編輯器字型下拉選單的最上方，並可從表格直接刪除。</li>
   </ul>
 </div>
+
+<style>
+  /* 美化的上傳拖曳區（與 admin/branding 同調性） */
+  .fnt-drop-zone {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px;
+    border: 2px dashed #cbd5e1;
+    border-radius: 10px;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    cursor: pointer;
+    transition: all 0.15s;
+    min-height: 64px; box-sizing: border-box;
+  }
+  .fnt-drop-zone:hover {
+    border-color: #3b82f6;
+    background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+    transform: translateY(-1px); box-shadow: 0 3px 10px rgba(59,130,246,0.15);
+  }
+  .fnt-drop-zone.is-dragover {
+    border-color: #16a34a; background: #dcfce7; border-style: solid;
+  }
+  .fnt-drop-zone.has-file {
+    border-color: #16a34a; background: #f0fdf4; border-style: solid;
+  }
+  .fnt-drop-icon {
+    flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: #dbeafe; color: #1e40af; line-height: 0;
+  }
+  .fnt-drop-zone.has-file .fnt-drop-icon { background: #bbf7d0; color: #166534; }
+  .fnt-drop-icon .ic { stroke: currentColor; }
+  .fnt-drop-text { font-size: 13.5px; color: #1e293b; line-height: 1.5; flex:1; min-width:0; }
+  .fnt-drop-text b { color: #1e40af; }
+  .fnt-drop-zone.has-file .fnt-drop-text b { color: #16a34a; }
+  .fnt-drop-hint { display:block; font-size: 11.5px; color: #64748b; margin-top: 2px; }
+
+  .fnt-upload-bar { display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
+
+  /* group header — 標題與批次按鈕分左右 */
+  .fnt-group-head {
+    display: inline-flex; align-items: center; justify-content: space-between;
+    width: calc(100% - 24px); gap: 12px;
+  }
+  .fnt-group-title { display: inline-flex; align-items: center; gap: 6px; }
+  .fnt-group-actions { display: inline-flex; gap: 6px; }
+  .fnt-group-actions .btn {
+    padding: 3px 8px; font-size: 11.5px; line-height: 1.4;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .fnt-bulk-show:hover { color:#0f766e; border-color:#5eead4; background:#ecfeff; }
+  .fnt-bulk-hide:hover { color:#9f1239; border-color:#fda4af; background:#fff1f2; }
+</style>
 
 {% endblock %}
 {% block scripts %}
 <script>
 const status = document.getElementById('uploadStatus');
+const fontDropZone = document.getElementById('fontDropZone');
+const fontFile = document.getElementById('fontFile');
+const btnUploadFont = document.getElementById('btnUploadFont');
+
 document.getElementById('btnRefresh').addEventListener('click', async () => {
   const r = await fetch('/admin/fonts/refresh', {method:'POST'});
   const d = await r.json();
   if (d.ok) location.reload();
 });
 
+// ---- Drag-drop file zone ----
+function _refreshDropZoneLabel() {
+  const files = Array.from(fontFile.files || []);
+  btnUploadFont.disabled = !files.length;
+  const text = fontDropZone.querySelector('.fnt-drop-text');
+  if (!files.length) {
+    fontDropZone.classList.remove('has-file');
+    text.innerHTML = '<b>點此挑選</b>或拖曳字型檔到此<span class="fnt-drop-hint">.ttf / .otf / .ttc，可多選</span>';
+    return;
+  }
+  fontDropZone.classList.add('has-file');
+  const names = files.length === 1
+    ? files[0].name
+    : files[0].name + ` 等 ${files.length} 個檔案`;
+  text.innerHTML = '<b>已選擇：</b>' + names + '<span class="fnt-drop-hint">點選「上傳」開始</span>';
+}
+['dragenter','dragover'].forEach(ev => fontDropZone.addEventListener(ev, e => {
+  e.preventDefault(); fontDropZone.classList.add('is-dragover');
+}));
+['dragleave','dragend','drop'].forEach(ev => fontDropZone.addEventListener(ev, e => {
+  e.preventDefault(); fontDropZone.classList.remove('is-dragover');
+}));
+fontDropZone.addEventListener('drop', (e) => {
+  if (e.dataTransfer.files && e.dataTransfer.files.length) {
+    fontFile.files = e.dataTransfer.files;
+    _refreshDropZoneLabel();
+  }
+});
+fontFile.addEventListener('change', _refreshDropZoneLabel);
+
 document.getElementById('fontUploadForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const input = document.getElementById('fontFile');
-  const files = Array.from(input.files || []);
+  const files = Array.from(fontFile.files || []);
   if (!files.length) { status.textContent = '請先選擇字型檔'; return; }
+  btnUploadFont.disabled = true;
   let ok = 0, fail = 0;
   for (const f of files) {
     status.textContent = `上傳中：${f.name} …`;
@@ -118,7 +228,6 @@ document.querySelectorAll('.toggle-hidden-font').forEach(btn => {
       body: JSON.stringify({id}),
     });
     if (r.ok) {
-      // 重新載入頁面就會看到新狀態 + 計數更新
       location.reload();
     } else {
       btn.disabled = false;
@@ -126,6 +235,31 @@ document.querySelectorAll('.toggle-hidden-font').forEach(btn => {
     }
   });
 });
+
+// 全部顯示 / 全部隱藏（每個分類）
+async function _bulkSetHidden(btn, hidden) {
+  let ids = [];
+  try { ids = JSON.parse(btn.dataset.ids || '[]'); } catch (_e) {}
+  if (!ids.length) return;
+  btn.disabled = true;
+  const verb = hidden ? '隱藏' : '顯示';
+  if (!(await showConfirm(`確定要把這個分類的 ${ids.length} 個字型全部設為「${verb}」？`,
+        { title: `全部${verb}`, kind: hidden ? 'danger' : 'primary', okText: `全部${verb}` }))) {
+    btn.disabled = false; return;
+  }
+  try {
+    const r = await fetch('/admin/fonts/bulk-hidden', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ids, hidden}),
+    });
+    if (r.ok) { location.reload(); }
+    else { btn.disabled = false; showAlert('操作失敗：' + await r.text()); }
+  } catch (e) { btn.disabled = false; showAlert('網路錯誤：' + e.message); }
+}
+document.querySelectorAll('.fnt-bulk-show').forEach(b =>
+  b.addEventListener('click', () => _bulkSetHidden(b, false)));
+document.querySelectorAll('.fnt-bulk-hide').forEach(b =>
+  b.addEventListener('click', () => _bulkSetHidden(b, true)));
 
 document.querySelectorAll('.del-custom-font').forEach(btn => {
   btn.addEventListener('click', async () => {

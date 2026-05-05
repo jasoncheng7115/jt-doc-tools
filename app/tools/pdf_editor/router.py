@@ -337,6 +337,7 @@ async def list_fonts():
             "style": f.get("style"),
         })
     group_titles = {
+        "custom": "自訂上傳字型",
         "taiwan": "台灣系統字型",
         "free-cjk": "開源 CJK 字型",
         "cjk": "其他 CJK 字型",
@@ -344,7 +345,8 @@ async def list_fonts():
         "pymupdf": "PyMuPDF 內建（最輕量、相容性最好）",
     }
     ordered = []
-    for key in ("taiwan", "free-cjk", "cjk", "latin", "pymupdf"):
+    # custom 排第一，讓 admin 上傳的公司字型最顯眼
+    for key in ("custom", "taiwan", "free-cjk", "cjk", "latin", "pymupdf"):
         if key in groups:
             ordered.append({"key": key, "title": group_titles[key], "fonts": groups[key]})
     return {"groups": ordered, "total": len(fonts)}
@@ -575,31 +577,27 @@ def _resolve_fonts_for_pref(
                 except Exception:
                     custom_font_name = None
 
-    def _style(base: str) -> str:
-        if base in ("helv", "hebo", "heit", "hebi"):
-            return {(0, 0): "helv", (1, 0): "hebo",
-                    (0, 1): "heit", (1, 1): "hebi"}[(int(bold), int(italic))]
-        if base in ("tiro", "tibo", "tiit", "tibi"):
-            return {(0, 0): "tiro", (1, 0): "tibo",
-                    (0, 1): "tiit", (1, 1): "tibi"}[(int(bold), int(italic))]
-        return base
-
     if custom_font_name:
         return (custom_font_name, custom_font_name)
+    # 把 china-* 內建升級為實際系統 CJK 字型（PyMuPDF 內建在 Linux render
+    # 不出 serif/sans 區別，全部變厚實 sans — v1.4.77 修）
+    def _u(builtin: str) -> str:
+        return _upgrade_cjk_font(page, builtin, cache, pno)
     if font_pref in ("pymupdf:sans", "sans"):
-        return ("china-ts" if has_cjk else _style("helv"), _style("helv"))
+        return (_u("china-ts") if has_cjk else _style_suffix("helv", bold, italic),
+                _style_suffix("helv", bold, italic))
     if font_pref in ("pymupdf:serif", "serif"):
-        return ("china-t", _style("tiro"))
+        return (_u("china-t"), _style_suffix("tiro", bold, italic))
     if font_pref in ("pymupdf:simplified", "simplified"):
-        return ("china-ss", _style("helv"))
+        return (_u("china-ss"), _style_suffix("helv", bold, italic))
     if font_pref in ("pymupdf:helv", "helv"):
-        return ("china-t", _style("helv"))
+        return (_u("china-t"), _style_suffix("helv", bold, italic))
     if font_pref in ("pymupdf:tiro", "tiro"):
-        return ("china-t", _style("tiro"))
+        return (_u("china-t"), _style_suffix("tiro", bold, italic))
     if font_pref in ("pymupdf:cour", "mono"):
-        return ("china-t", _style("cour"))
+        return (_u("china-t"), _style_suffix("cour", bold, italic))
     # "default" / "pymupdf:default"
-    return ("china-t", _style("helv"))
+    return (_u("china-t"), _style_suffix("helv", bold, italic))
 
 
 def _replace_all_fonts_sync(src, upload_id: str, font_id: str):
@@ -771,6 +769,63 @@ def _hex_rgb01(h: str) -> tuple[float, float, float]:
         return (int(h[0:2], 16)/255.0, int(h[2:4], 16)/255.0, int(h[4:6], 16)/255.0)
     except Exception:
         return (0.0, 0.0, 0.0)
+
+
+def _style_suffix(base: str, bold: bool = False, italic: bool = False) -> str:
+    """Map PyMuPDF built-in font base name + bold/italic flags → final
+    fontname (e.g. helv + bold → hebo). Module-level so it can be called
+    from any helper. Previously a nested fn inside save(), but
+    _insert_mixed_text/_resolve_fonts_for_pref also need it (replace-all-fonts
+    crashed with NameError before this hoist)."""
+    if base in ("helv", "hebo", "heit", "hebi"):
+        return {(0, 0): "helv", (1, 0): "hebo",
+                (0, 1): "heit", (1, 1): "hebi"}[(int(bold), int(italic))]
+    if base in ("tiro", "tibo", "tiit", "tibi"):
+        return {(0, 0): "tiro", (1, 0): "tibo",
+                (0, 1): "tiit", (1, 1): "tibi"}[(int(bold), int(italic))]
+    if base in ("cour", "cobo", "coit", "cobi"):
+        return {(0, 0): "cour", (1, 0): "cobo",
+                (0, 1): "coit", (1, 1): "cobi"}[(int(bold), int(italic))]
+    return base  # china-s/china-t/uf*/uc* etc have no style variants
+
+
+def _upgrade_cjk_font(page, builtin_name: str, cache: dict, pno: int) -> str:
+    """Upgrade a PyMuPDF built-in CJK font name (china-t / china-ts /
+    china-s / china-ss) to a registered system CJK font when one is
+    available. Falls back to the original built-in if nothing usable.
+
+    根因：PyMuPDF 的 china-* 內建在 Linux 上實際渲染都長一樣（厚實 sans），
+    使用者選 PyMuPDF Serif 看不出與 Sans 差別。這裡把 china-t→Noto Serif CJK
+    TC、china-ts→Noto Sans CJK TC 等替換掉。Cache key 跟其它 system font
+    註冊共用，避免每頁重複 insert_font。"""
+    style_cjk_map = {
+        "china-t":  ("serif", "traditional"),
+        "china-ts": ("sans",  "traditional"),
+        "china-s":  ("serif", "simplified"),
+        "china-ss": ("sans",  "simplified"),
+    }
+    pair = style_cjk_map.get(builtin_name)
+    if not pair:
+        return builtin_name  # not a builtin we know how to upgrade
+    style, cjk = pair
+    try:
+        from ...core import font_catalog
+        best = font_catalog.best_cjk_path(style=style, cjk=cjk)
+    except Exception:
+        best = None
+    if not best:
+        return builtin_name
+    path, idx = best
+    fkey = (pno, str(path), idx)
+    if fkey in cache:
+        return cache[fkey]
+    try:
+        reg_name = f"cu{len(cache)}"
+        page.insert_font(fontname=reg_name, fontfile=str(path))
+        cache[fkey] = reg_name
+        return reg_name
+    except Exception:
+        return builtin_name
 
 
 def _insert_mixed_text(page, x: float, y: float, text: str, *,
@@ -1328,12 +1383,14 @@ async def save(request: Request):
                     underline = bool(obj.get("underline"))
                     font_pref = str(obj.get("font") or "default")
                     has_cjk = any("一" <= c <= "鿿" for c in text)
-                    # System font override — user picked a .ttf/.otf/.ttc
-                    # from the catalog. Register it with the page if we
-                    # haven't already, and use the registered name for the
-                    # insert_text call.
+                    # System / custom font override — user picked a .ttf/.otf/.ttc
+                    # from the catalog（`system:<path>` 或 `custom:<filename>`）。
+                    # 註冊到 page 後用 reg_name 給 insert_text 用。
+                    # NOTE: 之前漏了 `custom:` 分支，導致 admin 上傳的字型 (例如「微軟
+                    # 正黑體」) 被 fall through 到 built-in china-t — UI 預覽看起來對
+                    # 但 auto-save 後重畫就跑掉。v1.4.74 修。
                     custom_font_name = None
-                    if font_pref.startswith("system:"):
+                    if font_pref.startswith("system:") or font_pref.startswith("custom:"):
                         from ...core import font_catalog
                         entry = font_catalog.resolve_font_id(font_pref)
                         if entry and entry.get("path"):
@@ -1342,7 +1399,8 @@ async def save(request: Request):
                                 custom_font_name = _custom_font_cache[fkey]
                             else:
                                 try:
-                                    reg_name = f"uf{len(_custom_font_cache)}"
+                                    prefix = "uc" if font_pref.startswith("custom:") else "uf"
+                                    reg_name = f"{prefix}{len(_custom_font_cache)}"
                                     page.insert_font(
                                         fontname=reg_name,
                                         fontfile=entry["path"],
@@ -1361,18 +1419,8 @@ async def save(request: Request):
                     #   cour / cobo / coit / cobi  — Courier family
                     #   china-s / china-ss          — SimSun (simplified CJK)
                     #   china-t / china-ts          — MingLiu (traditional CJK)
-                    def _style_suffix(base: str) -> str:
-                        # Map base + bold/italic flags; not all bases have all 4
-                        if base in ("helv", "hebo", "heit", "hebi"):
-                            return {(0,0):"helv", (1,0):"hebo",
-                                    (0,1):"heit", (1,1):"hebi"}[(int(bold), int(italic))]
-                        if base in ("tiro", "tibo", "tiit", "tibi"):
-                            return {(0,0):"tiro", (1,0):"tibo",
-                                    (0,1):"tiit", (1,1):"tibi"}[(int(bold), int(italic))]
-                        if base in ("cour", "cobo", "coit", "cobi"):
-                            return {(0,0):"cour", (1,0):"cobo",
-                                    (0,1):"coit", (1,1):"cobi"}[(int(bold), int(italic))]
-                        return base  # china-s/china-t have no style variants
+                    # _style_suffix() 已 hoist 到 module level —
+                    # 內部呼叫補上 bold/italic 參數即可。
 
                     # PyMuPDF built-in CJK fonts:
                     #   china-t  = Traditional 宋體 (MingLiU)     ← Taiwan default
@@ -1385,48 +1433,53 @@ async def save(request: Request):
                     if custom_font_name:
                         fontname = custom_font_name
                     elif font_pref == "pymupdf:sans" or font_pref == "sans":
-                        fontname = "china-ts" if has_cjk else _style_suffix("helv")
+                        fontname = "china-ts" if has_cjk else _style_suffix("helv", bold, italic)
                     elif font_pref == "pymupdf:serif" or font_pref == "serif":
-                        fontname = "china-t" if has_cjk else _style_suffix("tiro")
+                        fontname = "china-t" if has_cjk else _style_suffix("tiro", bold, italic)
                     elif font_pref == "pymupdf:cour" or font_pref == "mono":
-                        fontname = "china-t" if has_cjk else _style_suffix("cour")
+                        fontname = "china-t" if has_cjk else _style_suffix("cour", bold, italic)
                     elif font_pref == "pymupdf:helv" or font_pref == "helv":
-                        fontname = _style_suffix("helv")
+                        fontname = _style_suffix("helv", bold, italic)
                     elif font_pref == "pymupdf:tiro" or font_pref == "tiro":
-                        fontname = _style_suffix("tiro")
+                        fontname = _style_suffix("tiro", bold, italic)
                     elif font_pref == "pymupdf:simplified" or font_pref == "simplified":
-                        fontname = "china-ss" if has_cjk else _style_suffix("helv")
+                        fontname = "china-ss" if has_cjk else _style_suffix("helv", bold, italic)
                     else:  # "default" / "pymupdf:default"
-                        fontname = "china-t" if has_cjk else _style_suffix("helv")
+                        fontname = "china-t" if has_cjk else _style_suffix("helv", bold, italic)
                     # Split text into CJK / ASCII runs and render each
                     # with the right font so ASCII punctuation in mixed
                     # content doesn't blow up to full-width. ASCII font
                     # tracks the user's preference (helv/tiro/cour) and
                     # its bold/italic variant.
-                    if fontname.startswith("uf"):
-                        # Custom system font — user picked it specifically,
+                    # 把 china-* 內建升級為實際系統 CJK 字型（v1.4.77 修，
+                    # PyMuPDF 內建在 Linux 全部 render 成 sans，serif 選項
+                    # 沒效果）。Cache 用同一張 _custom_font_cache。
+                    def _u(builtin: str) -> str:
+                        return _upgrade_cjk_font(page, builtin, _custom_font_cache, pno)
+                    if fontname.startswith("uf") or fontname.startswith("uc"):
+                        # Custom / system font — user picked it specifically,
                         # use it for all chars without splitting (it's
                         # presumably designed for the content they pasted).
                         ascii_font = fontname
                         cjk_font = fontname
                     elif font_pref in ("pymupdf:serif", "serif"):
-                        cjk_font = "china-t"
-                        ascii_font = _style_suffix("tiro")
+                        cjk_font = _u("china-t")
+                        ascii_font = _style_suffix("tiro", bold, italic)
                     elif font_pref in ("pymupdf:simplified", "simplified"):
-                        cjk_font = "china-ss"
-                        ascii_font = _style_suffix("helv")
+                        cjk_font = _u("china-ss")
+                        ascii_font = _style_suffix("helv", bold, italic)
                     elif font_pref in ("pymupdf:helv", "helv"):
-                        cjk_font = "china-t"  # fallback for any CJK in "ASCII-only" picks
-                        ascii_font = _style_suffix("helv")
+                        cjk_font = _u("china-t")  # fallback for any CJK in "ASCII-only" picks
+                        ascii_font = _style_suffix("helv", bold, italic)
                     elif font_pref in ("pymupdf:tiro", "tiro"):
-                        cjk_font = "china-t"
-                        ascii_font = _style_suffix("tiro")
+                        cjk_font = _u("china-t")
+                        ascii_font = _style_suffix("tiro", bold, italic)
                     elif font_pref in ("pymupdf:cour", "mono"):
-                        cjk_font = "china-t"
-                        ascii_font = _style_suffix("cour")
+                        cjk_font = _u("china-t")
+                        ascii_font = _style_suffix("cour", bold, italic)
                     else:  # sans / default
-                        cjk_font = "china-ts"
-                        ascii_font = _style_suffix("helv")
+                        cjk_font = _u("china-ts")
+                        ascii_font = _style_suffix("helv", bold, italic)
 
                     lines = text.split("\n") if "\n" in text else [text]
                     ybase = rect.y0 + font_size
