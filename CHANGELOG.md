@@ -4,6 +4,35 @@
 
 ---
 
+## [1.4.65] - 2026-05-05
+
+### 安全強化
+
+- **`/change-password` 加 rate limit + audit failed attempts**：v1.4.64 雖然 user_id 一律從 server-side session lookup（不從 body）防止改別人密碼，但**session 被偷時**舊密碼仍可暴力試。這版加：
+  - 失敗 5 次（10 分內）→ 該 user 鎖 10 分鐘 (HTTP 429)
+  - 每次失敗寫 audit `event_type=password_change_fail` (含 reason / fail_count)
+  - 鎖定後寫 audit `event_type=password_change_lockout`
+  - 成功後 audit `event_type=password_change`，username 統一用 `user_label()` 格式 (`jason@local` / `jason@ldap`)
+- 端點安全清單（內部稽查確認 ✓）：
+  - `user_id` from session lookup ONLY，body 不接受 → 不可能改別人密碼
+  - SameSite=Lax cookie 擋跨站 CSRF
+  - `verify_password()` 是 constant-time argon2 比對
+  - LDAP / AD 帳號明確 reject（不能在這裡改目錄端密碼）
+  - 新密碼 8-128 字元、不能與舊密碼相同、不能全空白
+  - 變更後 revoke 其他 session 但保留呼叫方 session
+
+---
+
+## [1.4.64] - 2026-05-05
+
+### 新增
+
+- **本機帳號自助變更密碼**：「我的帳號」對話框內 source=local 的使用者多一顆「變更密碼」按鈕；輸入舊密碼 + 新密碼 + 確認新密碼 → POST `/change-password` 驗證舊密碼後更新；其他裝置 / 瀏覽器的 session 全被登出，目前這個視窗保留。LDAP / AD 使用者顯示「密碼由目錄端管理，請聯絡 IT」說明
+- 後端 `core/user_manager.py:change_password()` — 驗證舊密碼 (constant-time) → 強度檢查 → 更新 hash → revoke 其他 session（保留呼叫方 session）
+- 稽核記錄 `event_type=password_change`
+
+---
+
 ## [1.4.63] - 2026-05-05
 
 ### 新增
