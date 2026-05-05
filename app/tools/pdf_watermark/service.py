@@ -119,7 +119,7 @@ def _has_cjk(text: str) -> bool:
 def _font_covers_cjk(font: ImageFont.FreeTypeFont) -> bool:
     """Test whether the loaded face actually has glyphs for a representative
     CJK char. Pillow happily loads non-CJK fonts (Helvetica, Arial, DejaVuSans)
-    and renders missing chars as the .notdef glyph (an empty square /「豆腐」).
+    and renders missing chars as the .notdef glyph (an empty square / 缺字方框).
 
     Cheap-and-correct trick: render two visually distinct CJK chars and
     compare their pixel data. A real CJK font produces different masks for

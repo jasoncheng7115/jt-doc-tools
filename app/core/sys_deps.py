@@ -355,7 +355,7 @@ _DEPS = [
         "key": "cjk-fonts",
         "label": "CJK fonts",
         "category": "字型",
-        "impact": "PDF 文字插入、浮水印、用印需要正確中文 glyph 渲染。沒有 CJK 字型則中文顯示成豆腐方框。",
+        "impact": "PDF 文字插入、浮水印、用印需要正確中文 glyph 渲染。沒有 CJK 字型則中文顯示成空白方框 (缺字)。",
         "impact_en": "Needed to render Chinese glyphs in PDF text, watermark, stamp output. Without CJK fonts, Chinese shows as tofu boxes.",
         "soft": True,
         "probe": _probe_cjk_fonts,

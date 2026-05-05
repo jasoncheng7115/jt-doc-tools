@@ -39,15 +39,26 @@
   padding:8px 10px; }
 .td-cat h4 { margin:0 0 6px; font-size:13px; color:#1e293b; font-weight:600;
   border-bottom:1px solid #f1f5f9; padding-bottom:4px;
-  display:flex; align-items:center; gap:6px; }
+  display:flex; align-items:center; gap:6px;
+  white-space:nowrap; overflow:hidden; }
 .td-cat-icon { display:inline-flex; align-items:center; color:#1e40af;
-  background:#eff6ff; padding:3px; border-radius:5px; line-height:0; }
+  background:#eff6ff; padding:3px; border-radius:5px; line-height:0;
+  flex-shrink:0; }
 .td-cat-icon .ic { stroke: currentColor; }
-.td-cat .td-cat-tools { margin-left:auto; display:flex; gap:3px; }
-.td-cat .td-cat-tools button { background:#f1f5f9; border:0; padding:1px 7px;
-  border-radius:4px; font-size:10.5px; color:#475569; cursor:pointer;
-  font-weight:normal; }
-.td-cat .td-cat-tools button:hover { background:#e0e7ff; color:#3730a3; }
+.td-cat-name { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.td-cat .td-cat-tools { margin-left:auto; display:flex; gap:2px; flex-shrink:0; }
+.td-cat .td-cat-tools button {
+  display:inline-flex; align-items:center; justify-content:center;
+  background:#fff; border:1px solid #cbd5e1;
+  width:24px; height:24px; padding:0;
+  border-radius:5px; color:#64748b; cursor:pointer;
+  transition: all 0.12s;
+}
+.td-cat .td-cat-tools button .ic { stroke: currentColor; }
+.td-cat .td-cat-tools button:hover { background:#eff6ff; border-color:#3b82f6;
+  color:#1e40af; }
+.td-cat .td-cat-tools button[data-cat-act="all"]:hover { color:#16a34a; border-color:#16a34a; background:#f0fdf4; }
+.td-cat .td-cat-tools button[data-cat-act="none"]:hover { color:#dc2626; border-color:#dc2626; background:#fef2f2; }
 .td-cat label { display:flex; align-items:center; gap:6px; padding:2px 0;
   font-size:12.5px; cursor:pointer; }
 
@@ -100,11 +111,15 @@
    inline highlights). For now we just show a separate "找到清單" panel. */
 .td-finding-list { max-height:260px; overflow-y:auto; border:1px solid var(--border);
   border-radius:6px; background:#fff; padding:4px; margin-top:8px; }
-.td-finding-row { display:grid; grid-template-columns: 28px 80px 1fr 1fr;
+/* 固定 type 欄寬 (200px) — 不能用 max-content，那樣每行欄寬獨立計算
+   會讓不同行的 orig / repl 起始位置對不齊。長 label 在 200px 內 wrap */
+.td-finding-row { display:grid;
+  grid-template-columns: 28px 200px 1fr 1fr;
   gap:8px; padding:5px 8px; border-bottom:1px dashed #e5e7eb;
-  font-size:12.5px; align-items:center; }
+  font-size:12.5px; align-items:center; min-width: 0; }
 .td-finding-row:last-child { border-bottom:0; }
-.td-finding-row .type { color:#1e40af; font-weight:600; font-size:11.5px; }
+.td-finding-row .type { color:#1e40af; font-weight:600; font-size:11.5px;
+  line-height:1.3; overflow-wrap: anywhere; }
 .td-finding-row .orig { color:#0f172a; word-break:break-word; }
 .td-finding-row .repl { color:#92400e; word-break:break-word; }
 .td-finding-row .repl.is-redact { color:#000; letter-spacing:1px; }
@@ -158,11 +173,28 @@
     <div class="td-cat" data-cat="{{ loop.index }}">
       <h4>
         <span class="td-cat-icon">{{ icon(cat_icons.get(grp_name, 'tool'), size=15) }}</span>
-        {{ grp_name }}
+        <span class="td-cat-name">{{ grp_name }}</span>
         <span class="td-cat-tools">
-          <button type="button" data-cat-act="all">全選</button>
-          <button type="button" data-cat-act="none">取消</button>
-          <button type="button" data-cat-act="invert">反向</button>
+          <button type="button" data-cat-act="all" title="全選（這組全部勾選）">
+            <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <polyline points="7 12 11 16 17 9"/>
+            </svg>
+          </button>
+          <button type="button" data-cat-act="none" title="取消全選（這組全部清空）">
+            <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+            </svg>
+          </button>
+          <button type="button" data-cat-act="invert" title="反向選取（這組勾與未勾對調）">
+            <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="9" height="18" rx="1.5" fill="currentColor"/>
+              <rect x="12" y="3" width="9" height="18" rx="1.5"/>
+            </svg>
+          </button>
         </span>
       </h4>
       {% for p in items %}
@@ -386,6 +418,11 @@ $('btnDetect').addEventListener('click', async () => {
     renderFindings(lastFindings);
     $('btnApply').disabled = lastFindings.length === 0;
     $('applyPanel').hidden = lastFindings.length === 0;
+    // 偵測完自動套用一次（v1.4.58 起）— 不再需要使用者手按「套用至全部」
+    // 使用者若取消勾某筆 / 切換 mode 再點「套用至全部」即可重套
+    if (lastFindings.length > 0) {
+      $('btnApply').click();
+    }
   } catch (e) {
     showErr('偵測失敗：' + e.message);
   } finally {
