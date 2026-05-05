@@ -623,7 +623,11 @@ def _replace_all_fonts_sync(src, upload_id: str, font_id: str):
                 continue
             # Redact all existing text first.
             for sp in spans:
-                page.add_redact_annot(fitz.Rect(*sp["bbox"]), fill=(1, 1, 1))
+                # fill=None — 不畫白底覆蓋。否則底下原本是有色 cell（表頭灰
+                # / 總計橘）會被白方塊蓋掉，視覺上文字變成「浮在白底上」。
+                # 不畫覆蓋的話 redact 只會移除文字 content stream item，下方
+                # 顏色矩形原樣保留。v1.4.78 修。
+                page.add_redact_annot(fitz.Rect(*sp["bbox"]), fill=None)
             try:
                 page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
             except Exception:
