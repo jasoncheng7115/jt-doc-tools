@@ -109,6 +109,8 @@ class LLMSettingsManager:
          "use": "校驗欄位填值正確（看 PNG → 給 yes/no）", "kind": "vision"},
         {"id": "doc-deident",      "name": "文件去識別化（LLM 補偵測）",
          "use": "regex 抓不到的人名 / 職稱 / 客戶代號等 context-sensitive 案例", "kind": "text"},
+        {"id": "text-deident",     "name": "文字去識別化（LLM 補偵測）",
+         "use": "純文字版的 doc-deident，貼上 / 上傳文字檔做去識別化", "kind": "text"},
         {"id": "pdf-wordcount",    "name": "字數統計（LLM 摘要 / 關鍵字）",
          "use": "依文章內容生成 3-5 句摘要 + TOP 10 關鍵概念", "kind": "text"},
         {"id": "pdf-annotations",  "name": "註解整理（LLM 自動分組）",

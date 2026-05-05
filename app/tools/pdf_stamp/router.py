@@ -143,7 +143,8 @@ async def submit(
     temp_asset_file: Optional[UploadFile] = File(None),
 ):
     """Stamp one or many PDFs. Single-file result → PDF; multi → ZIP."""
-    actor = getattr(getattr(request.state, "user", None), "username", "") or ""
+    from ...core import sessions as _sessions
+    actor = _sessions.user_label(getattr(request.state, "user", None))
     stamp_png, preset_dict = await _resolve_stamp_source(
         stamp_id, temp_asset_file, request=request, actor_username=actor)
     asset = asset_manager.get(stamp_id) if stamp_id != _TEMP_STAMP_SENTINEL else None
@@ -335,7 +336,8 @@ async def preview_all_pages(
 ):
     """Render every page of the uploaded PDF with the stamp applied at the
     given position; return one PNG URL per page so the UI can stack them."""
-    actor = getattr(getattr(request.state, "user", None), "username", "") or ""
+    from ...core import sessions as _sessions
+    actor = _sessions.user_label(getattr(request.state, "user", None))
     stamp_png_path, preset_dict = await _resolve_stamp_source(
         stamp_id, temp_asset_file, request=request, actor_username=actor)
     data = await file.read()
@@ -412,7 +414,8 @@ async def preview_stamped(
     temp_asset_file: Optional[UploadFile] = File(None),
 ):
     """Stamp the first applicable page of the PDF and return a PNG preview."""
-    actor = getattr(getattr(request.state, "user", None), "username", "") or ""
+    from ...core import sessions as _sessions
+    actor = _sessions.user_label(getattr(request.state, "user", None))
     stamp_png_path, preset_dict = await _resolve_stamp_source(
         stamp_id, temp_asset_file, request=request, actor_username=actor)
     data = await file.read()

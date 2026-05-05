@@ -119,8 +119,20 @@ else
     # .app 透過 LaunchServices 啟動，能拿到完整 Aqua context。
     INSTALL_DIR=/usr/local/jt-doc-tools
     REAL_USER="${SUDO_USER:-}"
+    # 直接以 root 身分執行（沒走 sudo），也試著找出當前 GUI console user。
+    # macOS 的 .app + LaunchServices 必需以該 GUI user 身分擁有，否則
+    # AquaSal 抓不到 WindowServer，soffice 子行程會 SIGABRT。
     if [ -z "$REAL_USER" ] || [ "$REAL_USER" = "root" ]; then
-        die "macOS 不能直接用 root 帳號跑安裝；請以一般 user + sudo 執行：sudo bash install.sh"
+        # 從 /dev/console 取得目前登入桌面的使用者
+        CONSOLE_USER=$(stat -f "%Su" /dev/console 2>/dev/null || true)
+        if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
+            warn "偵測到 root 直接執行，將以桌面登入的 user『$CONSOLE_USER』做為 .app 擁有者。"
+            warn "（建議下次改用：sudo bash install.sh，避免猜測使用者）"
+            REAL_USER="$CONSOLE_USER"
+        else
+            die "macOS 找不到非 root 桌面使用者。請以一般 user + sudo 執行：sudo bash install.sh
+   原因：.app 需 GUI user 擁有，否則 OxOffice/LibreOffice 子行程會缺少 Aqua context。"
+        fi
     fi
     REAL_HOME=$(eval echo "~$REAL_USER")
     REAL_UID=$(id -u "$REAL_USER")

@@ -1,371 +1,477 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
-{% block title %}轉向 · {{ app_name }}{% endblock %}
+{% block title %}頁面轉向 · {{ app_name }}{% endblock %}
 {% block content %}
-<h1>{{ icon('rotate-cw', size=22) }} 轉向</h1>
-<p class="muted">把 PDF 整份或指定頁面旋轉 90 / 180 / 270 度，或左右 / 上下鏡向翻面。上傳後會立即顯示縮圖預覽，即時顯示套用後的效果。</p>
-<div class="panel">
-  <h2 style="margin-top:0;">上傳 PDF（單/多檔）</h2>
-  {% with upload_id='upR', accept='application/pdf', multiple=True, hint='縮圖預覽僅顯示第一份檔案；其他檔會以相同設定批次處理。' %}{% include "components/file_upload.html" %}{% endwith %}
-</div>
-<div class="panel">
-  <h2 style="margin-top:0;">設定</h2>
-  <div class="form-row">
-    <label>套用方式</label>
-    <div class="field option-cards">
-      <label class="option-card">
-        <span class="opt-ic">{{ icon('rotate-cw', size=28) }}</span>
-        <span class="opt-label">順時針 90°</span>
-        <input type="radio" name="mode" value="rotate-90" checked />
-      </label>
-      <label class="option-card">
-        <span class="opt-ic">{{ icon('rotate-180', size=28) }}</span>
-        <span class="opt-label">180°</span>
-        <input type="radio" name="mode" value="rotate-180" />
-      </label>
-      <label class="option-card">
-        <span class="opt-ic">{{ icon('rotate-ccw', size=28) }}</span>
-        <span class="opt-label">270°</span>
-        <input type="radio" name="mode" value="rotate-270" />
-      </label>
-      <label class="option-card">
-        <span class="opt-ic">{{ icon('flip-h', size=28) }}</span>
-        <span class="opt-label">左右鏡向</span>
-        <input type="radio" name="mode" value="flip-h" />
-      </label>
-      <label class="option-card">
-        <span class="opt-ic">{{ icon('flip-v', size=28) }}</span>
-        <span class="opt-label">上下鏡向</span>
-        <input type="radio" name="mode" value="flip-v" />
-      </label>
-    </div>
+<h1>{{ icon('rotate-cw', size=22) }} 頁面轉向</h1>
+<p class="muted">上傳 PDF 後自動顯示縮圖；上方工具列可整批套用 (90 / 180 / 270 / 左右鏡向 / 上下鏡向)
+並選擇套用範圍 (所有頁 / 偶數頁 / 奇數頁 / 自訂)；每張縮圖也有獨立旋轉按鈕。完成後可下載 PDF 或 ZIP（每頁 PNG）。</p>
+
+<div class="panel" id="upload-panel">
+  <h2 style="margin-top:0;">1. 上傳 PDF</h2>
+  {% with upload_id='upR', accept='application/pdf', multiple=False, hint='單檔；如需批次處理多個檔案請每次上傳一個。' %}{% include "components/file_upload.html" %}{% endwith %}
+  <div id="loading" class="muted" style="margin-top:10px; font-size:12.5px;" hidden>
+    {{ icon('refresh', size=14) }} 載入中…
   </div>
-  <div class="form-row">
-    <label>套用頁面</label>
-    <div class="field" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-      <select id="pages-mode" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:#fff;">
-        <option value="all" selected>所有頁</option>
-        <option value="custom">指定頁面…</option>
-      </select>
-      <input id="pages-custom" type="text" hidden style="flex:1 1 240px; min-width:200px; padding:6px 10px; border:1px solid var(--border); border-radius:6px;" placeholder="例：1,3-5,8-" />
-      <span id="pages-hint" class="muted" style="font-size:12px;" hidden>
-        逗號分隔；<code>3-5</code> = 第 3 到 5 頁；<code>8-</code> = 第 8 頁到最後。
-      </span>
-    </div>
-  </div>
+  <div id="upload-error" class="warn-box" hidden></div>
 </div>
 
-<details class="panel" id="thumbs-panel" hidden open>
-  <summary>頁面預覽 <span class="muted" id="thumbs-info" style="font-weight:normal; font-size:12px; margin-left:8px;">—</span></summary>
-  <p class="muted" style="font-size:12px;">會被旋轉的頁面有紫色邊框與「↻ 將旋轉」徽章；縮圖即時跟著轉動。每張縮圖下的工具列可<b>個別覆寫</b>該頁的轉向設定（綠框 = 個別覆寫）。</p>
+<div class="panel" id="work-panel" hidden>
+  <h2 style="margin-top:0;">2. 套用方式
+    <span class="muted" id="file-info" style="font-size:13px; font-weight:400; margin-left:8px;"></span>
+  </h2>
+
+  <div class="rt-toolbar">
+    <div class="rt-mode-buttons">
+      <button type="button" class="rt-mb" data-mode="rotate-90" title="順時針 90°">
+        <span class="ic-wrap-rt">{{ icon('rotate-cw', size=18) }}</span>
+        <span class="rt-mb-lbl">90°</span></button>
+      <button type="button" class="rt-mb" data-mode="rotate-180" title="180°">
+        <span class="ic-wrap-rt">{{ icon('rotate-180', size=18) }}</span>
+        <span class="rt-mb-lbl">180°</span></button>
+      <button type="button" class="rt-mb" data-mode="rotate-270" title="逆時針 90°">
+        <span class="ic-wrap-rt">{{ icon('rotate-ccw', size=18) }}</span>
+        <span class="rt-mb-lbl">270°</span></button>
+      <button type="button" class="rt-mb" data-mode="flip-h" title="左右鏡像">
+        <span class="ic-wrap-rt">{{ icon('flip-h', size=18) }}</span>
+        <span class="rt-mb-lbl">左右</span></button>
+      <button type="button" class="rt-mb" data-mode="flip-v" title="上下鏡像">
+        <span class="ic-wrap-rt">{{ icon('flip-v', size=18) }}</span>
+        <span class="rt-mb-lbl">上下</span></button>
+      <button type="button" class="rt-mb rt-mb-clear" data-mode="none" title="清除轉向">
+        <span class="ic-wrap-rt">{{ icon('reset', size=18) }}</span>
+        <span class="rt-mb-lbl">清除</span></button>
+    </div>
+    <div class="rt-scope">
+      <div class="rt-scope-row">
+        <label class="rt-scope-label">套用範圍</label>
+        <select id="scope-mode" class="field rt-scope-sel">
+          <option value="all" selected>所有頁</option>
+          <option value="even">偶數頁</option>
+          <option value="odd">奇數頁</option>
+          <option value="custom">自填頁碼…</option>
+        </select>
+        <input id="scope-custom" type="text" class="field"
+          placeholder="例：1,3-5,8-10" hidden />
+        <span id="scope-count" class="muted rt-scope-cnt">—</span>
+      </div>
+    </div>
+  </div>
+  <div class="muted" style="font-size:11.5px; margin-top:6px;">
+    點上方按鈕 = 套用該轉向到「套用範圍」內的頁；每張縮圖下方也有獨立按鈕可單頁覆寫。
+  </div>
+
   <div class="page-grid" id="thumb-grid"></div>
-</details>
-
-<div style="margin-top:12px;">
-  <button class="btn btn-primary" id="btn-submit">{{ icon('save') }}開始轉向</button>
 </div>
-<div style="margin-top:10px;">
-  {% with progress_id='jp' %}{% include "components/job_progress.html" %}{% endwith %}
+
+<div class="panel" id="action-panel" hidden>
+  <h2 style="margin-top:0;">3. 完成</h2>
+  <div class="rt-actions">
+    <button class="btn btn-primary" type="button" id="btn-pdf">
+      {{ icon('download', size=14) }} 下載 PDF</button>
+    <button class="btn" type="button" id="btn-png">
+      {{ icon('image', size=14) }} 下載 ZIP（每頁 PNG）</button>
+    <button class="btn" type="button" id="btn-reset">
+      {{ icon('reset', size=14) }} 處理新檔案</button>
+    <span id="action-msg" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
+  </div>
 </div>
 
 <style>
-.page-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:14px; margin-top: 8px; }
+.warn-box { background:#fef3c7; border:1px solid #fde68a; color:#78350f;
+  padding:8px 12px; border-radius:6px; font-size:13px; margin-top:8px; }
+
+/* 上方工具列 */
+.rt-toolbar {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px 24px;
+  align-items: center;
+  background:#f8fafc;
+  border:1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-top: 6px;
+}
+@media (max-width: 720px) {
+  .rt-toolbar { grid-template-columns: 1fr; }
+}
+.rt-mode-buttons { display:flex; gap:8px; flex-wrap:wrap; }
+.rt-mb {
+  display:inline-flex; flex-direction: column; align-items: center;
+  gap:4px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border:1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 14px 8px;
+  cursor:pointer;
+  color:#475569; font-family:inherit;
+  min-width: 64px;
+  transition: all 0.15s ease;
+  position: relative;
+}
+.rt-mb:hover {
+  border-color:#3b82f6;
+  color:#1e40af;
+  background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(59,130,246,0.18);
+}
+.rt-mb:active { transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(59,130,246,0.2); }
+.rt-mb .ic-wrap-rt {
+  display:flex; align-items:center; justify-content:center;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  transition: background 0.15s;
+}
+.rt-mb:hover .ic-wrap-rt { background: #fff; }
+.rt-mb .ic { stroke: currentColor; }
+.rt-mb-lbl { font-size: 12px; font-weight:600; line-height: 1; letter-spacing: 0.02em; }
+/* per-mode accent on the icon */
+.rt-mb[data-mode="rotate-90"]:hover .ic-wrap-rt  { color:#1e40af; }
+.rt-mb[data-mode="rotate-180"]:hover .ic-wrap-rt { color:#1e40af; }
+.rt-mb[data-mode="rotate-270"]:hover .ic-wrap-rt { color:#1e40af; }
+.rt-mb[data-mode="flip-h"]:hover .ic-wrap-rt     { color:#7c3aed; }
+.rt-mb[data-mode="flip-v"]:hover .ic-wrap-rt     { color:#7c3aed; }
+.rt-mb-clear {
+  color:#94a3b8;
+  background: linear-gradient(180deg, #fafafa 0%, #f1f5f9 100%);
+  border-color:#e2e8f0;
+}
+.rt-mb-clear:hover {
+  border-color:#dc2626; color:#dc2626;
+  background: linear-gradient(180deg, #fff5f5 0%, #fee2e2 100%);
+  box-shadow: 0 4px 10px rgba(220,38,38,0.18);
+}
+.rt-mb-clear:hover .ic-wrap-rt { color:#dc2626; }
+
+/* 套用範圍兩段式：上方 select + 自訂輸入；下方計數獨立一行（永遠不擠不折） */
+.rt-scope { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.rt-scope-row { display:flex; align-items:center; gap:8px; flex-wrap:nowrap; min-width:0; }
+.rt-scope-label { font-size:12.5px; color:#475569; font-weight:500; flex-shrink:0; }
+.rt-scope-sel { padding:6px 10px; flex: 0 0 130px; }
+#scope-custom { padding:6px 10px; flex: 1 1 0; min-width:120px; }
+.rt-scope-cnt { font-size:11.5px; padding-left: 70px; }
+@media (max-width: 720px) {
+  .rt-scope-cnt { padding-left: 0; }
+}
+
+/* 縮圖網格 */
+.page-grid {
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap:14px; margin-top: 16px;
+}
 .page-card {
   position:relative; background:#fff; border:1px solid var(--border); border-radius:8px;
   padding:8px; display:flex; flex-direction:column; align-items:center; gap:6px;
 }
-.page-card.will-rotate { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(99,102,241,0.2); }
-.page-card.has-override { border-color: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,0.25); }
-.page-card.has-override.will-rotate { border-color: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,0.25); }
-.page-tools { display:flex; flex-wrap:wrap; gap:3px; justify-content:center; margin-top:4px; }
-.page-tools button {
-  background:#fff; border:1px solid #e5e7eb; border-radius:4px;
-  padding:2px 6px; font-size:11px; cursor:pointer; line-height:1.2;
-  color:#475569;
-}
-.page-tools button:hover { background:#f1f5f9; border-color:#94a3b8; }
-.page-tools button.is-active { background:#16a34a; border-color:#16a34a; color:#fff; }
-.page-tools button.clear-btn { color:#94a3b8; }
-.page-tools button.clear-btn:hover { color:#dc2626; border-color:#dc2626; }
+.page-card.has-mode { border-color: #1e40af;
+  box-shadow: 0 0 0 2px rgba(30,64,175,0.15); }
 .page-thumb {
   width: 100%; aspect-ratio: 0.7071; background:#f8fafc;
   display:flex; align-items:center; justify-content:center; overflow:hidden;
   border:1px solid #e5e7eb; border-radius:4px;
   cursor: zoom-in; position: relative;
 }
-.page-thumb img {
-  max-width:100%; max-height:100%; pointer-events: none;
-  transition: transform 0.25s ease;
+.page-thumb img { max-width:100%; max-height:100%; pointer-events: none; }
+.page-num { font-size:12px; font-weight:600; color:#475569; text-align:center; }
+.page-num .mode-tag {
+  background: #1e40af; color:#fff; padding: 1px 7px; border-radius: 8px;
+  font-size: 10.5px; margin-left: 4px;
 }
-.page-num { font-size:13px; font-weight:600; color:#475569; text-align:center; }
-.rotate-badge {
-  position:absolute; top:6px; right:6px;
-  background: var(--primary); color: #fff; font-size: 10px;
-  padding: 2px 7px; border-radius: 10px; font-weight: 600;
-  pointer-events: none;
+
+/* 每張縮圖下方的個別轉向工具列 */
+.page-tools { display:flex; flex-wrap:wrap; gap:2px; justify-content:center; }
+.page-tools button {
+  background:#fff; border:1px solid #e5e7eb; border-radius:4px;
+  padding:1px 5px; font-size:10.5px; cursor:pointer; line-height:1.3;
+  color:#64748b; min-width: 28px;
 }
+.page-tools button:hover { background:#eff6ff; border-color:#1e40af; color:#1e40af; }
+.page-tools button.is-active { background:#1e40af; border-color:#1e40af; color:#fff; }
+.page-tools button.clear-btn { color:#94a3b8; }
+.page-tools button.clear-btn:hover { color:#dc2626; border-color:#dc2626; background:#fef2f2; }
+
 .page-lightbox {
   position: fixed; inset: 0; background: rgba(15,23,42,0.85); z-index: 9000;
   display: flex; align-items: center; justify-content: center;
   cursor: zoom-out; padding: 20px;
 }
-.page-lightbox img { max-width: 95%; max-height: 95vh; box-shadow: 0 16px 48px rgba(0,0,0,0.5); border-radius: 4px; background: #fff; transition: transform 0.25s; }
-.page-lightbox-close { position: absolute; top: 14px; right: 18px; color: #fff; font-size: 28px; background: none; border: none; cursor: pointer; }
+.page-lightbox img {
+  max-width: 95%; max-height: 95vh; box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  border-radius: 4px; background: #fff;
+}
+
+/* 完成區按鈕列 */
+.rt-actions { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 </style>
 {% endblock %}
+
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script>
-<script src="/static/js/job_progress.js"></script>
 <script>
-let files = [];
+const $ = (id) => document.getElementById(id);
+
+// State -----------------------------------------------------------------
 let uploadId = null;
-let pages = [];
+let filename = "";
 let pageCount = 0;
-// page number (1-based) → mode string ('rotate-90' / 'rotate-180' / 'rotate-270'
-// / 'flip-h' / 'flip-v' / 'none'). 'none' 代表「明確不轉這頁」(覆寫全頁套用)；
-// Map 內沒有的 key 表示「跟隨全頁設定」。
-const perPageMode = new Map();
+// Per-page mode map: pageNum (1-based) -> mode string. Empty / not in map = no rotation.
+// Possible mode values: 'rotate-90' / 'rotate-180' / 'rotate-270' / 'flip-h' / 'flip-v'
+const pageMode = new Map();
 
-const fu = new FileUpload(document.getElementById('upR'), async (_first, fs) => {
-  files = Array.isArray(fs) ? fs : (fs ? [fs] : []);
-  if (!files.length) {
-    document.getElementById('thumbs-panel').hidden = true;
-    pages = []; uploadId = null; return;
+const VALID_MODES = ['rotate-90', 'rotate-180', 'rotate-270', 'flip-h', 'flip-v'];
+const MODE_LABEL = {
+  'rotate-90': '90°', 'rotate-180': '180°', 'rotate-270': '270°',
+  'flip-h': '左右', 'flip-v': '上下',
+};
+const MODE_SHORT = {
+  'rotate-90': '↻', 'rotate-180': '180', 'rotate-270': '↺',
+  'flip-h': '⇆', 'flip-v': '⇅',
+};
+
+// Upload ----------------------------------------------------------------
+const fu = new FileUpload($('upR'), async (f) => {
+  if (!f) return;
+  $('loading').hidden = false;
+  $('upload-error').hidden = true;
+  try {
+    const fd = new FormData();
+    fd.append('file', f);
+    const r = await fetch('/tools/pdf-rotate/load', { method: 'POST', body: fd });
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(t || ('HTTP ' + r.status));
+    }
+    const j = await r.json();
+    uploadId = j.upload_id;
+    filename = j.filename;
+    pageCount = j.page_count;
+    pageMode.clear();
+    $('file-info').textContent = `${filename} · ${pageCount} 頁`;
+    renderGrid(j.pages);
+    $('work-panel').hidden = false;
+    $('action-panel').hidden = false;
+    refreshScopeCount();
+  } catch (e) {
+    $('upload-error').textContent = '載入失敗：' + e.message;
+    $('upload-error').hidden = false;
+  } finally {
+    $('loading').hidden = true;
   }
-  document.getElementById('thumbs-panel').hidden = false;
-  document.getElementById('thumb-grid').innerHTML =
-    '<p class="muted" style="grid-column:1/-1;text-align:center;padding:24px;">載入縮圖中…</p>';
-  const fd = new FormData(); fd.append('file', files[0]);
-  const r = await fu.upload('/tools/pdf-rotate/load', fd, {processingLabel: '載入頁面中…'});
-  if (!r.ok) {
-    document.getElementById('thumb-grid').innerHTML = '<p class="muted">載入失敗</p>';
-    return;
+});
+
+// Page grid -------------------------------------------------------------
+function renderGrid(pages) {
+  const grid = $('thumb-grid');
+  grid.innerHTML = pages.map(p => `
+    <div class="page-card" data-page="${p.page}">
+      <div class="page-thumb">
+        <img data-base="${p.thumb}" src="${p.thumb}" alt="第 ${p.page} 頁" loading="lazy"/>
+      </div>
+      <div class="page-num">第 ${p.page} 頁<span class="mode-tag" data-mode-tag hidden></span></div>
+      <div class="page-tools">
+        ${VALID_MODES.map(m => `<button type="button" data-pm="${m}">${MODE_SHORT[m]}</button>`).join('')}
+        <button type="button" class="clear-btn" data-pm="none" title="清除">─</button>
+      </div>
+    </div>`).join('');
+  grid.querySelectorAll('[data-pm]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const card = btn.closest('.page-card');
+      const page = parseInt(card.dataset.page);
+      const m = btn.dataset.pm;
+      if (m === 'none') pageMode.delete(page);
+      else pageMode.set(page, m);
+      refreshCard(card);
+    });
+  });
+  grid.querySelectorAll('.page-thumb').forEach(t => {
+    t.addEventListener('click', () => {
+      const card = t.closest('.page-card');
+      const img = t.querySelector('img');
+      openLightbox(img.dataset.base + '?large=1' + (img.src.includes('mode=') ?
+        '&mode=' + img.src.match(/mode=([^&]+)/)[1] : ''));
+    });
+  });
+}
+
+function refreshCard(card) {
+  const page = parseInt(card.dataset.page);
+  const mode = pageMode.get(page);
+  card.classList.toggle('has-mode', !!mode);
+  // Update thumb img URL
+  const img = card.querySelector('img');
+  const base = img.dataset.base;
+  img.src = mode ? (base + '?mode=' + encodeURIComponent(mode)) : base;
+  // Update mode tag in page-num
+  const tag = card.querySelector('[data-mode-tag]');
+  if (mode) {
+    tag.textContent = MODE_LABEL[mode];
+    tag.hidden = false;
+  } else {
+    tag.hidden = true;
   }
-  const j = await r.json();
-  pages = j.pages; pageCount = j.page_count; uploadId = j.upload_id;
-  renderThumbs();
-});
-
-const jp = new JobProgress(document.getElementById('jp'), {
-  onReset: () => { fu.reset(); files = []; pages = []; document.getElementById('thumbs-panel').hidden = true; }
-});
-
-const pmSel = document.getElementById('pages-mode');
-const pmInp = document.getElementById('pages-custom');
-const pmHint = document.getElementById('pages-hint');
-// 改全頁設定（套用方式 / 套用頁面）時，清掉所有 per-page override —
-// 否則使用者直覺「全頁套左右鏡向」會被殘留的個別覆寫卡住，看起來只有部分頁變動
-// (客戶 v1.4.39 回報：第 2 頁有舊的 180° 個別覆寫，切到「左右鏡向」後第 2 頁不變)。
-function _clearPerPageOverrides() {
-  if (perPageMode.size === 0) return;
-  perPageMode.clear();
-}
-pmSel.addEventListener('change', () => {
-  const custom = pmSel.value === 'custom';
-  pmInp.hidden = !custom;
-  pmHint.hidden = !custom;
-  if (custom) pmInp.focus();
-  _clearPerPageOverrides();
-  if (pages.length) refreshThumbStates();
-});
-pmInp.addEventListener('input', () => {
-  _clearPerPageOverrides();
-  if (pages.length) refreshThumbStates();
-});
-document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => {
-  _clearPerPageOverrides();
-  if (pages.length) refreshThumbStates();
-}));
-
-function getMode() {
-  const el = document.querySelector('input[name=mode]:checked');
-  return el ? el.value : 'rotate-90';
-}
-function modeTransform(mode) {
-  // CSS transform string used to preview the mode on the <img>.
-  switch (mode) {
-    case 'rotate-90':  return 'rotate(90deg)';
-    case 'rotate-180': return 'rotate(180deg)';
-    case 'rotate-270': return 'rotate(270deg)';
-    case 'flip-h':     return 'scaleX(-1)';
-    case 'flip-v':     return 'scaleY(-1)';
-    default:           return 'none';
-  }
-}
-function modeLabel(mode) {
-  return {
-    'rotate-90':  '↻ 90°',
-    'rotate-180': '↻ 180°',
-    'rotate-270': '↺ 90°',
-    'flip-h':     '⇆ 左右',
-    'flip-v':     '⇅ 上下',
-  }[mode] || mode;
-}
-function getPagesSpec() {
-  return pmSel.value === 'custom' ? (pmInp.value.trim() || 'all') : 'all';
+  // Highlight active per-page button
+  card.querySelectorAll('[data-pm]').forEach(b => {
+    b.classList.toggle('is-active', b.dataset.pm === mode);
+  });
 }
 
-function parsePages(spec, total) {
+// Scope (which pages the toolbar applies to) ----------------------------
+$('scope-mode').addEventListener('change', () => {
+  $('scope-custom').hidden = $('scope-mode').value !== 'custom';
+  refreshScopeCount();
+});
+$('scope-custom').addEventListener('input', refreshScopeCount);
+
+function selectedPages() {
+  const mode = $('scope-mode').value;
+  if (mode === 'all') return Array.from({length: pageCount}, (_, i) => i + 1);
+  if (mode === 'even') return Array.from({length: pageCount}, (_, i) => i + 1).filter(p => p % 2 === 0);
+  if (mode === 'odd')  return Array.from({length: pageCount}, (_, i) => i + 1).filter(p => p % 2 === 1);
+  // custom
+  const txt = ($('scope-custom').value || '').trim();
+  if (!txt) return [];
   const out = new Set();
-  spec = (spec || '').trim();
-  if (!spec || spec.toLowerCase() === 'all') {
-    for (let i = 1; i <= total; i++) out.add(i);
-    return out;
-  }
-  for (const chunk of spec.split(/[,，;；\s]+/)) {
-    if (!chunk) continue;
+  for (const chunk of txt.split(/[,，;；\s]+/).filter(Boolean)) {
     const m = chunk.match(/^(\d+)?\s*-\s*(\d+)?$/);
     if (m) {
       const a = m[1] ? parseInt(m[1]) : 1;
-      const b = m[2] ? parseInt(m[2]) : total;
-      for (let v = Math.min(a, b); v <= Math.max(a, b); v++) {
-        if (v >= 1 && v <= total) out.add(v);
-      }
+      const b = m[2] ? parseInt(m[2]) : pageCount;
+      for (let i = Math.max(1, a); i <= Math.min(pageCount, b); i++) out.add(i);
     } else if (/^\d+$/.test(chunk)) {
-      const v = parseInt(chunk);
-      if (v >= 1 && v <= total) out.add(v);
+      const n = parseInt(chunk);
+      if (n >= 1 && n <= pageCount) out.add(n);
     }
   }
-  return out;
+  return Array.from(out).sort((a, b) => a - b);
 }
 
-function renderThumbs() {
-  const grid = document.getElementById('thumb-grid');
-  const info = document.getElementById('thumbs-info');
-  info.textContent = `共 ${pageCount} 頁`;
-  if (files.length > 1) info.textContent += `；批次共 ${files.length} 份檔案`;
-  // data-base-src 留住原始 thumb URL；refreshThumbStates 會在末尾接 ?mode=
-  // 讓 server 給已旋轉好的 PNG（縮圖、lightbox 都用同一條 URL，視覺一致）。
-  grid.innerHTML = pages.map(p =>
-    `<div class="page-card" data-page="${p.page}">
-       <div class="page-thumb" data-zoom-src="${p.thumb}">
-         <img data-base-src="${p.thumb}" src="${p.thumb}" alt="page ${p.page}" loading="lazy" />
-       </div>
-       <div class="page-num">原第 ${p.page} 頁</div>
-       <div class="page-tools" data-page-tools>
-         <button type="button" data-pmode="none"       title="此頁不轉（0°）" class="clear-btn">0°</button>
-         <button type="button" data-pmode="rotate-90"  title="順時針 90°">90°</button>
-         <button type="button" data-pmode="rotate-180" title="180°">180°</button>
-         <button type="button" data-pmode="rotate-270" title="逆時針 90°（= 270°）">270°</button>
-         <button type="button" data-pmode="flip-h"     title="左右鏡向">⇆</button>
-         <button type="button" data-pmode="flip-v"     title="上下鏡向">⇅</button>
-       </div>
-     </div>`
-  ).join('');
-  // Per-page 工具列：每個按鈕都是「設成那個方向」。
-  //   ↺ ↻ 180° ⇆ ⇅ → 該頁套用此方向（覆寫全頁設定）
-  //   ─            → 該頁明確「不轉」（覆寫全頁設定 — 例如全頁套順時針，但這頁要保持原樣）
-  // 沒有「toggle off」 — 重複點同一個按鈕視覺上不會變動（故意的，使用者預期 click X 就是 X）。
-  // 要把該頁從個別覆寫拉回全頁設定 → 點「該頁按鈕對應全頁的方向」即可同效果，
-  // 或重新整理頁面（per-page state 不持久化）。
-  document.querySelectorAll('[data-page-tools]').forEach(toolbar => {
-    const card = toolbar.closest('.page-card');
-    const page = parseInt(card.dataset.page);
-    toolbar.querySelectorAll('button[data-pmode]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        perPageMode.set(page, btn.dataset.pmode);
-        refreshThumbStates();
-      });
+function refreshScopeCount() {
+  const sel = selectedPages();
+  $('scope-count').textContent = `${sel.length} 頁將被套用`;
+}
+
+// Top toolbar mode click — apply to all selected pages -------------------
+document.querySelectorAll('.rt-mode-buttons .rt-mb').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const m = btn.dataset.mode;
+    const sel = selectedPages();
+    if (!sel.length) {
+      alert('沒有任何頁被選到 — 請檢查「套用範圍」');
+      return;
+    }
+    sel.forEach(page => {
+      if (m === 'none') pageMode.delete(page);
+      else pageMode.set(page, m);
+      const card = document.querySelector(`.page-card[data-page="${page}"]`);
+      if (card) refreshCard(card);
     });
   });
-  refreshThumbStates();
-}
+});
 
-// 取得某一頁的有效模式：個別覆寫優先 > 全頁設定（且該頁在 pages spec 內）
-// 個別覆寫的 'none' 代表「明確不轉」 → 回傳 null
-function effectivePageMode(page, globalMode, target) {
-  if (perPageMode.has(page)) {
-    const m = perPageMode.get(page);
-    return m === 'none' ? null : m;
-  }
-  return target.has(page) ? globalMode : null;
-}
-
-// Build server-rendered thumb URL with per-page mode baked in. 縮圖跟
-// lightbox 用同一條 URL pattern (差只在 large=1)，server 端 PIL transpose
-// 回 PNG，客戶端不再依賴 CSS transform，視覺一致、沒有 aspect ratio 雷。
-function thumbUrlFor(baseSrc, mode) {
-  if (!mode) return baseSrc;
-  const sep = baseSrc.includes('?') ? '&' : '?';
-  return baseSrc + sep + 'mode=' + encodeURIComponent(mode);
-}
-
-function refreshThumbStates() {
-  const mode = getMode();
-  const target = parsePages(getPagesSpec(), pageCount);
-  document.querySelectorAll('.page-card').forEach(card => {
-    const page = parseInt(card.dataset.page);
-    const eff = effectivePageMode(page, mode, target);
-    const hasOverride = perPageMode.has(page);
-    const willApply = eff !== null;
-    card.classList.toggle('will-rotate', willApply);
-    card.classList.toggle('has-override', hasOverride);
-    const img = card.querySelector('.page-thumb img');
-    const baseSrc = img.dataset.baseSrc;
-    const newSrc = thumbUrlFor(baseSrc, willApply ? eff : null);
-    if (img.src !== new URL(newSrc, location.href).href) {
-      img.src = newSrc;
-    }
-    // 確保沒殘留 CSS transform（避免舊版本暫存的 inline style）
-    img.style.transform = '';
-    let badge = card.querySelector('.rotate-badge');
-    if (willApply) {
-      if (!badge) {
-        badge = document.createElement('span');
-        badge.className = 'rotate-badge';
-        card.querySelector('.page-thumb').appendChild(badge);
-      }
-      badge.textContent = (hasOverride ? '★ ' : '') + modeLabel(eff);
-      badge.style.background = hasOverride ? '#16a34a' : '';
-    } else if (badge) {
-      badge.remove();
-    }
-    // Per-page toolbar: highlight active mode (if override is set)
-    card.querySelectorAll('[data-page-tools] button[data-pmode]').forEach(b => {
-      b.classList.toggle('is-active',
-        hasOverride && b.dataset.pmode === perPageMode.get(page));
-    });
-  });
-}
-
-// Lightbox — uses server-rendered (pre-rotated) image so the image's
-// natural aspect matches the rotated visual, no CSS transform layout gotcha.
-document.getElementById('thumb-grid').addEventListener('click', (e) => {
-  // 點到 per-page 工具列的按鈕別觸發 lightbox
-  if (e.target.closest('[data-page-tools]')) return;
-  const t = e.target.closest('.page-thumb');
-  if (!t) return;
-  const card = t.closest('.page-card');
-  const page = parseInt(card.dataset.page);
-  const target = parsePages(getPagesSpec(), pageCount);
-  const eff = effectivePageMode(page, getMode(), target);
-  const params = new URLSearchParams({large: '1'});
-  if (eff) params.set('mode', eff);
-  const sep = t.dataset.zoomSrc.includes('?') ? '&' : '?';
-  const big = t.dataset.zoomSrc + sep + params.toString();
+// Lightbox --------------------------------------------------------------
+function openLightbox(url) {
   const lb = document.createElement('div');
   lb.className = 'page-lightbox';
-  lb.innerHTML = `<button class="page-lightbox-close" type="button">×</button>
-                  <img src="${big}" alt="" />`;
+  lb.innerHTML = `<img src="${url}"/>`;
   lb.addEventListener('click', () => lb.remove());
   document.body.appendChild(lb);
+}
+
+// Bottom action bar -----------------------------------------------------
+async function buildSubmitForm() {
+  if (!uploadId) throw new Error('no upload');
+  // Re-fetch the file from server-side path ... actually backend `/submit`
+  // expects a fresh file upload. We don't have the original bytes anymore
+  // (file was streamed to /load). Workaround: backend should accept
+  // upload_id directly; we POST to a new endpoint /finalize that uses the
+  // stashed file from /load.
+  const fd = new FormData();
+  fd.append('upload_id', uploadId);
+  const perPage = {};
+  pageMode.forEach((v, k) => perPage[String(k)] = v);
+  fd.append('per_page', JSON.stringify(perPage));
+  return fd;
+}
+
+$('btn-pdf').addEventListener('click', async () => {
+  if (!uploadId) return;
+  if (pageMode.size === 0) {
+    if (!confirm('沒有任何頁設定轉向，仍要下載 PDF 嗎？')) return;
+  }
+  const btn = $('btn-pdf');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '處理中…';
+  $('action-msg').textContent = '';
+  try {
+    const fd = await buildSubmitForm();
+    const r = await fetch('/tools/pdf-rotate/finalize', { method: 'POST', body: fd });
+    if (!r.ok) {
+      throw new Error(await r.text());
+    }
+    const blob = await r.blob();
+    const cd = r.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i);
+    const name = m ? decodeURIComponent(m[1]) : 'rotated.pdf';
+    download(blob, name);
+    $('action-msg').textContent = `已下載 ${name}`;
+  } catch (e) {
+    $('action-msg').textContent = '失敗：' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
 });
 
-document.getElementById('btn-submit').addEventListener('click', async () => {
-  if(!files.length) return alert('請上傳 PDF');
-  const fd = new FormData();
-  for (const f of files) fd.append('file', f);
-  fd.append('mode', getMode());
-  fd.append('pages', getPagesSpec());
-  // per-page 覆寫：只送有設定的頁。後端拿到 per_page 就以此為準（覆寫 mode/pages）
-  if (perPageMode.size) {
-    const obj = {};
-    perPageMode.forEach((v, k) => { obj[String(k)] = v; });
-    fd.append('per_page', JSON.stringify(obj));
+$('btn-png').addEventListener('click', async () => {
+  if (!uploadId) return;
+  const btn = $('btn-png');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '處理中…';
+  $('action-msg').textContent = '';
+  try {
+    const fd = await buildSubmitForm();
+    const r = await fetch('/tools/pdf-rotate/finalize-png', { method: 'POST', body: fd });
+    if (!r.ok) throw new Error(await r.text());
+    const blob = await r.blob();
+    const cd = r.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i);
+    const name = m ? decodeURIComponent(m[1]) : 'rotated.zip';
+    download(blob, name);
+    $('action-msg').textContent = `已下載 ${name}`;
+  } catch (e) {
+    $('action-msg').textContent = '失敗：' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
   }
-  const r = await fu.upload('/tools/pdf-rotate/submit', fd, {processingLabel: '排隊轉向中…'});
-  if(!r.ok) return alert('送出失敗：' + await r.text());
-  const j = await r.json(); jp.track(j.job_id);
 });
+
+$('btn-reset').addEventListener('click', () => {
+  uploadId = null;
+  filename = "";
+  pageCount = 0;
+  pageMode.clear();
+  fu.reset();
+  $('work-panel').hidden = true;
+  $('action-panel').hidden = true;
+  $('upload-error').hidden = true;
+  $('action-msg').textContent = '';
+  $('thumb-grid').innerHTML = '';
+});
+
+function download(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+}
 </script>
 {% endblock %}

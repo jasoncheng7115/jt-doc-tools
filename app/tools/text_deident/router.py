@@ -378,14 +378,112 @@ async def index(request: Request):
             "default_on": pat.default_on,
         })
     from ...core.office_convert import detect_engine
+    from ...core.llm_settings import llm_settings
     return templates.TemplateResponse(
         "text_deident.html",
         {
             "request": request,
             "grouped": grouped,
             "office_engine": detect_engine(),
+            "llm_enabled": llm_settings.is_enabled(),
+            "llm_model": llm_settings.get_model_for("text-deident") if llm_settings.is_enabled() else "",
         },
     )
+
+
+def _llm_extra_findings(full_text: str, already_known: list[str]) -> list[dict]:
+    """Ask LLM to find sensitive entities the regex missed.
+    Returns a list of {text, type} dicts; caller resolves text → char span."""
+    from ...core.llm_settings import llm_settings as _llms
+    client = _llms.make_client()
+    if client is None:
+        return []
+    model = _llms.get_model_for("text-deident")
+    max_chars = 8000
+    if len(full_text) > max_chars:
+        full_text = full_text[:max_chars] + "\n\n…（後續省略）"
+    known_str = "、".join(already_known[:30]) or "（無）"
+    prompt = (
+        "你是文字去識別化助手。請從下面文字中找出『可能屬於敏感個人 / 業務資料但容易被 regex 漏掉』"
+        "的詞彙，例如：人名（包含「先生 / 小姐 / 博士 / 經理」等稱謂）、職稱、客戶代號、產品代號、"
+        "特殊地址簡稱、暱稱、別名等。\n"
+        f"以下詞彙『已被偵測』，請不要重複列出：{known_str}\n\n"
+        "回應**只能是純 JSON array**，每筆 `{\"text\": \"...\", \"type\": \"類別\"}`，"
+        "type 用簡短中文（如 人名 / 職稱 / 代號 / 暱稱 / 地址）。"
+        "例：`[{\"text\":\"王經理\",\"type\":\"人名\"},{\"text\":\"KC-2024-A\",\"type\":\"代號\"}]`。"
+        "找不到就回 `[]`。**不要任何解釋文字、不要 ```json``` 包裝、不要前綴後綴。**\n\n"
+        f"文字內容：\n{full_text}"
+    )
+    try:
+        resp = client.text_query(prompt=prompt, model=model,
+                                  temperature=0.0, think=False)
+    except Exception as e:
+        import logging as _lg
+        _lg.getLogger(__name__).warning("LLM call failed: %s", e)
+        return []
+    raw = (resp or "").strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE)
+    try:
+        import json as _json
+        arr = _json.loads(raw)
+        if not isinstance(arr, list):
+            return []
+        out = []
+        for x in arr:
+            if not isinstance(x, dict):
+                continue
+            t = (x.get("text") or "").strip()
+            if not t or len(t) > 80:
+                continue
+            out.append({"text": t, "type": (x.get("type") or "其他").strip()[:16]})
+        return out
+    except Exception:
+        return []
+
+
+def _attach_llm_spans(text: str, llm_items: list[dict],
+                      existing: list[dict]) -> list[dict]:
+    """Resolve each LLM-suggested phrase to char-level spans in `text` and
+    append as new findings. Skips phrases that overlap with already-known
+    findings. Multiple occurrences of same phrase all get added."""
+    if not llm_items:
+        return existing
+    # Build set of (start, end) of existing spans for overlap check
+    existing_spans = [(f["start"], f["end"]) for f in existing]
+    fid = len(existing)
+    additions: list[dict] = []
+    for item in llm_items:
+        phrase = item["text"]
+        type_label = "[LLM] " + item.get("type", "其他")
+        pos = 0
+        while True:
+            idx = text.find(phrase, pos)
+            if idx < 0:
+                break
+            end = idx + len(phrase)
+            # Skip if overlaps with an existing finding
+            overlap = any(not (end <= s or idx >= e) for s, e in existing_spans)
+            if not overlap:
+                additions.append({
+                    "id": f"l{fid}",
+                    "type": "llm",
+                    "type_label": type_label,
+                    "group": "[LLM] 補偵測",
+                    "value": phrase,
+                    "masked": "*" * max(1, len(phrase)),
+                    "start": idx,
+                    "end": end,
+                })
+                existing_spans.append((idx, end))
+                fid += 1
+            pos = end
+    if not additions:
+        return existing
+    merged = sorted(existing + additions, key=lambda f: f["start"])
+    for i, f in enumerate(merged):
+        f["id"] = f"f{i}"
+    return merged
 
 
 @router.post("/extract-text")
@@ -415,6 +513,20 @@ async def detect(request: Request):
     custom_text = str(body.get("custom_regex") or "")
     custom_regexes = _parse_custom_regexes(custom_text)
     findings = _detect_findings(text, selected_ids, custom_regexes)
+    llm_augment = bool(body.get("llm_augment"))
+    llm_warning = ""
+    if llm_augment:
+        from ...core.llm_settings import llm_settings as _llms
+        if not _llms.is_enabled():
+            llm_warning = "已勾選 LLM 補偵測但 LLM 服務尚未啟用，本次跳過"
+        else:
+            already_known = [f["value"] for f in findings]
+            try:
+                extras = _llm_extra_findings(text, already_known)
+                if extras:
+                    findings = _attach_llm_spans(text, extras, findings)
+            except Exception as e:
+                llm_warning = f"LLM 補偵測失敗：{e}"
     # Aggregate counts for UI summary
     counts: dict[str, int] = {}
     for f in findings:
@@ -426,6 +538,7 @@ async def detect(request: Request):
         "counts": [{"label": k, "count": v} for k, v in
                    sorted(counts.items(), key=lambda x: -x[1])],
         "char_count": len(text),
+        "llm_warning": llm_warning,
     }
 
 

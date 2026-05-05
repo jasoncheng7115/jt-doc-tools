@@ -220,3 +220,118 @@ async def submit(
     job = job_manager.submit("pdf-rotate", run,
                              meta={"count": len(saved), "mode": mode})
     return {"job_id": job.id}
+
+
+# ----------------------------------------------------------------------
+# v1.4.53 redesigned UX: synchronous /finalize and /finalize-png that
+# operate on the file already stashed by /load. Replaces the multi-step
+# job-based /submit flow for the new UI (no batch — single file).
+# ----------------------------------------------------------------------
+
+def _apply_perpage(doc: "fitz.Document", per_page_map: dict[int, str]) -> None:
+    """Apply per-page mode override to the document in-place."""
+    for page_num_1based, m in per_page_map.items():
+        if m == "none" or not m:
+            continue
+        idx = page_num_1based - 1
+        if not (0 <= idx < doc.page_count):
+            continue
+        page = doc[idx]
+        if m.startswith("rotate-"):
+            ang = int(m.split("-")[1])
+            page.set_rotation((page.rotation + ang) % 360)
+        elif m == "flip-h":
+            _flip_page(page, horizontal=True)
+        elif m == "flip-v":
+            _flip_page(page, horizontal=False)
+
+
+def _parse_per_page(per_page: str) -> dict[int, str]:
+    if not per_page:
+        return {}
+    import json as _json
+    try:
+        raw = _json.loads(per_page)
+        if not isinstance(raw, dict):
+            raise ValueError("per_page must be JSON object")
+        out: dict[int, str] = {}
+        for k, v in raw.items():
+            pn = int(k)
+            vs = str(v)
+            if vs != "none" and vs not in _VALID_MODES:
+                raise ValueError(f"per_page mode 無效：{vs}")
+            out[pn] = vs
+        return out
+    except Exception as e:
+        raise HTTPException(400, f"per_page 解析失敗：{e}")
+
+
+_UPLOAD_ID_RE = re.compile(r"^[a-f0-9]{32}$")
+
+
+@router.post("/finalize")
+async def finalize(
+    upload_id: str = Form(...),
+    per_page: str = Form(""),
+):
+    """Build the rotated PDF from the file stashed by /load + per-page map."""
+    if not _UPLOAD_ID_RE.match(upload_id or ""):
+        raise HTTPException(400, "invalid upload_id")
+    src = settings.temp_dir / f"rotL_{upload_id}.pdf"
+    if not src.exists():
+        raise HTTPException(410, "上傳已過期，請重新上傳")
+    per_page_map = _parse_per_page(per_page)
+    out = settings.temp_dir / f"rotL_{upload_id}_rotated.pdf"
+    with fitz.open(str(src)) as doc:
+        _apply_perpage(doc, per_page_map)
+        doc.save(str(out), garbage=3, deflate=True)
+    from ...core.http_utils import content_disposition
+    download_name = "rotated.pdf"
+    return FileResponse(
+        str(out), media_type="application/pdf",
+        filename=download_name,
+        headers={"Content-Disposition": content_disposition(download_name)},
+    )
+
+
+@router.post("/finalize-png")
+async def finalize_png(
+    upload_id: str = Form(...),
+    per_page: str = Form(""),
+):
+    """Bake rotation, render each page to PNG, return ZIP."""
+    if not _UPLOAD_ID_RE.match(upload_id or ""):
+        raise HTTPException(400, "invalid upload_id")
+    src = settings.temp_dir / f"rotL_{upload_id}.pdf"
+    if not src.exists():
+        raise HTTPException(410, "上傳已過期，請重新上傳")
+    per_page_map = _parse_per_page(per_page)
+    # Bake rotation to a temp PDF, then render each page as PNG
+    baked = settings.temp_dir / f"rotL_{upload_id}_baked_for_png.pdf"
+    with fitz.open(str(src)) as doc:
+        _apply_perpage(doc, per_page_map)
+        doc.save(str(baked), garbage=3, deflate=True)
+    zip_path = settings.temp_dir / f"rotL_{upload_id}_pages.zip"
+    import zipfile as _zf
+    with _zf.ZipFile(zip_path, "w", _zf.ZIP_DEFLATED) as zf:
+        with fitz.open(str(baked)) as doc:
+            for i in range(doc.page_count):
+                png_path = settings.temp_dir / f"rotL_{upload_id}_pg_{i+1}.png"
+                # 150 DPI is a reasonable balance for "看得清楚 + 檔不太大"
+                pdf_preview.render_page_png(baked, png_path, i, dpi=150)
+                zf.write(png_path, arcname=f"page_{i+1:03d}.png")
+                try:
+                    png_path.unlink()
+                except Exception:
+                    pass
+    try:
+        baked.unlink()
+    except Exception:
+        pass
+    from ...core.http_utils import content_disposition
+    download_name = f"rotated_pages_{int(time.time())}.zip"
+    return FileResponse(
+        str(zip_path), media_type="application/zip",
+        filename=download_name,
+        headers={"Content-Disposition": content_disposition(download_name)},
+    )
