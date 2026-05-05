@@ -4,6 +4,15 @@
 
 ---
 
+## [1.4.62] - 2026-05-05
+
+### 修正
+
+- **README + docs/index.html 移除「AES 加密壓縮檔」**：實際 `aes-zip` tool 在 metadata 是 `enabled=False`（暫時下架），文件還寫著會誤導使用者去找
+- 用戶之前在 docs 看不到「文字去識別化」是 GitHub Pages 邊緣 cache 還沒更新；live HTML 確認已含此項
+
+---
+
 ## [1.4.61] - 2026-05-05
 
 ### 改善
