@@ -4,6 +4,19 @@
 
 ---
 
+## [1.4.63] - 2026-05-05
+
+### 新增
+
+- **`text-deident` / `doc-deident` 加 3 個 IT 資料 pattern**：
+  - **SSH 公鑰** — `ssh-rsa` / `ssh-ed25519` / `ecdsa-sha2-*` 等開頭，連帶 base64 主體 + comment
+  - **PEM 區塊** — `-----BEGIN CERTIFICATE-----` / `BEGIN OPENSSH PRIVATE KEY` / `BEGIN RSA PRIVATE KEY` ... `-----END...-----` 整段抓
+  - **Hash 雜湊值** — MD5 (32) / SHA-1 (40) / SHA-224 (56) / SHA-256 (64) / SHA-384 (96) / SHA-512 (128) hex 值 + bcrypt `$2[aby]$...`
+  - 都歸 IT 資料分類、預設關（避免一般文件誤抓 hex），使用者貼 logs / 設定檔 / git diff 給 AI 前先勾選去識別化
+- **「我的帳號」對話框排版重做**：原本只是表格 label/value 列；改成大頭像（依 source 配色：LDAP 藍 / AD 紫 / 本機綠 / 單機灰）+ 顯示名 + username@source pill + 角色 badges + 工具網格（admin 顯示綠色「全部工具」橫條，一般使用者顯示工具卡片格）
+
+---
+
 ## [1.4.62] - 2026-05-05
 
 ### 修正

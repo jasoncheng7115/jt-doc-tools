@@ -308,6 +308,31 @@ RE_USER_PATH = re.compile(
     r"(?:/home/|/Users/|C:\\Users\\|%USERPROFILE%\\?)([A-Za-z][A-Za-z0-9._\-]{1,30})(?:[/\\][^\s\"'<>]*)?"
 )
 
+# SSH public key — `ssh-rsa AAAA...`, `ssh-ed25519 AAAA...` 等
+RE_SSH_PUBKEY = re.compile(
+    r"\b(?:ssh-rsa|ssh-ed25519|ssh-dss|ssh-dsa|ecdsa-sha2-nistp(?:256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)"
+    r"\s+[A-Za-z0-9+/=]{20,}"
+    r"(?:\s+\S+)?"  # optional comment
+)
+
+# PEM block — SSH/SSL/TLS private key, certificate, public key, CSR 等
+# 任何 -----BEGIN xxx----- ... -----END xxx----- 都抓
+RE_PEM_BLOCK = re.compile(
+    r"-----BEGIN [A-Z0-9 ]+-----[\s\S]+?-----END [A-Z0-9 ]+-----"
+)
+
+# Hash 值 — MD5 / SHA1 / SHA256 / SHA512 等常見 hex hash 長度
+# 用具體長度避免吃到一般 hex 串。bcrypt 另外抓 ($2[aby]$...)
+RE_HASH = re.compile(
+    r"\b[a-fA-F0-9]{32}\b"           # MD5 (or UUID without dashes)
+    r"|\b[a-fA-F0-9]{40}\b"          # SHA-1
+    r"|\b[a-fA-F0-9]{56}\b"          # SHA-224
+    r"|\b[a-fA-F0-9]{64}\b"          # SHA-256
+    r"|\b[a-fA-F0-9]{96}\b"          # SHA-384
+    r"|\b[a-fA-F0-9]{128}\b"         # SHA-512
+    r"|\$2[aby]\$\d{2}\$[A-Za-z0-9./]{53}"  # bcrypt
+)
+
 # 帳號 / 密碼 — 標籤式：「password: xxx」「密碼: xxx」「user/pass: xxx」等
 # 涵蓋 admin/CLI 常見的 username:value 或 password:value 寫法
 RE_CRED_LABEL = re.compile(
@@ -517,6 +542,15 @@ CATALOG: list[Pattern] = [
     Pattern("cred_pair",  "帳號/密碼斜線組合 (admin/pass)", RE_CRED_PAIR, _always,
             lambda v: _mask_keep_edges(v, 1, 1), False,
             group="IT 資料", icon="lock"),
+    Pattern("ssh_pubkey", "SSH 公鑰 (ssh-rsa / ed25519 ...)", RE_SSH_PUBKEY, _always,
+            lambda v: v.split(None, 1)[0] + " [SSH-PUBKEY-REDACTED]", False,
+            group="IT 資料", icon="lock"),
+    Pattern("pem_block",  "PEM 區塊 (CERT / KEY / CSR)", RE_PEM_BLOCK, _always,
+            lambda v: "[PEM-BLOCK-REDACTED]", False,
+            group="IT 資料", icon="lock"),
+    Pattern("hash_value", "Hash 雜湊值 (MD5/SHA/bcrypt)", RE_HASH, _always,
+            lambda v: _mask_keep_edges(v, 4, 4), False,
+            group="IT 資料", icon="hash"),
 ]
 
 
