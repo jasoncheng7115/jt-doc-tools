@@ -167,6 +167,50 @@ def reset_password(user_id: int, new_password: str) -> None:
         conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
 
 
+def change_password(user_id: int, old_password: str, new_password: str,
+                    keep_current_session: Optional[str] = None) -> None:
+    """User self-service password change. Verifies old_password before
+    updating; revokes other sessions but keeps the current one (passed via
+    `keep_current_session` raw token) so the user doesn't get logged out
+    of the tab they used to change the password.
+
+    Raises ValueError on: wrong old password, weak new password, non-local
+    user (LDAP/AD passwords are managed by the directory).
+    """
+    ok, err = passwords.validate_password(new_password)
+    if not ok:
+        raise ValueError(err)
+    if old_password == new_password:
+        raise ValueError("新密碼不能與舊密碼相同")
+    conn = auth_db.conn()
+    row = conn.execute(
+        "SELECT source, password_hash FROM users WHERE id=?", (user_id,)
+    ).fetchone()
+    if not row:
+        raise ValueError(f"使用者 id={user_id} 不存在")
+    if row["source"] != "local":
+        raise ValueError("LDAP/AD 使用者的密碼由目錄端管理，請聯絡 IT 改 AD/LDAP 密碼")
+    if not passwords.verify_password(old_password, row["password_hash"]):
+        # Constant-time mismatch path: don't leak whether user exists.
+        raise ValueError("舊密碼錯誤")
+    new_hash = passwords.hash_password(new_password)
+    # Hash the keep token to compare with sessions.token_hash (sessions
+    # stores SHA-256 of raw token).
+    keep_hash = ""
+    if keep_current_session:
+        import hashlib
+        keep_hash = hashlib.sha256(keep_current_session.encode("utf-8")).hexdigest()
+    with db.tx(conn):
+        conn.execute("UPDATE users SET password_hash=? WHERE id=?",
+                     (new_hash, user_id))
+        if keep_hash:
+            conn.execute(
+                "DELETE FROM sessions WHERE user_id=? AND token_hash<>?",
+                (user_id, keep_hash))
+        else:
+            conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+
+
 def delete(user_id: int) -> None:
     conn = auth_db.conn()
     row = conn.execute("SELECT is_admin_seed FROM users WHERE id=?",

@@ -54,6 +54,13 @@ def _clear_session_cookie(response: Response) -> None:
     response.delete_cookie(sessions.COOKIE_NAME, path="/")
 
 
+# In-memory rate limit for /change-password failed attempts.
+# Maps user_id → (last_fail_ts, fail_count). After 5 fails within 10 min
+# the user is locked out from change-password (their normal login still works).
+# Process-local; OK for a single-uvicorn deployment.
+_CHGPW_FAILS: dict[int, tuple[float, int]] = {}
+
+
 def build_router(templates) -> APIRouter:
     router = APIRouter()
 
@@ -110,6 +117,90 @@ def build_router(templates) -> APIRouter:
         _set_session_cookie(resp, token, remember=bool(remember),
                             request=request, expires_at=expires_at)
         return resp
+
+    @router.post("/change-password")
+    async def change_password(request: Request):
+        """Self-service password change for the logged-in local user.
+
+        Security model:
+        - **user_id from server-side session lookup, never from request body**
+          → impossible to change another user's password by manipulating
+          the request payload.
+        - SameSite=Lax cookie blocks cross-site CSRF on this POST.
+        - `verify_password()` is constant-time (argon2 / bcrypt).
+        - Failed attempts (wrong old password) audited as
+          `password_change_fail` so admin sees brute-force from a
+          potentially-stolen session.
+        - Rate limit: max 5 fails per user per 10 min → 429 lockout.
+        - LDAP / AD users explicitly rejected (their hash isn't ours to set).
+
+        Requires JSON body `{old_password, new_password}`. Auth backend
+        OFF → 404 (no user concept). Wrong old password → 400.
+        """
+        from fastapi.responses import JSONResponse
+        from ..core import user_manager, sessions as _sessions
+        if not auth_settings.is_enabled():
+            return JSONResponse({"error": "auth_off",
+                                 "detail": "未啟用認證，無密碼可改"},
+                                status_code=404)
+        token = request.cookies.get(sessions.COOKIE_NAME, "")
+        user = sessions.lookup(token) if token else None
+        if not user:
+            return JSONResponse({"error": "unauthorized",
+                                 "detail": "請先登入"}, status_code=401)
+        # Username for audit always includes realm (jason@local / jason@ldap)
+        actor_label = _sessions.user_label(user)
+        # Rate limit: in-memory per-user fail counter (defined at module level)
+        import time as _t
+        uid = user["user_id"]
+        now = _t.time()
+        # Prune old entries (> 10 min) — keep dict from growing unbounded
+        for _k in [k for k, v in _CHGPW_FAILS.items() if now - v[0] >= 600]:
+            _CHGPW_FAILS.pop(_k, None)
+        cur = _CHGPW_FAILS.get(uid)
+        if cur and cur[1] >= 5:
+            audit_db.log_event(
+                "password_change_lockout", username=actor_label,
+                ip=_client_ip(request),
+            )
+            return JSONResponse({
+                "error": "locked",
+                "detail": "輸入錯誤次數太多，請等 10 分鐘後再試",
+            }, status_code=429)
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "bad_request",
+                                 "detail": "需要 JSON body"}, status_code=400)
+        old = str(body.get("old_password") or "")
+        new = str(body.get("new_password") or "")
+        if not old or not new:
+            return JSONResponse({"error": "bad_request",
+                                 "detail": "需要 old_password 跟 new_password"},
+                                status_code=400)
+        try:
+            user_manager.change_password(
+                uid, old, new, keep_current_session=token,
+            )
+        except ValueError as e:
+            # Bump fail counter so brute force gets locked out
+            ts, n = _CHGPW_FAILS.get(uid, (now, 0))
+            _CHGPW_FAILS[uid] = (now, n + 1)
+            audit_db.log_event(
+                "password_change_fail", username=actor_label,
+                ip=_client_ip(request),
+                details={"reason": str(e), "fail_count": n + 1},
+            )
+            return JSONResponse({"error": "rejected", "detail": str(e)},
+                                status_code=400)
+        # Success — clear fail counter
+        _CHGPW_FAILS.pop(uid, None)
+        audit_db.log_event(
+            "password_change", username=actor_label,
+            ip=_client_ip(request),
+        )
+        return JSONResponse({"ok": True,
+                             "detail": "密碼已變更，其他裝置的登入會被登出"})
 
     @router.post("/logout")
     async def logout(request: Request):
