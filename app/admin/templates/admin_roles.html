@@ -27,6 +27,9 @@
     </div>
     <div>
       <button class="btn btn-small" data-act="save">{{ icon('save', size=12) }} 儲存</button>
+      {% if r.id != 'admin' %}
+      <button class="btn btn-small" data-act="copy" title="複製此角色為新的可編輯角色">{{ icon('copy', size=12) }} 複製</button>
+      {% endif %}
       {% if not r.is_protected %}
       <button class="btn btn-small btn-danger" data-act="delete">{{ icon('trash', size=12) }} 刪除</button>
       {% endif %}
@@ -121,6 +124,37 @@ document.querySelectorAll('[data-role]').forEach(panel => {
   if (sel('invert')) sel('invert').addEventListener('click', () => {
     panel.querySelectorAll('.tool-grid input[type=checkbox]').forEach(c => c.checked = !c.checked);
     refreshCounter(panel);
+  });
+});
+
+// 複製角色：詢問新 id，把目前 panel 已勾選的工具複製成新角色（包含 unsaved 的勾選），
+// display name 自動加「（副本）」。建立後重整頁面即可看到。
+document.querySelectorAll('[data-role] [data-act="copy"]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const panel = btn.closest('[data-role]');
+    const srcId = panel.dataset.role;
+    const srcName = panel.querySelector('h2').textContent.trim();
+    const tools = Array.from(panel.querySelectorAll('input[type=checkbox]:checked'))
+                       .map(c => c.dataset.tool);
+    const newId = await showPrompt(
+      `複製「${srcName}」為新角色\n新角色的 id（英文，僅 a-z 0-9 -）：`,
+      { defaultValue: srcId + '-copy', okText: '複製', title: '複製角色' });
+    if (!newId) return;
+    if (!/^[a-z][a-z0-9-]{1,30}$/.test(newId)) {
+      showAlert('id 必須以英文小寫開頭，只能用 a-z 0-9 與 -');
+      return;
+    }
+    const r = await fetch('/admin/roles/create', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        id: newId,
+        display_name: srcName + '（副本）',
+        description: '複製自 ' + srcId,
+        tools: tools,
+      }),
+    });
+    if (r.ok) location.reload();
+    else showAlert('複製失敗：' + await r.text());
   });
 });
 

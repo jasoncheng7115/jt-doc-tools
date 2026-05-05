@@ -36,8 +36,8 @@ _NON_ADMIN_TOOL_IDS = [
     "pdf-extract-text", "pdf-extract-images", "pdf-attachments",
     "office-to-pdf", "pdf-to-image", "image-to-pdf",
     "pdf-encrypt", "pdf-decrypt", "pdf-metadata",
-    "pdf-hidden-scan", "doc-diff", "text-diff", "doc-deident", "pdf-editor",
-    "translate-doc",
+    "pdf-hidden-scan", "doc-diff", "text-diff", "doc-deident", "text-deident",
+    "pdf-editor", "translate-doc",
     # Sensitive — not in default-user; granted explicitly by finance/sales.
     # "pdf-fill", "pdf-stamp",
 ]
@@ -81,7 +81,7 @@ SEED_ROLES: list[dict] = [
         "is_protected": False,
         "tools": list(_NON_ADMIN_TOOL_IDS) + [
             "pdf-fill", "pdf-stamp", "pdf-watermark",
-            "pdf-encrypt", "doc-deident",
+            "pdf-encrypt", "doc-deident", "text-deident",
         ],
     },
     {
@@ -91,7 +91,8 @@ SEED_ROLES: list[dict] = [
         "is_builtin": True,
         "is_protected": False,
         "tools": list(_NON_ADMIN_TOOL_IDS) + [
-            "pdf-fill", "pdf-stamp", "pdf-watermark", "doc-deident",
+            "pdf-fill", "pdf-stamp", "pdf-watermark",
+            "doc-deident", "text-deident",
         ],
     },
     {
@@ -101,7 +102,8 @@ SEED_ROLES: list[dict] = [
         "is_builtin": True,
         "is_protected": False,
         "tools": list(_NON_ADMIN_TOOL_IDS) + [
-            "doc-deident", "pdf-hidden-scan", "pdf-metadata", "doc-diff",
+            "doc-deident", "text-deident",
+            "pdf-hidden-scan", "pdf-metadata", "doc-diff",
             "pdf-encrypt", "pdf-decrypt",
         ],
     },

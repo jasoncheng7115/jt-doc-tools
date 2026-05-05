@@ -4,6 +4,44 @@
 
 ---
 
+## [1.4.43] - 2026-05-04
+
+### 修正
+
+- **Windows install.ps1 在 `Install-Nssm` 函式炸掉「陳述式區塊或類型定義中缺少 '}'」**（GitHub issues [#1](https://github.com/jasoncheng7115/jt-doc-tools/issues/1) / [#3](https://github.com/jasoncheng7115/jt-doc-tools/issues/3)）：
+  - 根因：`Install-Nssm` 內含中文的 here-string `@" ... "@`，部分 PowerShell 版本 / 編碼把 `"@` 誤判為字串內容而非結尾，整支 script 後面所有 `}` 都被當成字串 → parser 找不到函式的閉合 `}`
+  - 修法：改用普通雙引號字串 + ``n` 換行串接，避開 here-string 跟非 ASCII 字元的相容性陷阱（@chihhao0312 in issue #1 提供的修法）
+- **用印與簽名歷史記錄全顯示「(匿名)」（即使已登入 LDAP）**（客戶 v1.3.14 回報）：
+  - 根因：`pdf_stamp` 背景 job 的 `stamp_history.save()` 用 `getattr(getattr(job, "_actor", None), "username", "")` 取使用者，但 job 物件根本沒 `_actor` 屬性 → 永遠拿到 `""` → 顯示匿名
+  - 修法：在 route handler 開頭就把 actor username 抓進 closure，傳給 `stamp_history.save(username=actor)`
+- **浮水印歷史記錄同樣全匿名**（同根因）：
+  - `pdf_watermark` 的 `watermark_history.save()` 之前直接 hardcode `username=""`，且 actor 只在 asset-mode 路徑捕獲；text-mode 完全沒抓
+  - 修法：route handler 一開頭就無條件抓 actor，傳進 closure
+
+---
+
+## [1.4.42] - 2026-05-04
+
+### 改善
+
+- **文件去識別化「LLM 補偵測」說明文案台灣化**：人名（含「先生 / 經理」前綴）→「等稱謂」，「前綴」這個用法在台灣比較硬，「稱謂」更貼近自然中文。LLM prompt 內的同樣字串一併改
+- **左側搜尋列範例文字加入中文示範**：之前只有英文「(form fill, stamp…)」，使用者看不出來能用中文搜尋。改成「(例：填表 / form fill、用印 / stamp)」
+
+---
+
+## [1.4.41] - 2026-05-04
+
+### 新增
+
+- **角色管理：每個角色 (除 admin 外) 多了「複製」按鈕**：之前 hint 文案說「需要時複製預設角色再客製」但根本沒按鈕。現在按複製會跳輸入框，輸入新 id 後即建立同樣權限的副本，display name 自動加「（副本）」、description 註明複製來源
+
+### 修正
+
+- **權限矩陣「清除」按鈕比同列其他按鈕小**：之前 CSS 加 `.picker-clear { padding:3px 10px !important; font-size:11px !important; }` override 了 `.btn-small` 的尺寸；移除 override 讓四個按鈕（全選 / 取消全選 / 反向選取 / 清除）視覺統一
+- **註解平面化頁面 AcroForm 提示框與下方上傳區無間隔**：之前 `.af-info` 只設 margin-top；改成 `margin: 10px 0 18px` 讓提示與下方 panel 有合理留白
+
+---
+
 ## [1.4.40] - 2026-05-04
 
 ### 新增

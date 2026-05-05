@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.4.40"
+VERSION = "1.4.43"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -94,6 +94,7 @@ _TOOL_ALIASES = {
     "translate-doc":      "translate translation translator sentence by sentence parallel side by side bilingual english chinese japanese korean traditional simplified llm ai ollama 翻譯 逐句 並排 對照 中英 中翻英 英翻中 機器翻譯 LLM 大語言模型 句子 中翻日 日翻中",
     "pdf-compress":       "compress compression shrink reduce size optimize optimise slim jpeg dpi downsample ghostscript gs subset font 壓縮 縮小 瘦身 減肥 檔案小 降解析度 去重複 Ghostscript",
     "doc-deident":        "deident deidentify de-identification redact redaction mask masking anonymize anonymise pii personal data privacy gdpr 個資 個人資料 去識別化 敏感資料 編修 不可逆遮蔽 資料遮罩 遮蔽 塗黑 脫敏 脫敏化 匿名 身分證 手機 Email 統編 信用卡 車牌 地址",
+    "text-deident":       "text deident deidentify redact mask anonymize fake substitute replace paste txt md docx odt 文字 文本 純文字 貼上 去識別化 敏感資料 編修 遮罩 替換假資料 假資料 假名 替代 PII 個資 隱私 身分證 手機 Email",
     "pdf-encrypt":        "encrypt password protect lock aes permission restrict owner user 加密 密碼 保護 權限 禁列印 禁複製 禁編輯 AES",
     "pdf-decrypt":        "decrypt unlock remove password 解鎖 解密 解除 密碼 移除密碼",
     "pdf-metadata":       "metadata xmp author title strip clean remove producer creator 中繼資料 中繼 修訂歷史 去識別 metadata 清除 作者 標題 標籤 XMP",

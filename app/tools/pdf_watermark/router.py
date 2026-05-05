@@ -222,11 +222,15 @@ async def submit(
     temp_asset_file: Optional[UploadFile] = File(None),
 ):
     base_params = _parse_params(params)
+    # Capture actor up top so the background job's history.save can attribute
+    # the entry to the right user. v1.4.43 bug fix: previously only captured
+    # in the asset-mode branch, so text-mode watermarks always logged
+    # username="" → 歷史記錄全變「(匿名)」.
+    actor = getattr(getattr(request.state, "user", None), "username", "") or ""
     wm_png: Optional[Path] = None
     if not (base_params.text and base_params.text.strip()):
         if not asset_id:
             raise HTTPException(400, "需要 asset_id 或 text")
-        actor = getattr(getattr(request.state, "user", None), "username", "") or ""
         wm_png = await _resolve_watermark_source(
             asset_id, temp_asset_file, request=request, actor_username=actor)
         if wm_png is None:
@@ -298,7 +302,7 @@ async def submit(
                         filled_path=dst,
                         preview_path=None,
                         original_filename=orig_name,
-                        username="",
+                        username=actor or "",
                         extra={"asset_id": asset_id, "page_mode": page_mode},
                     )
         except Exception:

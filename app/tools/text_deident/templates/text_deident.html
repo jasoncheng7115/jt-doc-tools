@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}文字去識別化 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.td-grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+@media (max-width: 900px) { .td-grid { grid-template-columns: 1fr; } }
+
+.td-input-area, .td-output-area { display:flex; flex-direction:column; min-width:0; }
+.td-input-area textarea, .td-output-area textarea {
+  width:100%; box-sizing:border-box; min-height:300px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size:13px; line-height:1.55; padding:10px 12px;
+  border:1px solid var(--border); border-radius:6px;
+  resize: vertical; word-break: break-word; overflow-wrap: anywhere;
+}
+.td-input-area textarea:focus { outline:2px solid #3b82f6; outline-offset:-1px; border-color:transparent; }
+
+.td-drop-zone {
+  display:flex; align-items:center; gap:10px;
+  padding:8px 12px; margin:6px 0;
+  border:1.5px dashed #cbd5e1; border-radius:6px;
+  background:#f8fafc; cursor:pointer;
+  transition: border-color 0.15s, background 0.15s;
+  height:36px; box-sizing:border-box;
+  font-size:12.5px; color:#475569;
+}
+.td-drop-zone:hover { border-color:#6366f1; background:#eef2ff; }
+.td-drop-zone.is-dragover { border-color:#16a34a; background:#dcfce7; border-style:solid; }
+.td-drop-zone.has-file { border-color:#16a34a; background:#f0fdf4; border-style:solid; }
+.td-drop-zone b { color:#1e40af; }
+.td-drop-zone .hint { color:#94a3b8; font-size:11px; margin-left:6px; }
+
+.td-pattern-cats { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));
+  gap:10px; margin-top:8px; }
+.td-cat { background:#fff; border:1px solid var(--border); border-radius:8px;
+  padding:8px 10px; }
+.td-cat h4 { margin:0 0 6px; font-size:12.5px; color:#475569;
+  border-bottom:1px solid #f1f5f9; padding-bottom:4px; }
+.td-cat label { display:flex; align-items:center; gap:6px; padding:2px 0;
+  font-size:12.5px; cursor:pointer; }
+
+.td-stats { display:flex; gap:14px; flex-wrap:wrap; align-items:center;
+  margin:8px 0; font-size:12.5px; }
+.td-stats .stat { background:#eef2ff; color:#1e40af; padding:3px 10px; border-radius:10px;
+  font-weight:600; }
+
+.td-counts { display:flex; flex-wrap:wrap; gap:5px; margin:6px 0 10px; }
+.td-counts .pill { display:inline-flex; align-items:center; gap:4px;
+  background:#f1f5f9; padding:3px 9px; border-radius:10px;
+  font-size:11.5px; color:#334155; font-weight:600; }
+.td-counts .pill .ct { background:#1e40af; color:#fff; padding:0 6px; border-radius:8px; }
+
+.td-modes { display:flex; gap:4px; margin:8px 0; flex-wrap:wrap; }
+.td-modes button { background:#f1f5f9; border:0; padding:6px 14px; border-radius:6px;
+  font-size:13px; cursor:pointer; color:#475569; }
+.td-modes button.active { background:#1e40af; color:#fff; }
+
+.td-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+
+/* Highlight overlay rendered into the input textarea on detect — we use a
+   contenteditable div mirroring the textarea content (textarea can't host
+   inline highlights). For now we just show a separate "找到清單" panel. */
+.td-finding-list { max-height:260px; overflow-y:auto; border:1px solid var(--border);
+  border-radius:6px; background:#fff; padding:4px; margin-top:8px; }
+.td-finding-row { display:grid; grid-template-columns: 28px 80px 1fr 1fr;
+  gap:8px; padding:5px 8px; border-bottom:1px dashed #e5e7eb;
+  font-size:12.5px; align-items:center; }
+.td-finding-row:last-child { border-bottom:0; }
+.td-finding-row .type { color:#1e40af; font-weight:600; font-size:11.5px; }
+.td-finding-row .orig { color:#0f172a; word-break:break-word; }
+.td-finding-row .repl { color:#92400e; word-break:break-word; }
+.td-finding-row .repl.is-redact { color:#000; letter-spacing:1px; }
+.td-finding-row.is-skipped .orig, .td-finding-row.is-skipped .repl { opacity:0.4; }
+
+.td-help { font-size:11.5px; color:#94a3b8; margin-top:6px; }
+
+.spinner { display:inline-block; width:12px; height:12px; border:2px solid #cbd5e1;
+  border-top-color:#3b82f6; border-radius:50%; animation: spin 0.7s linear infinite;
+  vertical-align:middle; margin-right:5px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>{{ icon('shield', size=22) }} 文字去識別化</h1>
+<p class="muted">貼上文字，或上傳 .txt / .md / .docx / .doc / .odt / .pdf 等檔案，自動偵測敏感資料（身分證 / 手機 / Email / 統編 / 信用卡 / 銀行帳號 / 地址 …），可選擇<b>遮罩</b>（王*明）、<b>編修</b>（█）或<b>替換假資料</b>（陳明翰、新隨機 ID）後輸出。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 來源文字</h2>
+  <div class="td-grid">
+    <div class="td-input-area">
+      <label class="td-drop-zone" id="dropZone" for="fileInput">
+        <input type="file" id="fileInput" accept=".txt,.md,.docx,.doc,.odt,.ods,.odp,.rtf,.pdf" hidden />
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#6366f1"
+             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <span class="td-drop-text"><b>點此挑選</b>或拖曳檔案到此
+          <span class="hint">.txt / .md / .docx / .odt / .pdf …</span></span>
+      </label>
+      <textarea id="srcText" placeholder="把要處理的文字貼上來，或從上方上傳檔案…"></textarea>
+      <div class="td-help"><span id="srcCount">0</span> 字</div>
+    </div>
+    <div class="td-output-area">
+      <div style="font-size:12.5px; color:#475569; margin-bottom:8px; height:36px; display:flex; align-items:center;">
+        處理後文字（按下「偵測」與「套用」後顯示在此）
+      </div>
+      <textarea id="outText" placeholder="處理後文字會顯示在這裡。" readonly></textarea>
+      <div class="td-help"><span id="outCount">0</span> 字</div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">2. 設定要偵測的資料類型</h2>
+  <div class="td-pattern-cats">
+    {% for grp_name, items in grouped.items() %}
+    <div class="td-cat">
+      <h4>{{ grp_name }}</h4>
+      {% for p in items %}
+      <label>
+        <input type="checkbox" data-pat-id="{{ p.id }}" {% if p.default_on %}checked{% endif %}>
+        <span>{{ p.label }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  <details style="margin-top:10px;">
+    <summary style="cursor:pointer; font-size:12.5px; color:#475569;">
+      ▸ 自訂 regex（一行一條，格式：<code>標籤 | 正則式</code>）
+    </summary>
+    <textarea id="customRx" rows="4" style="width:100%; box-sizing:border-box; margin-top:6px;
+      font-family: ui-monospace, monospace; font-size:12px; padding:8px;
+      border:1px solid var(--border); border-radius:6px;"
+      placeholder="員工編號 | EMP-\d{6}&#10;客戶代號 | CUS-[A-Z0-9]{4,8}"></textarea>
+  </details>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">3. 處理方式</h2>
+  <div class="td-modes" id="modeBar">
+    <button type="button" data-mode="mask" class="active">遮罩（王*明）</button>
+    <button type="button" data-mode="redact">編修（黑色 █）</button>
+    <button type="button" data-mode="fake">替換假資料（陳明翰）</button>
+  </div>
+  <div class="td-actions">
+    <button class="btn btn-primary" type="button" id="btnDetect">{{ icon('search', size=14) }} 偵測敏感資料</button>
+    <button class="btn" type="button" id="btnApply" disabled>{{ icon('shield', size=14) }} 套用至全部</button>
+    <button class="btn" type="button" id="btnDownload" disabled>{{ icon('download', size=14) }} 下載結果 (.txt)</button>
+    <button class="btn" type="button" id="btnCopy" disabled>{{ icon('paperclip', size=14) }} 複製到剪貼簿</button>
+  </div>
+  <div id="errBox" class="td-help" style="color:#b91c1c;" hidden></div>
+</div>
+
+<div class="panel" id="resultPanel" hidden>
+  <h2 style="margin-top:0;">4. 偵測結果
+    <span class="muted" id="resultMeta" style="font-size:12.5px; font-weight:400; margin-left:8px;"></span>
+  </h2>
+  <div class="td-counts" id="counts"></div>
+  <div class="td-finding-list" id="findings"></div>
+  <div class="td-help">每筆預設都會被處理。要排除某筆？取消左側勾選後再按「套用至全部」。</div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = (id) => document.getElementById(id);
+const ENGINE = {{ office_engine|tojson }};
+
+const srcEl = $('srcText');
+const outEl = $('outText');
+
+let lastFindings = [];   // last detect response
+let lastMode = 'mask';
+let lastFilename = 'text_deident.txt';
+
+function escapeHTML(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function refreshCount(el, target) { target.textContent = el.value.length.toLocaleString(); }
+srcEl.addEventListener('input', () => refreshCount(srcEl, $('srcCount')));
+
+// ---- file upload ----
+const fileInput = $('fileInput');
+const dropZone = $('dropZone');
+async function handleUploadedFile(f) {
+  if (!f) return;
+  const ext = (f.name || '').toLowerCase().split('.').pop();
+  const officeExts = ['docx', 'doc', 'odt', 'ods', 'odp', 'rtf'];
+  let parseLabel = '解析中…';
+  if (officeExts.includes(ext)) parseLabel = `${ENGINE} 解析中…`;
+  else if (ext === 'pdf') parseLabel = 'PyMuPDF 解析中…';
+  const dropText = dropZone.querySelector('.td-drop-text');
+  const orig = dropText.innerHTML;
+  dropZone.classList.add('has-file');
+  dropText.innerHTML = `<b>${escapeHTML(f.name)}</b> <span class="hint">${escapeHTML(parseLabel)}</span>`;
+  try {
+    const fd = new FormData();
+    fd.append('file', f);
+    const r = await fetch('/tools/text-deident/extract-text', {method:'POST', body: fd});
+    if (!r.ok) {
+      const t = await r.text();
+      showErr('解析失敗：' + t);
+      dropZone.classList.remove('has-file');
+      dropText.innerHTML = orig;
+      return;
+    }
+    const j = await r.json();
+    srcEl.value = j.text || '';
+    refreshCount(srcEl, $('srcCount'));
+    lastFilename = (j.filename || 'text_deident').replace(/\.[^.]+$/, '') + '_deident.txt';
+    dropText.innerHTML = `<b>${escapeHTML(j.filename || f.name)}</b> <span class="hint">已載入 ${(j.char_count || 0).toLocaleString()} 字</span>`;
+  } catch (err) {
+    showErr('上傳失敗：' + err.message);
+    dropZone.classList.remove('has-file');
+    dropText.innerHTML = orig;
+  } finally {
+    fileInput.value = '';
+  }
+}
+fileInput.addEventListener('change', (e) => handleUploadedFile(e.target.files[0]));
+['dragenter','dragover'].forEach(ev => dropZone.addEventListener(ev, e => {
+  e.preventDefault(); dropZone.classList.add('is-dragover');
+}));
+['dragleave','dragend','drop'].forEach(ev => dropZone.addEventListener(ev, e => {
+  e.preventDefault(); dropZone.classList.remove('is-dragover');
+}));
+dropZone.addEventListener('drop', (e) => {
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+    handleUploadedFile(e.dataTransfer.files[0]);
+  }
+});
+
+// ---- mode picker ----
+$('modeBar').querySelectorAll('button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $('modeBar').querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    lastMode = btn.dataset.mode;
+    if (lastFindings.length) renderFindings(lastFindings);
+  });
+});
+
+// ---- error helper ----
+function showErr(msg) {
+  $('errBox').textContent = msg;
+  $('errBox').hidden = false;
+}
+function clearErr() { $('errBox').hidden = true; $('errBox').textContent = ''; }
+
+// ---- detect ----
+function selectedTypes() {
+  return Array.from(document.querySelectorAll('.td-cat input[type=checkbox]:checked'))
+              .map(c => c.dataset.patId);
+}
+
+$('btnDetect').addEventListener('click', async () => {
+  clearErr();
+  if (!srcEl.value.trim()) { showErr('請貼上或上傳要處理的文字'); return; }
+  $('btnDetect').disabled = true;
+  $('btnDetect').innerHTML = '<span class="spinner"></span>偵測中…';
+  try {
+    const r = await fetch('/tools/text-deident/detect', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        text: srcEl.value,
+        types: selectedTypes(),
+        custom_regex: $('customRx').value,
+      }),
+    });
+    if (!r.ok) {
+      showErr('偵測失敗：' + await r.text());
+      return;
+    }
+    const j = await r.json();
+    lastFindings = j.findings || [];
+    $('resultPanel').hidden = false;
+    $('resultMeta').textContent = `共找到 ${lastFindings.length} 筆，原文 ${j.char_count.toLocaleString()} 字`;
+    // counts pills
+    $('counts').innerHTML = (j.counts || []).map(c =>
+      `<span class="pill">${escapeHTML(c.label)}<span class="ct">${c.count}</span></span>`
+    ).join('');
+    renderFindings(lastFindings);
+    $('btnApply').disabled = lastFindings.length === 0;
+  } catch (e) {
+    showErr('偵測失敗：' + e.message);
+  } finally {
+    $('btnDetect').disabled = false;
+    $('btnDetect').innerHTML = '{{ icon("search", size=14) }} 重新偵測';
+  }
+});
+
+// ---- render findings list with row checkboxes ----
+function renderFindings(findings) {
+  const lines = findings.map((f, i) => {
+    const repl = previewReplacement(f, lastMode);
+    return `<div class="td-finding-row" data-fid="${f.id}">
+      <input type="checkbox" data-finding-id="${f.id}" checked>
+      <span class="type">${escapeHTML(f.type_label)}</span>
+      <span class="orig">${escapeHTML(f.value)}</span>
+      <span class="repl ${lastMode === 'redact' ? 'is-redact' : ''}">${escapeHTML(repl)}</span>
+    </div>`;
+  });
+  $('findings').innerHTML = lines.join('') ||
+    '<div class="td-help" style="text-align:center; padding:20px;">沒有偵測到敏感資料</div>';
+  // checkbox toggles row state
+  $('findings').querySelectorAll('input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      cb.closest('.td-finding-row').classList.toggle('is-skipped', !cb.checked);
+    });
+  });
+}
+
+function previewReplacement(f, mode) {
+  if (mode === 'redact') return '█'.repeat(Math.max(1, f.end - f.start));
+  if (mode === 'mask')   return f.masked || ('*'.repeat(Math.max(1, f.end - f.start)));
+  // fake — show "(隨機產生)" placeholder; real value generated server-side on apply
+  return '(套用後產生)';
+}
+
+// ---- apply ----
+$('btnApply').addEventListener('click', async () => {
+  clearErr();
+  // collect un-skipped findings
+  const enabledIds = new Set(
+    Array.from($('findings').querySelectorAll('input[type=checkbox]:checked'))
+         .map(c => c.dataset.findingId)
+  );
+  const selections = lastFindings.filter(f => enabledIds.has(f.id));
+  if (!selections.length) { showErr('沒有勾選任何項目'); return; }
+  $('btnApply').disabled = true;
+  $('btnApply').innerHTML = '<span class="spinner"></span>套用中…';
+  try {
+    const r = await fetch('/tools/text-deident/process', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        text: srcEl.value,
+        selections: selections,
+        mode: lastMode,
+      }),
+    });
+    if (!r.ok) {
+      showErr('套用失敗：' + await r.text());
+      return;
+    }
+    const j = await r.json();
+    outEl.value = j.text || '';
+    refreshCount(outEl, $('outCount'));
+    $('btnDownload').disabled = false;
+    $('btnCopy').disabled = false;
+    // For fake mode: re-render the list with the actual replacements that
+    // were applied. Server already substituted; we don't have per-finding
+    // replacement strings back, so leave preview as "(套用後產生)".
+  } catch (e) {
+    showErr('套用失敗：' + e.message);
+  } finally {
+    $('btnApply').disabled = false;
+    $('btnApply').innerHTML = '{{ icon("shield", size=14) }} 套用至全部';
+  }
+});
+
+// ---- download / copy ----
+$('btnDownload').addEventListener('click', () => {
+  if (!outEl.value) return;
+  const fd = new FormData();
+  fd.append('text', outEl.value);
+  fd.append('filename', lastFilename);
+  // POST + trigger download via blob
+  fetch('/tools/text-deident/download', {method:'POST', body: fd})
+    .then(r => r.blob().then(b => ({blob: b, headers: r.headers})))
+    .then(({blob, headers}) => {
+      const cd = headers.get('Content-Disposition') || '';
+      let name = lastFilename;
+      const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i);
+      if (m) name = decodeURIComponent(m[1]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+    });
+});
+
+$('btnCopy').addEventListener('click', async () => {
+  if (!outEl.value) return;
+  try {
+    await navigator.clipboard.writeText(outEl.value);
+    if (typeof showToast === 'function') showToast('已複製處理後的文字', 'ok');
+    else $('btnCopy').textContent = '已複製';
+  } catch (e) {
+    showErr('複製失敗：' + e.message);
+  }
+});
+</script>
+{% endblock %}

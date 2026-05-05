@@ -246,7 +246,7 @@ async def submit(
                         filled_path=dst,
                         preview_path=None,
                         original_filename=orig_name,
-                        username=getattr(getattr(job, "_actor", None), "username", "") or "",
+                        username=actor or "",
                         extra={"asset_id": stamp_id,
                                "x_mm": p_x, "y_mm": p_y,
                                "width_mm": p_w, "height_mm": p_h,

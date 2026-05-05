@@ -234,13 +234,16 @@ function Install-Nssm {
         if ($ok) { Ok "  Download succeeded"; break }
     }
     if (-not $ok) {
-        Die @"
-NSSM download failed (all mirrors unreachable + bundled copy missing).
-此情境通常代表 git clone 失敗或 repo 結構異常。請手動：
-  1. 從 https://nssm.cc/release/nssm-2.24.zip 下載
-  2. 解壓後把 nssm-2.24\win64\nssm.exe 複製到 $NssmExe
-  3. 重跑此安裝腳本
-"@
+        # 不要用 here-string @"..."@ — 含中文時某些 PS 版本 / 編碼會誤判 "@
+        # 不是字串結尾，整支 script 後面所有 } 都被當成字串內容導致
+        # 「陳述式區塊或類型定義中缺少 '}'」(GitHub issues #1, #3)。
+        # 改用普通雙引號 + `n 換行，最相容。
+        $msg = "NSSM download failed (all mirrors unreachable + bundled copy missing).`n" +
+               "Please install manually:`n" +
+               "  1. Download from https://nssm.cc/release/nssm-2.24.zip`n" +
+               "  2. Extract and copy nssm-2.24\win64\nssm.exe to $NssmExe`n" +
+               "  3. Re-run this installer."
+        Die $msg
     }
     $extractDir = Join-Path $env:TEMP "nssm-extract"
     if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
