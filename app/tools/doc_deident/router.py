@@ -331,7 +331,7 @@ def _llm_extra_findings(full_text: str, already_known: list[str]) -> list[dict]:
     known_str = "、".join(already_known[:30]) or "（無）"
     prompt = (
         "你是文件去識別化助手。請從下面文件中找出『可能屬於敏感個人 / 業務資料但容易被 regex 漏掉』"
-        "的詞彙，例如：人名（包含「先生 / 小姐 / 博士 / 經理」等前綴）、職稱、客戶代號、產品代號、"
+        "的詞彙，例如：人名（包含「先生 / 小姐 / 博士 / 經理」等稱謂）、職稱、客戶代號、產品代號、"
         "特殊地址簡稱、暱稱、別名等。\n"
         f"以下詞彙『已被偵測』，請不要重複列出：{known_str}\n\n"
         "回應**只能是純 JSON array**，每筆 `{\"text\": \"...\", \"type\": \"類別\"}`，"

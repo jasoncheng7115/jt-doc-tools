@@ -175,7 +175,7 @@
 
   {{ llm_gate('doc-deident', llm_enabled, llm_model, mode='augment',
               feature_label='LLM 補偵測（找 regex 漏掉的）',
-              feature_desc='regex 抓不到的 context-sensitive 案例：人名（含「先生 / 經理」前綴）、職稱、客戶代號、產品代號、特殊地址簡稱等。會多送一次 LLM call，會稍慢但找回率高。',
+              feature_desc='regex 抓不到的 context-sensitive 案例：人名（含「先生 / 經理」等稱謂）、職稱、客戶代號、產品代號、特殊地址簡稱等。會多送一次 LLM call，會稍慢但找回率高。',
               input_id='ddLlmAugment') }}
 
   <div style="margin-top:10px;">
