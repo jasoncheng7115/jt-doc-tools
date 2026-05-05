@@ -4,6 +4,75 @@
 
 ---
 
+## [1.4.39] - 2026-05-04
+
+### 改善
+
+- **逐句翻譯譯文字數即時更新**：之前 header 的「譯文（繁體中文） 0 字」要等全部翻完才會跳到實際數字 — 翻譯到 90% 還顯示 0 字體感很怪。改成每完成一句就重新計算譯文總字數並 patch header，跟左邊原文字數一樣即時
+
+---
+
+## [1.4.38] - 2026-05-04
+
+### 改善
+
+- **逐句翻譯譯文欄右側也可拖曳加寬**：之前只有 # / 原文 欄有 resize handle；新增譯文欄右側 handle，往右拖會讓整張表變寬、面板水平捲動。長譯文不夠看時可以拉開來看完整內容
+
+---
+
+## [1.4.37] - 2026-05-04
+
+### 修正
+
+- **`jtdt update` 拒絕降版時實際還是降版了**（v1.4.36 之前長期 bug，使用者 v1.4.36 部署時觸發）：
+  - `svc_update` 偵測到 origin/main 比目前舊時，會印 warning 並嘗試 `git reset --hard v{cur}` 還原 — 但如果本地 VERSION 沒對應的 git tag（例如 dev 環境只 bump VERSION 不 git tag），restore 靜默失敗、code 繼續往下跑，最後仍然降版且服務以舊版重啟
+  - 修法：在 `git reset --hard origin/main` 之前先用 `git rev-parse HEAD` 抓 SHA，downgrade abort 時先用 SHA 還原（一定存在），SHA-restore 失敗才 fallback 到 tag 還原
+- **逐句翻譯停止後再翻譯時停止按鈕有時消失**：
+  - Race condition：使用者按下停止 → 開始新翻譯時，前一輪的 worker promise 還沒完全 resolve → finally 慢半拍執行 → 把新翻譯剛 set hidden=false 的 btnStop 改回 hidden=true
+  - 修法：在 btnTranslate handler 開頭把 `_translateAbortCtl` 拷貝成 `myCtl`，finally 只在 `_translateAbortCtl === myCtl` 時才清 UI（== 「我還是當前的翻譯」），新翻譯啟動後舊翻譯的 finally 不再動 UI
+
+---
+
+## [1.4.36] - 2026-05-04
+
+### 改善
+
+- **逐句翻譯解析中提示顯示引擎名稱**：上傳 .docx/.odt/.ods/.odp/.doc/.rtf 時顯示「OxOffice 解析中…」或「LibreOffice 解析中…」（依 server 實際裝的 binary），PDF 顯示「PyMuPDF 解析中…」。讓使用者知道後端是用哪條路在處理
+- **逐句翻譯文案精簡**：頁首跟工具列描述拿掉「PDF / DOCX / TXT」格式列表，統一寫「上傳文字或文件檔」 — 之前漏更新成 ODT/DOCX/RTF 都支援後字串就過時了
+
+---
+
+## [1.4.35] - 2026-05-04
+
+### 新增
+
+- **逐句翻譯：DOCX / DOC / ODT / ODS / ODP / RTF 統一走 soffice 文字匯出**：
+  - 等同「OxOffice/LibreOffice 開檔→另存為純文字」，跟使用者複製貼上看到的段落結構完全一致 — 列表編號、表格、註腳都正常
+  - 新增 `office_convert.convert_to_text()` 走 `--convert-to txt:Text (encoded):UTF8`，跟 PDF 轉檔共用同一個 soffice 鎖
+  - PDF 維持 PyMuPDF 直接抽，但加上段落重組（折回段內換行、保留段間空行）
+- **逐句翻譯加「停止翻譯」按鈕**：
+  - 翻譯中按下立刻 abort 所有 in-flight fetch + 設 cancel flag 讓 worker 停拉新句
+  - 統計列顯示「已中止 — 完成 N/總數 句」並保留已翻好的部分
+- **逐句翻譯表格欄寬可拖曳**：滑鼠拖 # / 原文 欄右側細長 hit-area 即時調整欄寬，譯文欄自動吃剩餘空間。最小 80 px 防止欄被拖到消失
+- **逐句翻譯偵測「填寫位」短路不送 LLM**：純底線 / 短橫線 / 點 / 等號等占位符（例如合約裡的 `_______________` 簽名線、`...........` 填寫位）直接 echo 原文、譯文欄顯示「（填寫位）」灰字。省 LLM call、保留版面對齊
+- **長 token 強制折行**：給 src / tgt cell 加 `overflow-wrap: anywhere`，超寬底線 / URL 不再衝出表格右邊界
+
+### 移除
+
+- 廢除前端 `_extract_text_from_odf` 直接 zipfile + ElementTree 解析路徑（被 soffice 走法取代，留 helper 在原檔但已不被呼叫，未來可清掉）
+
+---
+
+## [1.4.34] - 2026-05-04
+
+### 新增
+
+- **逐句翻譯支援 ODF 檔案上傳**（ODT / ODS / ODP）：
+  - 直接 unzip + 解析 `content.xml` 內 `<text:p>` / `<text:h>`，不走 soffice、不需轉成 PDF — 比走 office_convert 快、保留段落結構
+  - 上傳對話 accept 加入 `.odt,.ods,.odp`，提示文字也更新
+
+---
+
 ## [1.4.33] - 2026-05-04
 
 ### 修正

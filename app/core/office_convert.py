@@ -47,6 +47,17 @@ def find_soffice() -> Optional[str]:
     )
 
 
+def detect_engine() -> str:
+    """Return a human-readable engine label: 'OxOffice', 'LibreOffice',
+    or '(未安裝)'. Decides by path — anything containing 'oxoffice' (any
+    case) is OxOffice, otherwise LibreOffice. Cheap path-string check
+    (no subprocess) — safe to call from request handlers."""
+    p = find_soffice()
+    if not p:
+        return "(未安裝)"
+    return "OxOffice" if "oxoffice" in p.lower() else "LibreOffice"
+
+
 # Serialise concurrent office conversions.
 #
 # LibreOffice / OxOffice use a single user profile dir (our own, see below).
@@ -143,3 +154,72 @@ def convert_to_pdf(src: Path, dst_pdf: Path, timeout: float = 60.0) -> None:
             raise RuntimeError("轉檔成功但找不到輸出檔")
         dst_pdf.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(produced), str(dst_pdf))
+
+
+def convert_to_text(src: Path, timeout: float = 60.0) -> str:
+    """Run soffice headless to convert ``src`` into UTF-8 plain text.
+
+    Equivalent to opening the file in OxOffice/LibreOffice and choosing
+    "File → Save As → Text (UTF-8)" — gives the same paragraph layout
+    you'd get from manually copy-pasting from the rendered document.
+    Use this for translate-doc / wordcount where preserving paragraph
+    structure matters more than perfect formatting.
+
+    Returns the decoded text. Raises RuntimeError if soffice missing or
+    conversion fails.
+    """
+    soffice = find_soffice()
+    if not soffice:
+        raise RuntimeError(
+            "找不到 LibreOffice / OxOffice — Office / ODF 檔案需先轉成 TXT 才能翻譯。"
+        )
+    with tempfile.TemporaryDirectory() as td:
+        profile_path = Path(td) / "profile"
+        user_install = "file://" + str(profile_path.resolve())
+        soffice_args = [
+            f"-env:UserInstallation={user_install}",
+            "--safe-mode",
+            "--headless",
+            "--norestore",
+            "--nologo",
+            "--nolockcheck",
+            "--nodefault",
+            "--nofirststartwizard",
+            "--convert-to", "txt:Text (encoded):UTF8",
+            "--outdir", td,
+            str(src),
+        ]
+        import sys as _sys
+        import shlex as _shlex
+        if _sys.platform == "darwin":
+            quoted = " ".join(_shlex.quote(x) for x in [soffice] + soffice_args)
+            escaped = quoted.replace("\\", "\\\\").replace('"', '\\"')
+            cmd = ["osascript", "-e", f'do shell script "{escaped}"']
+        else:
+            cmd = [soffice] + soffice_args
+        with _soffice_lock:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                stdout, stderr = proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                try:
+                    proc.communicate(timeout=5)
+                except Exception:
+                    pass
+                raise RuntimeError(
+                    f"office 轉文字卡住（超過 {int(timeout)} 秒）。"
+                    "這份檔案可能已損壞或含有 LibreOffice/OxOffice 無法解析的內容。"
+                )
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    f"office 轉文字失敗：{stderr.decode('utf-8', 'replace') or stdout.decode('utf-8', 'replace')}"
+                )
+        produced = Path(td) / (src.stem + ".txt")
+        if not produced.exists():
+            raise RuntimeError("轉檔成功但找不到輸出 .txt")
+        # soffice writes UTF-8 (BOM-stripped); be tolerant of encoding hiccups.
+        try:
+            return produced.read_text(encoding="utf-8-sig")
+        except UnicodeDecodeError:
+            return produced.read_bytes().decode("utf-8", errors="replace")

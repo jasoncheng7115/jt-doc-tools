@@ -59,8 +59,74 @@ def _split_sentences(text: str) -> list[str]:
     return out
 
 
+_LIST_MARKER_RE = re.compile(
+    r"^("
+    r"[IVXLCM]+\.?"          # Roman numerals: I, II, III, IV.
+    r"|[ivxlcm]+\.?"         # lower-case roman: i, ii.
+    r"|\d+[.)]?"             # 1, 1., 1)
+    r"|[A-Za-z][.)]"         # A., a), b)
+    r"|[•◦▪■◆●○\-*]"         # bullet glyphs
+    r")$"
+)
+
+
+def _merge_list_markers(paras: list[str]) -> list[str]:
+    """Merge bare "list marker" paragraphs (e.g. "I.", "1)", "•") into the
+    next paragraph. Common case: original document put the marker on its
+    own line — we'd otherwise translate them in isolation, losing context
+    and giving the LLM nothing to translate from.
+    """
+    merged: list[str] = []
+    pending: str | None = None
+    for p in paras:
+        s = p.strip()
+        if not s:
+            continue
+        if pending is not None:
+            merged.append(f"{pending} {s}")
+            pending = None
+            continue
+        if len(s) <= 6 and _LIST_MARKER_RE.match(s):
+            pending = s
+            continue
+        merged.append(s)
+    if pending is not None:
+        merged.append(pending)
+    return merged
+
+
+def _extract_text_from_odf(data: bytes, kind: str) -> str:
+    """Parse OpenDocument (ODT / ODS / ODP) `content.xml` directly.
+
+    ODF files are zips containing `content.xml`; the text we want lives in
+    `<text:p>` / `<text:h>` elements (declared in the urn:oasis text
+    namespace). We strip namespaces by hand instead of pulling in `lxml`.
+
+    We don't bother going through soffice — that would require the binary,
+    cost a subprocess + temp files per upload, and lose paragraph breaks
+    when round-tripping through PDF.
+    """
+    import zipfile
+    from xml.etree import ElementTree as ET
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            with zf.open("content.xml") as fp:
+                tree = ET.parse(fp)
+    except (zipfile.BadZipFile, KeyError) as e:
+        raise HTTPException(400, f"{kind.upper()} parse failed: {e}")
+    text_ns = "{urn:oasis:names:tc:opendocument:xmlns:text:1.0}"
+    raw_paras: list[str] = []
+    for el in tree.iter():
+        if el.tag in (text_ns + "p", text_ns + "h"):
+            # itertext walks all descendants — joins text-runs split by spans
+            txt = "".join(el.itertext()).strip()
+            if txt:
+                raw_paras.append(txt)
+    return "\n\n".join(_merge_list_markers(raw_paras))
+
+
 def _extract_text_from_file(filename: str, data: bytes) -> str:
-    """支援 PDF / DOCX / TXT。其他副檔名拋 400。"""
+    """支援 PDF / DOCX / ODT / ODS / ODP / TXT / MD。其他副檔名拋 400。"""
     name = (filename or "").lower()
     if name.endswith(".txt") or name.endswith(".md"):
         # Try utf-8 first, then fall back to common encodings.
@@ -77,23 +143,44 @@ def _extract_text_from_file(filename: str, data: bytes) -> str:
             raise HTTPException(500, "PyMuPDF not available")
         try:
             with fitz.open(stream=data, filetype="pdf") as doc:
-                pages = []
+                paras: list[str] = []
                 for page in doc:
-                    pages.append(page.get_text("text"))
-                return "\n\n".join(pages)
+                    text = page.get_text("text") or ""
+                    # PyMuPDF separates paragraphs with blank lines; split on
+                    # 2+ newlines to keep paragraph boundaries intact while
+                    # merging soft line wraps within a paragraph.
+                    for chunk in re.split(r"\n\s*\n+", text):
+                        chunk = chunk.replace("\n", " ").strip()
+                        if chunk:
+                            paras.append(chunk)
+                return "\n\n".join(_merge_list_markers(paras))
         except Exception as e:
             raise HTTPException(400, f"PDF parse failed: {e}")
-    if name.endswith(".docx"):
+    # Office / ODF：交給 soffice 匯出 UTF-8 文字（等同「打開→另存為純文字」），
+    # 段落結構跟使用者在 OxOffice/LibreOffice 看到的一致。比直接 parse XML
+    # 多 ~1-2 秒 subprocess，但結果穩定 — 列表編號、表格、註腳都正常。
+    office_exts = (".docx", ".doc", ".odt", ".ods", ".odp", ".rtf")
+    if name.endswith(office_exts):
+        from ...core import office_convert
+        import tempfile as _tf
+        suffix = "." + name.rsplit(".", 1)[-1]
+        with _tf.NamedTemporaryFile(suffix=suffix, delete=False) as tf:
+            tf.write(data)
+            src_path = Path(tf.name)
         try:
-            from docx import Document
-        except ImportError:
-            raise HTTPException(500, "python-docx not available")
-        try:
-            doc = Document(io.BytesIO(data))
-            paras = [p.text for p in doc.paragraphs if p.text.strip()]
-            return "\n\n".join(paras)
+            text = office_convert.convert_to_text(src_path)
         except Exception as e:
-            raise HTTPException(400, f"DOCX parse failed: {e}")
+            raise HTTPException(400, f"office 檔解析失敗：{e}")
+        finally:
+            try:
+                src_path.unlink()
+            except Exception:
+                pass
+        # soffice TXT 輸出本來就有清楚的段落分行；直接重排即可
+        paras = [ln.strip() for ln in re.split(r"\n\s*\n+", text) if ln.strip()]
+        # 把每段內的單一換行折回去（保留段落感）
+        paras = [re.sub(r"\s*\n\s*", " ", p) for p in paras]
+        return "\n\n".join(_merge_list_markers(paras))
     raise HTTPException(400, f"unsupported file type: {filename}")
 
 
@@ -159,6 +246,9 @@ def _build_prompt(src_text: str, source_lang: str, target_lang: str) -> str:
     )
 
 
+_FILLER_RE = re.compile(r"^[\s_\-=·.•◦▪■◇◆●○※—–…]+$")
+
+
 def _translate_one(client, model: str, src: str,
                    source_lang: str, target_lang: str) -> dict:
     """單句翻譯 worker（給並行 executor 用）。
@@ -166,6 +256,10 @@ def _translate_one(client, model: str, src: str,
     不 raise — caller 用 list 收集所有結果。"""
     if not src.strip():
         return {"src": src, "translated": "", "error": ""}
+    # 「填寫位」(form blank fields like ___________) 不送 LLM — 直接 echo
+    # 原樣，譯文欄維持空白（前端會顯示「（填寫位）」），保留原文版面對齊。
+    if _FILLER_RE.match(src):
+        return {"src": src, "translated": "", "error": "", "skipped": "filler"}
     prompt = _build_prompt(src, source_lang, target_lang)
     try:
         resp = client.text_query(
@@ -213,6 +307,7 @@ def _translate_sentences(
 async def index(request: Request):
     templates = request.app.state.templates
     s = llm_settings.get()
+    from ...core.office_convert import detect_engine
     return templates.TemplateResponse(
         "translate_doc.html",
         {
@@ -221,6 +316,7 @@ async def index(request: Request):
             "llm_model": llm_settings.get_model_for("translate-doc"),
             "llm_default_model": s.get("model", ""),
             "llm_url": s.get("base_url", ""),
+            "office_engine": detect_engine(),
         },
     )
 
