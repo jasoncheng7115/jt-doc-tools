@@ -63,42 +63,63 @@
                 window.showAlert('無法載入帳號資訊：' + e.message);
                 return;
               }
-              var src = {local:'本機', ldap:'LDAP', ad:'Active Directory', off:'單機模式（未啟用認證）'}[info.source] || esc(info.source||'');
-              var labelStyle = 'color:#374151;font-weight:600;white-space:nowrap;padding-top:2px';
-              var valueStyle = 'color:#111827';
-              var roleHtml;
+              var srcMap = {local:'本機', ldap:'LDAP', ad:'Active Directory', off:'單機模式'};
+              var srcLabel = srcMap[info.source] || esc(info.source||'');
+              // 顯示名稱可能跟 username 一樣，避免重複資訊
+              var displayName = info.display_name || info.username || '';
+              var initials = (displayName.replace(/\s+/g,'').slice(0,2) || '?').toUpperCase();
+              // 大頭像顏色依 source 配色
+              var avatarBg = {ldap:'#1e40af', ad:'#7c3aed', local:'#16a34a', off:'#64748b'}[info.source] || '#64748b';
+              // 角色 badges
+              var roleBadges;
               if (info.is_admin) {
-                roleHtml = '<span style="background:#dc2626;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600">管理員</span>';
+                roleBadges = '<span style="background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;padding:3px 10px;border-radius:12px;font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>管理員</span>';
               } else if (info.roles && info.roles.length) {
-                roleHtml = info.roles.map(function(r){
-                  return '<span style="background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:4px;font-size:12px;margin-right:4px;display:inline-block">'
+                roleBadges = info.roles.map(function(r){
+                  return '<span style="background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-size:11.5px;font-weight:600;margin-right:4px;display:inline-block">'
                     + esc(r.display_name) + '</span>';
                 }).join('');
               } else {
-                roleHtml = '<span style="color:#6b7280">（無）</span>';
+                roleBadges = '<span style="color:#94a3b8;font-size:12px">（無指派角色）</span>';
               }
+              // 可用工具區
               var toolsHtml;
               if (info.tools_all) {
-                toolsHtml = '<span style="color:#059669;font-weight:600">全部工具（管理員）</span>';
+                toolsHtml = '<div style="background:#f0fdf4;border:1px solid #86efac;color:#166534;padding:10px 12px;border-radius:8px;font-size:13px;display:flex;align-items:center;gap:8px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><b>全部工具</b><span style="color:#16a34a;font-size:11.5px">(管理員權限)</span></div>';
               } else if (info.tools && info.tools.length) {
-                toolsHtml = '<span style="color:#6b7280;font-size:12px">共 ' + info.tools.length + ' 個</span>'
-                  + '<ul style="margin:6px 0 0 0;padding-left:20px;max-height:240px;overflow:auto">'
+                toolsHtml = '<div style="font-size:12px;color:#475569;margin-bottom:6px">共 <b style="color:#1e40af">'
+                  + info.tools.length + '</b> 個工具可用</div>'
+                  + '<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:6px 8px;max-height:200px;overflow:auto">'
+                  + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:3px 8px">'
                   + info.tools.map(function(t){
-                      return '<li style="font-size:13px;padding:2px 0">' + esc(t.name)
-                        + ' <code style="color:#6b7280;font-size:11px">' + esc(t.id) + '</code></li>';
+                      return '<div style="font-size:12.5px;padding:3px 4px;color:#1e293b;display:flex;align-items:center;gap:5px"><span style="color:#10b981">·</span>' + esc(t.name) + '</div>';
                     }).join('')
-                  + '</ul>';
+                  + '</div></div>';
               } else {
-                toolsHtml = '<span style="color:#dc2626;font-size:13px">您目前未被指派任何工具的使用權限，請聯絡管理員。</span>';
+                toolsHtml = '<div style="background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;padding:10px 12px;border-radius:8px;font-size:12.5px;line-height:1.6"><b>尚未取得任何工具權限</b><br>請聯絡管理員指派角色。</div>';
               }
-              var rows = '<div style="display:grid;grid-template-columns:max-content 1fr;column-gap:14px;row-gap:10px;align-items:start">'
-                + '<div style="' + labelStyle + '">帳號</div><div style="' + valueStyle + '">' + esc(info.username) + '</div>'
-                + '<div style="' + labelStyle + '">顯示名稱</div><div style="' + valueStyle + '">' + esc(info.display_name) + '</div>'
-                + '<div style="' + labelStyle + '">認證來源</div><div style="' + valueStyle + '">' + src + '</div>'
-                + '<div style="' + labelStyle + '">角色</div><div style="' + valueStyle + '">' + roleHtml + '</div>'
-                + '<div style="' + labelStyle + '">可用工具</div><div style="' + valueStyle + '">' + toolsHtml + '</div>'
+              // 完整 modal HTML
+              var html =
+                '<div style="display:flex;align-items:center;gap:14px;margin:-4px 0 18px">'
+                  + '<div style="background:' + avatarBg + ';color:#fff;width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;flex-shrink:0">'
+                    + esc(initials) + '</div>'
+                  + '<div style="min-width:0">'
+                    + '<div style="font-size:17px;font-weight:600;color:#0f172a;line-height:1.2">' + esc(displayName) + '</div>'
+                    + '<div style="font-size:12.5px;color:#64748b;margin-top:3px;font-family:ui-monospace,SFMono-Regular,monospace">'
+                      + esc(info.username) + '<span style="margin:0 5px;color:#cbd5e1">·</span>'
+                      + '<span style="background:#f1f5f9;color:#475569;padding:1px 7px;border-radius:8px;font-size:11px">' + srcLabel + '</span>'
+                    + '</div>'
+                  + '</div>'
+                + '</div>'
+                + '<div style="margin-bottom:14px">'
+                  + '<div style="font-size:11.5px;color:#64748b;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">角色</div>'
+                  + '<div>' + roleBadges + '</div>'
+                + '</div>'
+                + '<div>'
+                  + '<div style="font-size:11.5px;color:#64748b;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">可用工具</div>'
+                  + toolsHtml
                 + '</div>';
-              window.showAlert(rows, {title:'我的帳號', html:true, okText:'關閉'});
+              window.showAlert(html, {title:'我的帳號', html:true, okText:'關閉'});
             });
           })();
         </script>
