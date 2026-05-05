@@ -4,6 +4,36 @@
 
 ---
 
+## [1.4.70] - 2026-05-05
+
+### 修正
+
+- **首頁 hero 標題沒跟著站台名稱改變**：`web/router.py` 的 `index()` 把 `app_name=...` (boot-time cached 字串) 當 TemplateResponse context 傳入，會 override Jinja global 的動態值。改成不傳，讓 home.html 直接走 Jinja global → 動態 `branding.get_site_name()` 即時生效
+
+---
+
+## [1.4.69] - 2026-05-05
+
+### 修正
+
+- **`/admin/branding` 開頁 500 Internal Server Error**：v1.4.68 加站台名稱欄位時用了 `settings.app_name`，但 `app/admin/router.py` 沒 import `settings`。改用本地 helper `_br_default_app_name()` 從 `..config` 讀
+
+---
+
+## [1.4.68] - 2026-05-05
+
+### 新增
+
+- **企業 Logo / 識別頁加入「站台名稱」自訂**：可把預設的「Jason Tools 文件工具箱」改成自家品牌（例如「某某公司文件工具箱」）。新名稱即時套用到 sidebar 上方、瀏覽器分頁標題、首頁 hero、登入頁，不需重啟服務。儲存於 `data/branding/site_name.txt`，最長 60 字
+- 後端 `core/branding.py:get_site_name() / set_site_name()` + `POST /admin/branding/site-name` API
+- Jinja `app_name` global 改成 lazy 動態讀取（不再 boot-time cache）
+
+### 改善
+
+- **企業 Logo 上傳區改成漂亮的拖曳區**：之前只是裸 `<input type="file">`；改成圓 icon + 標題 + 說明的 dashed drop-zone，hover 浮起 + 配色，支援拖檔到區內
+
+---
+
 ## [1.4.67] - 2026-05-05
 
 ### 修正

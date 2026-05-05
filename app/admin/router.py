@@ -847,6 +847,10 @@ def build_router(templates) -> APIRouter:
         return {"deps": collect_sys_deps()}
 
     # ---- 企業 logo / 識別 -----------------------------------------------------
+    def _br_default_app_name() -> str:
+        from ..config import settings as _s
+        return _s.app_name
+
     @router.get("/branding", response_class=HTMLResponse)
     async def branding_page(request: Request):
         from ..core import branding
@@ -858,6 +862,9 @@ def build_router(templates) -> APIRouter:
                 "logo_url": branding.custom_logo_url(),
                 "max_mb": branding.MAX_LOGO_BYTES // 1024 // 1024,
                 "max_dim": branding.MAX_LOGO_DIMENSION,
+                "default_site_name": _br_default_app_name(),
+                "current_site_name": branding.get_site_name(default=_br_default_app_name()),
+                "has_custom_site_name": branding.has_custom_site_name(),
             },
         )
 
@@ -883,6 +890,23 @@ def build_router(templates) -> APIRouter:
         return {
             "has_custom": branding.has_custom_logo(),
             "logo_url": branding.custom_logo_url(),
+            "site_name": branding.get_site_name(default=_br_default_app_name()),
+            "has_custom_site_name": branding.has_custom_site_name(),
+        }
+
+    @router.post("/branding/site-name")
+    async def branding_site_name(request: Request):
+        from ..core import branding
+        body = await request.json()
+        name = str(body.get("name") or "").strip()
+        try:
+            branding.set_site_name(name)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {
+            "ok": True,
+            "site_name": branding.get_site_name(default=_br_default_app_name()),
+            "is_custom": branding.has_custom_site_name(),
         }
 
     # ---- 全站設定匯出 / 匯入 -------------------------------------------------

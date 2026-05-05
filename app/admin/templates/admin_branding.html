@@ -22,7 +22,14 @@
 
   <div style="flex:1 1 320px;">
     <h3 style="margin:0 0 8px 0;">上傳新 Logo</h3>
-    <input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" />
+    <label class="br-drop-zone" id="dropZone" for="logoFile">
+      <input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" hidden />
+      <span class="br-drop-icon">{{ icon('upload', size=22) }}</span>
+      <span class="br-drop-text">
+        <b>點此挑選</b>或拖曳檔案到此
+        <span class="br-drop-hint">PNG / JPG / WEBP，正方形最佳，最大 {{ max_dim }} px、{{ max_mb }} MB</span>
+      </span>
+    </label>
 
     <!-- 裁切 UI — 上傳非正方形圖片時自動出現 -->
     <div id="cropPanel" hidden style="margin-top:12px;">
@@ -66,6 +73,26 @@
       Sidebar 背景偏深色，建議使用透明背景或淺色 logo 才看得見。
     </p>
   </div>
+</div>
+
+<div class="panel">
+  <h3 style="margin:0 0 10px 0;">{{ icon('edit', size=18) }} 站台名稱</h3>
+  <p class="muted" style="margin:0 0 10px 0; font-size:13px;">
+    出現在左上 sidebar、瀏覽器分頁標題、首頁與登入頁。
+    留空可還原預設「<code>{{ default_site_name }}</code>」。
+  </p>
+  <div class="br-name-row">
+    <input type="text" id="siteName" maxlength="60"
+      value="{{ current_site_name if has_custom_site_name else '' }}"
+      placeholder="例如：某某公司文件工具箱" />
+    <button class="btn btn-primary" type="button" id="btnSaveName">{{ icon('save', size=14) }} 儲存</button>
+    <button class="btn" type="button" id="btnResetName" {% if not has_custom_site_name %}disabled{% endif %}>{{ icon('refresh', size=14) }} 還原預設</button>
+  </div>
+  <div class="br-name-default">
+    目前生效：<code id="curName">{{ current_site_name }}</code>
+    {% if has_custom_site_name %}<span style="color:#16a34a; margin-left:8px;">（自訂）</span>{% else %}<span style="color:#94a3b8; margin-left:8px;">（預設）</span>{% endif %}
+  </div>
+  <div id="nameStatus" style="margin-top:8px; font-size:12px;"></div>
 </div>
 
 <style>
@@ -119,6 +146,47 @@
   .logo-preview img {
     max-width: 100%; max-height: 200px; object-fit: contain;
   }
+  /* === 美化的上傳拖曳區 === */
+  .br-drop-zone {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px;
+    border: 2px dashed #cbd5e1;
+    border-radius: 10px;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    cursor: pointer;
+    transition: all 0.15s;
+    min-height: 64px; box-sizing: border-box;
+  }
+  .br-drop-zone:hover { border-color: #3b82f6; background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+    transform: translateY(-1px); box-shadow: 0 3px 10px rgba(59,130,246,0.15); }
+  .br-drop-zone.is-dragover { border-color: #16a34a; background: #dcfce7; border-style: solid; }
+  .br-drop-zone.has-file { border-color: #16a34a; background: #f0fdf4; border-style: solid; }
+  .br-drop-icon {
+    flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: #dbeafe; color: #1e40af; line-height: 0;
+  }
+  .br-drop-zone.has-file .br-drop-icon { background: #bbf7d0; color: #166534; }
+  .br-drop-icon .ic { stroke: currentColor; }
+  .br-drop-text { font-size: 13.5px; color: #1e293b; line-height: 1.5; flex:1; min-width:0; }
+  .br-drop-text b { color: #1e40af; }
+  .br-drop-zone.has-file .br-drop-text b { color: #16a34a; }
+  .br-drop-hint { display:block; font-size: 11.5px; color: #64748b; margin-top: 2px; }
+
+  /* 站台名稱 panel */
+  .br-name-row {
+    display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap;
+  }
+  .br-name-row input[type="text"] {
+    flex: 1 1 240px; padding: 8px 12px;
+    border: 1px solid #d1d5db; border-radius: 6px;
+    font-size: 14px; min-width: 0;
+  }
+  .br-name-row input[type="text"]:focus { outline: 2px solid #3b82f6;
+    outline-offset: -1px; border-color: transparent; }
+  .br-name-default { font-size: 12px; color: #94a3b8; margin-top: 6px; }
+  .br-name-default code { background: #f1f5f9; padding: 1px 6px; border-radius: 3px; font-size: 11.5px; }
 </style>
 {% endblock %}
 
@@ -129,6 +197,62 @@ const btnUpload = document.getElementById('btnUpload');
 const btnReset  = document.getElementById('btnReset');
 const status    = document.getElementById('statusLine');
 const previewImg = document.getElementById('logoImg');
+const dropZone = document.getElementById('dropZone');
+
+// ---- Drag-drop file zone (上傳區美化) ----
+['dragenter','dragover'].forEach(ev => dropZone.addEventListener(ev, e => {
+  e.preventDefault(); dropZone.classList.add('is-dragover');
+}));
+['dragleave','dragend','drop'].forEach(ev => dropZone.addEventListener(ev, e => {
+  e.preventDefault(); dropZone.classList.remove('is-dragover');
+}));
+dropZone.addEventListener('drop', (e) => {
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+    fileInput.files = e.dataTransfer.files;
+    fileInput.dispatchEvent(new Event('change'));
+  }
+});
+
+// ---- 站台名稱 ----
+(function(){
+  var nameInput = document.getElementById('siteName');
+  var btnSave = document.getElementById('btnSaveName');
+  var btnReset = document.getElementById('btnResetName');
+  var curName = document.getElementById('curName');
+  var statusEl = document.getElementById('nameStatus');
+  if (!nameInput) return;
+  function showS(msg, isErr){
+    statusEl.textContent = msg;
+    statusEl.style.color = isErr ? '#dc2626' : '#16a34a';
+  }
+  async function save(name){
+    btnSave.disabled = true; btnReset.disabled = true;
+    try {
+      var r = await fetch('/admin/branding/site-name', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({name: name}),
+      });
+      var j = await r.json().catch(function(){ return {}; });
+      if (!r.ok) { showS(j.detail || ('HTTP '+r.status), true); btnSave.disabled = false; return; }
+      curName.textContent = j.site_name;
+      btnReset.disabled = !j.is_custom;
+      showS('已儲存（重新整理頁面看 sidebar / 標題生效）', false);
+      // also update visible app_name spots on this page if any
+      try {
+        document.querySelectorAll('.brand-text').forEach(function(el){ el.textContent = j.site_name; });
+        document.title = j.site_name;
+      } catch(e) {}
+    } catch (e) { showS('網路錯誤：' + e.message, true); }
+    btnSave.disabled = false;
+  }
+  btnSave.addEventListener('click', function(){
+    save(nameInput.value);
+  });
+  btnReset.addEventListener('click', function(){
+    nameInput.value = '';
+    save('');
+  });
+})();
 const cropPanel = document.getElementById('cropPanel');
 const cropImg = document.getElementById('cropImg');
 const cropWrap = document.getElementById('cropWrap');

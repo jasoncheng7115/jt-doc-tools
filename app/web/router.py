@@ -55,7 +55,8 @@ def build_router(templates, tools, app_name: str, version: str) -> APIRouter:
                 "request": request,
                 "tools": tools_ctx,
                 "groups": groups,
-                "app_name": app_name,
+                # 不傳 app_name — Jinja global 已是動態 (branding.get_site_name())，
+                # 這裡傳會 override 成 boot-time cached 值，導致改完站台名稱後首頁不變
                 "version": version,
             },
         )
