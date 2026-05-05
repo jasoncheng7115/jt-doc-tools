@@ -1778,7 +1778,11 @@ $('gfGo').addEventListener('click', async () => {
     document.querySelectorAll('.pe-page img.bg').forEach((img, i) => {
       if (data.pages[i]) img.src = data.pages[i].preview_url;
     });
-    status.textContent = `完成！已重繪 ${data.replaced} 段文字。`;
+    // 換字型只改 src.pdf，下載用的 out.pdf 還是舊的 — 馬上觸發一次 savePdf
+    // 把目前 overlay 加新 src bake 進 out.pdf，使用者下載才拿得到新字型版。
+    status.textContent = `完成！已重繪 ${data.replaced} 段文字，正在更新下載檔…`;
+    try { await savePdf(true); } catch (_e) {}
+    status.textContent = `完成！已重繪 ${data.replaced} 段文字，下載檔已更新。`;
     setTimeout(() => { $('fontPicker').style.display = 'none'; }, 900);
     setStatus(`已把 ${data.replaced} 段文字換成新字型。`);
   } catch (e) {
