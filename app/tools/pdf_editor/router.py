@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
 import time
 import uuid
 from pathlib import Path
@@ -683,7 +684,10 @@ def _replace_all_fonts_sync(src, upload_id: str, font_id: str):
 async def replace_all_fonts(request: Request):
     """One-click: replace every existing text span in the PDF with the
     same text rendered in a chosen font. Destructive — overwrites the
-    editor session's pristine source with the new PDF."""
+    editor session's pristine source with the new PDF.
+
+    在覆寫前先把目前的 src 備份到 `pe_{id}_src_pre_repl.pdf`，這樣使用者
+    後悔可以呼叫 /undo-replace-all-fonts 還原。"""
     body = await request.json()
     upload_id = (body.get("upload_id") or "").strip()
     font_id = str(body.get("font_id") or "pymupdf:default")
@@ -692,11 +696,47 @@ async def replace_all_fonts(request: Request):
     src = _work_dir() / f"pe_{upload_id}_src.pdf"
     if not src.exists():
         raise HTTPException(404, "upload expired or missing")
+    # 備份目前 src（每次換字型只保最新一份，避免無限疊加）
+    backup = _work_dir() / f"pe_{upload_id}_src_pre_repl.pdf"
+    try:
+        shutil.copyfile(str(src), str(backup))
+    except Exception:
+        pass  # 備份失敗不擋換字型，但 undo 就會 404
     import asyncio as _asyncio
     replaced, pages_info = await _asyncio.to_thread(
         _replace_all_fonts_sync, src, upload_id, font_id
     )
-    return {"ok": True, "replaced": replaced, "pages": pages_info}
+    return {"ok": True, "replaced": replaced, "pages": pages_info,
+            "can_undo": backup.exists()}
+
+
+@router.post("/undo-replace-all-fonts")
+async def undo_replace_all_fonts(request: Request):
+    """還原最近一次「整份換字型」前的 src.pdf 並重新渲染預覽。"""
+    body = await request.json()
+    upload_id = (body.get("upload_id") or "").strip()
+    if not upload_id:
+        raise HTTPException(400, "upload_id required")
+    src = _work_dir() / f"pe_{upload_id}_src.pdf"
+    backup = _work_dir() / f"pe_{upload_id}_src_pre_repl.pdf"
+    if not backup.exists():
+        raise HTTPException(404, "no backup — already undone or never replaced")
+    # restore: backup → src（搬走避免重複按）
+    backup.replace(src)
+    # 重新渲染所有頁的預覽 PNG
+    pages_info = []
+    with fitz.open(str(src)) as d2:
+        for i in range(d2.page_count):
+            page = d2[i]
+            png = _work_dir() / f"pe_{upload_id}_p{i+1}.png"
+            pdf_preview.render_page_png(src, png, i, dpi=120)
+            pages_info.append({
+                "index": i,
+                "width_pt": page.rect.width,
+                "height_pt": page.rect.height,
+                "preview_url": f"/tools/pdf-editor/preview/{png.name}?t={int(time.time())}",
+            })
+    return {"ok": True, "pages": pages_info}
 
 
 @router.post("/upload-image")
