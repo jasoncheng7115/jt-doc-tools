@@ -92,3 +92,50 @@ def custom_logo_url() -> str:
     logo exists, else empty string (templates fall back to the bundled
     default in app/static/images/)."""
     return "/branding/logo" if has_custom_logo() else ""
+
+
+# ----- 站台名稱 customization (v1.4.68 起) -----
+# 客戶可改「Jason Tools 文件工具箱」→「<某某公司> 文件工具箱」之類自家品牌。
+# 改完之後出現在 sidebar 上方、瀏覽器頁籤 title、首頁 hero、login 頁。
+# Apache 2.0 license 允許 white-label，這只是內建讓不會改 source 的客戶也能改。
+_MAX_SITE_NAME_LEN = 60
+
+
+def _site_name_path() -> Path:
+    return settings.branding_dir / "site_name.txt"
+
+
+def get_site_name(default: str = "") -> str:
+    """Return custom site name if set, else `default` (typically settings.app_name).
+    讀檔每次 request，不快取 — 改完立即生效，不用 restart。檔案不存在或
+    空白回 default。"""
+    p = _site_name_path()
+    try:
+        if p.exists():
+            txt = p.read_text(encoding="utf-8").strip()
+            if txt:
+                return txt[:_MAX_SITE_NAME_LEN]
+    except Exception:
+        pass
+    return default
+
+
+def set_site_name(name: str) -> None:
+    """Save custom site name. Empty / whitespace → reset to default
+    (delete the file). Raises ValueError on too-long input."""
+    name = (name or "").strip()
+    if not name:
+        # Reset path
+        try:
+            _site_name_path().unlink(missing_ok=True)
+        except Exception:
+            pass
+        return
+    if len(name) > _MAX_SITE_NAME_LEN:
+        raise ValueError(f"站台名稱不得超過 {_MAX_SITE_NAME_LEN} 字元（目前 {len(name)} 字元）")
+    settings.branding_dir.mkdir(parents=True, exist_ok=True)
+    _site_name_path().write_text(name, encoding="utf-8")
+
+
+def has_custom_site_name() -> bool:
+    return _site_name_path().exists() and _site_name_path().stat().st_size > 0

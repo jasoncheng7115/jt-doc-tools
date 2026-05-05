@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.4.65"
+VERSION = "1.4.70"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -42,7 +42,18 @@ for t in tools:
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "web" / "templates"))
 templates.env.loader = ChoiceLoader(loaders)
-templates.env.globals["app_name"] = settings.app_name
+# app_name 改成可被 admin/branding 自訂（v1.4.68 起）— 用 lazy property
+# 包裝讓 Jinja 每次 render 都讀檔，admin 改完立即生效不用 restart
+class _DynamicAppName:
+    def __str__(self):
+        from .core import branding as _br
+        return _br.get_site_name(default=settings.app_name)
+    # Jinja 比較 / concat 都會 call __str__；Jinja 的 escape 對 str 子類也 OK
+    def __html__(self):
+        return str(self)
+
+
+templates.env.globals["app_name"] = _DynamicAppName()
 templates.env.globals["version"] = VERSION
 
 
