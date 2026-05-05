@@ -484,7 +484,7 @@ CATALOG: list[Pattern] = [
     # 其他
     Pattern("person_name","人名",         RE_PERSON,    _always,       _mask_name,
             False, value_group=1, group="其他", icon="user"),
-    Pattern("ip",        "IP 位址",       RE_IP,        _always,       _mask_ip,    False, group="其他", icon="globe"),
+    Pattern("ip",        "IP 位址",       RE_IP,        _always,       _mask_ip,    False, group="IT 資料", icon="globe"),
     Pattern("plate",     "車牌",          RE_PLATE,     _always,       _mask_plate, False, group="其他", icon="car"),
     # IT / DevOps — 預設關，使用者要貼 log/設定檔給 AI 時自己勾。一般商務文件
     # 容易誤抓 (例如「2026.04.30 公司決議」會被當成 UUID-like)
@@ -514,7 +514,7 @@ CATALOG: list[Pattern] = [
     Pattern("cred_label", "標籤式密碼 / 帳號 (password: xxx)", RE_CRED_LABEL, _always,
             lambda v: _mask_keep_edges(v, 1, 1), False, value_group=1,
             group="IT 資料", icon="lock"),
-    Pattern("cred_pair",  "帳號/密碼斜線對 (admin/pass)", RE_CRED_PAIR, _always,
+    Pattern("cred_pair",  "帳號/密碼斜線組合 (admin/pass)", RE_CRED_PAIR, _always,
             lambda v: _mask_keep_edges(v, 1, 1), False,
             group="IT 資料", icon="lock"),
 ]
