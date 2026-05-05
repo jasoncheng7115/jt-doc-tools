@@ -97,11 +97,33 @@
 .pe-sidebar .chip-row button + button { border-left: 0; }
 .pe-sidebar .chip-row button:hover:not(.on) { background: #f3f4f6; }
 .pe-sidebar .chip-row button.on { background: #2563eb; color: #fff; border-color: #2563eb; }
-.pe-top { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
-.pe-top .btn { padding: 6px 12px; font-size: 13px; }
-.pe-status { flex: 1; color: #6b7280; font-size: 12px; }
-.pe-zoom-ctl { display: flex; align-items: center; gap: 6px; }
+/* Toolbar — 寬度夠就一條，不夠就 chip 整塊一起換行。狀態列強制
+   flex-basis:100% 讓它一定獨佔下一列，不會把按鈕推來推去。*/
+.pe-top {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.pe-top .btn { padding: 6px 12px; font-size: 13px; white-space: nowrap; }
+.pe-top-divider {
+  width: 1px; height: 20px; background: #e5e7eb; margin: 0 4px;
+  flex: 0 0 auto;
+}
+.pe-status {
+  flex: 1 1 100%; color: #6b7280; font-size: 12px;
+  min-width: 0; padding: 2px 4px;
+}
+.pe-zoom-ctl {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px; border: 1px solid #e5e7eb; border-radius: 6px;
+  background: #f9fafb;
+}
 .pe-zoom-ctl input[type="range"] { width: 120px; }
+.pe-autosave {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 12px;
+  cursor: pointer; padding: 2px 8px; border: 1px solid #e5e7eb;
+  border-radius: 6px; background: #f9fafb; color: #475569;
+  white-space: nowrap;
+}
 /* Keyboard-key shortcut hint — wrapped in a light framed strip */
 .pe-shortcuts {
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px 4px;
@@ -213,7 +235,7 @@
   <div class="pe-top">
     <button class="btn btn-primary" type="button" id="btnSave">{{ icon('save') }} 儲存並預覽</button>
     <a class="btn" id="btnDownload" href="#" style="display:none;">{{ icon('download') }} 下載</a>
-    <span style="width:1px; height:20px; background:#e5e7eb; margin:0 4px;"></span>
+    <span class="pe-top-divider"></span>
     <button class="btn" type="button" id="btnUndo" title="復原 (Cmd/Ctrl+Z)" disabled>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h9a7 7 0 0 1 0 14h-2"/></svg>
       復原
@@ -222,22 +244,21 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9h-9a7 7 0 0 0 0 14h2"/></svg>
       重做
     </button>
-    <span style="width:1px; height:20px; background:#e5e7eb; margin:0 4px;"></span>
-    <label class="muted" style="display:inline-flex; align-items:center; gap:4px; font-size:12px; cursor:pointer;">
-      <input type="checkbox" id="peAutoSave" checked>
-      自動預覽（改動後 ~1 秒自動重算）
-    </label>
+    <span class="pe-top-divider"></span>
     <button class="btn" type="button" id="btnGlobalFont" data-tip="把整份 PDF 的文字換成同一個字型"
       style="padding: 4px 10px; display:inline-flex; align-items:center; gap:4px;">
       {{ icon('text', size=14) }} 整份換字型
     </button>
-    <span style="width:1px; height:20px; background:#e5e7eb; margin:0 4px;"></span>
     <button class="btn" type="button" id="btnPrefs" data-tip="編輯器設定"
       style="padding: 4px 8px; display:inline-flex; align-items:center; gap:4px; position:relative;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       設定
     </button>
-    <span style="width:1px; height:20px; background:#e5e7eb; margin:0 4px;"></span>
+    <span class="pe-top-divider"></span>
+    <label class="pe-autosave">
+      <input type="checkbox" id="peAutoSave" checked>
+      自動預覽（改動後 ~1 秒自動重算）
+    </label>
     <div class="pe-zoom-ctl">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px;"><circle cx="11" cy="11" r="7"/><path d="M16 16l5 5M8 11h6M11 8v6"/></svg>
       <input type="range" id="zoomSlider" min="50" max="200" value="100" step="10">
@@ -1784,13 +1805,62 @@ $('gfGo').addEventListener('click', async () => {
     try { await savePdf(true); } catch (_e) {}
     status.textContent = `完成！已重繪 ${data.replaced} 段文字，下載檔已更新。`;
     setTimeout(() => { $('fontPicker').style.display = 'none'; }, 900);
-    setStatus(`已把 ${data.replaced} 段文字換成新字型。`);
+    // 顯示「復原此次換字型」按鈕（只能還原最近一次 — 後端只保留一份備份）
+    if (data.can_undo) {
+      _showUndoReplaceFonts(data.replaced);
+    } else {
+      setStatus(`已把 ${data.replaced} 段文字換成新字型。`);
+    }
   } catch (e) {
     status.textContent = '錯誤：' + e.message;
   } finally {
     hideLoading();
   }
 });
+
+// 在 status 列旁掛一個「復原此次換字型」inline 按鈕。Fabric undo history
+// 不能逆轉這動作（它改的是 src.pdf 不是 overlay），需要走後端的 backup
+// restore。按一次後就拿掉（後端 backup 也搬走了，只能還原一次）。
+function _showUndoReplaceFonts(replaced) {
+  const status = $('peStatus');
+  status.innerHTML = `已把 ${replaced} 段文字換成新字型。`;
+  const undoBtn = document.createElement('button');
+  undoBtn.type = 'button';
+  undoBtn.className = 'btn';
+  undoBtn.style.cssText = 'margin-left:10px; padding:2px 10px; font-size:11.5px; ' +
+    'border-color:#fbbf24; color:#92400e; background:#fef3c7;';
+  undoBtn.innerHTML = '↶ 復原此次換字型';
+  undoBtn.addEventListener('click', async () => {
+    if (!(await showConfirm('要把 PDF 還原到「整份換字型」之前的狀態嗎？',
+          { title: '復原換字型', okText: '復原', kind: 'warning' }))) return;
+    undoBtn.disabled = true;
+    showLoading('復原中…');
+    try {
+      const r = await fetch('/tools/pdf-editor/undo-replace-all-fonts', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({upload_id: uploadId}),
+      });
+      if (!r.ok) {
+        showAlert('復原失敗：' + await r.text());
+        undoBtn.disabled = false;
+        return;
+      }
+      const data = await r.json();
+      document.querySelectorAll('.pe-page img.bg').forEach((img, i) => {
+        if (data.pages[i]) img.src = data.pages[i].preview_url + '?t=' + Date.now();
+      });
+      try { await savePdf(true); } catch (_e) {}
+      undoBtn.remove();
+      setStatus('已復原至換字型前的狀態。');
+    } catch (e) {
+      showAlert('復原錯誤：' + e.message);
+      undoBtn.disabled = false;
+    } finally {
+      hideLoading();
+    }
+  });
+  status.appendChild(undoBtn);
+}
 
 function showLoading(text) {
   $('peLoadingText').textContent = text || '重新渲染中…';
