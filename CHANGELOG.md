@@ -4,6 +4,25 @@
 
 ---
 
+## [1.4.67] - 2026-05-05
+
+### 修正
+
+- **README + THIRD-PARTY-NOTICES + packaging/README 還寫 NSSM**：v1.4.44 起改用 WinSW 但這 3 個文件沒同步，使用者誤以為服務還是用 NSSM。一併更新：
+  - README 安裝位置表：Windows 服務 `(NSSM)` → `(WinSW)`，macOS 從 LaunchDaemon 改成正確的 `.app + LaunchServices` 描述、data 路徑改回 `~/Library/...`（per-user 不是 system-wide）
+  - THIRD-PARTY-NOTICES 加入 WinSW 條目；NSSM 條目改為「已棄用，保留供舊安裝偵測用」
+  - packaging/README.md 更新成 WinSW 路徑
+
+---
+
+## [1.4.66] - 2026-05-05
+
+### 改善
+
+- **LDAP/AD 帳號的密碼說明文字精簡**：「密碼由 LDAP 目錄端管理，請聯絡 IT 修改。」→「密碼由 LDAP 目錄端管理。」— 後半句多餘
+
+---
+
 ## [1.4.65] - 2026-05-05
 
 ### 安全強化
