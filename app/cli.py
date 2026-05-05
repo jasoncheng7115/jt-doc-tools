@@ -611,6 +611,8 @@ def _ensure_system_deps_for_update() -> None:
     _ensure_tesseract()
     # OxOffice / LibreOffice X11 runtime libs — Linux only (自 v1.3.15 起)
     _ensure_oxoffice_x11_libs()
+    # Java JRE — OxOffice/LibreOffice 部分匯入需要 (自 v1.4.40 起，客戶 v1.4.39 踩到)
+    _ensure_java_runtime()
 
 
 def _ensure_tesseract() -> None:
@@ -692,9 +694,15 @@ def _ensure_oxoffice_x11_libs() -> None:
                 env=env,
             )
         elif shutil.which("dnf"):
-            dnf_pkgs = ["libXinerama", "libXrandr", "libXcursor", "libXi",
-                        "libXtst", "libSM", "libXext", "libXrender",
-                        "dbus-libs", "cups-libs"]
+            dnf_pkgs = [
+                "libXinerama", "libXrandr", "libXcursor", "libXi", "libXtst",
+                "libSM", "libXext", "libXrender",
+                "libX11-xcb", "libXcomposite", "libXdamage", "libXfixes",
+                "libxkbcommon",
+                "dbus-libs", "cups-libs",
+                "fontconfig", "freetype", "cairo",
+                "pango", "gdk-pixbuf2", "nss",
+            ]
             rc = subprocess.call(["dnf", "install", "-y"] + dnf_pkgs)
         else:
             print("  WARNING: no apt-get or dnf found; install X11 libs manually",
@@ -709,6 +717,47 @@ def _ensure_oxoffice_x11_libs() -> None:
     else:
         print("  WARNING: X11 libs install failed  "
               "(office-to-pdf may fail until installed manually)",
+              file=sys.stderr)
+
+
+def _ensure_java_runtime() -> None:
+    """OxOffice / LibreOffice 在處理含 macro 的舊 .doc / .xls 或部分 ODF 公式時
+    呼叫 javaldx 確認 JRE 路徑。沒裝 JRE 會 abort 並印
+    'javaldx: Could not find a Java Runtime Environment!'.
+    Linux only — macOS/Windows 通常已內建或會跟著 OxOffice 安裝套件帶上。"""
+    if not _is_linux():
+        return
+    if shutil.which("java"):
+        return
+    print("Installing Java runtime (default-jre-headless) for OxOffice ...")
+    rc = -1
+    try:
+        if shutil.which("apt-get"):
+            env = os.environ.copy()
+            env["DEBIAN_FRONTEND"] = "noninteractive"
+            rc = subprocess.call(
+                ["apt-get", "install", "-y", "default-jre-headless"],
+                env=env,
+            )
+        elif shutil.which("dnf"):
+            rc = subprocess.call(
+                ["dnf", "install", "-y", "java-21-openjdk-headless"])
+            if rc != 0:
+                rc = subprocess.call(
+                    ["dnf", "install", "-y", "java-17-openjdk-headless"])
+        else:
+            print("  WARNING: no apt-get or dnf found; install Java JRE manually",
+                  file=sys.stderr)
+            return
+    except Exception as e:
+        print(f"  WARNING: Java JRE install errored: {e}  "
+              "(office-to-pdf 部分 docx/xls 可能失敗)", file=sys.stderr)
+        return
+    if rc == 0:
+        print("  OK: Java JRE installed")
+    else:
+        print("  WARNING: Java JRE install failed  "
+              "(office-to-pdf 部分 docx/xls 可能失敗，請手動 sudo apt install default-jre-headless)",
               file=sys.stderr)
 
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -143,8 +144,14 @@ def _probe_python_pkg(import_name: str) -> dict:
         return {"installed": False, "version": "", "extra": str(e), "ok": False}
 
 
+# OxOffice / LibreOffice oosplash + cairo + GTK 啟動時 dlopen 的全套 lib。
+# 每加一個都是因為某客戶踩到「.so.X: cannot open shared object file」死掉。
+# 一次裝齊比客戶踩一個補一個好 — Debian / Ubuntu minimal / server 鏡像
+# 經常少裝這些（apt 預設 --no-install-recommends 又會省掉更多）。
+# 順序按「漏裝最常見」由上往下排。
 _OXOFFICE_X11_LIBS = [
     # (soname, apt-pkg)
+    # 核心 X11 client lib — oosplash 必呼叫
     ("libXinerama.so.1", "libxinerama1"),
     ("libXrandr.so.2", "libxrandr2"),
     ("libXcursor.so.1", "libxcursor1"),
@@ -153,8 +160,25 @@ _OXOFFICE_X11_LIBS = [
     ("libSM.so.6", "libsm6"),
     ("libXext.so.6", "libxext6"),
     ("libXrender.so.1", "libxrender1"),
+    # X11 extensions — OxOffice 11+ 新依賴（客戶 v1.4.39 踩到 libX11-xcb）
+    ("libX11-xcb.so.1", "libx11-xcb1"),
+    ("libXcomposite.so.1", "libxcomposite1"),
+    ("libXdamage.so.1", "libxdamage1"),
+    ("libXfixes.so.3", "libxfixes3"),
+    # Keyboard input — OxOffice 11 起改用 xkbcommon
+    ("libxkbcommon.so.0", "libxkbcommon0"),
+    # 系統服務（cups 列印對話、dbus IPC）
     ("libdbus-1.so.3", "libdbus-1-3"),
     ("libcups.so.2", "libcups2"),
+    # 字型/圖形（多半已在系統，但 minimal 鏡像有時也缺）
+    ("libfontconfig.so.1", "libfontconfig1"),
+    ("libfreetype.so.6", "libfreetype6"),
+    ("libcairo.so.2", "libcairo2"),
+    ("libpango-1.0.so.0", "libpango-1.0-0"),
+    ("libpangocairo-1.0.so.0", "libpangocairo-1.0-0"),
+    ("libgdk_pixbuf-2.0.so.0", "libgdk-pixbuf-2.0-0"),
+    # NSS — OxOffice 加密元件 / 數位簽章用
+    ("libnss3.so", "libnss3"),
 ]
 
 
@@ -200,6 +224,37 @@ def _probe_oxoffice_x11_libs() -> dict:
         "ok": True,
         "binary": "",
     }
+
+
+def _probe_java_runtime() -> dict:
+    """Detect a Java Runtime — needed by OxOffice/LibreOffice for some
+    legacy doc/odf operations. Tries `java -version` (writes to stderr)
+    and parses the version line."""
+    java_bin = shutil.which("java")
+    if not java_bin:
+        return {
+            "installed": False, "version": "", "extra": "找不到 java 執行檔",
+            "ok": False, "binary": "",
+        }
+    try:
+        proc = subprocess.run(
+            [java_bin, "-version"],
+            capture_output=True, text=True, timeout=5,
+        )
+        # `java -version` writes to STDERR, e.g. `openjdk version "17.0.10" ...`
+        out = (proc.stderr or proc.stdout or "").strip().splitlines()
+        first = out[0] if out else ""
+        m = re.search(r'version\s+"([^"]+)"', first)
+        ver = m.group(1) if m else first
+        return {
+            "installed": True, "version": ver, "extra": "",
+            "ok": True, "binary": java_bin,
+        }
+    except Exception as e:
+        return {
+            "installed": False, "version": "", "extra": f"java -version 失敗: {e}",
+            "ok": False, "binary": java_bin,
+        }
 
 
 def _probe_cjk_fonts() -> dict:
@@ -277,9 +332,23 @@ _DEPS = [
         "soft": False,
         "probe": _probe_oxoffice_x11_libs,
         "install_cmd": {
-            "linux": "sudo apt install libxinerama1 libxrandr2 libxcursor1 libxi6 libxtst6 libsm6 libxext6 libxrender1 libdbus-1-3 libcups2",
+            "linux": "sudo apt install libxinerama1 libxrandr2 libxcursor1 libxi6 libxtst6 libsm6 libxext6 libxrender1 libx11-xcb1 libxcomposite1 libxdamage1 libxfixes3 libxkbcommon0 libdbus-1-3 libcups2 libfontconfig1 libfreetype6 libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 libnss3",
             "macos": "n/a (macOS uses Aqua, not X11)",
             "windows": "n/a (Windows uses GDI, not X11)",
+        },
+    },
+    {
+        "key": "java-runtime",
+        "label": "Java Runtime (OxOffice / LibreOffice 部分匯入需要)",
+        "category": "文書轉檔",
+        "impact": "OxOffice / LibreOffice 在處理含 macro 的舊 .doc / .xls 或部分 ODF 公式時會呼叫 javaldx 確認 JRE 路徑；找不到 JRE 會直接 abort，office-to-pdf 報「javaldx: Could not find a Java Runtime Environment!」。Debian/Ubuntu minimal 沒預裝 Java。",
+        "impact_en": "OxOffice/LibreOffice calls javaldx for legacy .doc/.xls macros and some ODF formulas; missing JRE aborts conversion with 'javaldx: Could not find a Java Runtime Environment!'.",
+        "soft": False,
+        "probe": lambda: _probe_java_runtime(),
+        "install_cmd": {
+            "linux": "sudo apt install default-jre-headless",
+            "macos": "brew install temurin   (or system Java already present)",
+            "windows": "winget install EclipseAdoptium.Temurin.21.JRE",
         },
     },
     {
