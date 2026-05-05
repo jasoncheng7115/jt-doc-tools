@@ -396,6 +396,12 @@ def svc_update() -> int:
     # (歷史重寫) 時會 abort「Not possible to fast-forward」。reset --hard 強制
     # 對齊 origin/main 是 fresh-checkout 的標準作法 — 我們不在 install 內做開發
     # commit，所以無「本地未提交變更」需要保留。
+    # 先把目前 HEAD 的 SHA 記下來 — 萬一發現 origin/main 是降版，要靠 SHA 回復
+    # （tag 名 `v{cur}` 不一定存在，例如本地手動 reset 過、release 沒 tag 過 …）
+    pre_sha_proc = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"],
+        env=git_env, capture_output=True, text=True)
+    pre_sha = pre_sha_proc.stdout.strip() if pre_sha_proc.returncode == 0 else ""
     rc = subprocess.call(
         ["git", "-C", str(root), "reset", "--hard", "origin/main"], env=git_env)
     if rc != 0:
@@ -417,11 +423,20 @@ def svc_update() -> int:
             f"  Aborted upgrade and restored previous state.",
             file=sys.stderr,
         )
-        # Restore previous code by undoing the reset
-        subprocess.call(
-            ["git", "-C", str(root), "reset", "--hard", f"v{cur}"],
-            env=git_env,
-        )  # may fail if no tag; that's fine — server stays stopped, user fixes manually
+        # Restore previous code by SHA (tag `v{cur}` may not exist locally —
+        # e.g. when user has been bumping VERSION without git-tagging releases).
+        restored = False
+        if pre_sha:
+            restore_rc = subprocess.call(
+                ["git", "-C", str(root), "reset", "--hard", pre_sha],
+                env=git_env)
+            restored = (restore_rc == 0)
+        if not restored:
+            # SHA-based restore failed too (shouldn't happen — pre_sha was
+            # captured from THIS repo seconds ago). Last-ditch try the tag.
+            subprocess.call(
+                ["git", "-C", str(root), "reset", "--hard", f"v{cur}"],
+                env=git_env)
         _restore_ownership(root, owner)
         svc_start()
         return 1
