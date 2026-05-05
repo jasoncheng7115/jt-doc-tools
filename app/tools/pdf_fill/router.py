@@ -77,6 +77,7 @@ async def index(request: Request, cid: Optional[str] = None):
 
 @router.post("/preview")
 async def preview(
+    request: Request,
     file: UploadFile = File(...),
     font_id: str = Form("auto"),
     company_id: str = Form(""),
@@ -121,8 +122,30 @@ async def preview(
     raw_png = settings.temp_dir / f"{upload_id}_raw_p1.png"
     unmatched = pdf_form_detect.find_unmatched_candidates(src)
 
-    # History persistence disabled — files are ephemeral and cleaned up by
-    # the upload-sweep background task after TTL expires.
+    # 寫一筆 fill_history（admin 可在 /admin/history/fill 看到）。
+    # best-effort — 任何錯誤都不能擋 user request。
+    try:
+        from ...core import sessions as _sessions
+        actor = _sessions.user_label(getattr(request.state, "user", None))
+        history_manager.save(
+            original_path=src,
+            filled_path=filled,
+            preview_path=png,
+            original_filename=file.filename or "uploaded.pdf",
+            template_id=(report.applied_template or {}).get("id") if report.applied_template else None,
+            template_name=(report.applied_template or {}).get("name") if report.applied_template else None,
+            company_id=company_id or None,
+            username=actor or "",
+            report={
+                "detected": report.detected_count,
+                "filled": report.filled_count,
+                "checked": [{"key": k, "option": o} for k, o in report.checked_boxes],
+                "fingerprint": report.fingerprint,
+            },
+        )
+    except Exception:
+        import logging as _lg
+        _lg.getLogger(__name__).exception("fill history save failed")
 
     # Expose every placement on every page.
     page_placements = [
@@ -623,6 +646,10 @@ async def submit(
 
     result_filename = _result_filename(file.filename)
     profile = profile_manager.get(company_id or None)
+    # 抓 actor 起來給背景 job 用 — request.state.user 在 run() 跑時可能已釋放
+    from ...core import sessions as _sessions
+    actor = _sessions.user_label(getattr(request.state, "user", None))
+    orig_filename = file.filename or "uploaded.pdf"
 
     def run(job):
         job.message = "辨識欄位…"
@@ -632,6 +659,27 @@ async def submit(
         job.progress = 1.0
         job.result_path = dst
         job.result_filename = result_filename
+        # 寫一筆 history（在 src.unlink 之前）
+        try:
+            history_manager.save(
+                original_path=src,
+                filled_path=dst,
+                preview_path=None,
+                original_filename=orig_filename,
+                template_id=(report.applied_template or {}).get("id") if report.applied_template else None,
+                template_name=(report.applied_template or {}).get("name") if report.applied_template else None,
+                company_id=company_id or None,
+                username=actor or "",
+                report={
+                    "detected": report.detected_count,
+                    "filled": report.filled_count,
+                    "checked": [{"key": k, "option": o} for k, o in report.checked_boxes],
+                    "fingerprint": report.fingerprint,
+                },
+            )
+        except Exception:
+            import logging as _lg
+            _lg.getLogger(__name__).exception("fill history save failed (job path)")
         try:
             src.unlink()
         except OSError:
