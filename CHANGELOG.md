@@ -4,6 +4,59 @@
 
 ---
 
+## [1.4.48] - 2026-05-05
+
+### 改善
+
+- **`jtdt update` 結尾自動 self-bootstrap 系統依賴檢查**：之前修正 update flow 內的 helper（如 `_migrate_nssm_to_winsw`、新加的 `_ensure_*` probe）只有在「下次再跑 update」時才生效（CLAUDE.md `feedback_jtdt_update_self_bootstrap.md`）。現在每次升級結尾用 venv 的 fresh Python 子行程跑 `_ensure_system_deps_for_update`，新加的依賴/移轉邏輯立即吃到。Idempotent，已是 WinSW 的安裝直接 short-circuit
+- **Win11 完整端到端驗證**：v1.4.26 NSSM 安裝 → 移轉到 v1.4.47 WinSW → uninstall → 全新 install.ps1 → v1.4.47 WinSW 三條路徑都通過
+
+---
+
+## [1.4.47] - 2026-05-05
+
+### 修正
+
+- **install.ps1 `Write-WinswXml` 參數 `$Host` 撞到 PS 自動變數**：PowerShell 的 `$Host` 是 read-only built-in，當作參數會印「無法覆寫 Host 變數」。改名 `$BindHost`
+
+---
+
+## [1.4.46] - 2026-05-05
+
+### 修正
+
+- **NSSM→WinSW 移轉後 svc_start 印 1056 錯誤訊息**：移轉腳本本身已啟動服務，update flow 結尾再 `sc.exe start` 會收到 1056「服務已執行中」誤判失敗。Win 平台 svc_start 現在把 1056 視為成功
+- **移轉時 nssm.exe 因被 SCM 鎖住無法刪**：之前印 ugly 「[WinError 5] 存取被拒」。改為呼叫 `MoveFileEx(MOVEFILE_DELAY_UNTIL_REBOOT)` 排程下次重開機自動清掉，訊息溫和「nssm.exe still in use; queued for removal on next reboot」
+
+---
+
+## [1.4.45] - 2026-05-05
+
+### 修正
+
+- **NSSM→WinSW 移轉腳本呼叫 `_run_capture` 多傳了 `timeout` 參數**：v1.4.44 引入時誤以為 helper 接受 timeout，實際它只接 cmd list。Win11 測試機第二次 jtdt update 時遇到 `_run_capture() got an unexpected keyword argument 'timeout'` warning，移轉沒跑成功
+- 修法：移除三處 `timeout=5`；sc.exe 本來就秒回不會卡
+
+---
+
+## [1.4.44] - 2026-05-05
+
+### 重大變更
+
+- **Windows 服務 wrapper 從 NSSM 換成 WinSW**：
+  - 新安裝走 WinSW（v2.12.0、MIT、GitHub Release 託管、Jenkins 等大型專案在用）
+  - **舊客戶 `jtdt update` 自動移轉**：偵測到 NSSM-wrapped service 時自動讀取 registry 中的 JTDT_HOST / JTDT_PORT / JTDT_DATA_DIR、停止舊服務、解除安裝、改用 WinSW 重新註冊（service name `jt-doc-tools` 不變，所有 sc.exe / 監控整合繼續運作）
+  - 移除 NSSM 的理由：2014 後無更新、nssm.cc 不時 503/404 (issues #1, #3)、AV PUA 誤判頻繁
+  - WinSW 配置由 `bin/jtdt-svc.xml` 管理；`jtdt bind` 直接改 XML 後重啟服務
+- **install.ps1 加入 UTF-8 BOM**：Win11 PowerShell 5.1 預設用 CP950 解碼無 BOM 檔，含中文的腳本因此 parse 失敗（issues #1 / #3 真正根因）。加 BOM 後 `ParseFile` 通過 SYNTAX OK；客戶 v1.4.43 升級時就自動拉到正確版本
+
+### 內部
+- `app/cli.py:_migrate_nssm_to_winsw` — 完整 NSSM→WinSW 移轉邏輯，含 env var preserve / WinSW SHA256 驗證 / fallback 從 GitHub Release 下載
+- `app/cli.py:_write_winsw_xml` — XML 安全產生器（escape、UTF-8 寫入）
+- `app/cli.py:svc_bind` 在 Windows 上現在直接改 WinSW XML 重啟服務，不再印「請手動跑 nssm」
+
+---
+
 ## [1.4.43] - 2026-05-04
 
 ### 修正
