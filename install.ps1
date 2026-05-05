@@ -1,11 +1,14 @@
-# 不能用 'Stop' — 會把 native command 寫 stderr 當成 terminating error，
-# 整個 install.ps1 會在 nssm / uv / git 任何寫一行 stderr 時就死。
+﻿# 不能用 'Stop' — 會把 native command 寫 stderr 當成 terminating error，
+# 整個 install.ps1 會在 winsw / uv / git 任何寫一行 stderr 時就死。
 # 我們在 Cmdlet 失敗時用 try/catch 處理，native command 失敗用 $LASTEXITCODE 判斷。
 $ErrorActionPreference = 'Continue'
 $ProgressPreference    = 'SilentlyContinue'
 
-$RepoUrl     = 'https://github.com/jasoncheng7115/jt-doc-tools'
-$RepoBranch  = 'main'
+# Allow $env:JTDT_REPO_URL / $env:JTDT_REPO_BRANCH override — used for
+# pre-release testing against a local file:// mirror without polluting GitHub.
+# Customer installs run with no env vars set, so default to GitHub.
+$RepoUrl     = if ($env:JTDT_REPO_URL)    { $env:JTDT_REPO_URL }    else { 'https://github.com/jasoncheng7115/jt-doc-tools' }
+$RepoBranch  = if ($env:JTDT_REPO_BRANCH) { $env:JTDT_REPO_BRANCH } else { 'main' }
 $ServiceName = 'jt-doc-tools'
 
 function Log  ($m) { Write-Host "==> $m"  -ForegroundColor Cyan }
@@ -63,7 +66,9 @@ $InstallDir = Join-Path $ProgFiles 'jt-doc-tools'
 $DataDir    = Join-Path (Join-Path $ProgData 'jt-doc-tools') 'Data'
 $LogDir     = Join-Path (Join-Path $ProgData 'jt-doc-tools') 'Logs'
 $BinDir     = Join-Path $InstallDir 'bin'
-$NssmExe    = Join-Path $BinDir 'nssm.exe'
+$NssmExe    = Join-Path $BinDir 'nssm.exe'   # legacy, kept for migration detection
+$WinswExe   = Join-Path $BinDir 'jtdt-svc.exe'   # WinSW renamed (must match XML basename)
+$WinswXml   = Join-Path $BinDir 'jtdt-svc.xml'
 $UvExe      = Join-Path $BinDir 'uv.exe'
 $CliShim    = Join-Path $InstallDir 'jtdt.cmd'
 
@@ -174,82 +179,68 @@ function Install-Uv {
     Ok "uv installed at $UvExe"
 }
 
-# NSSM (Windows Service wrapper)
-# v1.4.2: 改用 bundled-first 策略 — nssm.exe 直接 commit 在 repo 裡
-# (packaging/windows/nssm.exe，BSD 授權允許 redistribute)。git clone 完就有，
-# 不需要網路下載；nssm.cc 503 / chocolatey 認證問題都不再 block 客戶安裝。
+# WinSW (Windows Service Wrapper) — v1.4.44 起取代 NSSM
 #
-# 安全保證：
-#   1. SHA256 寫死在這個 script 內 ($NssmBundledSha256)，與 bundled 檔對比；
-#      被改過 (例如惡意 PR fork) 就拒絕拷貝
-#   2. SHA256 = NSSM 2.24 win64 官方版 (https://nssm.cc/release/nssm-2.24.zip
-#      解壓後 win64\nssm.exe 的 hash)；任何人可獨立驗證
-#   3. 萬一 bundled 不見 (tarball mode 抽掉了) 或 hash 不符，退到網路下載
+# 為什麼換掉 NSSM？
+#   - NSSM 2.24 是 2014 年最後一版，10 年無更新
+#   - GitHub issues #1 / #3 反映 nssm.cc 不時 503 / 404
+#   - 部分企業 AV 把 NSSM 標 PUA
 #
-# 若公司 AV 擋掉 nssm.exe (heuristic flag for service-wrapper PUA)：
-#   - bundled copy 被 AV quarantine → fallback 網路下載
-#   - 網路也擋 → 印明確訊息請 IT 加白名單或手動下載
-$NssmBundledSha256 = 'f689ee9af94b00e9e3f0bb072b34caaf207f32dcb4f5782fc9ca351df9a06c97'
+# WinSW 優勢：
+#   - GitHub 託管下載（穩定）+ 活躍維護（v2.12 是 2024 年版本）
+#   - MIT 授權清楚
+#   - Jenkins 等大型專案使用，AV 信任度高
+#   - 配置由 XML 檔（更直觀）
+#
+# 安全保證跟 NSSM 一樣：
+#   1. SHA256 寫死在 $WinswBundledSha256，被改過拒絕使用
+#   2. 萬一 bundled 不見 / hash 不符 / AV 隔離，退到 GitHub Release 網路下載
+#
+# WinSW 命名規則：service exe 與 XML 設定檔須同名（去掉副檔名）。
+# 所以 winsw.exe 重命名為 jtdt-svc.exe，配 jtdt-svc.xml 一起放在 bin/。
+$WinswBundledSha256 = 'b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f'
+$WinswReleaseUrl = 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW.NET461.exe'
 
-function Install-Nssm {
-    if (Test-Path $NssmExe) { Ok "nssm already present"; return }
+function Install-Winsw {
+    if (Test-Path $WinswExe) { Ok "WinSW already present at $WinswExe"; return }
     New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
-    $bundled = Join-Path $InstallDir 'packaging\windows\nssm.exe'
+    $bundled = Join-Path $InstallDir 'packaging\windows\winsw.exe'
     if (Test-Path $bundled) {
-        # SHA256 校驗 — 防止 repo 被改包 / 中間人替換
         $actualHash = (Get-FileHash -Path $bundled -Algorithm SHA256).Hash.ToLower()
-        if ($actualHash -ne $NssmBundledSha256) {
-            Warn "Bundled nssm.exe SHA256 mismatch — expected $NssmBundledSha256 got $actualHash"
+        if ($actualHash -ne $WinswBundledSha256) {
+            Warn "Bundled winsw.exe SHA256 mismatch - expected $WinswBundledSha256 got $actualHash"
             Warn "Possibly tampered repo or AV quarantine; falling back to network download"
         } else {
-            Log "Using bundled nssm.exe ($([int]((Get-Item $bundled).Length / 1KB)) KB, SHA256 verified)"
-            Copy-Item -Path $bundled -Destination $NssmExe -Force
-            Ok "nssm installed at $NssmExe (bundled, signature verified)"
+            Log "Using bundled winsw.exe ($([int]((Get-Item $bundled).Length / 1KB)) KB, SHA256 verified)"
+            Copy-Item -Path $bundled -Destination $WinswExe -Force
+            Ok "WinSW installed at $WinswExe (bundled, signature verified)"
             return
         }
     }
-    # Bundled binary missing (tarball mode might have stripped it, or older
-    # repo) — fall back to network. 用 Invoke-WebRequest + -TimeoutSec 而非
-    # 老 Net.WebClient.DownloadFile (沒 timeout 會卡好幾分鐘才出錯)。
-    Warn "Bundled nssm.exe not found at $bundled — falling back to network download"
-    Log "Downloading NSSM (Windows Service wrapper) ..."
-    $tmp = Join-Path $env:TEMP "nssm.zip"
-    $urls = @(
-        'https://nssm.cc/release/nssm-2.24.zip',
-        'https://archive.org/download/nssm-2.24/nssm-2.24.zip',
-        'https://web.archive.org/web/2024/https://nssm.cc/release/nssm-2.24.zip'
-    )
-    $ok = $false
-    foreach ($url in $urls) {
-        Log "  Trying $url"
-        for ($i = 0; $i -lt 3; $i++) {
-            try {
-                Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -TimeoutSec 20 -ErrorAction Stop
-                if ((Get-Item $tmp).Length -gt 100000) { $ok = $true; break }
-            } catch {
-                Warn "    Attempt $($i+1) failed: $($_.Exception.Message.Split([Environment]::NewLine)[0])"
-                Start-Sleep -Seconds 3
+    Warn "Bundled winsw.exe not found at $bundled - falling back to GitHub Release"
+    Log "Downloading WinSW (Windows Service wrapper) from $WinswReleaseUrl ..."
+    for ($i = 0; $i -lt 3; $i++) {
+        try {
+            Invoke-WebRequest -Uri $WinswReleaseUrl -OutFile $WinswExe `
+                -UseBasicParsing -TimeoutSec 20 -ErrorAction Stop
+            $actualHash = (Get-FileHash -Path $WinswExe -Algorithm SHA256).Hash.ToLower()
+            if ($actualHash -ne $WinswBundledSha256) {
+                Remove-Item $WinswExe -Force -ErrorAction SilentlyContinue
+                throw "Downloaded winsw.exe SHA256 mismatch (expected $WinswBundledSha256, got $actualHash)"
             }
+            Ok "WinSW downloaded and SHA256 verified"
+            return
+        } catch {
+            Warn "  Attempt $($i+1) failed: $($_.Exception.Message.Split([Environment]::NewLine)[0])"
+            Start-Sleep -Seconds 3
         }
-        if ($ok) { Ok "  Download succeeded"; break }
     }
-    if (-not $ok) {
-        # 不要用 here-string @"..."@ — 含中文時某些 PS 版本 / 編碼會誤判 "@
-        # 不是字串結尾，整支 script 後面所有 } 都被當成字串內容導致
-        # 「陳述式區塊或類型定義中缺少 '}'」(GitHub issues #1, #3)。
-        # 改用普通雙引號 + `n 換行，最相容。
-        $msg = "NSSM download failed (all mirrors unreachable + bundled copy missing).`n" +
-               "Please install manually:`n" +
-               "  1. Download from https://nssm.cc/release/nssm-2.24.zip`n" +
-               "  2. Extract and copy nssm-2.24\win64\nssm.exe to $NssmExe`n" +
-               "  3. Re-run this installer."
-        Die $msg
-    }
-    $extractDir = Join-Path $env:TEMP "nssm-extract"
-    if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
-    Expand-Archive -Path $tmp -DestinationPath $extractDir -Force
-    Copy-Item -Path (Join-Path $extractDir 'nssm-2.24\win64\nssm.exe') -Destination $NssmExe -Force
-    Remove-Item $tmp, $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+    $msg = "WinSW download failed (GitHub unreachable + bundled copy missing).`n" +
+           "Please install manually:`n" +
+           "  1. Download from $WinswReleaseUrl`n" +
+           "  2. Save as $WinswExe`n" +
+           "  3. Re-run this installer."
+    Die $msg
     Ok "nssm installed at $NssmExe (from network)"
 }
 
@@ -304,8 +295,8 @@ function Fetch-Code {
         } finally { Pop-Location }
         return
     }
-    # InstallDir may already exist because Install-Uv / Install-Nssm just put
-    # bin/ in there. We keep bin/ (uv + nssm) and wipe everything else, then
+    # InstallDir may already exist because Install-Uv / Install-Winsw just put
+    # bin/ in there. We keep bin/ (uv + winsw + legacy nssm) and wipe everything else, then
     # clone into a temp dir and copy contents in. We can't clone directly
     # into $InstallDir because git refuses non-empty destinations.
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
@@ -320,7 +311,7 @@ function Fetch-Code {
         Stop-Service jt-doc-tools -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
     }
-    Warn "$InstallDir is not a git repo; cleaning non-bin files (keeping bin/uv.exe and bin/nssm.exe) ..."
+    Warn "$InstallDir is not a git repo; cleaning non-bin files (keeping bin/uv.exe, bin/jtdt-svc.exe, and bin/nssm.exe if present) ..."
     Get-ChildItem $InstallDir -Force |
         Where-Object { $_.Name -ne 'bin' } |
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -411,27 +402,91 @@ function Prepare-Data {
     }
 }
 
+function Write-WinswXml {
+    # NB: parameter name MUST NOT be $Host — that's a PowerShell automatic
+    # variable (read-only) and reassigning it triggers VariableNotWritable.
+    param(
+        [string]$BindHost = '127.0.0.1',
+        [int]$Port = 8765
+    )
+    $py = Join-Path $InstallDir '.venv\Scripts\python.exe'
+    # XML 安全：所有路徑用變數插值；不含使用者輸入。Description / id 不允許特殊字元
+    $xml = @'
+<service>
+  <id>{0}</id>
+  <name>Jason Tools Document Toolbox</name>
+  <description>Jason Tools Document Toolbox - PDF / Office processing</description>
+  <executable>{1}</executable>
+  <arguments>-m app.main</arguments>
+  <workingdirectory>{2}</workingdirectory>
+  <log mode="roll-by-size">
+    <sizeThreshold>5120</sizeThreshold>
+    <keepFiles>5</keepFiles>
+  </log>
+  <logpath>{3}</logpath>
+  <env name="JTDT_DATA_DIR" value="{4}"/>
+  <env name="JTDT_HOST" value="{5}"/>
+  <env name="JTDT_PORT" value="{6}"/>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="20 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <startmode>Automatic</startmode>
+</service>
+'@ -f $ServiceName, $py, $InstallDir, $LogDir, $DataDir, $BindHost, $Port
+    Set-Content -Path $WinswXml -Value $xml -Encoding UTF8
+}
+
 # Service
 function Install-Service {
-    Log "Installing Windows Service (via NSSM) ..."
-    # Remove old service if exists
+    Log "Installing Windows Service (via WinSW) ..."
+    # Detect & remove pre-existing service. Could be:
+    #   (a) old NSSM-wrapped install — use nssm.exe to remove
+    #   (b) old WinSW install — use winsw uninstall (sc.exe delete works too)
+    #   (c) sc.exe-only install (legacy) — sc.exe delete
+    # All three respond to `sc.exe stop` for stop, and `sc.exe delete` cleans up
+    # the SCM record. NSSM-specific cleanup also drops registry params.
     $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
     if ($existing) {
-        & $NssmExe stop $ServiceName confirm | Out-Null
-        & $NssmExe remove $ServiceName confirm | Out-Null
+        Log "  Existing service detected, stopping & removing ..."
+        & sc.exe stop $ServiceName 2>&1 | Out-Null
+        Start-Sleep -Seconds 2
+        if (Test-Path $NssmExe) {
+            # Old NSSM install — use proper remove (cleans up registry env vars)
+            Log "  Removing old NSSM-wrapped service ..."
+            & $NssmExe remove $ServiceName confirm 2>&1 | Out-Null
+        } else {
+            & sc.exe delete $ServiceName 2>&1 | Out-Null
+        }
+        Start-Sleep -Seconds 1
     }
-    $py = Join-Path $InstallDir '.venv\Scripts\python.exe'
-    & $NssmExe install $ServiceName $py "-m" "app.main" | Out-Null
-    & $NssmExe set $ServiceName AppDirectory $InstallDir | Out-Null
-    & $NssmExe set $ServiceName AppEnvironmentExtra "JTDT_DATA_DIR=$DataDir" "JTDT_HOST=127.0.0.1" "JTDT_PORT=8765" | Out-Null
-    & $NssmExe set $ServiceName AppStdout (Join-Path $LogDir 'jt-doc-tools.log') | Out-Null
-    & $NssmExe set $ServiceName AppStderr (Join-Path $LogDir 'jt-doc-tools.err') | Out-Null
-    & $NssmExe set $ServiceName AppRotateFiles 1 | Out-Null
-    & $NssmExe set $ServiceName AppRotateBytes 5242880 | Out-Null
-    & $NssmExe set $ServiceName Start SERVICE_AUTO_START | Out-Null
-    & $NssmExe set $ServiceName Description "Jason Tools Document Toolbox - PDF / Office processing" | Out-Null
-    & $NssmExe start $ServiceName | Out-Null
-    Ok "Windows Service '$ServiceName' installed and started, autostart enabled"
+    # Old NSSM binary cleanup — keep nssm.exe ONLY if user might still need it
+    # for diagnosis; we'll remove it after WinSW is verified working.
+    if (Test-Path $NssmExe) {
+        Log "  Old nssm.exe present at $NssmExe - will remove after WinSW verified"
+    }
+    Write-WinswXml -BindHost '127.0.0.1' -Port 8765
+    Log "  Generated WinSW XML config: $WinswXml"
+    & $WinswExe install 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Die "WinSW install failed (exit $LASTEXITCODE). Check $LogDir for details."
+    }
+    & $WinswExe start 2>&1 | Out-Null
+    Start-Sleep -Seconds 2
+    $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+    if (-not $svc -or $svc.Status -ne 'Running') {
+        Die "WinSW start failed - service not in Running state. Check $LogDir\$ServiceName.wrapper.log."
+    }
+    # Now safe to remove old nssm.exe
+    if (Test-Path $NssmExe) {
+        try {
+            Remove-Item $NssmExe -Force -ErrorAction Stop
+            Log "  Cleaned up old nssm.exe"
+        } catch {
+            Warn "  Failed to remove $NssmExe (in use?): $($_.Exception.Message)"
+        }
+    }
+    Ok "Windows Service '$ServiceName' installed and started via WinSW, autostart enabled"
 }
 
 # jtdt CLI shim
@@ -481,10 +536,10 @@ Install-Tesseract
 Install-Git
 Install-Uv
 Fetch-Code
-# IMPORTANT: Install-Nssm 必須在 Fetch-Code 之後 — 我們把 nssm.exe bundle 在 repo
-# 內 (github/packaging/windows/nssm.exe)，所以 git clone 完才有 binary 可用。
-# 不再依賴 nssm.cc / web.archive.org / chocolatey 等網路下載 (常 503 / 404)。
-Install-Nssm
+# IMPORTANT: Install-Winsw 必須在 Fetch-Code 之後 — 我們把 winsw.exe bundle 在 repo
+# 內 (github/packaging/windows/winsw.exe)，所以 git clone 完才有 binary 可用。
+# 不再依賴 nssm.cc 之類不穩定的下載源；fallback 也走 GitHub Release。
+Install-Winsw
 Setup-Python
 Prepare-Data
 Install-Service

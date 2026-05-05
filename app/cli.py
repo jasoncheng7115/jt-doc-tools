@@ -172,7 +172,20 @@ def svc_start() -> int:
             cmd = ["sudo", "-u", user] + cmd
         return _run(cmd)
     if _is_windows():
-        return _run(["sc.exe", "start", SERVICE_NAME])
+        # sc.exe start returns 1056 when the service is already running.
+        # That's success from the user's POV (service is up). Don't alarm them.
+        rc, out = _run_capture(["sc.exe", "start", SERVICE_NAME])
+        if rc == 0:
+            return 0
+        # 1056 = ERROR_SERVICE_ALREADY_RUNNING
+        if "1056" in out or "1056" in str(rc):
+            return 0
+        # Verify by querying — maybe sc.exe error was transient
+        rc2, q = _run_capture(["sc.exe", "query", SERVICE_NAME])
+        if rc2 == 0 and "RUNNING" in q.upper():
+            return 0
+        sys.stderr.write(out)
+        return rc
     return 1
 
 
@@ -492,6 +505,24 @@ def svc_update() -> int:
     # 5b. Ensure system-level deps for new features (auto best-effort).
     _ensure_system_deps_for_update()
 
+    # 5c. Self-bootstrap: when upgrading, the NEW cli.py is on disk but
+    # THIS process still has OLD cli.py in memory. So any helper that's
+    # newer than what's running (esp. _migrate_nssm_to_winsw on Windows,
+    # but also new _ensure_* probes added in this release) wouldn't run.
+    # Spawn a child interpreter so it imports the fresh cli.py and re-runs
+    # the system-deps check. Idempotent.
+    if venv_py.exists():
+        print("Re-running system deps check with new code ...")
+        try:
+            subprocess.call(
+                [str(venv_py), "-c",
+                 "from app.cli import _ensure_system_deps_for_update; "
+                 "_ensure_system_deps_for_update()"],
+            )
+        except Exception as e:
+            print(f"  warning: post-upgrade re-check failed: {e}",
+                  file=sys.stderr)
+
     # 5. Restart
     print("Starting new version ...")
     rc = svc_start()
@@ -613,6 +644,12 @@ def _ensure_system_deps_for_update() -> None:
     _ensure_oxoffice_x11_libs()
     # Java JRE — OxOffice/LibreOffice 部分匯入需要 (自 v1.4.40 起，客戶 v1.4.39 踩到)
     _ensure_java_runtime()
+    # NSSM → WinSW 移轉 — Windows only (自 v1.4.44 起)
+    if _is_windows():
+        try:
+            _migrate_nssm_to_winsw()
+        except Exception as e:
+            print(f"  warning: NSSM→WinSW migration errored: {e}", file=sys.stderr)
 
 
 def _ensure_tesseract() -> None:
@@ -761,6 +798,318 @@ def _ensure_java_runtime() -> None:
               file=sys.stderr)
 
 
+# ===========================================================================
+# Windows Service wrapper management — WinSW from v1.4.44, NSSM before that
+# ===========================================================================
+#
+# Why WinSW now: NSSM 2.24 (2014) is unmaintained, nssm.cc serves intermittent
+# 503/404 (GitHub issues #1, #3), and various AVs flag it as PUA. WinSW (v2)
+# is MIT-licensed, GitHub-hosted, actively maintained, and used by Jenkins
+# etc. — better trust, better availability.
+#
+# Migration rule: customers upgrading from NSSM hit `_migrate_nssm_to_winsw`
+# during `jtdt update`; we capture their env vars (JTDT_HOST/PORT/DATA_DIR)
+# from the NSSM registry, remove the old service, and re-register via WinSW
+# preserving the same service name "jt-doc-tools" so external integrations
+# (sc.exe, monitoring, etc.) keep working.
+
+_WINSW_BUNDLED_SHA256 = (
+    "b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f"
+)
+_WINSW_RELEASE_URL = (
+    "https://github.com/winsw/winsw/releases/download/"
+    "v2.12.0/WinSW.NET461.exe"
+)
+
+
+def _winsw_exe_path() -> Path:
+    """`bin/jtdt-svc.exe` — WinSW renamed; basename must match the .xml."""
+    return _install_root() / "bin" / "jtdt-svc.exe"
+
+
+def _winsw_xml_path() -> Path:
+    return _install_root() / "bin" / "jtdt-svc.xml"
+
+
+def _nssm_exe_path() -> Path:
+    """Legacy NSSM wrapper path — used only for migration detection / cleanup."""
+    return _install_root() / "bin" / "nssm.exe"
+
+
+def _log_dir_windows() -> Path:
+    return Path(os.environ.get("ProgramData", r"C:\ProgramData")) / "jt-doc-tools" / "Logs"
+
+
+def _detect_service_wrapper() -> str:
+    """Return 'winsw', 'nssm', 'sc', or 'none' based on what's on disk
+    and registered as the SCM binary path. Windows-only."""
+    if not _is_windows():
+        return "none"
+    # If the service isn't registered, no wrapper.
+    rc, _ = _run_capture(["sc.exe", "query", SERVICE_NAME])
+    if rc != 0:
+        return "none"
+    # Read SCM binary path
+    rc, qc = _run_capture(["sc.exe", "qc", SERVICE_NAME])
+    if rc != 0:
+        return "unknown"
+    qc_lower = qc.lower()
+    if "jtdt-svc.exe" in qc_lower or "winsw" in qc_lower:
+        return "winsw"
+    if "nssm.exe" in qc_lower:
+        return "nssm"
+    return "sc"
+
+
+def _read_nssm_env_vars() -> dict[str, str]:
+    """Read NSSM AppEnvironmentExtra from the registry. Returns dict of
+    var_name → value. Empty dict if nothing found / not Windows."""
+    if not _is_windows():
+        return {}
+    try:
+        import winreg  # type: ignore
+    except ImportError:
+        return {}
+    out: dict[str, str] = {}
+    # NSSM stores env at HKLM\SYSTEM\CurrentControlSet\Services\<svc>\Parameters\AppEnvironmentExtra
+    key_path = rf"SYSTEM\CurrentControlSet\Services\{SERVICE_NAME}\Parameters"
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path) as k:
+            try:
+                # AppEnvironmentExtra is REG_MULTI_SZ ("KEY=VAL" lines)
+                val, _ = winreg.QueryValueEx(k, "AppEnvironmentExtra")
+                if isinstance(val, list):
+                    for line in val:
+                        if "=" in line:
+                            kk, _, vv = line.partition("=")
+                            out[kk.strip()] = vv.strip()
+            except FileNotFoundError:
+                pass
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        print(f"  warning: cannot read NSSM env from registry: {e}",
+              file=sys.stderr)
+    return out
+
+
+def _write_winsw_xml(host: str = "127.0.0.1", port: int = 8765,
+                     data_dir: Optional[Path] = None) -> None:
+    """Generate the WinSW service config. Caller is responsible for service
+    install/start. Path / values are XML-escaped via str.translate."""
+    if not _is_windows():
+        return
+    root = _install_root()
+    log_dir = _log_dir_windows()
+    py = root / ".venv" / "Scripts" / "python.exe"
+    data = data_dir if data_dir is not None else _data_dir()
+
+    def _xe(s: str) -> str:
+        # Minimal XML escape — paths shouldn't contain &/</>/quotes but be safe
+        return (s.replace("&", "&amp;")
+                 .replace("<", "&lt;")
+                 .replace(">", "&gt;")
+                 .replace('"', "&quot;"))
+
+    xml = f"""<service>
+  <id>{_xe(SERVICE_NAME)}</id>
+  <name>Jason Tools Document Toolbox</name>
+  <description>Jason Tools Document Toolbox - PDF / Office processing</description>
+  <executable>{_xe(str(py))}</executable>
+  <arguments>-m app.main</arguments>
+  <workingdirectory>{_xe(str(root))}</workingdirectory>
+  <log mode="roll-by-size">
+    <sizeThreshold>5120</sizeThreshold>
+    <keepFiles>5</keepFiles>
+  </log>
+  <logpath>{_xe(str(log_dir))}</logpath>
+  <env name="JTDT_DATA_DIR" value="{_xe(str(data))}"/>
+  <env name="JTDT_HOST" value="{_xe(host)}"/>
+  <env name="JTDT_PORT" value="{port}"/>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="20 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <startmode>Automatic</startmode>
+</service>
+"""
+    log_dir.mkdir(parents=True, exist_ok=True)
+    _winsw_xml_path().parent.mkdir(parents=True, exist_ok=True)
+    _winsw_xml_path().write_text(xml, encoding="utf-8")
+
+
+def _ensure_winsw_binary() -> bool:
+    """Make sure bin/jtdt-svc.exe exists and SHA256 matches.
+
+    Tries (in order): existing bin/jtdt-svc.exe (verify hash), bundled
+    packaging/windows/winsw.exe (copy + verify), GitHub release download.
+    Returns True on success, False if all paths failed."""
+    if not _is_windows():
+        return False
+    target = _winsw_exe_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    def _verify(p: Path) -> bool:
+        try:
+            import hashlib
+            h = hashlib.sha256(p.read_bytes()).hexdigest()
+            return h.lower() == _WINSW_BUNDLED_SHA256
+        except Exception:
+            return False
+
+    if target.exists() and _verify(target):
+        return True
+
+    bundled = _install_root() / "packaging" / "windows" / "winsw.exe"
+    if bundled.exists() and _verify(bundled):
+        try:
+            shutil.copy2(bundled, target)
+            return True
+        except Exception as e:
+            print(f"  warning: copy bundled winsw.exe failed: {e}",
+                  file=sys.stderr)
+
+    # Last resort: download from GitHub Release.
+    print(f"  Downloading WinSW from {_WINSW_RELEASE_URL} ...")
+    try:
+        import urllib.request
+        with urllib.request.urlopen(_WINSW_RELEASE_URL, timeout=30) as r:
+            data = r.read()
+        target.write_bytes(data)
+        if _verify(target):
+            return True
+        print("  ERROR: downloaded winsw.exe SHA256 mismatch", file=sys.stderr)
+        target.unlink(missing_ok=True)
+    except Exception as e:
+        print(f"  ERROR: WinSW download failed: {e}", file=sys.stderr)
+    return False
+
+
+def _migrate_nssm_to_winsw() -> bool:
+    """If the service is currently NSSM-wrapped, switch it to WinSW while
+    preserving env vars. Idempotent — safe to call when already on WinSW.
+    Returns True if migration ran successfully (or wasn't needed).
+
+    Steps:
+      1. Detect wrapper (nssm vs winsw vs none)
+      2. If nssm: capture env vars from registry
+      3. Stop service
+      4. nssm.exe remove (cleans registry)
+      5. Ensure jtdt-svc.exe binary exists + SHA-verified
+      6. Write XML with captured env vars
+      7. jtdt-svc.exe install + start
+      8. Verify Running, then remove legacy nssm.exe
+    """
+    if not _is_windows():
+        return True
+    wrapper = _detect_service_wrapper()
+    if wrapper == "winsw":
+        # Already migrated; refresh XML + restart so new fields take effect.
+        return True
+    if wrapper == "none":
+        # No service registered at all — fresh install, install.ps1 owns this.
+        return True
+    if wrapper not in ("nssm", "sc", "unknown"):
+        print(f"  warning: unknown service wrapper '{wrapper}', "
+              "skipping migration", file=sys.stderr)
+        return False
+
+    print(f"Migrating Windows Service wrapper: {wrapper} → WinSW ...")
+
+    # 1+2: capture env vars (best-effort — fall back to defaults if unreadable)
+    captured = _read_nssm_env_vars()
+    host = captured.get("JTDT_HOST") or "127.0.0.1"
+    port_str = captured.get("JTDT_PORT") or "8765"
+    try:
+        port = int(port_str)
+    except ValueError:
+        port = 8765
+    data_dir_str = captured.get("JTDT_DATA_DIR")
+    data_dir = Path(data_dir_str) if data_dir_str else None
+    print(f"  Preserving env: JTDT_HOST={host} JTDT_PORT={port} "
+          f"JTDT_DATA_DIR={data_dir or '(default)'}")
+
+    # 3: stop service
+    print("  Stopping current service ...")
+    subprocess.call(["sc.exe", "stop", SERVICE_NAME],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    import time as _t
+    _t.sleep(2)
+
+    # 4: remove via nssm if available, else via sc.exe
+    nssm = _nssm_exe_path()
+    if wrapper == "nssm" and nssm.exists():
+        print("  Removing NSSM-wrapped service ...")
+        rc = subprocess.call(
+            [str(nssm), "remove", SERVICE_NAME, "confirm"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if rc != 0:
+            # Fallback to sc.exe — NSSM remove can fail mid-AV-scan
+            subprocess.call(["sc.exe", "delete", SERVICE_NAME],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+    else:
+        subprocess.call(["sc.exe", "delete", SERVICE_NAME],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    _t.sleep(1)
+
+    # 5: ensure WinSW binary
+    if not _ensure_winsw_binary():
+        print("  ERROR: cannot place verified jtdt-svc.exe; aborting migration. "
+              "Run install.ps1 again or restore manually.", file=sys.stderr)
+        return False
+
+    # 6: write XML
+    _write_winsw_xml(host=host, port=port, data_dir=data_dir)
+    print(f"  Wrote {_winsw_xml_path()}")
+
+    # 7: install + start
+    winsw = _winsw_exe_path()
+    rc = subprocess.call([str(winsw), "install"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if rc != 0:
+        print(f"  ERROR: WinSW install failed (rc={rc})", file=sys.stderr)
+        return False
+    rc = subprocess.call([str(winsw), "start"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if rc != 0:
+        print(f"  WARNING: WinSW start returned rc={rc}; "
+              "service may need manual start", file=sys.stderr)
+    _t.sleep(2)
+
+    # 8: verify + clean up legacy nssm.exe
+    rc, out = _run_capture(["sc.exe", "query", SERVICE_NAME])
+    if rc != 0 or "RUNNING" not in out.upper():
+        print(f"  WARNING: service not in RUNNING state after migration. "
+              f"Check {_log_dir_windows()}\\{SERVICE_NAME}.wrapper.log",
+              file=sys.stderr)
+        # Don't remove nssm.exe — keep for fallback diagnosis
+        return False
+    if nssm.exists():
+        try:
+            nssm.unlink()
+            print("  Removed legacy nssm.exe")
+        except Exception:
+            # File may still be locked by SCM right after service uninstall.
+            # Queue for removal on next reboot via MoveFileEx; harmless to
+            # leave behind otherwise. Wraps Win32 API via ctypes.
+            try:
+                import ctypes
+                MOVEFILE_DELAY_UNTIL_REBOOT = 4
+                ok = ctypes.windll.kernel32.MoveFileExW(
+                    str(nssm), None, MOVEFILE_DELAY_UNTIL_REBOOT)
+                if ok:
+                    print("  nssm.exe still in use; queued for removal on next reboot")
+                else:
+                    print("  nssm.exe still present (in use); will be cleaned later",
+                          file=sys.stderr)
+            except Exception:
+                pass
+    print(f"  Migration complete. Service '{SERVICE_NAME}' running via WinSW.")
+    return True
+
+
 def svc_uninstall(purge: bool) -> int:
     if not _is_admin():
         print("Uninstall requires administrator privileges.", file=sys.stderr)
@@ -808,7 +1157,14 @@ def svc_uninstall(purge: bool) -> int:
                     pass
                 legacy.unlink(missing_ok=True)
     elif _is_windows():
-        _run(["sc.exe", "delete", SERVICE_NAME])
+        # WinSW knows how to clean its own SCM entry + log files; fall back
+        # to sc.exe delete if the binary's missing (manual install / partial state).
+        winsw = _winsw_exe_path()
+        if winsw.exists():
+            _run([str(winsw), "stop"])
+            _run([str(winsw), "uninstall"])
+        else:
+            _run(["sc.exe", "delete", SERVICE_NAME])
 
     root = _install_root()
 
@@ -985,12 +1341,47 @@ def svc_bind(addr: str) -> int:
         return 0
 
     if _is_windows():
-        print("Use NSSM on Windows:", file=sys.stderr)
+        # v1.4.44+: re-write the WinSW XML and restart. Fall back to manual
+        # instructions if the XML/binary aren't where we expect.
+        xml_path = _winsw_xml_path()
+        winsw = _winsw_exe_path()
+        if xml_path.exists() and winsw.exists():
+            try:
+                # Read existing host/port from the XML so we only patch what changed
+                txt = xml_path.read_text(encoding="utf-8")
+                cur_host = "127.0.0.1"
+                cur_port = 8765
+                m = re.search(r'name="JTDT_HOST"\s+value="([^"]+)"', txt)
+                if m:
+                    cur_host = m.group(1)
+                m = re.search(r'name="JTDT_PORT"\s+value="([^"]+)"', txt)
+                if m:
+                    try:
+                        cur_port = int(m.group(1))
+                    except ValueError:
+                        pass
+                final_host = new_host if new_host is not None else cur_host
+                final_port = new_port if new_port is not None else cur_port
+                _write_winsw_xml(host=final_host, port=final_port)
+                print(f"  Updated {xml_path}: JTDT_HOST={final_host} JTDT_PORT={final_port}")
+                print("Restarting service ...")
+                subprocess.call(["sc.exe", "stop", SERVICE_NAME],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                import time as _t
+                _t.sleep(2)
+                subprocess.call(["sc.exe", "start", SERVICE_NAME],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return 0
+            except Exception as e:
+                print(f"  WinSW XML update failed: {e}; manual instructions follow:",
+                      file=sys.stderr)
+        print("Edit WinSW XML on Windows (run as Administrator):", file=sys.stderr)
+        print(f"  notepad {xml_path}")
         if new_host is not None:
-            print(f"  nssm set jt-doc-tools AppEnvironmentExtra JTDT_HOST={new_host}")
+            print(f'    change <env name="JTDT_HOST" value="..."/> to "{new_host}"')
         if new_port is not None:
-            print(f"  nssm set jt-doc-tools AppEnvironmentExtra JTDT_PORT={new_port}")
-        print("  nssm restart jt-doc-tools")
+            print(f'    change <env name="JTDT_PORT" value="..."/> to "{new_port}"')
+        print(f"  sc.exe stop {SERVICE_NAME}; sc.exe start {SERVICE_NAME}")
         return 1
     return 1
 
