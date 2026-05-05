@@ -4,6 +4,41 @@
 
 ---
 
+## [1.4.33] - 2026-05-04
+
+### 修正
+
+- **逐句翻譯所有結果都顯示「no result」**（v1.4.32 引入）：
+  - 根因：v1.4.32 把前端從 `/translate-batch` 切換到 `/translate-one` per-sentence 並行池，但用了錯誤的 response shape — `/translate-batch` 回 `{results: [...]}`，`/translate-one` 直接回 `{src, translated, error}` 單個 dict。前端 `j.results[0]` 永遠 undefined → 顯示 fallback 字串「no result」
+  - 修法：前端解 `{translated, error}` 直接欄位
+
+---
+
+## [1.4.32] - 2026-05-04
+
+### 新增
+
+- **逐句翻譯加進度條**：改用前端 4-worker 並行池呼叫 `/translate-one`，每完成一句立刻刷新該列譯文，頂端有進度條 + 「N/總數 句、已花 X 秒、預估剩 Y 秒」即時更新。長文不再一片黃 shimmer 直到結束才出結果
+- **逐句翻譯表格加「編號」欄**：左側 44px 欄顯示句序 (1, 2, 3 …)，方便溝通「第幾句翻錯」；hover 時編號變紫加深
+- **逐句翻譯 prompt 加台灣 IT 術語對照**：translate-doc 後端在目標為繁中時，prompt 額外塞入 ~40 條對照（kernel→核心、software→軟體、network→網路 …），避免 LLM 自動套用大陸用語
+
+### 修正
+
+- **逐句翻譯來源面板版面緊湊**：「或上傳檔案」拖曳區改成 36px 單行高度，跟左側兩個下拉同高，不再下拉下方一大片留白
+- **逐句翻譯結果表頭語言名稱雙層括號**：原本顯示「原文 (English (英文))」，因前端 `LANG_NAMES` 已含 `(English)` 又被 header 包了一層 `（…）`。改成純中文鍵值「英文 / 日文 / 法文 …」消除雙括號
+
+---
+
+## [1.4.31] - 2026-05-04
+
+### 修正
+
+- **登入頁 Safari 認證領域下拉框高度與帳號 / 密碼欄位不一致**：
+  - 根因：Safari 對原生 `<select>` 套自家 chrome，使 padding 計算結果矮於 `<input>`
+  - 修法：`appearance:none` 抹掉系統樣式 + 自繪 SVG 下拉箭頭 + 跟 input 共用同一條 padding/border/line-height 規則 → 三個欄位高度完全一致
+
+---
+
 ## [1.4.30] - 2026-05-04
 
 ### 修正

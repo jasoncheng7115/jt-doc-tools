@@ -56,15 +56,15 @@
       <label class="trd-drop-zone" id="dropZone" for="fileInput">
         <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.md" hidden />
         <div class="trd-drop-icon">
-          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
         </div>
         <div class="trd-drop-text">
-          <b>點此挑選</b>，或拖曳檔案到此
-          <div class="trd-drop-hint">支援 PDF / DOCX / TXT / Markdown</div>
+          <b>點此挑選</b>或拖曳檔案到此
+          <span class="trd-drop-hint">PDF / DOCX / TXT / MD</span>
         </div>
       </label>
     </div>
@@ -85,6 +85,10 @@
     <button class="btn btn-small" type="button" id="btnCopyTgt">{{ icon('paperclip', size=12) }} 複製譯文</button>
     <button class="btn btn-small" type="button" id="btnCopySxs">{{ icon('paperclip', size=12) }} 複製對照</button>
   </div>
+  <div class="trd-progress-wrap" id="trdProgressWrap" hidden>
+    <div class="trd-progress-bar" id="trdProgressBar"></div>
+  </div>
+  <div class="trd-progress-meta" id="trdProgressMeta" hidden></div>
   <div class="trd-grid" id="trdGrid"></div>
   <div style="margin-top:10px; font-size:11.5px; color:#94a3b8;">
     每一列對應一句。點 <b>↻</b> 可重新請 LLM 翻譯該句。空白列代表原文是空行。
@@ -105,30 +109,49 @@
   @media (max-width: 720px) {
     .trd-form-grid { grid-template-columns: 1fr; }
   }
-  /* drag-drop file zone */
+  /* drag-drop file zone — 緊湊單行高度與 select 一致 */
   .trd-drop-zone {
-    display: flex; align-items: center; gap: 12px;
-    padding: 12px 14px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px;
     border: 1.5px dashed #cbd5e1;
-    border-radius: 8px;
+    border-radius: 6px;
     background: #f8fafc;
     cursor: pointer;
-    transition: border-color 0.15s, background 0.15s, transform 0.05s;
-    min-height: 56px;
+    transition: border-color 0.15s, background 0.15s;
+    height: 36px;
     box-sizing: border-box;
+    overflow: hidden;
   }
   .trd-drop-zone:hover { border-color: #6366f1; background: #eef2ff; }
   .trd-drop-zone.is-dragover { border-color: #16a34a; background: #dcfce7; border-style: solid; }
   .trd-drop-zone.has-file { border-color: #16a34a; background: #f0fdf4; border-style: solid; }
-  .trd-drop-icon { color: #6366f1; flex-shrink: 0; }
+  .trd-drop-icon { color: #6366f1; flex-shrink: 0; line-height: 0; }
   .trd-drop-zone.has-file .trd-drop-icon { color: #16a34a; }
-  .trd-drop-text { font-size: 12.5px; color: #475569; line-height: 1.4; }
+  .trd-drop-text { font-size: 12.5px; color: #475569; line-height: 1.4;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .trd-drop-text b { color: #1e40af; }
-  .trd-drop-hint { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+  .trd-drop-hint { font-size: 11px; color: #94a3b8; margin-left: 6px; }
+
+  /* === 翻譯進度條 === */
+  .trd-progress-wrap {
+    margin: 8px 0 4px;
+    background: #e5e7eb; border-radius: 4px; overflow: hidden;
+    height: 8px; position: relative;
+  }
+  .trd-progress-bar {
+    height: 100%; background: linear-gradient(90deg, #6366f1, #4f46e5);
+    width: 0%; transition: width 0.3s ease;
+  }
+  .trd-progress-meta {
+    font-size: 11.5px; color: #64748b; margin-top: 4px;
+    display: flex; gap: 12px; flex-wrap: wrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .trd-progress-meta b { color: #1e293b; font-weight: 600; }
 
   .trd-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 32px;
+    grid-template-columns: 44px 1fr 1fr 32px;
     gap: 4px;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -136,6 +159,17 @@
   }
   .trd-row {
     display: contents;
+  }
+  .trd-row .num {
+    background: #f8fafc;
+    border-top: 1px solid #f1f5f9;
+    border-right: 1px solid #e5e7eb;
+    color: #94a3b8;
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    padding: 8px 4px;
+    user-select: none;
   }
   .trd-row .src, .trd-row .tgt {
     position: relative;
@@ -173,15 +207,18 @@
     display: contents;
     font-size: 12px; font-weight: 600; color: #0f172a;
   }
-  .trd-head > .h-src, .trd-head > .h-tgt, .trd-head > .h-ctl {
+  .trd-head > .h-num, .trd-head > .h-src, .trd-head > .h-tgt, .trd-head > .h-ctl {
     background: #eef2ff;
     border-bottom: 2px solid #c7d2fe;
     padding: 8px 10px;
     position: sticky; top: 0; z-index: 2;
   }
+  .trd-head .h-num { text-align: center; color: #6366f1; font-size: 11.5px;
+                     border-right: 1px solid #c7d2fe; padding: 8px 4px; }
   .trd-head .h-src { border-right: 1px solid #c7d2fe; }
   .trd-head .h-lang { color: #4338ca; font-weight: 500; font-size: 11.5px; margin-left: 4px; }
   .trd-head .h-stat { color: #6b7280; font-weight: 400; font-size: 11px; float: right; }
+  .trd-row:first-child .num,
   .trd-row:first-child .src,
   .trd-row:first-child .tgt,
   .trd-row:first-child .ctl { border-top: 0; }
@@ -202,12 +239,14 @@
   /* 光棒（shimmer）效果 — 翻譯進行中的列，左原文 + 右譯文 + 中央按鈕欄
      全部蓋一層流動高光，吸睛但不擋字。重點 cell 用 ::after pseudo 浮在
      上面、pointer-events:none 不擋滑鼠。 */
+  .trd-row.is-loading .num,
   .trd-row.is-loading .src,
   .trd-row.is-loading .tgt,
   .trd-row.is-loading .ctl {
     position: relative;
     overflow: hidden;
   }
+  .trd-row.is-loading .num { background: #fffbeb; color: #92400e; }
   .trd-row.is-loading .src { background: #fffbeb; }
   .trd-row.is-loading .tgt { background: #fffbeb; color: #92400e; }
   .trd-row.is-loading .src::after,
@@ -235,12 +274,14 @@
 
   /* 整列 hover 高亮 — 因為 .trd-row 是 display:contents 沒實體 box，
      用 JS 在滑鼠進入任一格時把 .is-hover class 加到該列所有 cell */
+  .trd-row.is-hover .num,
   .trd-row.is-hover .src,
   .trd-row.is-hover .tgt,
   .trd-row.is-hover .ctl {
     background: #eef2ff !important;
     position: relative;
   }
+  .trd-row.is-hover .num { color: #4338ca; }
   .trd-row.is-hover .src::after,
   .trd-row.is-hover .tgt::after,
   .trd-row.is-hover .ctl::after {
@@ -390,6 +431,7 @@ function renderRow(idx, src, translated, error) {
   const copyBtn = (which) =>
     `<button type="button" class="cell-copy" data-act="copy-cell" data-which="${which}" title="複製到剪貼簿">${COPY_ICON_SVG}</button>`;
   row.innerHTML = `
+    <div class="num">${idx + 1}</div>
     <div class="src">${escapeHTML(src) || '<span style="color:#cbd5e1;">（空行）</span>'}${copyBtn('src')}</div>
     <div class="tgt ${tgtCls}">${tgtHtml}${copyBtn('tgt')}</div>
     <div class="ctl"><button type="button" data-act="retry" title="重新翻譯本句">↻</button></div>
@@ -413,15 +455,16 @@ function _setHoverRow(idx) {
       r.classList.add('is-hover'));
   }
 }
-// 語言代碼 → 顯示名稱（與後端 _LANG_NAMES 對齊；'auto' 顯示「自動偵測」）
+// 語言代碼 → 中文顯示名稱（與後端 _LANG_NAMES 對齊；header 已用「（…）」
+// 包起來，所以這裡只放純中文，避免變成「（English (英文)）」雙層括號）
 const LANG_NAMES = {
-  'auto': '自動偵測', 'en': 'English (英文)',
+  'auto': '自動偵測', 'en': '英文',
   'zh': '中文', 'zh-TW': '繁體中文', 'zh-CN': '簡體中文',
-  'ja': '日本語 (日文)', 'ko': '한국어 (韓文)',
-  'fr': 'Français (法文)', 'de': 'Deutsch (德文)',
-  'es': 'Español (西班牙文)', 'vi': 'Tiếng Việt (越南文)',
-  'th': 'ไทย (泰文)', 'id': 'Bahasa Indonesia (印尼文)',
-  'ru': 'Русский (俄文)',
+  'ja': '日文', 'ko': '韓文',
+  'fr': '法文', 'de': '德文',
+  'es': '西班牙文', 'vi': '越南文',
+  'th': '泰文', 'id': '印尼文',
+  'ru': '俄文',
 };
 function _langName(code) { return LANG_NAMES[code] || code || '?'; }
 
@@ -430,6 +473,7 @@ function renderHeader(srcLang, tgtLang, srcChars, tgtChars) {
   const hd = document.createElement('div');
   hd.className = 'trd-head';
   hd.innerHTML = `
+    <div class="h-num">#</div>
     <div class="h-src">原文<span class="h-lang">（${escapeHTML(_langName(srcLang))}）</span><span class="h-stat">${srcChars} 字</span></div>
     <div class="h-tgt">譯文<span class="h-lang">（${escapeHTML(_langName(tgtLang))}）</span><span class="h-stat">${tgtChars} 字</span></div>
     <div class="h-ctl"></div>
@@ -489,6 +533,46 @@ trdGrid.addEventListener('click', async (e) => {
   }
 });
 
+// 客戶端並行池 — 跟 backend 設定保持一致；4 是預設值，用戶在 admin/llm-settings
+// 拉到更高的話這裡也可改。實際 throughput 仍受 LLM server 限制。
+const CLIENT_CONCURRENCY = 4;
+
+async function _translateOne(idx, src) {
+  const r = await fetch('/tools/translate-doc/translate-one', {
+    method: 'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      src: src,
+      source_lang: srcLang.value,
+      target_lang: tgtLang.value,
+    }),
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(t);
+  }
+  // Backend `/translate-one` returns a single {src, translated, error} dict,
+  // NOT {results: [...]}. Empty-source short-circuits to {translated: ""}.
+  const j = await r.json();
+  if (j && typeof j === 'object' && ('translated' in j || 'error' in j)) {
+    return {src: j.src ?? src, translated: j.translated ?? '', error: j.error ?? ''};
+  }
+  return {src, translated: '', error: 'unexpected response'};
+}
+
+function _updateProgress(done, total, t0) {
+  const pct = total ? Math.round(done / total * 100) : 0;
+  $('trdProgressBar').style.width = pct + '%';
+  const elapsed = (performance.now() - t0) / 1000;
+  const rate = done > 0 ? (elapsed / done) : 0;
+  const eta = done < total ? Math.max(0, (total - done) * rate) : 0;
+  const fmt = (s) => s < 60 ? `${s.toFixed(0)} 秒`
+                            : `${Math.floor(s/60)} 分 ${Math.round(s%60)} 秒`;
+  $('trdProgressMeta').innerHTML =
+    `<span><b>${done}</b> / <b>${total}</b> 句（${pct}%）</span>` +
+    `<span>已花 <b>${fmt(elapsed)}</b></span>` +
+    (done < total && rate > 0 ? `<span>預估剩 <b>${fmt(eta)}</b></span>` : '');
+}
+
 btnTranslate.addEventListener('click', async () => {
   const text = srcText.value;
   if (!text.trim()) return alert('請先輸入或上傳要翻譯的文字');
@@ -496,47 +580,82 @@ btnTranslate.addEventListener('click', async () => {
   if (!currentSentences.length) return alert('沒有可翻譯的內容');
   // Render rows immediately with loading state
   trdGrid.innerHTML = '';
+  const total = currentSentences.length;
   const srcChars = currentSentences.reduce((n, s) => n + (s || '').length, 0);
   trdGrid.appendChild(renderHeader(srcLang.value, tgtLang.value, srcChars, 0));
-  currentSentences.forEach((s, i) => {
+  const rowEls = currentSentences.map((s, i) => {
     const row = renderRow(i, s, '翻譯中…', '');
     row.classList.add('is-loading');
     trdGrid.appendChild(row);
+    return row;
   });
   resultPanel.hidden = false;
-  resultMeta.textContent = `${currentSentences.length} 句送出（模型：${LLM_MODEL || '?'}），請稍候…`;
+  resultMeta.textContent = `${total} 句送出（模型：${LLM_MODEL || '?'}）`;
   btnTranslate.disabled = true;
   btnTranslate.dataset.orig = btnTranslate.innerHTML;
   btnTranslate.innerHTML = `翻譯中… (${LLM_MODEL || '?'})`;
+  $('trdProgressWrap').hidden = false;
+  $('trdProgressMeta').hidden = false;
+  $('trdProgressBar').style.width = '0%';
 
-  try {
-    const r = await fetch('/tools/translate-doc/translate-batch', {
-      method: 'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        sentences: currentSentences,
-        source_lang: srcLang.value,
-        target_lang: tgtLang.value,
-      }),
-    });
-    if (!r.ok) {
-      const t = await r.text();
-      alert('翻譯失敗：' + t);
-      return;
+  const t0 = performance.now();
+  const results = new Array(total);
+  let done = 0;
+  let firstError = null;
+  _updateProgress(0, total, t0);
+
+  // 簡易並行池：N workers 從 queue 拿 idx
+  let nextIdx = 0;
+  async function worker() {
+    while (true) {
+      const i = nextIdx++;
+      if (i >= total) return;
+      const src = currentSentences[i];
+      try {
+        const res = await _translateOne(i, src);
+        results[i] = res;
+        // 更新該列
+        const oldRow = rowEls[i];
+        const newRow = renderRow(i, res.src, res.translated, res.error);
+        oldRow.replaceWith(newRow);
+        rowEls[i] = newRow;
+      } catch (e) {
+        if (!firstError) firstError = e.message || String(e);
+        results[i] = {src, translated: '', error: e.message || String(e)};
+        const oldRow = rowEls[i];
+        const newRow = renderRow(i, src, '', e.message || String(e));
+        oldRow.replaceWith(newRow);
+        rowEls[i] = newRow;
+      }
+      done++;
+      _updateProgress(done, total, t0);
     }
-    const j = await r.json();
-    trdGrid.innerHTML = '';
-    const srcCharsAll = j.results.reduce((n, r) => n + (r.src || '').length, 0);
-    const tgtCharsAll = j.results.reduce((n, r) => n + (r.translated || '').length, 0);
-    trdGrid.appendChild(renderHeader(j.source_lang, j.target_lang, srcCharsAll, tgtCharsAll));
-    j.results.forEach((res, i) => {
-      trdGrid.appendChild(renderRow(i, res.src, res.translated, res.error));
-    });
-    resultMeta.textContent = `共 ${j.results.length} 句 — 原文 ${srcCharsAll} 字、譯文 ${tgtCharsAll} 字 · 模型：${LLM_MODEL || '?'}`;
+  }
+  try {
+    const workers = [];
+    for (let w = 0; w < Math.min(CLIENT_CONCURRENCY, total); w++) {
+      workers.push(worker());
+    }
+    await Promise.all(workers);
+    // Final tally
+    const srcCharsAll = results.reduce((n, r) => n + (r && r.src || '').length, 0);
+    const tgtCharsAll = results.reduce((n, r) => n + (r && r.translated || '').length, 0);
+    // Replace header to update target char count
+    const oldHead = trdGrid.firstChild;
+    if (oldHead) oldHead.remove();
+    const newHead = renderHeader(srcLang.value, tgtLang.value, srcCharsAll, tgtCharsAll);
+    trdGrid.insertBefore(newHead, trdGrid.firstChild);
+    const elapsed = (performance.now() - t0) / 1000;
+    resultMeta.textContent = `共 ${total} 句 — 原文 ${srcCharsAll} 字、譯文 ${tgtCharsAll} 字 · 用時 ${elapsed.toFixed(1)} 秒 · 模型：${LLM_MODEL || '?'}`;
+    if (firstError) {
+      resultMeta.textContent += `（部分失敗：${firstError}）`;
+    }
   } catch (e) {
     alert('翻譯失敗：' + e.message);
   } finally {
     btnTranslate.disabled = false;
     btnTranslate.innerHTML = btnTranslate.dataset.orig || '開始翻譯';
+    // Keep progress bar visible at 100% so user sees final state
   }
 });
 

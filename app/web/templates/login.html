@@ -22,10 +22,19 @@
                    border-radius:6px; font-size:13px; margin-bottom:14px; }
     .form-row { margin-bottom:14px; }
     .form-row label { display:block; font-size:12px; color:#374151; margin-bottom:4px; font-weight:600; }
-    .form-row input[type=text], .form-row input[type=password] {
+    .form-row input[type=text], .form-row input[type=password], .form-row select {
         width:100%; box-sizing:border-box; padding:10px 12px;
-        border:1px solid #d1d5db; border-radius:6px; font:inherit; }
-    .form-row input:focus { outline:2px solid #3b82f6; outline-offset:-1px; border-color:transparent; }
+        border:1px solid #d1d5db; border-radius:6px; font:inherit;
+        line-height:1.4; }
+    .form-row select {
+        -webkit-appearance:none; -moz-appearance:none; appearance:none;
+        background-color:#fff;
+        background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='none' stroke='%2364748b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M1 1.5l5 5 5-5'/></svg>");
+        background-repeat:no-repeat;
+        background-position:right 12px center;
+        padding-right:32px; }
+    .form-row input:focus, .form-row select:focus {
+        outline:2px solid #3b82f6; outline-offset:-1px; border-color:transparent; }
     .login-remember { display:flex; align-items:center; gap:6px;
                       font-size:13px; color:#374151; margin-bottom:18px; }
     .login-btn { width:100%; padding:11px; background:#2563eb; color:#fff;
@@ -54,8 +63,7 @@
     {% if realms and realms|length > 1 %}
     <div class="form-row">
       <label for="realm">認證領域</label>
-      <select id="realm" name="realm" style="width:100%; box-sizing:border-box;
-              padding:10px 12px; border:1px solid #d1d5db; border-radius:6px; font:inherit;">
+      <select id="realm" name="realm">
         {% for r in realms %}
         <option value="{{ r.id }}" {% if r.id == default_realm %}selected{% endif %}>{{ r.label }}</option>
         {% endfor %}
