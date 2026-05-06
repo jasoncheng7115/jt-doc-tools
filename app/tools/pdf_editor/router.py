@@ -366,6 +366,10 @@ async def detect_objects(request: Request):
     y = float(body.get("y", 0))
     if not upload_id:
         raise HTTPException(400, "upload_id required")
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
     src = _work_dir() / f"pe_{upload_id}_src.pdf"
     if not src.exists():
         raise HTTPException(404, "upload expired")
@@ -693,6 +697,10 @@ async def replace_all_fonts(request: Request):
     font_id = str(body.get("font_id") or "pymupdf:default")
     if not upload_id:
         raise HTTPException(400, "upload_id required")
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
     src = _work_dir() / f"pe_{upload_id}_src.pdf"
     if not src.exists():
         raise HTTPException(404, "upload expired or missing")
@@ -717,6 +725,10 @@ async def undo_replace_all_fonts(request: Request):
     upload_id = (body.get("upload_id") or "").strip()
     if not upload_id:
         raise HTTPException(400, "upload_id required")
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
     src = _work_dir() / f"pe_{upload_id}_src.pdf"
     backup = _work_dir() / f"pe_{upload_id}_src_pre_repl.pdf"
     if not backup.exists():
@@ -741,6 +753,7 @@ async def undo_replace_all_fonts(request: Request):
 
 @router.post("/upload-image")
 async def upload_image(
+    request: Request,
     upload_id: str = Form(...),
     file: UploadFile = File(...),
 ):
@@ -753,6 +766,10 @@ async def upload_image(
     import uuid as _uuid
     if not upload_id:
         raise HTTPException(400, "upload_id required")
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
     data = await file.read()
     if not data:
         raise HTTPException(400, "empty file")
@@ -1016,7 +1033,7 @@ async def index(request: Request):
 
 
 @router.post("/load")
-async def load(file: UploadFile = File(...)):
+async def load(request: Request, file: UploadFile = File(...)):
     """Upload a PDF, render each page as a preview PNG, return upload_id +
     per-page info (size in pt + preview URL)."""
     data = await file.read()
@@ -1026,6 +1043,8 @@ async def load(file: UploadFile = File(...)):
         raise HTTPException(400, "only PDF is supported in Phase 1")
 
     upload_id = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
     src = _work_dir() / f"pe_{upload_id}_src.pdf"
     src.write_bytes(data)
     # Stash the original filename so /download can suggest it back with
@@ -1068,18 +1087,28 @@ async def load(file: UploadFile = File(...)):
 
 
 @router.get("/preview/{filename}")
-async def preview(filename: str):
-    # Guard against directory traversal — only allow files we created.
-    if not filename.startswith("pe_") or ".." in filename or "/" in filename:
+async def preview(filename: str, request: Request):
+    # Strict allowlist + path containment + per-upload ACL.
+    from ...core.safe_paths import safe_join, is_safe_name
+    from ...core import upload_owner
+    if not (filename.startswith("pe_") and is_safe_name(filename)):
         raise HTTPException(400, "invalid filename")
-    path = _work_dir() / filename
+    path = safe_join(_work_dir(), filename)
+    # extract uid from "pe_<uuid>_p1.png" / "pe_<uuid>_out_p1.png" ...
+    rest = filename[3:].split("_", 1)[0]
+    if rest:
+        upload_owner.require(rest, request)
     if not path.exists():
         raise HTTPException(404, "not found")
     return FileResponse(str(path), media_type="image/png")
 
 
 @router.get("/file/{upload_id}")
-async def original_file(upload_id: str):
+async def original_file(upload_id: str, request: Request):
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner
+    require_uuid_hex(upload_id, "upload_id")
+    upload_owner.require(upload_id, request)
     src = _work_dir() / f"pe_{upload_id}_src.pdf"
     if not src.exists():
         raise HTTPException(404, "upload expired or missing")
@@ -1109,6 +1138,10 @@ async def save(request: Request):
     upload_id = (body.get("upload_id") or "").strip()
     if not upload_id:
         raise HTTPException(400, "upload_id required")
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
     pages = body.get("pages") or []
     src = _work_dir() / f"pe_{upload_id}_src.pdf"
     if not src.exists():
@@ -1581,7 +1614,11 @@ async def save(request: Request):
 
 
 @router.get("/download/{upload_id}")
-async def download(upload_id: str):
+async def download(upload_id: str, request: Request):
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner
+    require_uuid_hex(upload_id, "upload_id")
+    upload_owner.require(upload_id, request)
     out = _work_dir() / f"pe_{upload_id}_out.pdf"
     if not out.exists():
         raise HTTPException(404, "saved file not found — save first")

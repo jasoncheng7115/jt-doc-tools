@@ -68,7 +68,7 @@ async def index(request: Request):
 
 
 @router.post("/analyze")
-async def analyze(file: UploadFile = File(...)):
+async def analyze(request: Request, file: UploadFile = File(...)):
     """Read annotations and persist PDF + sidecar JSON.
 
     The PDF stays at ``strip_{uid}_in.pdf`` so /preview can render
@@ -81,6 +81,8 @@ async def analyze(file: UploadFile = File(...)):
     if not data:
         raise HTTPException(400, "empty file")
     upload_id = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
     src, sidecar = _cached_paths(upload_id)
     src.write_bytes(data)
     try:
@@ -109,9 +111,11 @@ async def analyze(file: UploadFile = File(...)):
 
 
 @router.get("/preview/{upload_id}/{page}")
-async def preview(upload_id: str, page: int):
+async def preview(upload_id: str, page: int, request: Request):
     """Render one page (with annotations baked) as a thumbnail PNG."""
     _validate_upload_id(upload_id)
+    from ...core import upload_owner
+    upload_owner.require(upload_id, request)
     if page < 1:
         raise HTTPException(400, "invalid page")
     src, _ = _cached_paths(upload_id)
@@ -160,12 +164,16 @@ def _strip_pdf(src: Path, out: Path,
 
 @router.post("/strip")
 async def strip(
+    request: Request,
     upload_id: str = Form(...),
     types: str = Form(""),
     authors: str = Form(""),
     mode: str = Form("all"),
 ):
     """Remove annotations and return cleaned PDF — uses cached upload."""
+    _validate_upload_id(upload_id)
+    from ...core import upload_owner
+    upload_owner.require(upload_id, request)
     cached = _load_cached(upload_id)
     src, _ = _cached_paths(upload_id)
     if not src.exists():

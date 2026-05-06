@@ -335,12 +335,14 @@ async def index(request: Request):
 
 
 @router.post("/load")
-async def load(files: list[UploadFile] = File(...)):
+async def load(request: Request, files: list[UploadFile] = File(...)):
     """Accept one or more PDF/Office files; store them and return a total
     page count + per-file counts so the UI can preview."""
     if not files:
         raise HTTPException(400, "no files")
     upload_id = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
     per_file: list[dict] = []
     total_pages = 0
     for idx, f in enumerate(files):
@@ -383,7 +385,11 @@ async def generate(opts: NupOptions):
 
 
 @router.get("/download/{upload_id}")
-async def download(upload_id: str):
+async def download(upload_id: str, request: Request):
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner
+    require_uuid_hex(upload_id, "upload_id")
+    upload_owner.require(upload_id, request)
     p = _out_path(upload_id)
     if not p.exists():
         raise HTTPException(404, "not generated yet")

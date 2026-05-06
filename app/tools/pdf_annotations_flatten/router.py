@@ -67,7 +67,7 @@ async def analyze(file: UploadFile = File(...)):
 
 
 @router.post("/flatten")
-async def flatten(file: UploadFile = File(...)):
+async def flatten(request: Request, file: UploadFile = File(...)):
     """Bake all annotations into the page content stream.
 
     Uses PyMuPDF's ``doc.bake(annots=True, widgets=False)`` — this draws every
@@ -87,6 +87,8 @@ async def flatten(file: UploadFile = File(...)):
     if not data:
         raise HTTPException(400, "empty file")
     baked_uid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(baked_uid, request)
     src = settings.temp_dir / f"flat_{baked_uid}_in.pdf"
     out, name_path = _baked_paths(baked_uid)
     src.write_bytes(data)
@@ -147,9 +149,11 @@ async def api_flatten(file: UploadFile = File(...)):
 
 
 @router.get("/baked-preview/{baked_uid}/{page}")
-async def baked_preview(baked_uid: str, page: int):
+async def baked_preview(baked_uid: str, page: int, request: Request):
     """Render a single page of the flattened PDF as a thumbnail PNG."""
     _validate_uid(baked_uid)
+    from ...core import upload_owner
+    upload_owner.require(baked_uid, request)
     if page < 1:
         raise HTTPException(400, "invalid page")
     out, _ = _baked_paths(baked_uid)
@@ -167,9 +171,11 @@ async def baked_preview(baked_uid: str, page: int):
 
 
 @router.get("/baked-download/{baked_uid}")
-async def baked_download(baked_uid: str):
+async def baked_download(baked_uid: str, request: Request):
     """Stream the flattened PDF for download."""
     _validate_uid(baked_uid)
+    from ...core import upload_owner
+    upload_owner.require(baked_uid, request)
     out, name_path = _baked_paths(baked_uid)
     if not out.exists():
         raise HTTPException(410, "結果已過期，請重新執行")

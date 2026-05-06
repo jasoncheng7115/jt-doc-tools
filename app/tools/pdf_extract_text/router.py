@@ -268,6 +268,8 @@ async def extract(request: Request, file: UploadFile = File(...)):
         raise HTTPException(400, "empty file")
 
     bid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(bid, request)
     wdir = _work_dir(bid)
     src = wdir / "src.pdf"
     src.write_bytes(data)
@@ -325,7 +327,11 @@ async def extract(request: Request, file: UploadFile = File(...)):
 
 
 @router.get("/download/{batch_id}/{fmt}")
-async def download(batch_id: str, fmt: str):
+async def download(batch_id: str, fmt: str, request: Request):
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner
+    require_uuid_hex(batch_id, "batch_id")
+    upload_owner.require(batch_id, request)
     wdir = settings.temp_dir / f"ext_text_{batch_id}"
     if not wdir.exists():
         raise HTTPException(404, "batch 不存在或已過期")

@@ -223,6 +223,14 @@ def _validate_upload_id(upload_id: str) -> None:
         raise HTTPException(400, "invalid upload_id")
 
 
+def _require_access(upload_id: str, request) -> None:
+    """Validate id format AND check ownership ACL — call this at every
+    endpoint that accepts an upload_id from the user."""
+    _validate_upload_id(upload_id)
+    from ...core import upload_owner
+    upload_owner.require(upload_id, request)
+
+
 def _cached_paths(upload_id: str) -> tuple[Path, Path]:
     """Return (pdf_path, sidecar_json_path). No existence check."""
     return (
@@ -323,6 +331,7 @@ async def _llm_group_annots(annots: list[dict[str, Any]]) -> dict[str, Any]:
 
 @router.post("/analyze")
 async def analyze(
+    request: Request,
     file: UploadFile = File(...),
     llm_group: str = Form(""),
 ):
@@ -337,6 +346,8 @@ async def analyze(
     temp uploads).
     """
     src, fname, upload_id = await _save_upload(file)
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
     with fitz.open(str(src)) as doc:
         pc = doc.page_count
     annots = _read_annotations(src)
@@ -363,8 +374,8 @@ async def analyze(
 
 
 @router.post("/api/pdf-annotations")
-async def api_annotations(file: UploadFile = File(...)):
-    return await analyze(file)
+async def api_annotations(request: Request, file: UploadFile = File(...)):
+    return await analyze(request, file)
 
 
 def _parse_csv_list(s: str | None) -> list[str]:
@@ -374,9 +385,11 @@ def _parse_csv_list(s: str | None) -> list[str]:
 
 
 @router.get("/preview/{upload_id}/{page}")
-async def preview(upload_id: str, page: int):
+async def preview(upload_id: str, page: int, request: Request):
     """Render one page (with annotations baked in by the renderer) as a thumbnail PNG."""
     _validate_upload_id(upload_id)
+    from ...core import upload_owner
+    upload_owner.require(upload_id, request)
     if page < 1:
         raise HTTPException(400, "invalid page")
     src, _ = _cached_paths(upload_id)
@@ -395,10 +408,12 @@ async def preview(upload_id: str, page: int):
 
 @router.post("/export-csv")
 async def export_csv(
+    request: Request,
     upload_id: str = Form(...),
     types: str = Form(""),
     authors: str = Form(""),
 ):
+    _require_access(upload_id, request)
     cached = _load_cached(upload_id)
     annots = _filter_annots(cached["annots"],
                             _parse_csv_list(types),
@@ -412,11 +427,13 @@ async def export_csv(
 
 @router.post("/export-review")
 async def export_review(
+    request: Request,
     upload_id: str = Form(...),
     types: str = Form(""),
     authors: str = Form(""),
     group_by: str = Form("page"),
 ):
+    _require_access(upload_id, request)
     cached = _load_cached(upload_id)
     annots = _filter_annots(cached["annots"],
                             _parse_csv_list(types),
@@ -430,11 +447,13 @@ async def export_review(
 
 @router.post("/export-todo")
 async def export_todo(
+    request: Request,
     upload_id: str = Form(...),
     types: str = Form(""),
     authors: str = Form(""),
     fmt: str = Form("md"),
 ):
+    _require_access(upload_id, request)
     cached = _load_cached(upload_id)
     annots = _filter_annots(cached["annots"],
                             _parse_csv_list(types),
@@ -453,10 +472,12 @@ async def export_todo(
 
 @router.post("/export-json")
 async def export_json(
+    request: Request,
     upload_id: str = Form(...),
     types: str = Form(""),
     authors: str = Form(""),
 ):
+    _require_access(upload_id, request)
     cached = _load_cached(upload_id)
     annots = _filter_annots(cached["annots"],
                             _parse_csv_list(types),

@@ -28,13 +28,15 @@ def _safe_name(name: str) -> str:
 
 
 @router.post("/scan")
-async def scan(file: UploadFile = File(...)):
+async def scan(request: Request, file: UploadFile = File(...)):
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF")
     data = await file.read()
     if not data:
         raise HTTPException(400, "empty file")
     uid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(uid, request)
     src = settings.temp_dir / f"att_{uid}_in.pdf"
     src.write_bytes(data)
     try:
@@ -70,7 +72,11 @@ async def scan(file: UploadFile = File(...)):
 
 
 @router.get("/file/{uid}/{name}")
-async def get_file(uid: str, name: str):
+async def get_file(uid: str, name: str, request: Request):
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner
+    require_uuid_hex(uid, "uid")
+    upload_owner.require(uid, request)
     src = settings.temp_dir / f"att_{uid}_in.pdf"
     if not src.exists():
         raise HTTPException(404, "upload expired")

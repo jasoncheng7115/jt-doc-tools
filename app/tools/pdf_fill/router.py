@@ -92,6 +92,9 @@ async def preview(
         raise HTTPException(400, "empty file")
 
     upload_id = uuid.uuid4().hex
+    # 寫入 owner 紀錄供 /preview/{name} 與 /download/{upload_id} ACL 使用
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
     src = settings.temp_dir / f"{upload_id}_in.pdf"
     filled = settings.temp_dir / f"{upload_id}_filled.pdf"
     png = settings.temp_dir / f"{upload_id}_p1.png"
@@ -430,6 +433,10 @@ async def llm_review_apply(request: Request):
         raise HTTPException(400, "upload_id required")
     if not corrections:
         raise HTTPException(400, "no corrections to apply")
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
 
     src = settings.temp_dir / f"{upload_id}_in.pdf"
     snap_p = settings.temp_dir / f"{upload_id}_placements.json"
@@ -542,6 +549,10 @@ async def regenerate(request: Request):
     overrides = body.get("placements") or []
     if not upload_id:
         raise HTTPException(400, "upload_id required")
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
     src = settings.temp_dir / f"{upload_id}_in.pdf"
     if not src.exists():
         raise HTTPException(404, "upload expired")
@@ -598,6 +609,10 @@ async def save_template(request: Request):
     placements = body.get("placements") or []
     if not upload_id or not name:
         raise HTTPException(400, "upload_id and name required")
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
     src = settings.temp_dir / f"{upload_id}_in.pdf"
     if not src.exists():
         raise HTTPException(404, "upload not found or expired")
@@ -637,6 +652,8 @@ async def submit(
         raise HTTPException(400, "empty file")
 
     upload_id = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
     src = settings.temp_dir / f"{upload_id}_in.pdf"
     dst = settings.temp_dir / f"{upload_id}_filled.pdf"
     try:
@@ -690,21 +707,31 @@ async def submit(
 
 
 @router.get("/preview/{name}")
-async def serve_preview(name: str):
-    p = settings.temp_dir / name
+async def serve_preview(name: str, request: Request):
+    from ...core.safe_paths import safe_join
+    from ...core import upload_owner
+    p = safe_join(settings.temp_dir, name)
+    # ACL — extract upload_id prefix, deny if not the owner (auth ON)
+    uid = upload_owner.extract_upload_id(name)
+    if uid:
+        upload_owner.require(uid, request)
     if not p.exists():
         raise HTTPException(404)
     return FileResponse(str(p), media_type="image/png")
 
 
 @router.get("/download/{upload_id}")
-async def download_filled(upload_id: str, name: str = "filled.pdf"):
+async def download_filled(upload_id: str, request: Request, name: str = "filled.pdf"):
     """Direct-download endpoint used by the preview page (bypasses jobs).
 
     The optional ``name`` query argument lets the client suggest the
     filename (e.g. ``<orig>_filled.pdf``) so the user gets a meaningful
     file name instead of the generic ``filled.pdf``.
     """
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner
+    require_uuid_hex(upload_id, "upload_id")
+    upload_owner.require(upload_id, request)
     p = settings.temp_dir / f"{upload_id}_filled.pdf"
     if not p.exists():
         raise HTTPException(404, "not found or expired")
