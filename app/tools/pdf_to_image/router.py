@@ -65,6 +65,8 @@ async def convert(
         )
 
     upload_id = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
     work = _work_dir()
     work.mkdir(parents=True, exist_ok=True)
 
@@ -125,17 +127,26 @@ async def convert(
 
 
 @router.get("/preview/{filename}")
-async def preview(filename: str):
-    if not filename.startswith("p2i_") or ".." in filename or "/" in filename:
+async def preview(filename: str, request: Request):
+    from ...core.safe_paths import safe_join, is_safe_name
+    from ...core import upload_owner
+    if not (filename.startswith("p2i_") and is_safe_name(filename)):
         raise HTTPException(400, "invalid filename")
-    path = _work_dir() / filename
+    path = safe_join(_work_dir(), filename)
+    rest = filename[4:].split("_", 1)[0]
+    if rest:
+        upload_owner.require(rest, request)
     if not path.exists():
         raise HTTPException(404, "not found")
     return FileResponse(str(path), media_type="image/png")
 
 
 @router.get("/download/{upload_id}")
-async def download(upload_id: str):
+async def download(upload_id: str, request: Request):
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner
+    require_uuid_hex(upload_id, "upload_id")
+    upload_owner.require(upload_id, request)
     work = _work_dir()
     # Recover original filename
     orig = "document.pdf"

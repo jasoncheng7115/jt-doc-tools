@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.4.82"
+VERSION = "1.4.83"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -452,6 +452,42 @@ def _looks_like_xhr(request: Request) -> bool:
     if xrw == "xmlhttprequest":
         return True
     return False
+
+
+@app.middleware("http")
+async def _security_headers(request: Request, call_next):
+    """Add baseline browser-side defence headers on every response.
+
+    - X-Content-Type-Options: nosniff — stops MIME sniffing letting
+      uploaded SVG/HTML execute as the wrong type.
+    - X-Frame-Options: SAMEORIGIN — clickjacking defence (modern equivalent
+      is CSP frame-ancestors but XFO covers older browsers).
+    - Referrer-Policy: strict-origin-when-cross-origin — don't leak full
+      URLs (which contain upload_id UUIDs) to external sites.
+    - Permissions-Policy: deny features we don't use; reduces fingerprinting
+      and stops a XSS from accessing camera/mic/geolocation.
+    - Strict-Transport-Security: only when request comes via HTTPS so we
+      don't lock plain-HTTP intranet installs out for a year.
+
+    CSP intentionally NOT set — the editor uses inline `<style>` and
+    inline event handlers in dynamically-built UI; a tight CSP would
+    break Fabric.js / template render. Revisit when we externalise
+    inline scripts."""
+    response = await call_next(request)
+    h = response.headers
+    h.setdefault("X-Content-Type-Options", "nosniff")
+    h.setdefault("X-Frame-Options", "SAMEORIGIN")
+    h.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    h.setdefault("Permissions-Policy",
+                 "camera=(), microphone=(), geolocation=(), interest-cohort=()")
+    is_https = (
+        request.url.scheme == "https"
+        or request.headers.get("X-Forwarded-Proto", "").lower() == "https"
+    )
+    if is_https:
+        h.setdefault("Strict-Transport-Security",
+                     "max-age=15552000; includeSubDomains")
+    return response
 
 
 @app.middleware("http")

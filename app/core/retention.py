@@ -173,6 +173,18 @@ def _sweep_temp_dir(seconds: int) -> int:
         if not d.exists():
             continue
         for child in d.iterdir():
+            # `.owners/` is a special dir for upload-owner ACL sidecars
+            # — sweep individual records inside it (the dir itself stays
+            # fresh as long as new uploads are happening).
+            if child.is_dir() and child.name == ".owners":
+                for owner_file in child.iterdir():
+                    try:
+                        if owner_file.stat().st_mtime < cutoff:
+                            owner_file.unlink(missing_ok=True)
+                            n += 1
+                    except OSError:
+                        pass
+                continue
             try:
                 if child.stat().st_mtime < cutoff:
                     if child.is_dir():

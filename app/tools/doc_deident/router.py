@@ -171,6 +171,7 @@ async def index(request: Request):
 
 @router.post("/detect")
 async def detect(
+    request: Request,
     file: UploadFile = File(...),
     types: str = Form(""),    # comma-separated pattern ids
     custom: str = Form(""),   # optional: "label|regex\nlabel2|regex2"
@@ -183,6 +184,8 @@ async def detect(
     ext = Path(orig_name).suffix.lower()
 
     upload_id = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
     pdf_path = _src_path(upload_id)
     # If PDF upload, write direct; if office, convert via soffice.
     if ext == ".pdf":
@@ -489,11 +492,15 @@ async def process(request: Request):
 
 
 @router.get("/preview/{filename}")
-async def preview(filename: str):
-    # Only allow our own did_ prefix, no path traversal
-    if not filename.startswith("did_") or ".." in filename or "/" in filename:
+async def preview(filename: str, request: Request):
+    from ...core.safe_paths import safe_join, is_safe_name
+    from ...core import upload_owner
+    if not (filename.startswith("did_") and is_safe_name(filename)):
         raise HTTPException(400, "invalid")
-    p = settings.temp_dir / filename
+    p = safe_join(settings.temp_dir, filename)
+    rest = filename[4:].split("_", 1)[0]
+    if rest:
+        upload_owner.require(rest, request)
     if not p.exists():
         raise HTTPException(404)
     return FileResponse(str(p), media_type="image/png",
@@ -501,7 +508,11 @@ async def preview(filename: str):
 
 
 @router.get("/download/{upload_id}")
-async def download(upload_id: str):
+async def download(upload_id: str, request: Request):
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner
+    require_uuid_hex(upload_id, "upload_id")
+    upload_owner.require(upload_id, request)
     out = _out_path(upload_id)
     if not out.exists():
         raise HTTPException(404, "尚未處理或已過期")

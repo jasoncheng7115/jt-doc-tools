@@ -485,9 +485,14 @@ async def preview_stamped(
 
 
 @router.get("/preview/{name}")
-async def serve_preview(name: str):
+async def serve_preview(name: str, request: Request):
     from fastapi.responses import FileResponse
-    p = settings.temp_dir / name
+    from ...core.safe_paths import safe_join
+    from ...core import upload_owner
+    p = safe_join(settings.temp_dir, name)
+    uid = upload_owner.extract_upload_id(name)
+    if uid:
+        upload_owner.require(uid, request)
     if not p.exists():
         raise HTTPException(404)
     return FileResponse(str(p), media_type="image/png")

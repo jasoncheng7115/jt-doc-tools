@@ -4,6 +4,23 @@
 
 ---
 
+## [1.4.83] - 2026-05-07
+
+### 安全（重要）
+
+啟用認證後，原本任一已登入使用者只要拿到別人的 `upload_id`（網址、瀏覽歷史、伺服器 log、截圖外洩等管道）就能下載對方的 PDF / 預覽 PNG，且 `/preview/{name}` 系列端點對檔名沒做 path traversal 防護。本次集中修補：
+
+- **新增 `app/core/safe_paths.py`**：strict allowlist `[A-Za-z0-9._\-]{1,255}`、拒絕 `..` / `/` / `\` / NUL；`safe_join()` 用 `relative_to()` 做 containment check 連 symlink escape 都擋；`require_uuid_hex()` 強制 32 字元小寫 hex 驗證 upload_id
+- **新增 `app/core/upload_owner.py`**：每次上傳產 `upload_id` 時記一筆 sidecar JSON（`<temp>/.owners/<id>.json`）寫入 owner user_id；下載／預覽端點先 `require()` 比對當前 user。Auth OFF 時直通；admin（`effective_tools == ALL`）一律放行；missing owner record（legacy 或被掃掉）非 admin 一律拒
+- **覆蓋 14 個工具的所有檔案存取端點**：pdf-fill / pdf-stamp / pdf-watermark / pdf-editor / pdf-attachments / pdf-metadata / pdf-hidden-scan / pdf-nup / pdf-to-image / doc-deident / pdf-extract-text / pdf-annotations / pdf-annotations-strip / pdf-annotations-flatten — 33 個 `/preview` `/download` `/file` `/baked-*` 端點全部加上 `safe_paths` 驗證 + `upload_owner.require()` ACL；upload-creating 端點同步 `upload_owner.record()`
+- **新增安全 headers middleware**：`X-Content-Type-Options: nosniff` / `X-Frame-Options: SAMEORIGIN` / `Referrer-Policy: strict-origin-when-cross-origin` / `Permissions-Policy` 關閉 camera/mic/geolocation/interest-cohort；HTTPS 連線加 HSTS 6 個月（HTTP 不發避免內網 plain-HTTP 被鎖）
+- **retention sweeper 擴充**：`.owners/` 目錄內的 sidecar 也按 TTL 清掉（避免 stale 記錄無限累積）
+- **新增 34 個單元測試** `tests/test_safe_paths_and_owner.py` 覆蓋 path traversal 拒絕、symlink escape、UUID 驗證、ACL 各種組合（auth on/off、admin override、missing record、跨 user）
+
+舊行為（無 ACL、無 path traversal 檢查）等於每位 user 都是 admin。客戶若已啟用認證且擔心歷史 upload_id 已外洩，請在升級後手動 `rm -rf data/temp/.owners` 清掉所有 owner 紀錄（後續上傳會重新建立 — 副作用：升級當下進行中的上傳對話會 403，重新整理頁面即可）
+
+---
+
 ## [1.4.82] - 2026-05-05
 
 ### 修正

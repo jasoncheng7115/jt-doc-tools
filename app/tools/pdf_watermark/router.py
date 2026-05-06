@@ -319,8 +319,13 @@ async def submit(
 
 
 @router.get("/preview/{name}")
-async def serve_preview(name: str):
-    p = settings.temp_dir / name
+async def serve_preview(name: str, request: Request):
+    from ...core.safe_paths import safe_join
+    from ...core import upload_owner
+    p = safe_join(settings.temp_dir, name)
+    uid = upload_owner.extract_upload_id(name)
+    if uid:
+        upload_owner.require(uid, request)
     if not p.exists():
         raise HTTPException(404)
     return FileResponse(str(p), media_type="image/png")
