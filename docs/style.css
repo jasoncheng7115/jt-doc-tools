@@ -624,6 +624,84 @@ code {
   .ent-grid { grid-template-columns: 1fr; }
 }
 
+/* ===== Separation of duties (v1.5.0) ===== */
+.sod-table-wrap {
+  overflow-x: auto;
+  margin: 28px 0 36px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.sod-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--card);
+  font-size: 14.5px;
+}
+.sod-table th, .sod-table td {
+  padding: 14px 18px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.sod-table thead th {
+  background: var(--indigo-light);
+  color: var(--indigo-dark);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.sod-table thead th:first-child { width: 38%; }
+.sod-table tbody tr:last-child td { border-bottom: none; }
+.sod-table tbody tr:hover { background: rgba(99,102,241,0.04); }
+.sod-table .ok { color: #16a34a; font-weight: 600; white-space: nowrap; }
+.sod-table .no { color: #dc2626; font-weight: 600; white-space: nowrap; }
+.sod-table .muted { color: var(--text-3); font-size: 12.5px; font-weight: 400; }
+.sod-table code {
+  background: var(--code-bg, #f1f5f9);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.sod-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-top: 16px;
+}
+.sod-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--indigo-dark);
+  border-radius: var(--radius-md, 8px);
+  padding: 20px 22px;
+}
+.sod-card h3 {
+  margin: 0 0 8px;
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.sod-card p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+.sod-card code {
+  background: var(--code-bg, #f1f5f9);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+@media (max-width: 1024px) {
+  .sod-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .sod-grid { grid-template-columns: 1fr; }
+  .sod-table th, .sod-table td { padding: 10px 12px; font-size: 13.5px; }
+}
+
 /* ===== Privacy / trust band ===== */
 .section-privacy {
   background: linear-gradient(135deg, #0b1d3a 0%, #1e3a8a 100%);
