@@ -137,6 +137,9 @@ def _ocr_bbox(page: "fitz.Page", bbox, lang: str = "chi_tra+eng") -> str:
     try:
         import pytesseract
         from PIL import Image
+        # 防 user 把 tesseract 裝在預設位置但沒加 PATH（Win11 客戶常見，issue #4）
+        from ...core.sys_deps import configure_pytesseract
+        configure_pytesseract()
     except ImportError:
         return ""
     try:

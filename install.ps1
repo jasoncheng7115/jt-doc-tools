@@ -137,24 +137,70 @@ function Ensure-Office {
 # PDFs whose Identity-H subset font has a missing/identity ToUnicode CMap.
 # Any failure here is non-fatal — system runs fine without it, OCR feature
 # just degrades to "ask user to retype" message.
-function Test-Tesseract {
-    if (Get-Command tesseract -ErrorAction SilentlyContinue) {
-        $langs = & tesseract --list-langs 2>&1 | Out-String
-        return ($langs -match 'chi_tra')
+function Find-TesseractExe {
+    # 1) PATH
+    $cmd = Get-Command tesseract -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Path }
+    # 2) Standard install locations (winget / UB-Mannheim installer)
+    #    issue #4: winget sometimes installs but doesn't add to PATH so
+    #    Get-Command misses it.
+    $candidates = @(
+        "C:\Program Files\Tesseract-OCR\tesseract.exe",
+        "C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        "$env:LOCALAPPDATA\Programs\Tesseract-OCR\tesseract.exe"
+    )
+    foreach ($c in $candidates) {
+        if (Test-Path $c) { return $c }
     }
-    return $false
+    return ""
+}
+
+function Test-Tesseract {
+    $exe = Find-TesseractExe
+    if (-not $exe) { return $false }
+    $langs = & $exe --list-langs 2>&1 | Out-String
+    return ($langs -match 'chi_tra')
+}
+
+function Add-TesseractToPath {
+    # 加到 SYSTEM PATH 讓所有 process（包括 jt-doc-tools service）看得到。
+    # 即使我們的 app 程式碼會 fallback 抓標準路徑，加進 PATH 仍是好習慣 —
+    # CLI 用法、其它工具呼叫 tesseract 都能 work。issue #4 客戶踩雷。
+    $exe = Find-TesseractExe
+    if (-not $exe) { return }
+    $dir = Split-Path -Parent $exe
+    $cur = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $parts = $cur -split ';' | Where-Object { $_ -ne '' }
+    if ($parts -contains $dir) { return }  # already there
+    Log "Adding Tesseract to system PATH: $dir"
+    try {
+        $new = ($parts + $dir) -join ';'
+        [Environment]::SetEnvironmentVariable("Path", $new, "Machine")
+        # Also patch current session so the subsequent --list-langs probe works
+        $env:Path = "$env:Path;$dir"
+        Ok "Tesseract added to system PATH (existing shells need restart)"
+    } catch {
+        Warn "Could not modify system PATH (need admin?): $_"
+    }
 }
 
 function Install-Tesseract {
-    if (Test-Tesseract) { Ok "tesseract + chi_tra already installed"; return }
+    if (Test-Tesseract) {
+        Add-TesseractToPath
+        Ok "tesseract + chi_tra already installed"
+        return
+    }
     Log "Installing tesseract OCR (soft optional; pdf-editor text recovery)..."
     try {
         if (Get-Command winget -ErrorAction SilentlyContinue) {
             # UB-Mannheim build bundles all language data files including chi_tra
             $proc = Start-Process winget -ArgumentList "install --id UB-Mannheim.TesseractOCR -e --silent --accept-package-agreements --accept-source-agreements" -Wait -PassThru -NoNewWindow -ErrorAction SilentlyContinue
-            if ($proc.ExitCode -eq 0 -and (Test-Tesseract)) {
-                Ok "tesseract installed via winget"
-                return
+            if ($proc.ExitCode -eq 0) {
+                Add-TesseractToPath
+                if (Test-Tesseract) {
+                    Ok "tesseract installed via winget"
+                    return
+                }
             }
         }
         Warn "tesseract auto-install failed - pdf-editor OCR feature will be disabled"

@@ -609,7 +609,7 @@ def _print_system_deps_summary() -> None:
     deps = [
         (
             "tesseract OCR",
-            lambda: bool(shutil.which("tesseract")) and _tesseract_has_lang("chi_tra"),
+            lambda: bool(_resolve_tesseract_binary()) and _tesseract_has_lang("chi_tra"),
             "pdf-editor automatic OCR text recognition (without it, manual retype required)",
             {
                 "linux": "sudo apt install tesseract-ocr tesseract-ocr-chi-tra tesseract-ocr-eng",
@@ -641,10 +641,43 @@ def _print_system_deps_summary() -> None:
     print()
 
 
+def _resolve_tesseract_binary() -> str:
+    """Find tesseract.exe even when not on PATH (very common on Windows
+    when client installed UB-Mannheim build but didn't tick the PATH option,
+    or winget install skipped PATH update — GitHub issue #4).
+
+    Mirrors logic in app/core/sys_deps.py:_find_tesseract_binary so cli.py
+    can be used standalone without importing the FastAPI app stack."""
+    p = shutil.which("tesseract")
+    if p:
+        return p
+    if _is_windows():
+        candidates = [
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\Tesseract-OCR\tesseract.exe"),
+        ]
+    elif _is_macos():
+        candidates = [
+            "/opt/homebrew/bin/tesseract",
+            "/usr/local/bin/tesseract",
+            "/opt/local/bin/tesseract",
+        ]
+    else:
+        candidates = ["/usr/bin/tesseract", "/usr/local/bin/tesseract"]
+    for c in candidates:
+        if c and os.path.isfile(c):
+            return c
+    return ""
+
+
 def _tesseract_has_lang(lang: str) -> bool:
+    binary = _resolve_tesseract_binary()
+    if not binary:
+        return False
     try:
         out = subprocess.run(
-            ["tesseract", "--list-langs"],
+            [binary, "--list-langs"],
             capture_output=True, text=True, timeout=5,
         )
         return lang in (out.stdout or "")
