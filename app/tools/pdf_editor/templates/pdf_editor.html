@@ -1179,10 +1179,18 @@ function wirePropsPanel(active) {
       rerender();
       // 字型變更要立即重繪（CSS generic 的 serif/sans-serif 看起來常常一樣，
       // 真正的視覺差別在後端 bake 後 PNG 上看到）— 立刻 trigger save 不
-      // 等 800ms debounce。autoSave 關閉時尊重使用者選擇，需手動按儲存。
+      // 等 800ms debounce。**includeActive: true** 讓 active 物件這次也被
+      // bake（不然客戶 T 加文字框後改字型，左邊預覽不變 — 因為 active 被
+      // skip）。autoSave 關閉時尊重使用者選擇，需手動按儲存。v1.4.91 修。
       if ($('peAutoSave')?.checked) {
         if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
-        doAutoSave();
+        if (saveInFlight) { pendingSave = true; }
+        else { saveInFlight = true;
+          savePdf(true, {includeActive: true}).finally(() => {
+            saveInFlight = false;
+            if (pendingSave) { pendingSave = false; scheduleAutoSave(); }
+          });
+        }
       }
     });
   }
@@ -1253,10 +1261,17 @@ function wireBatchPanel(sel, textKids) {
     const v = e.target.value;
     textKids.forEach(o => { o._peFont = v; o.set('fontFamily', fontFamilyForKey(v)); });
     bump();
-    // 立即 trigger save（同單選 pfFont），讓字型變更馬上 bake 進 BG PNG
+    // 立即 trigger save（同單選 pfFont），includeActive: true 讓選取的
+    // 物件也被 bake，使用者立刻看到字型差別
     if ($('peAutoSave')?.checked) {
       if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
-      doAutoSave();
+      if (saveInFlight) { pendingSave = true; }
+      else { saveInFlight = true;
+        savePdf(true, {includeActive: true}).finally(() => {
+          saveInFlight = false;
+          if (pendingSave) { pendingSave = false; scheduleAutoSave(); }
+        });
+      }
     }
   });
   const sizeEl = $('pfBatchSize');
@@ -1885,7 +1900,8 @@ function showLoading(text) {
 }
 function hideLoading() { $('peLoading').classList.remove('show'); }
 
-async function savePdf(isAuto) {
+async function savePdf(isAuto, opts) {
+  opts = opts || {};
   if (!uploadId) return;
   if (!isAuto) setStatus('儲存中…');
   else setStatus('自動儲存中…');
@@ -1896,7 +1912,11 @@ async function savePdf(isAuto) {
   // Active object per canvas — skip it during this save so the background
   // PDF doesn't duplicate its rendering on top of the Fabric overlay the
   // user is actively editing. Next save (after deselect) bakes it in.
-  const activePerCanvas = pageCanvases.map(fc => fc.getActiveObject());
+  // opts.includeActive=true：font 換完後立刻 bake 即時看到差別（v1.4.91 修
+  // 客戶反映「T 加文字框後改字型左邊預覽不變」— 因為原本一律 skip active）。
+  const activePerCanvas = opts.includeActive
+    ? pageCanvases.map(_ => null)
+    : pageCanvases.map(fc => fc.getActiveObject());
   let anySkipped = false;
   pageCanvases.forEach((fc, pIdx) => {
     const objs = [];
