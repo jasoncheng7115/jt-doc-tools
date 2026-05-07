@@ -33,19 +33,25 @@
 .td-drop-zone b { color:#1e40af; }
 .td-drop-zone .hint { color:#94a3b8; font-size:11px; margin-left:6px; }
 
-/* CSS multi-column layout — 瀏覽器自動把卡片塞進去並平衡每欄高度，
-   讓 IT 資料這種特高卡片自己一欄、其他短卡片堆在隔壁欄，避免 IT 欄
-   獨自掛在第二列導致版面歪。column-count 在窄螢幕用 media query 降階。 */
-.td-pattern-cats { column-count: 4; column-gap: 10px; margin-top:8px; }
-@media (max-width: 1100px) { .td-pattern-cats { column-count: 3; } }
-@media (max-width: 820px)  { .td-pattern-cats { column-count: 2; } }
-@media (max-width: 560px)  { .td-pattern-cats { column-count: 1; } }
+/* 三欄固定版面 — 用 wrapper 把分類顯式分組，每欄內 flex stack 短卡片，
+   IT 資料獨佔一欄。比 CSS multi-column 可預測，IT 卡很高也不會把版面打亂。
+   窄螢幕用 media query 把欄合併。 */
+.td-pattern-cats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  margin-top: 8px; align-items: start;
+}
+.td-pat-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+@media (max-width: 1100px) {
+  .td-pattern-cats { grid-template-columns: repeat(2, 1fr); }
+  /* 第三欄（IT）會掉到下一列 — 跨整列以維持寬度 */
+  .td-pat-col:nth-child(3) { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) {
+  .td-pattern-cats { grid-template-columns: 1fr; }
+  .td-pat-col:nth-child(3) { grid-column: auto; }
+}
 .td-cat { background:#fff; border:1px solid var(--border); border-radius:8px;
-  padding:8px 10px;
-  /* 別讓單張卡片跨欄被切兩半 */
-  break-inside: avoid; -webkit-column-break-inside: avoid;
-  display: inline-block; width: 100%; box-sizing: border-box;
-  margin-bottom: 10px; vertical-align: top; }
+  padding:8px 10px; min-width: 0; box-sizing: border-box; }
 .td-cat h4 { margin:0 0 6px; font-size:13px; color:#1e293b; font-weight:600;
   border-bottom:1px solid #f1f5f9; padding-bottom:4px;
   display:flex; align-items:center; gap:6px;
@@ -178,8 +184,14 @@
       'IT 資料':  'globe',
       '自訂':     'edit',
     } %}
-    {% for grp_name, items in grouped.items() %}
-    <div class="td-cat" data-cat="{{ loop.index }}">
+    {# 顯式分三欄 — 第 1 欄為「個資 × 3」、第 2 欄「企業/其他」、第 3 欄
+       獨立給 IT（項目最多）。其它未列入 col1/col2/col3_extra 的分類自動放
+       第 2 欄末尾，避免新增分類時被吃掉。 #}
+    {% set col1_names = ['個人身分', '聯絡方式', '金融資訊'] %}
+    {% set col2_names = ['企業資料', '其他'] %}
+    {% set col3_names = ['IT 資料'] %}
+    {% macro cat_card(grp_name, items, idx) -%}
+    <div class="td-cat" data-cat="{{ idx }}">
       <h4>
         <span class="td-cat-icon">{{ icon(cat_icons.get(grp_name, 'tool'), size=15) }}</span>
         <span class="td-cat-name">{{ grp_name }}</span>
@@ -213,7 +225,28 @@
       </label>
       {% endfor %}
     </div>
-    {% endfor %}
+    {%- endmacro %}
+    {# Column 1 #}
+    <div class="td-pat-col">
+      {% for grp_name in col1_names if grp_name in grouped %}
+        {{ cat_card(grp_name, grouped[grp_name], loop.index) }}
+      {% endfor %}
+    </div>
+    {# Column 2: explicit + uncategorised fallback #}
+    <div class="td-pat-col">
+      {% for grp_name in col2_names if grp_name in grouped %}
+        {{ cat_card(grp_name, grouped[grp_name], 100 + loop.index) }}
+      {% endfor %}
+      {% for grp_name, items in grouped.items() if grp_name not in (col1_names + col2_names + col3_names) %}
+        {{ cat_card(grp_name, items, 200 + loop.index) }}
+      {% endfor %}
+    </div>
+    {# Column 3: IT (tall) #}
+    <div class="td-pat-col">
+      {% for grp_name in col3_names if grp_name in grouped %}
+        {{ cat_card(grp_name, grouped[grp_name], 300 + loop.index) }}
+      {% endfor %}
+    </div>
   </div>
   <details style="margin-top:10px;">
     <summary style="cursor:pointer; font-size:12.5px; color:#475569;">
