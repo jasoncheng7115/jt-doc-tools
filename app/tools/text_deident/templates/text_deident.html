@@ -33,10 +33,19 @@
 .td-drop-zone b { color:#1e40af; }
 .td-drop-zone .hint { color:#94a3b8; font-size:11px; margin-left:6px; }
 
-.td-pattern-cats { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));
-  gap:10px; margin-top:8px; }
+/* CSS multi-column layout — 瀏覽器自動把卡片塞進去並平衡每欄高度，
+   讓 IT 資料這種特高卡片自己一欄、其他短卡片堆在隔壁欄，避免 IT 欄
+   獨自掛在第二列導致版面歪。column-count 在窄螢幕用 media query 降階。 */
+.td-pattern-cats { column-count: 4; column-gap: 10px; margin-top:8px; }
+@media (max-width: 1100px) { .td-pattern-cats { column-count: 3; } }
+@media (max-width: 820px)  { .td-pattern-cats { column-count: 2; } }
+@media (max-width: 560px)  { .td-pattern-cats { column-count: 1; } }
 .td-cat { background:#fff; border:1px solid var(--border); border-radius:8px;
-  padding:8px 10px; }
+  padding:8px 10px;
+  /* 別讓單張卡片跨欄被切兩半 */
+  break-inside: avoid; -webkit-column-break-inside: avoid;
+  display: inline-block; width: 100%; box-sizing: border-box;
+  margin-bottom: 10px; vertical-align: top; }
 .td-cat h4 { margin:0 0 6px; font-size:13px; color:#1e293b; font-weight:600;
   border-bottom:1px solid #f1f5f9; padding-bottom:4px;
   display:flex; align-items:center; gap:6px;
@@ -217,8 +226,8 @@
   </details>
 
   {{ llm_gate('text-deident', llm_enabled, llm_model, mode='augment',
-              feature_label='LLM 補偵測（找 regex 漏掉的）',
-              feature_desc='regex 抓不到的 context-sensitive 案例：人名（含「先生 / 經理」等稱謂）、職稱、客戶代號、產品代號、特殊地址簡稱等。會多送一次 LLM call，會稍慢但找回率高。',
+              feature_label='LLM 補偵測（找出 regex 漏掉的敏感資訊）',
+              feature_desc='regex 只能抓「格式固定」的東西（身分證、電話、Email、銀行帳號…）。實務上更常漏掉的是「靠上下文判讀」的內容：人名（王小明、陳經理、林先生）、職稱（採購主管、業務副總）、自訂代號（客戶 C-2024-001、產品 SKU、合約編號）、口語化地址（台北南港分公司、總部三樓會議室）、其他公司 / 機構名稱等。搭配本機 LLM 跑（預設 gemma4:26b，內部 4 份廠商表單 × 73 欄位實測 100% 命中），完全不出網路、不上雲、不留資料；多花一次 LLM call 換來真正可用的去識別化效果，比單跑 regex 漏一堆要實在得多。',
               input_id='tdLlmAugment') }}
 </div>
 
