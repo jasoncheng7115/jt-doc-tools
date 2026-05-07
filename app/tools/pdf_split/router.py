@@ -44,6 +44,7 @@ def _parse_ranges(text: str, page_count: int) -> list[list[int]]:
 
 @router.post("/submit")
 async def submit(
+    request: Request,
     file: List[UploadFile] = File(...),
     mode: str = Form("each"),  # each | ranges
     ranges: str = Form(""),
@@ -52,6 +53,8 @@ async def submit(
     if not files:
         raise HTTPException(400, "沒有檔案")
     bid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(bid, request)
     bdir = settings.temp_dir / f"split_{bid}"
     bdir.mkdir(parents=True, exist_ok=True)
     saved: list[tuple[Path, str]] = []

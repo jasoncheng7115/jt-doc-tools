@@ -22,10 +22,12 @@ async def index(request: Request):
 
 
 @router.post("/submit")
-async def submit(file: List[UploadFile] = File(...)):
+async def submit(request: Request, file: List[UploadFile] = File(...)):
     files = file or []
     if not files: raise HTTPException(400, "沒有檔案")
     bid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(bid, request)
     bdir = settings.temp_dir / f"o2p_{bid}"; bdir.mkdir(parents=True, exist_ok=True)
     saved: list[tuple[Path, str, bool]] = []   # (path, orig_name, is_pdf)
     for i, f in enumerate(files):

@@ -125,9 +125,26 @@ body {
   background: rgba(255,255,255,0.10); color: #fff;
   text-decoration: none; transition: background 0.12s, transform 0.05s;
   border: 1px solid rgba(255,255,255,0.10);
+  position: relative;
 }
 .sb-item:hover { background: rgba(255,255,255,0.20); border-color: rgba(255,255,255,0.22); }
 .sb-item:active { transform: translateY(1px); }
+/* 釘選按鈕 — 滑入時才顯示，已釘選的常駐金色 */
+.sb-pin-btn {
+  position: absolute; top: 4px; right: 4px;
+  background: transparent; border: 1px solid transparent; padding: 3px;
+  border-radius: 5px; cursor: pointer; color: rgba(255,255,255,0.55);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.sb-item:hover .sb-pin-btn { opacity: 1; }
+.sb-pin-btn:hover { background: rgba(255,255,255,0.18); color: #fde047; }
+.sb-pin-btn.is-pinned {
+  opacity: 1; color: #fde047;
+}
+.sb-pin-btn.is-pinned svg { fill: #fde047; }
+/* 釘選群組 summary 圖示用金色與其他群組區別 */
+.sb-pinned > summary .sb-group-icon { color: #fde047; }
 /* Active item visually merges into the right content area: same bg colour
    as the page (var(--bg)), no border/shadow, extended to the right edge
    so it looks like a tab kissing the content. */

@@ -204,17 +204,33 @@
       <input class="sidebar-search" id="sidebarSearch" type="search" placeholder="搜尋工具… (例：填表 / form fill、用印 / stamp)" />
     </div>
     <div class="sidebar-scroll">
+      {# 釘選群組 — 預留 placeholder，由前端 JS 依 localStorage 動態填入。
+         如果使用者有釘選工具，這裡會顯示在最上方便快速存取。 #}
+      <details class="sb-group sb-pinned" id="sbPinnedGroup" open hidden>
+        <summary><span class="sb-group-icon">{{ icon('star', size=15) }}</span>釘選<span class="sb-count" id="sbPinnedCount">0</span></summary>
+        <div class="sb-items" id="sbPinnedItems"></div>
+      </details>
       {% for g in nav_tool_groups(request) %}
       <details class="sb-group" open>
         <summary><span class="sb-group-icon">{{ icon('tool', size=15) }}</span>{{ g.title }}<span class="sb-count">{{ g.tools|length }}</span></summary>
         <div class="sb-items">
           {% for t in g.tools %}
-          <a class="sb-item" href="{{ t.url }}" data-name="{{ t.name }} {{ t.description }} {{ t.keywords }}">
+          <a class="sb-item" href="{{ t.url }}" data-tool-id="{{ t.id }}" data-name="{{ t.name }} {{ t.description }} {{ t.keywords }}">
             <span class="sb-item-icon tile-color-{{ t.color|default(0) }}">{{ icon(t.icon or 'tool', size=18) }}</span>
             <span class="sb-item-text">
               <span class="sb-item-name">{{ t.name }}</span>
               {% if t.description %}<span class="sb-item-desc">{{ t.description }}</span>{% endif %}
             </span>
+            <button class="sb-pin-btn" type="button" tabindex="-1"
+                    data-pin-tool="{{ t.id }}" data-pin-name="{{ t.name }}"
+                    data-pin-desc="{{ t.description or '' }}"
+                    data-pin-icon="{{ t.icon or 'tool' }}"
+                    data-pin-color="{{ t.color|default(0) }}"
+                    title="釘選 / 取消釘選">
+              <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2l2.39 4.84L20 7.6l-4 3.9L17 17l-5-2.6L7 17l1-5.5-4-3.9 5.61-.76L12 2z"/>
+              </svg>
+            </button>
           </a>
           {% endfor %}
         </div>
@@ -371,6 +387,64 @@
           });
         });
       }
+      // ---------- 釘選功能 (localStorage) ----------
+      // 結構：localStorage['jtdt:pinned'] = JSON array of tool_id
+      // 點工具卡片右上的星星按鈕 toggle，已釘選的會出現在最上方「釘選」群組。
+      // 釘選群組是純 mirror，不影響原本的分類列表。
+      const PINS_KEY = 'jtdt:pinned';
+      function loadPins() {
+        try { return JSON.parse(localStorage.getItem(PINS_KEY)) || []; }
+        catch (_e) { return []; }
+      }
+      function savePins(arr) {
+        try { localStorage.setItem(PINS_KEY, JSON.stringify(arr)); } catch (_e) {}
+      }
+      function renderPinned() {
+        const pins = loadPins();
+        const grp = document.getElementById('sbPinnedGroup');
+        const cnt = document.getElementById('sbPinnedCount');
+        const cont = document.getElementById('sbPinnedItems');
+        if (!grp || !cont) return;
+        // 取消所有按鈕的 is-pinned，再依當前 pins 標回
+        sb.querySelectorAll('.sb-pin-btn').forEach(b => b.classList.remove('is-pinned'));
+        cont.innerHTML = '';
+        if (!pins.length) {
+          grp.hidden = true; cnt.textContent = '0';
+          return;
+        }
+        grp.hidden = false;
+        cnt.textContent = String(pins.length);
+        // 依 pins 順序找對應的 sb-item，clone 到釘選群組
+        for (const tid of pins) {
+          // 找原本的 sb-item（避開 sb-pinned 群組內 cloned 的）
+          const orig = sb.querySelector('.sb-group:not(.sb-pinned) .sb-item[data-tool-id="' + tid + '"]');
+          if (!orig) continue;  // 工具被移除 / 沒權限
+          const clone = orig.cloneNode(true);
+          // clone 內的釘選按鈕也標金色（同 tool_id）
+          const cloneBtn = clone.querySelector('.sb-pin-btn');
+          if (cloneBtn) cloneBtn.classList.add('is-pinned');
+          cont.appendChild(clone);
+          // 同步原本 group 內的按鈕狀態
+          const origBtn = orig.querySelector('.sb-pin-btn');
+          if (origBtn) origBtn.classList.add('is-pinned');
+        }
+      }
+      function togglePin(tid) {
+        const pins = loadPins();
+        const idx = pins.indexOf(tid);
+        if (idx >= 0) pins.splice(idx, 1);
+        else pins.push(tid);
+        savePins(pins);
+        renderPinned();
+      }
+      // 委派 click 處理（包含原本 + 釘選群組內 clone 的按鈕）
+      sb.addEventListener('click', (e) => {
+        const btn = e.target.closest('.sb-pin-btn');
+        if (!btn) return;
+        e.preventDefault(); e.stopPropagation();
+        togglePin(btn.dataset.pinTool);
+      });
+      renderPinned();
       // Floating custom scrollbar (painted on sidebar, overlays the active tile)
       const scroller = sb && sb.querySelector('.sidebar-scroll');
       const thumb = document.getElementById('sidebarScrollbar');

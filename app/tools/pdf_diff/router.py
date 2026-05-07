@@ -271,6 +271,7 @@ def _metadata_diff(a_meta: dict, b_meta: dict) -> list[dict]:
 
 @router.post("/compare")
 async def compare(
+    request: Request,
     file_a: UploadFile = File(...),
     file_b: UploadFile = File(...),
     llm_summarize: str = Form(""),
@@ -281,6 +282,8 @@ async def compare(
         raise HTTPException(400, "empty file")
 
     uid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(uid, request)
     pa = _ensure_pdf(file_a, data_a, uid, "a")
     pb = _ensure_pdf(file_b, data_b, uid, "b")
 

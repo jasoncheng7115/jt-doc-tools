@@ -19,7 +19,7 @@ async def index(request: Request):
 
 
 @router.post("/submit")
-async def submit(file: List[UploadFile] = File(...)):
+async def submit(request: Request, file: List[UploadFile] = File(...)):
     files = file or []
     if len(files) < 2:
         raise HTTPException(400, "至少需要 2 個 PDF 檔")
@@ -27,6 +27,8 @@ async def submit(file: List[UploadFile] = File(...)):
         if not (f.filename or "").lower().endswith(".pdf"):
             raise HTTPException(400, f"只支援 PDF：{f.filename}")
     bid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(bid, request)
     bdir = settings.temp_dir / f"merge_{bid}"
     bdir.mkdir(parents=True, exist_ok=True)
     saved: list[tuple[Path, str]] = []

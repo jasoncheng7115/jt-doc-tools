@@ -44,6 +44,7 @@ async def index(request: Request):
 
 @router.post("/submit")
 async def submit(
+    request: Request,
     file: List[UploadFile] = File(...),
     user_pw: str = Form(""),
     owner_pw: str = Form(""),
@@ -66,6 +67,8 @@ async def submit(
         raise HTTPException(400, "沒有檔案")
 
     bid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(bid, request)
     bdir = settings.temp_dir / f"enc_{bid}"
     bdir.mkdir(parents=True, exist_ok=True)
     saved: list[tuple[Path, str]] = []
