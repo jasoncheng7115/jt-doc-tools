@@ -27,6 +27,7 @@ async def index(request: Request):
 
 @router.post("/submit")
 async def submit(
+    request: Request,
     file: List[UploadFile] = File(...),
     password: str = Form(""),
     use_filename_as_password: str = Form(""),  # "1" / "true" / "on" → 開
@@ -75,6 +76,8 @@ async def submit(
             d += _td(days=1)
 
     bid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(bid, request)
     bdir = settings.temp_dir / f"dec_{bid}"
     bdir.mkdir(parents=True, exist_ok=True)
     saved: list[tuple[Path, str]] = []

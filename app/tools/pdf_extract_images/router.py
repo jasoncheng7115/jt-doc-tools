@@ -25,12 +25,14 @@ async def index(request: Request):
 # ---------- input PDF preview (page thumbs after upload) ----------
 
 @router.post("/load")
-async def load(file: UploadFile = File(...)):
+async def load(request: Request, file: UploadFile = File(...)):
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF")
     data = await file.read()
     if not data: raise HTTPException(400, "empty file")
     upload_id = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
     src = settings.temp_dir / f"exL_{upload_id}.pdf"
     src.write_bytes(data)
     with fitz.open(str(src)) as doc:
@@ -74,6 +76,8 @@ async def extract(request: Request, file: UploadFile = File(...)):
     data = await file.read()
     if not data: raise HTTPException(400, "empty file")
     bid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(bid, request)
     bdir = settings.temp_dir / f"ext_{bid}"; bdir.mkdir(parents=True, exist_ok=True)
     src = bdir / Path(file.filename).name
     src.write_bytes(data)

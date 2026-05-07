@@ -59,13 +59,15 @@ async def index(request: Request):
 
 
 @router.post("/load")
-async def load(file: UploadFile = File(...)):
+async def load(request: Request, file: UploadFile = File(...)):
     """Stash the upload + return page count and thumbnail URLs."""
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF")
     data = await file.read()
     if not data: raise HTTPException(400, "empty file")
     upload_id = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
     src = settings.temp_dir / f"pgL_{upload_id}.pdf"
     src.write_bytes(data)
     with fitz.open(str(src)) as doc:
@@ -96,6 +98,7 @@ async def thumb(upload_id: str, page: int, large: bool = False):
 
 @router.post("/submit-from-upload")
 async def submit_from_upload(
+    request: Request,
     upload_id: str = Form(...),
     order: str = Form(...),       # comma-separated 1-based page numbers
     filename: str = Form(""),
@@ -108,6 +111,8 @@ async def submit_from_upload(
         raise HTTPException(400, "結果頁數為 0")
 
     bid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(bid, request)
     bdir = settings.temp_dir / f"pg_{bid}"; bdir.mkdir(parents=True, exist_ok=True)
     stem = Path(filename or src.name).stem
     out_name = f"{stem}_pages.pdf"
@@ -133,6 +138,7 @@ async def submit_from_upload(
 
 @router.post("/submit")
 async def submit(
+    request: Request,
     file: List[UploadFile] = File(...),
     mode: str = Form("reorder"),  # reorder | drop
     spec: str = Form(""),
@@ -140,6 +146,8 @@ async def submit(
     files = file or []
     if not files: raise HTTPException(400, "沒有檔案")
     bid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(bid, request)
     bdir = settings.temp_dir / f"pg_{bid}"; bdir.mkdir(parents=True, exist_ok=True)
     saved: list[tuple[Path, str]] = []
     for i, f in enumerate(files):

@@ -397,13 +397,15 @@ async def index(request: Request):
 
 
 @router.post("/analyze")
-async def analyze(file: UploadFile = File(...)):
+async def analyze(request: Request, file: UploadFile = File(...)):
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF")
     data = await file.read()
     if not data:
         raise HTTPException(400, "empty file")
     upload_id = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
     src = settings.temp_dir / f"cmp_{upload_id}_in.pdf"
     src.write_bytes(data)
     try:

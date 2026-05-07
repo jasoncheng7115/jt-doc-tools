@@ -21,13 +21,15 @@ async def index(request: Request):
 
 
 @router.post("/load")
-async def load(file: UploadFile = File(...)):
+async def load(request: Request, file: UploadFile = File(...)):
     """Stash the upload + return page count and thumbnail URLs (single file)."""
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF")
     data = await file.read()
     if not data: raise HTTPException(400, "empty file")
     upload_id = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
     src = settings.temp_dir / f"pnL_{upload_id}.pdf"
     src.write_bytes(data)
     with fitz.open(str(src)) as doc:
@@ -145,6 +147,7 @@ async def preview_thumb(
 
 @router.post("/submit")
 async def submit(
+    request: Request,
     file: List[UploadFile] = File(...),
     position: str = Form("br"),    # tl tr bl br tc bc
     fmt: str = Form("{n} / {N}"),  # template tokens: {n}=current 1-based, {N}=total
@@ -158,6 +161,8 @@ async def submit(
     files = file or []
     if not files: raise HTTPException(400, "沒有檔案")
     bid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(bid, request)
     bdir = settings.temp_dir / f"pn_{bid}"; bdir.mkdir(parents=True, exist_ok=True)
     saved: list[tuple[Path, str]] = []
     for i, f in enumerate(files):

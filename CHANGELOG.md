@@ -4,6 +4,23 @@
 
 ---
 
+## [1.4.96] - 2026-05-07
+
+### 新增
+
+- **使用者自訂釘選工具**：sidebar 每個工具卡片右上角加金色星星按鈕（hover 顯示），點下去即釘選 / 取消釘選；已釘選的工具會在 sidebar 最上方「釘選」群組鏡像出現，方便快速存取常用工具。資料存 `localStorage['jtdt:pinned']`，跨工具頁保留；目前 per-browser，未來可加 server-side 同步多裝置
+
+---
+
+## [1.4.95] - 2026-05-07
+
+### 修正
+
+- **補完 12 個工具的 `upload_owner.record()` 呼叫**：v1.4.83 安全強化漏掉的工具現在也會把 upload_id 歸屬到登入 user，admin 系統狀態頁的「目前佔用」欄位現在會反映**所有**工具的上傳活動。覆蓋：pdf-merge / pdf-split / pdf-rotate / pdf-pages / pdf-pageno / pdf-compress / pdf-extract-images / pdf-decrypt / pdf-encrypt / office-to-pdf / image-to-pdf / pdf-diff
+- 真正純 text body 的工具（text-diff / text-deident /detect / translate-doc）沒有 upload_id 不必加；wordcount /analyze 是 transient 立即清，也不加。這幾個工具的 user 活動透過 audit middleware 仍會出現在「近 30 天」欄
+
+---
+
 ## [1.4.94] - 2026-05-07
 
 ### 修正

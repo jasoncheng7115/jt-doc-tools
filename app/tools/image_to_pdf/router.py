@@ -88,7 +88,7 @@ async def index(request: Request):
 
 
 @router.post("/upload")
-async def upload(file: UploadFile = File(...)):
+async def upload(request: Request, file: UploadFile = File(...)):
     """Save one image, generate thumbnail + full preview, return metadata."""
     name = (file.filename or "").strip()
     ext = Path(name).suffix.lower()
@@ -121,6 +121,8 @@ async def upload(file: UploadFile = File(...)):
         raise HTTPException(400, f"無法解析圖片：{e}")
 
     fid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(fid, request)
     out = _img_path(fid)
     img.save(str(out), format="PNG", optimize=False)
 
@@ -256,6 +258,8 @@ async def generate(request: Request):
             pass
 
     bid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(bid, request)
     bdir = _work_dir() / f"job_{bid}"
     bdir.mkdir(parents=True, exist_ok=True)
     out_path = bdir / filename
