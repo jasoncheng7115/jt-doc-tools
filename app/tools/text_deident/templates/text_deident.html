@@ -74,11 +74,12 @@
   color:#1e40af; }
 .td-cat .td-cat-tools button[data-cat-act="all"]:hover { color:#16a34a; border-color:#16a34a; background:#f0fdf4; }
 .td-cat .td-cat-tools button[data-cat-act="none"]:hover { color:#dc2626; border-color:#dc2626; background:#fef2f2; }
-.td-cat label { display:flex; align-items:center; gap:6px; padding:2px 0;
-  font-size:12.5px; cursor:pointer; }
-/* 補齊到 5 倍數高度的 placeholder — 視覺上看不見但佔同等空間，
-   讓不同卡片的底部對齊（5/10/15/20 的「樓層」高度節奏）。*/
-.td-cat label.td-pat-pad { visibility: hidden; pointer-events: none; }
+.td-cat label { display:flex; align-items:center; gap:6px;
+  padding:3px 8px; margin: 0 -8px;  /* 負 margin 讓 hover 光棒延伸到卡片邊緣 */
+  font-size:12.5px; cursor:pointer; border-radius: 4px;
+  transition: background 0.08s; }
+.td-cat label:hover { background: #eef2ff; }
+.td-cat label:has(input:checked):hover { background: #dbeafe; }
 
 .td-stats { display:flex; gap:14px; flex-wrap:wrap; align-items:center;
   margin:8px 0; font-size:12.5px; }
@@ -225,13 +226,6 @@
       <label>
         <input type="checkbox" data-pat-id="{{ p.id }}" {% if p.default_on %}checked{% endif %}>
         <span>{{ p.label }}</span>
-      </label>
-      {% endfor %}
-      {# 補齊到 5 的倍數，讓不同卡片底部對齊形成乾淨的「樓層」節奏 #}
-      {% set _pad = (5 - items|length % 5) % 5 %}
-      {% for _ in range(_pad) %}
-      <label class="td-pat-pad" aria-hidden="true">
-        <input type="checkbox" disabled tabindex="-1"><span>&nbsp;</span>
       </label>
       {% endfor %}
     </div>
