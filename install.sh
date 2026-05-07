@@ -579,7 +579,7 @@ setup_python() {
     [ -x "$INSTALL_DIR/.venv/bin/python" ] || die "Python venv 建立失敗"
     log "驗證關鍵依賴可正常 import ..."
     "$INSTALL_DIR/.venv/bin/python" -c \
-        "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx" \
+        "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx, psutil" \
         || die "依賴 import 失敗 — 安裝不完整，請查看上方錯誤"
     ok "Python 環境就緒：$INSTALL_DIR/.venv"
 }

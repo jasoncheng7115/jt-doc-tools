@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}系統狀態 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.ss-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:14px; }
+.ss-card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:14px 16px;
+  display:flex; flex-direction:column; gap:8px; }
+.ss-card h3 { margin:0; font-size:13px; color:#1e40af; font-weight:700;
+  display:flex; align-items:center; gap:6px; padding-bottom:6px;
+  border-bottom:1px solid #f1f5f9; }
+.ss-metric { display:flex; align-items:baseline; gap:6px; }
+.ss-metric .num { font-size:24px; font-weight:700; color:#0f172a; line-height:1; }
+.ss-metric .unit { font-size:12px; color:#64748b; }
+.ss-bar { height:8px; background:#f1f5f9; border-radius:4px; overflow:hidden; position:relative; }
+.ss-bar > i { display:block; height:100%; background: linear-gradient(90deg,#3b82f6,#1e40af);
+  transition: width 0.3s; }
+.ss-bar.warn > i { background: linear-gradient(90deg,#f59e0b,#d97706); }
+.ss-bar.crit > i { background: linear-gradient(90deg,#ef4444,#b91c1c); }
+.ss-row { display:flex; justify-content:space-between; font-size:12px; color:#475569; }
+.ss-sub { font-size:11px; color:#94a3b8; }
+.ss-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:6px; }
+.ss-table th, .ss-table td { text-align:left; padding:6px 10px; border-bottom:1px solid #f1f5f9; }
+.ss-table th { background:#f8fafc; font-weight:600; color:#475569; font-size:11.5px;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  cursor: pointer; user-select: none; position: relative; }
+.ss-table th:hover { background:#eef2ff; color:#1e40af; }
+.ss-table th.sort-asc::after  { content: ' ▲'; font-size: 9px; color:#3b82f6; }
+.ss-table th.sort-desc::after { content: ' ▼'; font-size: 9px; color:#3b82f6; }
+.ss-table td.num { text-align:right; font-variant-numeric: tabular-nums; }
+.ss-table tr:hover td { background: #f8fafc; }
+/* 橫向長條圖：用獨立 column 容納，bar 寬度依 % 算 */
+.ss-bar-cell { width: 200px; padding: 6px 10px; }
+.ss-bar-cell .bar-track {
+  height: 14px; background: #f1f5f9; border-radius: 3px; overflow: hidden;
+  position: relative;
+}
+.ss-bar-cell .bar-fill {
+  height: 100%; background: linear-gradient(90deg, #60a5fa, #2563eb);
+  border-radius: 3px; transition: width 0.3s;
+}
+.ss-bar-cell .bar-fill.warn { background: linear-gradient(90deg, #fbbf24, #d97706); }
+.ss-bar-cell .bar-fill.crit { background: linear-gradient(90deg, #f87171, #dc2626); }
+.ss-disabled-banner { background:#fef3c7; border:1px solid #fbbf24; color:#92400e;
+  padding:10px 14px; border-radius:8px; margin-bottom:12px; font-size:13.5px; }
+.ss-controls { display:flex; gap:10px; align-items:center; margin: 8px 0 14px; }
+.ss-controls .muted { font-size:12px; color:#64748b; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>{{ icon('eye', size=22) }} 系統狀態</h1>
+<p class="muted">主機資源用量 + 各使用者檔案佔用。資料每 5 秒自動刷新。</p>
+
+<div class="ss-controls">
+  <label style="font-size:12.5px; cursor:pointer; user-select:none;">
+    <input type="checkbox" id="ssAutoRefresh" checked>
+    自動刷新（每 5 秒）
+  </label>
+  <button class="btn" id="ssRefreshNow">{{ icon('refresh', size=14) }} 立即刷新</button>
+  <span class="muted" id="ssLastUpdate"></span>
+</div>
+
+<div id="ssBanner"></div>
+
+<div class="ss-grid" id="ssHostGrid"></div>
+
+<div class="panel" style="margin-top:16px;">
+  <h2 style="margin-top:0;">使用者檔案用量</h2>
+  <p class="muted" style="font-size:12.5px; margin:0 0 8px;">
+    包含暫存上傳檔（owner ACL 紀錄追蹤）+ 表單填寫 / 用印 / 浮水印歷史目錄。
+    匿名 / 未追蹤的檔案歸到「(匿名)」列。
+  </p>
+  <div id="ssUserStats">載入中…</div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const $ = (id) => document.getElementById(id);
+
+// ---- formatting ----
+function fmtBytes(n) {
+  if (n == null || isNaN(n)) return '—';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(i === 0 ? 0 : 1) + ' ' + u[i];
+}
+function fmtPercent(p) {
+  return p == null ? '—' : (p.toFixed(1) + '%');
+}
+function fmtBitsRate(bps) {
+  // bytes/sec → bits/sec
+  const bitsps = bps * 8;
+  if (bitsps < 1000) return bitsps.toFixed(0) + ' bps';
+  if (bitsps < 1e6) return (bitsps / 1000).toFixed(1) + ' Kbps';
+  if (bitsps < 1e9) return (bitsps / 1e6).toFixed(1) + ' Mbps';
+  return (bitsps / 1e9).toFixed(2) + ' Gbps';
+}
+function fmtBytesRate(bps) {
+  if (bps < 1024) return bps.toFixed(0) + ' B/s';
+  if (bps < 1024 * 1024) return (bps / 1024).toFixed(1) + ' KB/s';
+  if (bps < 1024 * 1024 * 1024) return (bps / 1024 / 1024).toFixed(1) + ' MB/s';
+  return (bps / 1024 / 1024 / 1024).toFixed(2) + ' GB/s';
+}
+function fmtUptime(secAgo) {
+  const days = Math.floor(secAgo / 86400);
+  const hours = Math.floor((secAgo % 86400) / 3600);
+  const mins = Math.floor((secAgo % 3600) / 60);
+  if (days > 0) return `${days} 天 ${hours} 時 ${mins} 分`;
+  if (hours > 0) return `${hours} 時 ${mins} 分`;
+  return `${mins} 分`;
+}
+function escapeHTML(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function barClass(pct) {
+  if (pct >= 90) return 'crit';
+  if (pct >= 75) return 'warn';
+  return '';
+}
+
+// ---- prev snapshot for delta calc ----
+let prev = null;
+
+function renderHost(host) {
+  if (!host.available) {
+    $('ssBanner').innerHTML = `<div class="ss-disabled-banner">
+      <b>主機資源監控未啟用</b>：${escapeHTML(host.error || 'psutil 模組未安裝')}。
+      請執行 <code>jtdt update</code> 或重新安裝。</div>`;
+    $('ssHostGrid').innerHTML = '';
+    return;
+  }
+  $('ssBanner').innerHTML = '';
+
+  const cards = [];
+
+  // ---- CPU
+  if (host.cpu && !host.cpu.error) {
+    const c = host.cpu;
+    const la = c.loadavg;
+    cards.push(`
+      <div class="ss-card">
+        <h3>CPU</h3>
+        <div class="ss-metric"><span class="num">${fmtPercent(c.percent)}</span></div>
+        <div class="ss-bar ${barClass(c.percent)}"><i style="width:${Math.min(100,c.percent||0)}%"></i></div>
+        <div class="ss-row"><span>邏輯核心</span><span>${c.count_logical || '—'}</span></div>
+        <div class="ss-row"><span>實體核心</span><span>${c.count_physical || '—'}</span></div>
+        ${la ? `<div class="ss-row"><span>Load avg</span><span>${la.map(v=>v.toFixed(2)).join(' / ')}</span></div>` : ''}
+      </div>`);
+  }
+
+  // ---- RAM
+  if (host.mem && !host.mem.error) {
+    const m = host.mem;
+    cards.push(`
+      <div class="ss-card">
+        <h3>記憶體 (RAM)</h3>
+        <div class="ss-metric">
+          <span class="num">${fmtBytes(m.used)}</span>
+          <span class="unit">/ ${fmtBytes(m.total)} (${fmtPercent(m.percent)})</span>
+        </div>
+        <div class="ss-bar ${barClass(m.percent)}"><i style="width:${Math.min(100,m.percent||0)}%"></i></div>
+        <div class="ss-row"><span>可用</span><span>${fmtBytes(m.available)}</span></div>
+        <div class="ss-row"><span>Swap</span><span>${fmtBytes(m.swap_used)} / ${fmtBytes(m.swap_total)} (${fmtPercent(m.swap_percent)})</span></div>
+      </div>`);
+  }
+
+  // ---- Disks
+  for (const d of (host.disks || [])) {
+    cards.push(`
+      <div class="ss-card">
+        <h3>${escapeHTML(d.label || d.path)}</h3>
+        <div class="ss-metric">
+          <span class="num">${fmtBytes(d.used)}</span>
+          <span class="unit">/ ${fmtBytes(d.total)} (${fmtPercent(d.percent)})</span>
+        </div>
+        <div class="ss-bar ${barClass(d.percent)}"><i style="width:${Math.min(100,d.percent||0)}%"></i></div>
+        <div class="ss-row"><span>剩餘</span><span>${fmtBytes(d.free)}</span></div>
+        <div class="ss-sub">${escapeHTML(d.path)}</div>
+      </div>`);
+  }
+
+  // ---- Disk IO (rate vs prev)
+  if (host.disk_io && prev && prev.host && prev.host.disk_io) {
+    const dt = host.ts - prev.host.ts;
+    if (dt > 0) {
+      const r = (host.disk_io.read_bytes - prev.host.disk_io.read_bytes) / dt;
+      const w = (host.disk_io.write_bytes - prev.host.disk_io.write_bytes) / dt;
+      cards.push(`
+        <div class="ss-card">
+          <h3>磁碟 I/O</h3>
+          <div class="ss-row"><span>讀取速率</span><span><b>${fmtBytesRate(Math.max(0,r))}</b></span></div>
+          <div class="ss-row"><span>寫入速率</span><span><b>${fmtBytesRate(Math.max(0,w))}</b></span></div>
+          <div class="ss-row"><span>累計讀</span><span>${fmtBytes(host.disk_io.read_bytes)}</span></div>
+          <div class="ss-row"><span>累計寫</span><span>${fmtBytes(host.disk_io.write_bytes)}</span></div>
+        </div>`);
+    }
+  } else if (host.disk_io) {
+    cards.push(`
+      <div class="ss-card">
+        <h3>磁碟 I/O</h3>
+        <div class="ss-sub">下次刷新後顯示速率（需要兩個取樣點）</div>
+        <div class="ss-row"><span>累計讀</span><span>${fmtBytes(host.disk_io.read_bytes)}</span></div>
+        <div class="ss-row"><span>累計寫</span><span>${fmtBytes(host.disk_io.write_bytes)}</span></div>
+      </div>`);
+  }
+
+  // ---- Network IO (rate vs prev)
+  if (host.net_io && prev && prev.host && prev.host.net_io) {
+    const dt = host.ts - prev.host.ts;
+    if (dt > 0) {
+      const tx = (host.net_io.bytes_sent - prev.host.net_io.bytes_sent) / dt;
+      const rx = (host.net_io.bytes_recv - prev.host.net_io.bytes_recv) / dt;
+      cards.push(`
+        <div class="ss-card">
+          <h3>網路</h3>
+          <div class="ss-row"><span>下傳速率</span><span><b>${fmtBitsRate(Math.max(0,rx))}</b></span></div>
+          <div class="ss-row"><span>上傳速率</span><span><b>${fmtBitsRate(Math.max(0,tx))}</b></span></div>
+          <div class="ss-row"><span>累計接收</span><span>${fmtBytes(host.net_io.bytes_recv)}</span></div>
+          <div class="ss-row"><span>累計發送</span><span>${fmtBytes(host.net_io.bytes_sent)}</span></div>
+        </div>`);
+    }
+  } else if (host.net_io) {
+    cards.push(`
+      <div class="ss-card">
+        <h3>網路</h3>
+        <div class="ss-sub">下次刷新後顯示速率</div>
+        <div class="ss-row"><span>累計接收</span><span>${fmtBytes(host.net_io.bytes_recv)}</span></div>
+        <div class="ss-row"><span>累計發送</span><span>${fmtBytes(host.net_io.bytes_sent)}</span></div>
+      </div>`);
+  }
+
+  // ---- Self process
+  if (host.self_proc) {
+    const sp = host.self_proc;
+    const upSec = (Date.now()/1000) - sp.create_time;
+    cards.push(`
+      <div class="ss-card">
+        <h3>本服務行程</h3>
+        <div class="ss-row"><span>PID</span><span>${sp.pid}</span></div>
+        <div class="ss-row"><span>RSS 記憶體</span><span>${fmtBytes(sp.rss)}</span></div>
+        <div class="ss-row"><span>執行緒數</span><span>${sp.threads}</span></div>
+        <div class="ss-row"><span>CPU%</span><span>${fmtPercent(sp.cpu_percent)}</span></div>
+        <div class="ss-row"><span>運行時間</span><span>${fmtUptime(upSec)}</span></div>
+      </div>`);
+  }
+
+  $('ssHostGrid').innerHTML = cards.join('');
+}
+
+// Sort state — persists across refreshes
+let sortKey = 'bytes';   // 'username' | 'count' | 'bytes'
+let sortDir = -1;        // 1 = asc, -1 = desc
+let _lastUsersData = null;
+
+function renderUsers(users) {
+  _lastUsersData = users;
+  if (!users || !users.users) {
+    $('ssUserStats').innerHTML = '<div class="muted">無資料</div>';
+    return;
+  }
+  if (users.users.length === 0) {
+    $('ssUserStats').innerHTML = '<div class="muted">尚無使用者檔案紀錄</div>';
+    return;
+  }
+  // Sort copy of rows
+  const rows = users.users.slice().sort((a, b) => {
+    const va = a[sortKey], vb = b[sortKey];
+    if (typeof va === 'string') {
+      return sortDir * va.localeCompare(vb, 'zh-TW');
+    }
+    return sortDir * ((va || 0) - (vb || 0));
+  });
+  // Max bytes for bar scaling — use max user bytes (not total) so the
+  // top user fills the bar, others scale relatively
+  const maxBytes = Math.max(...rows.map(r => r.bytes), 1);
+  const arrowFor = (k) =>
+    sortKey === k ? (sortDir > 0 ? 'sort-asc' : 'sort-desc') : '';
+  let html = `<table class="ss-table"><thead><tr>
+    <th data-sort-key="username" class="${arrowFor('username')}">使用者</th>
+    <th data-sort-key="count" class="num ${arrowFor('count')}">檔案數</th>
+    <th data-sort-key="bytes" class="num ${arrowFor('bytes')}">容量</th>
+    <th data-sort-key="bytes" class="${arrowFor('bytes')}" style="width:200px;">用量比例</th>
+    <th class="num">佔總計</th>
+  </tr></thead><tbody>`;
+  const total = users.total_bytes || 1;
+  for (const r of rows) {
+    const pct = (r.bytes / total) * 100;
+    const barPct = (r.bytes / maxBytes) * 100;
+    let barCls = '';
+    if (pct >= 50) barCls = 'crit';
+    else if (pct >= 25) barCls = 'warn';
+    html += `<tr>
+      <td>${escapeHTML(r.username)}</td>
+      <td class="num">${r.count.toLocaleString()}</td>
+      <td class="num">${fmtBytes(r.bytes)}</td>
+      <td class="ss-bar-cell"><div class="bar-track">
+        <div class="bar-fill ${barCls}" style="width:${barPct.toFixed(1)}%"></div>
+      </div></td>
+      <td class="num">${pct.toFixed(1)}%</td>
+    </tr>`;
+  }
+  html += `</tbody><tfoot><tr style="font-weight:600; background:#f8fafc;">
+    <td>合計</td>
+    <td class="num">${users.total_count.toLocaleString()}</td>
+    <td class="num">${fmtBytes(users.total_bytes)}</td>
+    <td></td>
+    <td class="num">100%</td>
+  </tr></tfoot></table>`;
+  $('ssUserStats').innerHTML = html;
+  // Wire up header clicks for sorting
+  $('ssUserStats').querySelectorAll('th[data-sort-key]').forEach(th => {
+    th.addEventListener('click', () => {
+      const k = th.dataset.sortKey;
+      if (sortKey === k) sortDir = -sortDir;  // toggle direction
+      else { sortKey = k; sortDir = (k === 'username' ? 1 : -1); }
+      renderUsers(_lastUsersData);  // re-render with new sort
+    });
+  });
+}
+
+async function refresh() {
+  try {
+    const r = await fetch('/admin/system-status/data');
+    if (!r.ok) {
+      $('ssBanner').innerHTML = `<div class="ss-disabled-banner">取得資料失敗：HTTP ${r.status}</div>`;
+      return;
+    }
+    const data = await r.json();
+    renderHost(data.host);
+    renderUsers(data.users);
+    prev = data;
+    $('ssLastUpdate').textContent = '最後更新：' + new Date().toLocaleTimeString();
+  } catch (e) {
+    $('ssBanner').innerHTML = `<div class="ss-disabled-banner">取得資料錯誤：${escapeHTML(e.message)}</div>`;
+  }
+}
+
+let timer = null;
+function startTimer() {
+  if (timer) return;
+  timer = setInterval(refresh, 5000);
+}
+function stopTimer() {
+  if (timer) { clearInterval(timer); timer = null; }
+}
+$('ssAutoRefresh').addEventListener('change', () => {
+  if ($('ssAutoRefresh').checked) startTimer();
+  else stopTimer();
+});
+$('ssRefreshNow').addEventListener('click', refresh);
+
+refresh();
+startTimer();
+</script>
+{% endblock %}

@@ -98,7 +98,9 @@
 .pe-sidebar .chip-row button:hover:not(.on) { background: #f3f4f6; }
 .pe-sidebar .chip-row button.on { background: #2563eb; color: #fff; border-color: #2563eb; }
 /* Toolbar — 寬度夠就一條，不夠就 chip 整塊一起換行。狀態列強制
-   flex-basis:100% 讓它一定獨佔下一列，不會把按鈕推來推去。*/
+   flex-basis:100% 讓它一定獨佔下一列，不會把按鈕推來推去。
+   選物件後右屬性面板出現會擠縮 toolbar 寬度，下面 media query 在中等
+   寬度下隱藏 verbose label / 縮 padding，讓按鈕仍能維持一條 (v1.4.93)。*/
 .pe-top {
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   margin-bottom: 10px;
@@ -123,6 +125,20 @@
   cursor: pointer; padding: 2px 8px; border: 1px solid #e5e7eb;
   border-radius: 6px; background: #f9fafb; color: #475569;
   white-space: nowrap;
+}
+.pe-autosave .hint { color: #94a3b8; font-size: 11px; }
+/* Compact mode — 1450px 以下：autosave 隱藏 hint、縮短按鈕 padding、
+   zoom slider 縮短，讓「選物件後右屬性面板出現」時 toolbar 仍能單行。 */
+@media (max-width: 1450px) {
+  .pe-top .btn { padding: 5px 9px; font-size: 12.5px; }
+  .pe-top-divider { margin: 0 2px; }
+  .pe-autosave .hint { display: none; }
+  .pe-zoom-ctl input[type="range"] { width: 90px; }
+  .pe-zoom-ctl { padding: 3px 6px; gap: 4px; }
+}
+@media (max-width: 1200px) {
+  /* 更窄：autosave 整段折起來，只顯示 checkbox + 簡短 label */
+  .pe-zoom-ctl input[type="range"] { width: 70px; }
 }
 /* Keyboard-key shortcut hint — wrapped in a light framed strip */
 .pe-shortcuts {
@@ -255,9 +271,9 @@
       設定
     </button>
     <span class="pe-top-divider"></span>
-    <label class="pe-autosave">
+    <label class="pe-autosave" title="自動預覽（改動後 ~1 秒自動重算）">
       <input type="checkbox" id="peAutoSave" checked>
-      自動預覽（改動後 ~1 秒自動重算）
+      自動預覽<span class="hint">（改動後 ~1 秒自動重算）</span>
     </label>
     <div class="pe-zoom-ctl">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px;"><circle cx="11" cy="11" r="7"/><path d="M16 16l5 5M8 11h6M11 8v6"/></svg>

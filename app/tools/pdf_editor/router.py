@@ -259,6 +259,7 @@ _COMMON_TC = set(
     "選項範圍位置數量大小高度寬度長度公司部門組織單位負責人員會員"
     "權限管理員一般個人團體大型中型小型快速分析統計報告紀錄歷史最新"
     "中文英文程式語言開源企業免費商業軟體網站手機電腦平板問題答案"
+    "測試驗收評估檢核審核確認核准發行版次更新修訂作業流程方法步驟"
     "建議考慮注意應該必須可能繁體簡體台灣中華民國"
     "虛擬化容器實體機器主機網域區網路由備份還原快照映像光碟硬碟"
     "記憶體處理器執行運作功能操作畫面文字段落章節範例例如說明文件"
@@ -318,8 +319,11 @@ def _looks_garbled(text: str) -> bool:
         return True
     if suspicious / max(cjk_count + suspicious, 1) >= 0.25:
         return True
-    # Signal b) multiple CJK but no common chars → garbled
-    if cjk_count >= 2 and common_hits == 0:
+    # Signal b) 大量 CJK 但完全沒 common chars → garbled
+    # 門檻 8 — 真 Identity-H garbage 通常 10+ 字長；短的合法詞（測試驗證、
+    # 文字測試、工程驗收 ...）4-7 個不含 common particle 也常見，門檻 2 太
+    # 容易誤判把它們丟去 OCR（OCR 又常常多吐 iia 之類雜訊更糟）。v1.4.92 修。
+    if cjk_count >= 8 and common_hits == 0:
         return True
     # Signal c) — long run of identical letters/digits (8+) is essentially
     # never real text. 客戶踩過：TOC 的 leader dots「........」用 Identity-H

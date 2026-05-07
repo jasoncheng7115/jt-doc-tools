@@ -817,6 +817,22 @@ def build_auth_router(templates) -> APIRouter:
         )
         return {"ok": True, "report": report}
 
+    # ---------- /admin/system-status ----------
+
+    @router.get("/system-status", response_class=HTMLResponse)
+    async def system_status_page(request: Request):
+        return templates.TemplateResponse(
+            "admin_system_status.html", {"request": request},
+        )
+
+    @router.get("/system-status/data")
+    async def system_status_data():
+        from ..core import host_stats as _hs
+        return {
+            "host": _hs.get_host_stats(),
+            "users": _hs.get_user_file_stats(),
+        }
+
     return router
 
 
