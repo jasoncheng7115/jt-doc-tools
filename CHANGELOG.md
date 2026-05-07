@@ -4,6 +4,14 @@
 
 ---
 
+## [1.4.97] - 2026-05-07
+
+### 新增
+
+- **首頁也可釘選工具**：螢幕小、sidebar 收起來時也能用同樣的星星按鈕釘選 / 取消（hover 顯示金色星星按鈕）。釘選的工具會在首頁最上方「釘選」區塊鏡像出現。資料同 sidebar 共用 `localStorage['jtdt:pinned']`，sidebar 與首頁的釘選操作互相同步（透過 `jtdt:pins-changed` custom event + `storage` event 跨 tab 同步）
+
+---
+
 ## [1.4.96] - 2026-05-07
 
 ### 新增
