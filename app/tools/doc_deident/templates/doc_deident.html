@@ -11,43 +11,50 @@
   display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 6px 14px; margin: 8px 0;
 }
-.dd-type-groups { display: flex; flex-direction: column; gap: 12px; margin: 8px 0; }
-.dd-type-group { border: 1px solid #e5e7eb; border-radius: 10px; background: #fafbfc;
-  padding: 12px 14px 14px; }
-.dd-type-group-title {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-size: 13px; font-weight: 700; color: #1e293b;
-  cursor: pointer; user-select: none; margin-bottom: 10px;
-  padding: 3px 8px 3px 3px; border-radius: 999px;
+/* 緊湊卡片版面（與 text-deident 共用樣式語言）。三欄固定，IT 資料獨佔一欄。 */
+.dd-pattern-cats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  margin-top: 8px; align-items: start;
 }
-.dd-type-group-title:hover { background: rgba(99, 102, 241, 0.08); }
-.dd-type-group-title input[type="checkbox"] {
-  width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: #4f46e5;
+.dd-pat-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+@media (max-width: 1100px) {
+  .dd-pattern-cats { grid-template-columns: repeat(2, 1fr); }
+  .dd-pat-col:nth-child(3) { grid-column: 1 / -1; }
 }
-.dd-type-group-label { letter-spacing: 0.02em; }
-.dd-type-group-count { font-size: 11.5px; font-weight: 500; color: #64748b; }
-.dd-type-items {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 6px;
+@media (max-width: 700px) {
+  .dd-pattern-cats { grid-template-columns: 1fr; }
+  .dd-pat-col:nth-child(3) { grid-column: auto; }
 }
-.dd-type-pill {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 7px 10px; border-radius: 8px;
-  background: #fff; border: 1px solid #e2e8f0;
-  font-size: 13px; color: #475569; cursor: pointer;
-  transition: border-color 0.1s, background 0.1s, color 0.1s;
+.dd-cat { background:#fff; border:1px solid var(--border); border-radius:8px;
+  padding:8px 10px; min-width: 0; box-sizing: border-box; }
+.dd-cat h4 { margin:0 0 6px; font-size:13px; color:#1e293b; font-weight:600;
+  border-bottom:1px solid #f1f5f9; padding-bottom:4px;
+  display:flex; align-items:center; gap:6px;
+  white-space:nowrap; overflow:hidden; }
+.dd-cat-icon { display:inline-flex; align-items:center; color:#1e40af;
+  background:#eff6ff; padding:3px; border-radius:5px; line-height:0;
+  flex-shrink:0; }
+.dd-cat-icon .ic { stroke: currentColor; }
+.dd-cat-name { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.dd-cat .dd-cat-tools { margin-left:auto; display:flex; gap:2px; flex-shrink:0; }
+.dd-cat .dd-cat-tools button {
+  display:inline-flex; align-items:center; justify-content:center;
+  background:#fff; border:1px solid #cbd5e1;
+  width:24px; height:24px; padding:0;
+  border-radius:5px; color:#64748b; cursor:pointer;
+  transition: all 0.12s;
 }
-.dd-type-pill:hover { border-color: #c7d2fe; background: #fafbff; }
-.dd-type-pill input[type="checkbox"] {
-  width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: #4f46e5;
-  flex: 0 0 auto;
-}
-.dd-type-pill .dd-type-ico { display: inline-flex; color: #64748b; flex: 0 0 auto; }
-.dd-type-pill:has(input:checked) {
-  border-color: #4f46e5; background: #eef2ff; color: #1e1b4b; font-weight: 500;
-}
-.dd-type-pill:has(input:checked) .dd-type-ico { color: #4f46e5; }
-.dd-type-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dd-cat .dd-cat-tools button .ic { stroke: currentColor; }
+.dd-cat .dd-cat-tools button:hover { background:#eff6ff; border-color:#3b82f6;
+  color:#1e40af; }
+.dd-cat .dd-cat-tools button[data-cat-act="all"]:hover { color:#16a34a; border-color:#16a34a; background:#f0fdf4; }
+.dd-cat .dd-cat-tools button[data-cat-act="none"]:hover { color:#dc2626; border-color:#dc2626; background:#fef2f2; }
+.dd-cat label { display:flex; align-items:center; gap:6px;
+  padding:3px 8px; margin: 0 -8px;
+  font-size:12.5px; cursor:pointer; border-radius: 4px;
+  transition: background 0.08s; }
+.dd-cat label:hover { background: #eef2ff; }
+.dd-cat label:has(input:checked):hover { background: #dbeafe; }
 /* Legacy flat layout used elsewhere */
 .dd-types label { display:inline-flex; align-items:center; gap:6px;
   font-size: 13px; color:#334155; cursor: pointer; padding: 3px 0; }
@@ -147,26 +154,72 @@
 
 <div class="panel">
   <h2 style="margin-top:0;">2. 選擇要偵測的類型</h2>
-  <div class="dd-type-groups" id="ddTypes">
-    {% for g in pattern_groups %}
-    <div class="dd-type-group">
-      <label class="dd-type-group-title">
-        <input type="checkbox" class="dd-group-master" data-group="{{ g.title }}">
-        <span class="dd-type-group-label">{{ g.title }}</span>
-        <span class="dd-type-group-count"></span>
+  <div class="dd-pattern-cats" id="ddTypes">
+    {% set cat_icons = {
+      '個人身分': 'id-card', '聯絡方式': 'mail', '金融資訊': 'credit-card',
+      '企業資料': 'building', '其他': 'tool', 'IT 資料': 'globe', '自訂': 'edit',
+    } %}
+    {# 把 pattern_groups (list) 轉成 dict 方便顯式分欄 #}
+    {% set grouped = {} %}
+    {% for g in pattern_groups %}{% set _ = grouped.update({g.title: g.entries}) %}{% endfor %}
+    {% set col1_names = ['個人身分', '聯絡方式', '金融資訊'] %}
+    {% set col2_names = ['企業資料', '其他'] %}
+    {% set col3_names = ['IT 資料'] %}
+    {% macro cat_card(grp_name, items) -%}
+    <div class="dd-cat" data-cat="{{ grp_name }}">
+      <h4>
+        <span class="dd-cat-icon">{{ icon(cat_icons.get(grp_name, 'tool'), size=15) }}</span>
+        <span class="dd-cat-name">{{ grp_name }}</span>
+        <span class="dd-cat-tools">
+          <button type="button" data-cat-act="all" title="全選（這組全部勾選）">
+            <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <polyline points="7 12 11 16 17 9"/>
+            </svg>
+          </button>
+          <button type="button" data-cat-act="none" title="取消全選（這組全部清空）">
+            <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+            </svg>
+          </button>
+          <button type="button" data-cat-act="invert" title="反向選取（這組勾與未勾對調）">
+            <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="9" height="18" rx="1.5" fill="currentColor"/>
+              <rect x="12" y="3" width="9" height="18" rx="1.5"/>
+            </svg>
+          </button>
+        </span>
+      </h4>
+      {% for p in items %}
+      <label>
+        <input type="checkbox" class="dd-type-cb" value="{{ p.id }}"
+               data-group="{{ grp_name }}" {% if p.default_on %}checked{% endif %}>
+        <span>{{ p.label }}</span>
       </label>
-      <div class="dd-type-items">
-        {% for p in g.entries %}
-        <label class="dd-type-pill">
-          <input type="checkbox" class="dd-type-cb" data-group="{{ g.title }}"
-                 value="{{ p.id }}" {% if p.default_on %}checked{% endif %}>
-          <span class="dd-type-ico">{{ icon(p.icon, size=14) }}</span>
-          <span class="dd-type-name">{{ p.label }}</span>
-        </label>
-        {% endfor %}
-      </div>
+      {% endfor %}
     </div>
-    {% endfor %}
+    {%- endmacro %}
+    <div class="dd-pat-col">
+      {% for grp_name in col1_names if grp_name in grouped %}
+        {{ cat_card(grp_name, grouped[grp_name]) }}
+      {% endfor %}
+    </div>
+    <div class="dd-pat-col">
+      {% for grp_name in col2_names if grp_name in grouped %}
+        {{ cat_card(grp_name, grouped[grp_name]) }}
+      {% endfor %}
+      {% for grp_name, items in grouped.items() if grp_name not in (col1_names + col2_names + col3_names) %}
+        {{ cat_card(grp_name, items) }}
+      {% endfor %}
+    </div>
+    <div class="dd-pat-col">
+      {% for grp_name in col3_names if grp_name in grouped %}
+        {{ cat_card(grp_name, grouped[grp_name]) }}
+      {% endfor %}
+    </div>
   </div>
   <details class="dd-custom" style="margin-top:10px;">
     <summary class="muted" style="cursor:pointer; font-size:13px;">+ 自訂 regex（一行一條，格式：<code>標籤|正則式</code>）</summary>
@@ -246,32 +299,17 @@ let chosenMode = 'mask';
 
 function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
-// Master checkbox per group: reflects 全選/部分/無；點擊 = 全選/全取消
-function refreshMaster(master) {
-  const grp = master.dataset.group;
-  const boxes = document.querySelectorAll(`.dd-type-cb[data-group="${CSS.escape(grp)}"]`);
-  const total = boxes.length;
-  const on = Array.from(boxes).filter(b => b.checked).length;
-  master.checked = on === total && total > 0;
-  master.indeterminate = on > 0 && on < total;
-  const countEl = master.parentElement.querySelector('.dd-type-group-count');
-  if (countEl) countEl.textContent = `(${on}/${total})`;
-}
-document.querySelectorAll('.dd-group-master').forEach(master => {
-  master.addEventListener('click', () => {
-    const grp = master.dataset.group;
-    const boxes = document.querySelectorAll(`.dd-type-cb[data-group="${CSS.escape(grp)}"]`);
-    const allOn = Array.from(boxes).every(b => b.checked);
-    boxes.forEach(b => { b.checked = !allOn; });
-    refreshMaster(master);
-  });
-  refreshMaster(master);
-});
-document.querySelectorAll('.dd-type-cb').forEach(cb => {
-  cb.addEventListener('change', () => {
-    const grp = cb.dataset.group;
-    const master = document.querySelector(`.dd-group-master[data-group="${CSS.escape(grp)}"]`);
-    if (master) refreshMaster(master);
+// Per-category 全選 / 取消 / 反向（取代舊的 master checkbox 介面）
+document.querySelectorAll('.dd-cat .dd-cat-tools button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const cat = btn.closest('.dd-cat');
+    const boxes = cat.querySelectorAll('input[type=checkbox].dd-type-cb');
+    const act = btn.dataset.catAct;
+    boxes.forEach(b => {
+      if (act === 'all')      b.checked = true;
+      else if (act === 'none') b.checked = false;
+      else if (act === 'invert') b.checked = !b.checked;
+    });
   });
 });
 

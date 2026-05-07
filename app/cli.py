@@ -734,18 +734,50 @@ def _ensure_system_deps_for_update() -> None:
             print(f"  warning: NSSM→WinSW migration errored: {e}", file=sys.stderr)
 
 
+def _ensure_tesseract_chi_tra(binary: str) -> bool:
+    """Make sure chi_tra.traineddata is present. UB-Mannheim winget silent
+    install 預設不含；直接從 tessdata GitHub 下載 ~12MB 補進 tessdata 目錄。
+    Returns True if chi_tra is present (already-or-now)."""
+    try:
+        out = subprocess.run(
+            [binary, "--list-langs"], capture_output=True, text=True, timeout=5,
+        )
+        if "chi_tra" in (out.stdout or ""):
+            return True
+    except Exception:
+        return False
+    # Find tessdata dir — usually <install_dir>/tessdata
+    tessdata = Path(binary).parent / "tessdata"
+    if not tessdata.exists():
+        print(f"  WARNING: tessdata dir not found: {tessdata} — skipping chi_tra download",
+              file=sys.stderr)
+        return False
+    url = "https://github.com/tesseract-ocr/tessdata_fast/raw/main/chi_tra.traineddata"
+    dst = tessdata / "chi_tra.traineddata"
+    print(f"  Downloading chi_tra.traineddata (~12MB) → {dst} ...")
+    try:
+        import urllib.request
+        urllib.request.urlretrieve(url, str(dst))
+        if dst.exists() and dst.stat().st_size > 1_000_000:
+            print(f"  OK: chi_tra.traineddata installed ({dst.stat().st_size / 1024 / 1024:.1f} MB)")
+            return True
+        else:
+            dst.unlink(missing_ok=True)
+            print("  WARNING: chi_tra download incomplete, removed", file=sys.stderr)
+            return False
+    except Exception as e:
+        print(f"  WARNING: chi_tra download failed: {e}", file=sys.stderr)
+        return False
+
+
 def _ensure_tesseract() -> None:
-    if shutil.which("tesseract"):
-        # Already installed — verify chi_tra trained data also present
-        try:
-            out = subprocess.run(
-                ["tesseract", "--list-langs"],
-                capture_output=True, text=True, timeout=5,
-            )
-            if "chi_tra" in (out.stdout or ""):
-                return
-        except Exception:
+    binary = _resolve_tesseract_binary()
+    if binary:
+        # Already installed (PATH or standard install dir) — verify chi_tra
+        if _ensure_tesseract_chi_tra(binary):
             return
+        # If chi_tra still missing after attempted download, fall through to
+        # try platform package manager (apt may have it as separate package)
     print("Installing tesseract OCR (pdf-editor text recovery fallback) ...")
     rc = -1
     try:
@@ -780,8 +812,15 @@ def _ensure_tesseract() -> None:
         print(f"  WARNING: tesseract install errored: {e}  (pdf-editor OCR disabled, rest still works)",
               file=sys.stderr)
         return
-    if rc == 0 and shutil.which("tesseract"):
-        print("  OK: tesseract installed")
+    if rc == 0 and _resolve_tesseract_binary():
+        # Re-verify chi_tra after winget install — UB-Mannheim silent install
+        # often skips it, fall back to GitHub download
+        binary2 = _resolve_tesseract_binary()
+        if binary2 and _ensure_tesseract_chi_tra(binary2):
+            print("  OK: tesseract + chi_tra installed")
+        else:
+            print("  WARNING: tesseract installed but chi_tra missing  (Chinese OCR 不可用，可手動下載)",
+                  file=sys.stderr)
     else:
         print("  WARNING: tesseract auto-install failed  (pdf-editor OCR disabled, rest still works)",
               file=sys.stderr)

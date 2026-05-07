@@ -4,6 +4,19 @@
 
 ---
 
+## [1.4.89] - 2026-05-07
+
+### 新增
+
+- **Windows install.ps1 / jtdt update：自動補 chi_tra.traineddata**：UB-Mannheim winget silent install 預設不含繁中訓練檔，導致客戶 OCR 仍不能跑中文。新增 `Ensure-TesseractChiTra` (PowerShell) 與 `_ensure_tesseract_chi_tra()` (Python)：偵測缺 chi_tra 時直接從 `tessdata_fast` GitHub repo 下載 ~12MB 補進 `<install>/tessdata/`，不需重裝整個 Tesseract
+
+### 改善
+
+- **doc-deident 偵測類型選擇 UI 改成 text-deident 同款緊湊三欄卡片**：取代原本垂直 accordion + master checkbox 的版面，省空間 + 視覺一致；每張卡片右上 [全選 / 取消 / 反向] 三鍵取代原 master 三態（更直覺）。所有 checkbox 仍保留 `value=`/`data-group=` 維持向下相容
+- 整列 hover 光棒（與 text-deident 同步），點擊判定範圍清楚
+
+---
+
 ## [1.4.88] - 2026-05-07
 
 ### 修正
