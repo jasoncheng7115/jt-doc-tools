@@ -4,6 +4,14 @@
 
 ---
 
+## [1.4.91] - 2026-05-07
+
+### 修正
+
+- **PDF 編輯器：T 加文字框後改字型，左邊內容預覽不變**：根因 — `savePdf()` 一律 SKIP 當前選取物件（避免 bake 重複 layer 在 Fabric overlay 上），但對「字型變更」這種已經完成的編輯動作，這個 skip 反而讓使用者看不到效果。新增 `savePdf(isAuto, {includeActive: true})` 選項；font change handler（單選 + batch 多選）改用此選項，bake 包含 active obj，使用者立刻看到字型差別。selection 維持，可繼續編輯
+
+---
+
 ## [1.4.90] - 2026-05-07
 
 ### 修正
