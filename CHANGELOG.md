@@ -4,6 +4,14 @@
 
 ---
 
+## [1.4.90] - 2026-05-07
+
+### 修正
+
+- **PDF 編輯器：點「選既有物件」選到 TOC 目錄的 leader dots「........」，文字變成「eeeeeee...」**：根因 — TOC 的 leader dots 用 Identity-H subset font 儲存，glyph index 0x65 對應「.」glyph 但 ToUnicode CMap 把它 map 回 codepoint 0x65 = 'e'，PyMuPDF extract 出來變一堆「eeeee」。原本 `_looks_garbled()` 只偵測 CJK 範圍 + 符號雜亂，沒抓 ASCII 重複字串。新增 Signal c)：偵測 8+ 連續同字母 / 數字（real text 不可能 8 連碼），判定 garbled → 走 OCR fallback 拿回正確的點點。同時 `_replace_all_fonts_sync` 也預過濾 garbled span（不 redact 也不 re-insert，保持原始 layout）
+
+---
+
 ## [1.4.89] - 2026-05-07
 
 ### 新增
