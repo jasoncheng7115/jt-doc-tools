@@ -240,9 +240,13 @@ async function uploadOne(file) {
       return;
     }
     const j = await r.json();
-    // Replace placeholder with real entry
+    // 多頁圖（如多 page TIFF / GIF）後端會回 array；單頁回 object。
+    // 兩種都處理：array 把 placeholder 替換成第一張 + 把剩下的插在後面。
+    const arr = Array.isArray(j) ? j : [j];
     const idx = pages.findIndex(p => p.file_id === placeholderId);
-    if (idx >= 0) pages[idx] = { ...j, rotation: 0 };
+    if (idx >= 0) {
+      pages.splice(idx, 1, ...arr.map(it => ({ ...it, rotation: 0 })));
+    }
     render();
   } catch (e) {
     pages = pages.filter(p => p.file_id !== placeholderId);

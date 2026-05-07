@@ -103,13 +103,29 @@ async def upload(request: Request, file: UploadFile = File(...)):
         raise HTTPException(413, "圖片過大（單檔上限 50 MB）")
 
     try:
-        img = Image.open(io.BytesIO(raw))
-        # EXIF orientation: rotate to canonical orientation BEFORE saving so
-        # downstream rotation math is simple. Phone cameras commonly tag a
-        # landscape sensor + portrait orientation in EXIF.
-        img = ImageOps.exif_transpose(img)
+        opened = Image.open(io.BytesIO(raw))
+    except Exception as e:
+        raise HTTPException(400, f"無法解析圖片：{e}")
+
+    # 多頁處理 — TIFF / GIF / animated WEBP 等格式可能含多 frame，要逐頁拆。
+    # 之前只開第一張，使用者反映 .tiff 內 3 張只轉出 1 張（v1.4.98 修）。
+    n_frames = getattr(opened, "n_frames", 1) or 1
+    items: list[dict] = []
+    from ...core import upload_owner as _uo
+    base_stem = Path(name).stem
+    for i in range(n_frames):
+        try:
+            opened.seek(i)
+        except (EOFError, OSError):
+            break
+        # Convert to RGB once per frame; .copy() before manipulation so
+        # subsequent seek() on `opened` doesn't disturb our processing.
+        img = opened.copy()
+        # EXIF orientation only applies to first frame (multi-page TIFF
+        # rarely has per-frame EXIF, but exif_transpose handles missing tags)
+        if i == 0:
+            img = ImageOps.exif_transpose(img)
         # Convert palette / CMYK / RGBA-with-alpha to RGB so PDF embed works
-        # everywhere (PyMuPDF insert_image handles RGB cleanly).
         if img.mode not in ("RGB", "L"):
             if img.mode == "RGBA":
                 bg = Image.new("RGB", img.size, "white")
@@ -117,33 +133,31 @@ async def upload(request: Request, file: UploadFile = File(...)):
                 img = bg
             else:
                 img = img.convert("RGB")
-    except Exception as e:
-        raise HTTPException(400, f"無法解析圖片：{e}")
-
-    fid = uuid.uuid4().hex
-    from ...core import upload_owner as _uo
-    _uo.record(fid, request)
-    out = _img_path(fid)
-    img.save(str(out), format="PNG", optimize=False)
-
-    # Thumbnail for grid view (long edge 320 px)
-    thumb = img.copy()
-    thumb.thumbnail((_THUMB_MAX, _THUMB_MAX), Image.LANCZOS)
-    thumb.save(str(_thumb_path(fid)), format="PNG", optimize=True)
-
-    # Larger preview for lightbox click-to-zoom
-    full = img.copy()
-    full.thumbnail((_FULL_MAX, _FULL_MAX), Image.LANCZOS)
-    full.save(str(_full_path(fid)), format="PNG", optimize=True)
-
-    return {
-        "file_id": fid,
-        "filename": name,
-        "width": img.width,
-        "height": img.height,
-        "thumb_url": f"/tools/image-to-pdf/thumb/{fid}",
-        "full_url": f"/tools/image-to-pdf/full/{fid}",
-    }
+        fid = uuid.uuid4().hex
+        _uo.record(fid, request)
+        img.save(str(_img_path(fid)), format="PNG", optimize=False)
+        thumb = img.copy()
+        thumb.thumbnail((_THUMB_MAX, _THUMB_MAX), Image.LANCZOS)
+        thumb.save(str(_thumb_path(fid)), format="PNG", optimize=True)
+        full = img.copy()
+        full.thumbnail((_FULL_MAX, _FULL_MAX), Image.LANCZOS)
+        full.save(str(_full_path(fid)), format="PNG", optimize=True)
+        # 為多頁檔加 frame 編號到 filename，方便使用者在介面上分辨
+        display_name = name if n_frames == 1 else f"{base_stem} ({i + 1}/{n_frames}){ext}"
+        items.append({
+            "file_id": fid,
+            "filename": display_name,
+            "width": img.width,
+            "height": img.height,
+            "thumb_url": f"/tools/image-to-pdf/thumb/{fid}",
+            "full_url": f"/tools/image-to-pdf/full/{fid}",
+        })
+    if not items:
+        raise HTTPException(400, "圖片無內容（無法讀出任何 frame）")
+    # 單張：回單個 dict（向下相容舊客戶端）。多張：回 list。
+    if len(items) == 1:
+        return items[0]
+    return items
 
 
 @router.get("/thumb/{fid}")
