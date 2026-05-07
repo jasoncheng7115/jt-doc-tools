@@ -27,17 +27,18 @@
       {% for s in subjects %}
       <div class="perm-row" data-type="{{ s.type }}" data-key="{{ s.key }}"
            data-name="{{ s.name }} {{ s.username }}"
-           data-source="{{ s.source }}">
+           data-source="{{ s.source }}"
+           data-locked="{{ '1' if (s.is_admin_seed or s.is_audit_seed) else '' }}">
         <div class="perm-row-icon">
           {% if s.type == 'user' %}{{ icon('user', size=14) }}{% else %}{{ icon('building', size=14) }}{% endif %}
         </div>
         <div class="perm-row-text">
           <div class="perm-row-name">
-            {{ s.name }}
-            {% if s.is_admin_seed %}<span class="badge-seed">SEED</span>{% endif %}
+            {% if s.type == 'user' %}{{ s.username }}{% else %}{{ s.name }}{% endif %}
+            {% if s.is_admin_seed or s.is_audit_seed %}<span class="badge-seed">SEED</span>{% endif %}
           </div>
           <div class="perm-row-sub">
-            {% if s.type == 'user' %}{{ s.username }}{% else %}群組{% endif %}
+            {% if s.type == 'user' %}{{ s.name }}{% else %}群組{% endif %}
             <span class="src-badge src-{{ s.source }}">{{ s.source }}</span>
           </div>
         </div>
@@ -191,8 +192,12 @@ function escapeHtml(s) {
 }
 
 // Group SUBJECTS by composite key for O(1) lookup.
+// Also derive is_locked from is_admin_seed / is_audit_seed (built-in users).
 const subjectByKey = {};
-SUBJECTS.forEach(s => { subjectByKey[`${s.type}:${s.key}`] = s; });
+SUBJECTS.forEach(s => {
+  s.is_locked = !!(s.is_admin_seed || s.is_audit_seed);
+  subjectByKey[`${s.type}:${s.key}`] = s;
+});
 
 // ----- left side: search + type filter + count badges -----
 const permList = document.getElementById('permList');
@@ -282,15 +287,44 @@ function loadSubject(s) {
   document.getElementById('pdTitle').textContent = s.label;
   document.getElementById('pdSub').textContent =
     `subject_type=${s.type} · subject_key=${s.key}`;
+  // SEED users (jtdt-admin / jtdt-auditor) — 角色與工具固定，不可改
+  const isLocked = !!s.is_locked;
+  let lockBanner = document.getElementById('pdLockBanner');
+  if (!lockBanner) {
+    lockBanner = document.createElement('div');
+    lockBanner.id = 'pdLockBanner';
+    lockBanner.style.cssText = 'background:#fef3c7;border:1px solid #fde68a;color:#92400e;padding:10px 14px;border-radius:6px;font-size:13px;margin:10px 0;line-height:1.5;';
+    document.getElementById('permForm').insertBefore(
+      lockBanner,
+      document.getElementById('permForm').children[1] || null);
+  }
+  if (isLocked) {
+    lockBanner.hidden = false;
+    lockBanner.innerHTML = '🔒 <b>內建帳號</b>：角色與工具權限固定，不可從權限矩陣修改。' +
+      '（此處顯示的勾選只是讓您查看現狀，按儲存會被拒。）';
+    document.getElementById('pdSave').disabled = true;
+    document.getElementById('pdSave').title = '內建帳號權限固定不可修改';
+  } else {
+    lockBanner.hidden = true;
+    document.getElementById('pdSave').disabled = false;
+    document.getElementById('pdSave').title = '';
+  }
+  // SEED 帳號連同 bulk action 按鈕（全選 / 取消全選 / 反向 / 清除）也禁用
+  document.querySelectorAll('button[data-bulk], button.picker-clear')
+    .forEach(b => {
+      b.disabled = isLocked;
+      b.title = isLocked ? '內建帳號權限固定不可修改' : '';
+    });
 
   // Roles picker
   const haveR = new Set(s.roles || []);
   const roleList = document.getElementById('pdRoleList');
+  const lockedAttr = isLocked ? 'disabled' : '';
   roleList.innerHTML = ALL_ROLES.length
     ? ALL_ROLES.map(r => {
         const id = r.id, name = r.display_name || r.id;
         return `<label class="picker-item" data-name="${escapeHtml(name)} ${escapeHtml(id)}" title="${escapeHtml(id)}">
-          <input type="checkbox" data-rid="${escapeHtml(id)}" ${haveR.has(id)?'checked':''}>
+          <input type="checkbox" data-rid="${escapeHtml(id)}" ${haveR.has(id)?'checked':''} ${lockedAttr}>
           <span class="picker-name">${escapeHtml(name)}</span>
         </label>`;
       }).join('')
@@ -304,7 +338,7 @@ function loadSubject(s) {
   toolList.innerHTML = ALL_TOOLS.length
     ? ALL_TOOLS.map(t => {
         return `<label class="picker-item" data-name="${escapeHtml(t.name)} ${escapeHtml(t.id)}" title="${escapeHtml(t.id)}">
-          <input type="checkbox" data-tid="${escapeHtml(t.id)}" ${haveT.has(t.id)?'checked':''}>
+          <input type="checkbox" data-tid="${escapeHtml(t.id)}" ${haveT.has(t.id)?'checked':''} ${lockedAttr}>
           <span class="picker-name">${escapeHtml(t.name)}</span>
         </label>`;
       }).join('')

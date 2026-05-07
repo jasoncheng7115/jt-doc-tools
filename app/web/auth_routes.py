@@ -9,8 +9,8 @@ import logging
 from typing import Optional
 from urllib.parse import quote as _qstr
 
-from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from ..core import audit_db, auth as _auth, auth_local, auth_settings, sessions
 
@@ -59,6 +59,54 @@ def _clear_session_cookie(response: Response) -> None:
 # the user is locked out from change-password (their normal login still works).
 # Process-local; OK for a single-uvicorn deployment.
 _CHGPW_FAILS: dict[int, tuple[float, int]] = {}
+
+
+# --- Pending 2FA store -----------------------------------------------------
+# Process-local dict of {pending_token: {user_id, ts, remember, ip, ua,
+# next_url, forced_setup}}. After password OK but before TOTP verify, we
+# stash the partial-auth state here so the /2fa-verify page can complete
+# login. TTL 5 min — long enough to type a code from your phone, short
+# enough to limit replay window if cookie leaks.
+import secrets as _secrets
+PENDING_2FA_COOKIE = "jtdt_pending_2fa"
+PENDING_2FA_TTL = 5 * 60   # seconds
+_PENDING_2FA: dict[str, dict] = {}
+
+
+def _stash_pending_2fa(*, user_id: int, remember: bool, ip: str, ua: str,
+                       next_url: str, forced_setup: bool) -> str:
+    import time as _t
+    # GC stale entries
+    cutoff = _t.time() - PENDING_2FA_TTL
+    for k in list(_PENDING_2FA.keys()):
+        if _PENDING_2FA[k]["ts"] < cutoff:
+            del _PENDING_2FA[k]
+    token = _secrets.token_urlsafe(24)
+    _PENDING_2FA[token] = {
+        "user_id": user_id, "ts": _t.time(), "remember": remember,
+        "ip": ip, "ua": ua, "next_url": next_url, "forced_setup": forced_setup,
+        "fails": 0,
+    }
+    return token
+
+
+def _consume_pending_2fa(token: str) -> Optional[dict]:
+    """Look up + return entry, but don't delete (lets retries work).
+    Returns None if missing or expired."""
+    import time as _t
+    if not token:
+        return None
+    entry = _PENDING_2FA.get(token)
+    if not entry:
+        return None
+    if (_t.time() - entry["ts"]) > PENDING_2FA_TTL:
+        _PENDING_2FA.pop(token, None)
+        return None
+    return entry
+
+
+def _drop_pending_2fa(token: str) -> None:
+    _PENDING_2FA.pop(token, None)
 
 
 def build_router(templates) -> APIRouter:
@@ -110,6 +158,32 @@ def build_router(templates) -> APIRouter:
                  "default_realm": realm or _auth.default_realm()},
                 status_code=200,
             )
+        # 2FA check — 在 issue session 之前。auditor role 強制 TOTP；
+        # 其他 user 自選。totp_required + 沒 setup → 強制走 setup；
+        # totp_enabled → 要求驗 6 碼。詳見 totp 模組 + /2fa-verify 路由。
+        from ..core import totp as _totp, permissions as _perm
+        try:
+            tstate = _totp.get_user_totp_state(user["user_id"])
+        except Exception:
+            tstate = {"enabled": False, "required": False, "has_secret": False}
+        # 預先計算「是否強制」（auditor role 自動視為 required，即使 DB
+        # 還沒設 totp_required，也強制；admin 後台另開的也吃 DB column）
+        try:
+            forced_by_role = _perm.is_auditor(user["user_id"])
+        except Exception:
+            forced_by_role = False
+        needs_2fa = tstate["enabled"] or tstate["required"] or forced_by_role
+        if needs_2fa:
+            pending_token = _stash_pending_2fa(
+                user_id=user["user_id"], remember=bool(remember),
+                ip=ip, ua=ua, next_url=_safe_next(next),
+                forced_setup=(not tstate["enabled"]),
+            )
+            resp = RedirectResponse("/2fa-verify", status_code=302)
+            resp.set_cookie(key=PENDING_2FA_COOKIE, value=pending_token,
+                            max_age=PENDING_2FA_TTL, httponly=True,
+                            samesite="lax", path="/")
+            return resp
         token, expires_at = sessions.issue(
             user["user_id"], remember=bool(remember), ip=ip, ua=ua,
         )
@@ -201,6 +275,200 @@ def build_router(templates) -> APIRouter:
         )
         return JSONResponse({"ok": True,
                              "detail": "密碼已變更，其他裝置的登入會被登出"})
+
+    # ---------- 2FA / TOTP --------------------------------------------------
+
+    @router.get("/2fa-verify", response_class=HTMLResponse)
+    async def twofa_verify_page(request: Request):
+        """Show the 6-digit code input. If user is in `forced_setup` state
+        (no secret yet but role / admin requires TOTP), show setup screen
+        with QR code first."""
+        from ..core import totp as _totp
+        ptoken = request.cookies.get(PENDING_2FA_COOKIE, "")
+        entry = _consume_pending_2fa(ptoken)
+        if not entry:
+            # Cookie expired / missing — back to login
+            return RedirectResponse("/login?error=session+expired", status_code=302)
+        uid = entry["user_id"]
+        # 取 user 資訊用於 setup page 顯示 issuer + username
+        from ..core import auth_db, branding
+        urow = auth_db.conn().execute(
+            "SELECT username, display_name FROM users WHERE id=?", (uid,),
+        ).fetchone()
+        if not urow:
+            return RedirectResponse("/login?error=user+not+found", status_code=302)
+        # 強制 setup 流程（required + 沒 secret）
+        secret = _totp.get_secret(uid)
+        is_setup = entry.get("forced_setup") and not secret
+        qr_url = ""
+        if is_setup:
+            # 為使用者產一個 secret 並寫進 DB（totp_enabled 仍 0，要驗碼才啟用）
+            if not secret:
+                secret = _totp.new_secret()
+                _totp.set_secret(uid, secret)
+            uri = _totp.provision_uri(
+                secret, urow["username"], branding.get_site_name(default="jt-doc-tools"),
+            )
+            qr_url = _totp.qr_png_data_url(uri)
+        return templates.TemplateResponse("twofa_verify.html", {
+            "request": request,
+            "username": urow["username"],
+            "display_name": urow["display_name"] or urow["username"],
+            "is_setup": is_setup,
+            "qr_url": qr_url,
+            "secret_for_manual": secret if is_setup else "",
+            "fails": entry.get("fails", 0),
+        })
+
+    @router.post("/2fa-verify")
+    async def twofa_verify_submit(request: Request, code: str = Form(...)):
+        from ..core import totp as _totp
+        ptoken = request.cookies.get(PENDING_2FA_COOKIE, "")
+        entry = _consume_pending_2fa(ptoken)
+        if not entry:
+            return RedirectResponse("/login?error=session+expired", status_code=302)
+        uid = entry["user_id"]
+        secret = _totp.get_secret(uid)
+        if not secret:
+            # 不該發生（應該在 GET setup 階段先生成）
+            return RedirectResponse("/2fa-verify", status_code=302)
+        if not _totp.verify_code(secret, code):
+            entry["fails"] += 1
+            audit_db.log_event(
+                "2fa_fail", username=str(uid), ip=_client_ip(request),
+                details={"fail_count": entry["fails"]},
+            )
+            if entry["fails"] >= 5:
+                _drop_pending_2fa(ptoken)
+                return RedirectResponse(
+                    "/login?error=2FA+failed+too+many+times", status_code=302)
+            return templates.TemplateResponse("twofa_verify.html", {
+                "request": request, "error": "驗證碼錯誤，請再試一次",
+                "fails": entry["fails"],
+                "is_setup": False,  # 失敗時不重新顯示 QR（避免 secret 反覆暴露）
+                "qr_url": "", "secret_for_manual": "",
+            }, status_code=200)
+        # 成功 — 第一次就標 enabled；發 session；清 pending
+        if not _totp.get_user_totp_state(uid)["enabled"]:
+            _totp.mark_enabled(uid)
+            audit_db.log_event(
+                "2fa_enabled", username=str(uid), ip=_client_ip(request),
+            )
+        audit_db.log_event(
+            "2fa_success", username=str(uid), ip=_client_ip(request),
+        )
+        ip = entry["ip"]; ua = entry["ua"]
+        token, expires_at = sessions.issue(
+            uid, remember=entry["remember"], ip=ip, ua=ua,
+        )
+        next_url = entry.get("next_url") or "/"
+        resp = RedirectResponse(next_url, status_code=302)
+        _set_session_cookie(resp, token, remember=entry["remember"],
+                            request=request, expires_at=expires_at)
+        resp.delete_cookie(PENDING_2FA_COOKIE, path="/")
+        _drop_pending_2fa(ptoken)
+        return resp
+
+    @router.get("/me/2fa", response_class=HTMLResponse)
+    async def my_2fa_page(request: Request):
+        """Self-service: 啟用 / 停用 / 重新生 TOTP secret。需登入；audit role
+        強制 enabled，不能 disable（disable button 隱藏）。"""
+        from ..core import auth_settings as _as
+        if not _as.is_enabled():
+            raise HTTPException(404, "auth not enabled")
+        token = request.cookies.get(sessions.COOKIE_NAME, "")
+        user = sessions.lookup(token) if token else None
+        if not user:
+            return RedirectResponse("/login?next=/me/2fa", status_code=302)
+        from ..core import totp as _totp, permissions as _perm
+        uid = user["user_id"]
+        st = _totp.get_user_totp_state(uid)
+        forced = st["required"] or _perm.is_auditor(uid)
+        return templates.TemplateResponse("me_2fa.html", {
+            "request": request,
+            "username": user["username"],
+            "enabled": st["enabled"],
+            "required": forced,
+        })
+
+    @router.post("/me/2fa/start")
+    async def my_2fa_start(request: Request):
+        """Generate a new secret + return QR code. 已 enabled 的 user 也可
+        re-generate（用情境：手機遺失需換新 secret）— 但會把 enabled 重置
+        為 0，下次驗碼成功後才再 enable。"""
+        from ..core import auth_settings as _as
+        if not _as.is_enabled():
+            raise HTTPException(404)
+        token = request.cookies.get(sessions.COOKIE_NAME, "")
+        user = sessions.lookup(token) if token else None
+        if not user:
+            raise HTTPException(401)
+        from ..core import totp as _totp, branding
+        uid = user["user_id"]
+        secret = _totp.new_secret()
+        _totp.set_secret(uid, secret)
+        uri = _totp.provision_uri(
+            secret, user["username"], branding.get_site_name(default="jt-doc-tools"),
+        )
+        return JSONResponse({
+            "ok": True,
+            "qr_url": _totp.qr_png_data_url(uri),
+            "secret": secret,  # 顯示給 user 手動輸入備用
+        })
+
+    @router.post("/me/2fa/verify")
+    async def my_2fa_verify(request: Request):
+        """Confirm initial setup or re-setup."""
+        from ..core import auth_settings as _as
+        if not _as.is_enabled():
+            raise HTTPException(404)
+        token = request.cookies.get(sessions.COOKIE_NAME, "")
+        user = sessions.lookup(token) if token else None
+        if not user:
+            raise HTTPException(401)
+        body = await request.json()
+        code = str(body.get("code") or "")
+        from ..core import totp as _totp
+        uid = user["user_id"]
+        secret = _totp.get_secret(uid)
+        if not secret:
+            return JSONResponse(
+                {"ok": False, "detail": "請先按「啟用」生成 secret"}, status_code=400)
+        if not _totp.verify_code(secret, code):
+            audit_db.log_event(
+                "2fa_setup_fail", username=user["username"],
+                ip=_client_ip(request),
+            )
+            return JSONResponse(
+                {"ok": False, "detail": "驗證碼錯誤"}, status_code=400)
+        _totp.mark_enabled(uid)
+        audit_db.log_event(
+            "2fa_enabled", username=user["username"], ip=_client_ip(request),
+        )
+        return JSONResponse({"ok": True, "detail": "TOTP 已啟用"})
+
+    @router.post("/me/2fa/disable")
+    async def my_2fa_disable(request: Request):
+        from ..core import auth_settings as _as
+        if not _as.is_enabled():
+            raise HTTPException(404)
+        token = request.cookies.get(sessions.COOKIE_NAME, "")
+        user = sessions.lookup(token) if token else None
+        if not user:
+            raise HTTPException(401)
+        from ..core import totp as _totp, permissions as _perm
+        uid = user["user_id"]
+        st = _totp.get_user_totp_state(uid)
+        # 強制要求的 user（含 audit role）不能自己 disable
+        if st["required"] or _perm.is_auditor(uid):
+            return JSONResponse(
+                {"ok": False, "detail": "您的角色強制使用 2FA，不能自行停用"},
+                status_code=403)
+        _totp.disable(uid)
+        audit_db.log_event(
+            "2fa_disabled", username=user["username"], ip=_client_ip(request),
+        )
+        return JSONResponse({"ok": True, "detail": "已停用 TOTP"})
 
     @router.post("/logout")
     async def logout(request: Request):

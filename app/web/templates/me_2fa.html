@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}兩步驟驗證 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('lock', size=22) }} 兩步驟驗證 (TOTP)</h1>
+<p class="muted">使用 Google Authenticator / Microsoft Authenticator / Authy / 1Password 等 TOTP App 在登入時提供 6 位數驗證碼，提升帳號安全。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">目前狀態</h2>
+  <p style="margin: 8px 0;">
+    使用者：<b>{{ username }}</b>
+  </p>
+  <p style="margin: 8px 0;">
+    狀態：
+    {% if enabled %}
+      <span style="color: #16a34a; font-weight: 600;">✓ 已啟用</span>
+    {% else %}
+      <span style="color: #94a3b8;">○ 未啟用</span>
+    {% endif %}
+    {% if required %}
+      <span style="background:#fef3c7; color:#92400e; padding: 2px 10px;
+                   border-radius: 999px; font-size: 12px; margin-left: 8px;">
+        強制（您的角色強制使用 2FA，不可停用）
+      </span>
+    {% endif %}
+  </p>
+  <div style="margin-top: 14px;">
+    {% if enabled %}
+      <button class="btn" id="btnReenroll">{{ icon('refresh', size=14) }} 重新設定（換 secret）</button>
+      {% if not required %}
+      <button class="btn btn-danger" id="btnDisable">{{ icon('trash', size=14) }} 停用 TOTP</button>
+      {% endif %}
+    {% else %}
+      <button class="btn btn-primary" id="btnEnroll">{{ icon('plus', size=14) }} 啟用 TOTP</button>
+    {% endif %}
+  </div>
+  <div id="setupBox" hidden style="margin-top: 16px; padding: 16px;
+       background: #f8fafc; border: 1px solid var(--border); border-radius: 8px;">
+    <p style="margin: 0 0 10px; font-size: 13px; color: #1e293b;">
+      <b>步驟 1：</b>用 TOTP App 掃描下方 QR Code（或手動輸入 secret）
+    </p>
+    <div style="text-align: center; margin: 10px 0;">
+      <img id="qrImg" src="" alt="QR Code"
+           style="width: 220px; height: 220px; border: 1px solid #e5e7eb;
+                  border-radius: 8px;">
+    </div>
+    <details style="margin: 8px 0;">
+      <summary style="cursor: pointer; font-size: 12.5px; color: #475569;">
+        無法掃描？點此手動輸入
+      </summary>
+      <div id="secretText" style="margin-top: 8px; padding: 10px;
+           background: #fff; border-radius: 6px;
+           font-family: ui-monospace, monospace; font-size: 12.5px;
+           word-break: break-all;"></div>
+    </details>
+    <p style="margin: 14px 0 8px; font-size: 13px; color: #1e293b;">
+      <b>步驟 2：</b>輸入 App 顯示的 6 位數驗證碼確認
+    </p>
+    <div style="display: flex; gap: 8px;">
+      <input type="text" id="verifyCode" placeholder="6 位數字"
+             inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+             style="flex: 1; padding: 10px 12px; font-size: 18px;
+                    text-align: center; letter-spacing: 4px;
+                    font-family: ui-monospace, monospace;
+                    border: 1px solid var(--border); border-radius: 6px;">
+      <button class="btn btn-primary" id="btnVerify">驗證並啟用</button>
+    </div>
+    <div id="verifyMsg" style="margin-top: 10px; font-size: 13px;"></div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+async function startEnroll() {
+  const r = await fetch('/me/2fa/start', {method: 'POST'});
+  const j = await r.json();
+  if (!r.ok) { alert('啟用失敗：' + (j.detail || r.status)); return; }
+  $('qrImg').src = j.qr_url;
+  $('secretText').textContent = j.secret;
+  $('setupBox').hidden = false;
+  $('verifyMsg').innerHTML = '';
+  $('verifyCode').value = '';
+  $('verifyCode').focus();
+}
+const eb = $('btnEnroll'); if (eb) eb.addEventListener('click', startEnroll);
+const rb = $('btnReenroll'); if (rb) rb.addEventListener('click', startEnroll);
+
+const vb = $('btnVerify');
+if (vb) vb.addEventListener('click', async () => {
+  const code = $('verifyCode').value.trim();
+  if (!/^\d{6}$/.test(code)) {
+    $('verifyMsg').innerHTML = '<span style="color:#dc2626;">請輸入 6 位數字</span>';
+    return;
+  }
+  vb.disabled = true;
+  try {
+    const r = await fetch('/me/2fa/verify', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({code}),
+    });
+    const j = await r.json();
+    if (r.ok) {
+      $('verifyMsg').innerHTML = '<span style="color:#16a34a;">✓ ' + (j.detail || '已啟用') + '，重新整理頁面…</span>';
+      setTimeout(() => location.reload(), 800);
+    } else {
+      $('verifyMsg').innerHTML = '<span style="color:#dc2626;">' + (j.detail || '驗證失敗') + '</span>';
+      vb.disabled = false;
+    }
+  } catch (e) {
+    $('verifyMsg').innerHTML = '<span style="color:#dc2626;">錯誤：' + e.message + '</span>';
+    vb.disabled = false;
+  }
+});
+
+const db = $('btnDisable');
+if (db) db.addEventListener('click', async () => {
+  if (!confirm('確定要停用 TOTP 嗎？您的帳號將回到只用密碼登入。')) return;
+  db.disabled = true;
+  try {
+    const r = await fetch('/me/2fa/disable', {method: 'POST'});
+    const j = await r.json();
+    if (r.ok) location.reload();
+    else { alert(j.detail || '停用失敗'); db.disabled = false; }
+  } catch (e) { alert('錯誤：' + e.message); db.disabled = false; }
+});
+</script>
+{% endblock %}

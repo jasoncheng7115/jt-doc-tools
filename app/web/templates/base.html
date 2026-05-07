@@ -29,7 +29,7 @@
                 style="background:transparent; border:0; color:inherit; padding:0; font:inherit; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left;"
                 title="查看角色與權限">
           {{ icon('user', size=14) }}
-          <b>{{ _cur.display_name or _cur.username }}</b>{% if _cur.source and _cur.source != 'off' %}<span style="opacity:0.7; font-weight:400; margin-left:2px;">@{{ _cur.source }}</span>{% endif %}
+          <b>{{ _cur.username }}</b>{% if _cur.source and _cur.source != 'off' %}<span style="opacity:0.7; font-weight:400; margin-left:2px;">@{{ _cur.source }}</span>{% endif %}
         </button>
         <form id="logoutForm" method="post" action="/logout" style="margin:0;">
           <button class="btn btn-small" type="button" id="logoutBtn"
@@ -109,6 +109,36 @@
                 pwBtnHtml = '<div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:11.5px;color:#94a3b8">'
                   + '密碼由 ' + esc(srcLabel) + ' 目錄端管理。</div>';
               }
+              // 2FA 區塊 — 任何 source 都能用（含 LDAP/AD），TOTP 是本機 app 狀態
+              var totpHtml = '';
+              if (info.totp) {
+                var totpEnabled = !!info.totp.enabled;
+                var totpRequired = !!info.totp.required;
+                var statusBadge;
+                if (totpEnabled) {
+                  statusBadge = '<span style="background:#dcfce7;color:#166534;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600">已啟用</span>';
+                } else if (totpRequired) {
+                  statusBadge = '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600">需設定</span>';
+                } else {
+                  statusBadge = '<span style="background:#e2e8f0;color:#475569;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600">未啟用</span>';
+                }
+                var actionBtn = '';
+                if (!totpEnabled) {
+                  actionBtn = '<button type="button" id="meTotpEnableBtn" class="btn" style="font-size:12px;padding:5px 12px">啟用 2FA</button>';
+                } else if (totpRequired) {
+                  actionBtn = '<button type="button" id="meTotpReissueBtn" class="btn" style="font-size:12px;padding:5px 12px;margin-right:6px">重新生 secret</button>'
+                    + '<span style="font-size:11px;color:#94a3b8">您的角色強制使用 2FA，不可停用</span>';
+                } else {
+                  actionBtn = '<button type="button" id="meTotpReissueBtn" class="btn" style="font-size:12px;padding:5px 12px;margin-right:6px">重新生 secret</button>'
+                    + '<button type="button" id="meTotpDisableBtn" class="btn btn-danger" style="font-size:12px;padding:5px 12px">停用 2FA</button>';
+                }
+                totpHtml = '<div style="margin-top:14px;padding-top:12px;border-top:1px solid #e5e7eb">'
+                  + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+                  + '<span style="font-size:11.5px;color:#64748b;font-weight:500;text-transform:uppercase;letter-spacing:0.04em">兩步驟驗證 (TOTP)</span>'
+                  + statusBadge + '</div>'
+                  + '<div>' + actionBtn + '</div>'
+                  + '</div>';
+              }
               // 完整 modal HTML
               var html =
                 '<div style="display:flex;align-items:center;gap:14px;margin:-4px 0 18px">'
@@ -130,15 +160,95 @@
                   + '<div style="font-size:11.5px;color:#64748b;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">可用工具</div>'
                   + toolsHtml
                 + '</div>'
+                + totpHtml
                 + pwBtnHtml;
               window.showAlert(html, {title:'我的帳號', html:true, okText:'關閉'});
               // Bind the 變更密碼 button — uses a self-contained inline modal
               // (showConfirm closes before we can read form values)
               setTimeout(function(){
                 var pb = document.getElementById('meChangePwBtn');
-                if (!pb) return;
-                pb.addEventListener('click', function(){ openChangePasswordModal(); });
+                if (pb) pb.addEventListener('click', function(){ openChangePasswordModal(); });
+                var enableBtn = document.getElementById('meTotpEnableBtn');
+                if (enableBtn) enableBtn.addEventListener('click', function(){ openTotpSetupModal(); });
+                var reissueBtn = document.getElementById('meTotpReissueBtn');
+                if (reissueBtn) reissueBtn.addEventListener('click', function(){
+                  window.showConfirm(
+                    '重新生 secret 會把現有的 TOTP secret 換掉，您需要重新用 Authenticator app 掃 QR。原來的 secret 失效。',
+                    {title:'重新生成', okText:'繼續'}
+                  ).then(function(ok){ if (ok) openTotpSetupModal(); });
+                });
+                var disableBtn = document.getElementById('meTotpDisableBtn');
+                if (disableBtn) disableBtn.addEventListener('click', async function(){
+                  var ok = await window.showConfirm(
+                    '停用 2FA？下次登入只會問密碼，安全性降低。',
+                    {title:'停用 2FA', kind:'danger', okText:'停用'}
+                  );
+                  if (!ok) return;
+                  var r = await fetch('/me/2fa/disable', {method:'POST'});
+                  if (r.ok) { window.showAlert('已停用 2FA'); location.reload(); }
+                  else { var j = await r.json().catch(function(){return{};});
+                    window.showAlert('停用失敗：' + (j.detail || r.status)); }
+                });
               }, 50);
+
+              function openTotpSetupModal(){
+                var ov = document.createElement('div');
+                ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+                var card = document.createElement('div');
+                card.style.cssText = 'background:#fff;border-radius:12px;padding:24px;max-width:420px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,0.3);text-align:center';
+                card.innerHTML =
+                  '<div style="font-size:18px;font-weight:600;color:#0f172a;margin-bottom:8px">設定 兩步驟驗證 (TOTP)</div>'
+                  + '<div style="font-size:12.5px;color:#64748b;line-height:1.55;margin-bottom:14px;text-align:left">用 Google Authenticator / Microsoft Authenticator / Authy / 1Password 等 TOTP App 掃 QR，再輸入 6 碼確認。</div>'
+                  + '<div id="totpQrSlot" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px;display:flex;justify-content:center;align-items:center;min-height:140px">產生 QR 中…</div>'
+                  + '<div id="totpSecretSlot" style="font-size:11px;color:#94a3b8;font-family:ui-monospace,monospace;word-break:break-all;margin-bottom:12px"></div>'
+                  + '<div style="font-size:13px;text-align:left;margin-bottom:6px;color:#475569;font-weight:500">驗證碼（6 位數字）</div>'
+                  + '<input type="text" id="totpCode" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:18px;letter-spacing:6px;text-align:center;font-family:ui-monospace,monospace">'
+                  + '<div id="totpErr" style="color:#dc2626;font-size:12px;display:none;background:#fef2f2;padding:6px 10px;border-radius:5px;margin-top:8px"></div>'
+                  + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">'
+                    + '<button type="button" class="btn" id="totpCancel">取消</button>'
+                    + '<button type="button" class="btn btn-primary" id="totpOk">驗證並啟用</button>'
+                  + '</div>';
+                ov.appendChild(card);
+                document.body.appendChild(ov);
+                var qrSlot = card.querySelector('#totpQrSlot');
+                var secSlot = card.querySelector('#totpSecretSlot');
+                var codeEl = card.querySelector('#totpCode');
+                var errEl = card.querySelector('#totpErr');
+                var okBtn = card.querySelector('#totpOk');
+                card.querySelector('#totpCancel').addEventListener('click', function(){ ov.remove(); });
+                ov.addEventListener('click', function(e){ if (e.target === ov) ov.remove(); });
+                function showE(m){ errEl.textContent = m; errEl.style.display='block'; }
+                fetch('/me/2fa/start', {method:'POST'})
+                  .then(function(r){ return r.json(); })
+                  .then(function(j){
+                    if (!j.ok) { qrSlot.textContent = '建立 secret 失敗'; return; }
+                    qrSlot.innerHTML = '<img src="' + j.qr_url + '" style="max-width:220px;height:auto" alt="QR">';
+                    secSlot.textContent = '若無法掃 QR，可手動輸入：' + j.secret;
+                    codeEl.focus();
+                  })
+                  .catch(function(){ qrSlot.textContent = '建立 secret 失敗（網路錯誤）'; });
+                okBtn.addEventListener('click', async function(){
+                  errEl.style.display = 'none';
+                  var code = (codeEl.value || '').replace(/\D/g, '');
+                  if (code.length !== 6) { showE('請輸入 6 位數字'); return; }
+                  okBtn.disabled = true;
+                  var r = await fetch('/me/2fa/verify', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({code: code}),
+                  });
+                  var j = await r.json().catch(function(){ return {}; });
+                  if (r.ok && j.ok) {
+                    ov.remove();
+                    window.showAlert('已啟用 兩步驟驗證');
+                    location.reload();
+                  } else {
+                    showE(j.detail || ('驗證失敗：' + r.status));
+                    okBtn.disabled = false;
+                  }
+                });
+                codeEl.addEventListener('keydown', function(e){ if (e.key === 'Enter') okBtn.click(); });
+              }
 
               function openChangePasswordModal(){
                 var ov = document.createElement('div');

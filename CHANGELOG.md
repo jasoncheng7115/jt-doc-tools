@@ -4,6 +4,83 @@
 
 ---
 
+## [1.5.0] - 2026-05-07
+
+### 重要行為變更 — admin 看不到 user 隱私資料的 4 頁（職責分離強化）
+
+升級到 v1.5.0 後，**admin 看不到**：
+
+- 上傳檔案記錄 (`/admin/uploads`)
+- 表單填寫歷史 (`/admin/history/fill`)
+- 用印簽名歷史 (`/admin/history/stamp`)
+- 浮水印歷史 (`/admin/history/watermark`)
+
+這 4 頁含 user 真實上傳內容 / 填寫資料，**只有稽核員可看**。設計理由：合規上 admin 雖管系統，但不該偷看 user 的真實檔案。原本 admin 慣用「上傳檔案記錄」查 user 行為的 → 改用 `/admin/audit`（稽核紀錄）查事件流。
+
+**admin 仍看得到**：稽核紀錄 (`/admin/audit`) + 系統狀態 (`/admin/system-status`) + 其他所有設定區，以及自己的設定 / 工具 / 服務管理。
+
+**升級指引**：
+- 升級後 admin sidebar **自動隱藏**這 4 頁（`_nav_settings_visible` filter 自動處理，不會有「按進去 403」的死連結）
+- 想看那 4 頁需要用稽核員帳號（`jtdt-auditor` 或 `jtdt audit-user create <name>` 自建）
+- 不希望這個變更 → admin 可在 admin/permissions 把自己加入 auditor 角色（會自動轉為純稽核員、失去 admin 權限，所以不建議；正解是另開稽核員帳號）
+
+### 新增 — 內建稽核員帳號 `jtdt-auditor` 自動建立
+
+- 啟動時若認證已啟用且本機沒有 `jtdt-auditor` 帳號 → 自動建立內建稽核員帳號
+  - **密碼留空**（`password_hash=NULL`），無法直接登入；admin 必需執行
+    `sudo jtdt reset-password jtdt-auditor` 設定第一次密碼
+  - 強制 2FA（`totp_required=1`），第一次登入導向 `/2fa-verify` 設定 TOTP
+  - 自動指派 `auditor` 角色（admin 不慎移除後，下次啟動會自動補回）
+  - `is_audit_seed=1` 旗標保護，UI / CLI 拒絕刪除
+- 新 schema migration v7：`users.is_audit_seed` 欄位
+- admin 仍可用 `sudo jtdt audit-user create <username>` 建額外稽核員
+- 升級無痛：既有客戶升上 v1.5.0 → 啟動瞬間補帳號，`audit_seed_create` 寫進 audit log
+
+### 修正 — v1.4.99 上線後實機 e2e 測試暴露的三個 bug
+
+- **`/me/2fa/start`、`/me/2fa/verify`、`/me/2fa/disable` 三個 endpoint 之前會回 500**（`NameError: JSONResponse not defined`）。`auth_routes.py` 的 `JSONResponse` 與 `HTTPException` import 補進 module-level；TOTP 自助管理頁面現在正常運作。
+- **`jtdt audit-user create` SQL 錯誤** — `INSERT INTO subject_roles ... assigned_at` 寫到不存在的欄位（schema 只有 `(subject_type, subject_key, role_id)`），改成不帶 `assigned_at` 的版本。
+- **`jtdt auth disable` / `jtdt auth set-local` 印出 SyntaxError** — 內嵌 Python 片段的單引號字串裡又有單引號（`'Already 'off'; ...'`），被 Python parser 切成三段。改成不帶內嵌引號的訊息。
+- **admin/roles 頁面稽核員角色不應顯示工具勾選方塊** — 稽核員職責就是不能用工具（職責分離），UI 不該讓 admin 誤勾。改與 admin 角色一樣顯示「無工具權限」說明區。後端 `roles.update()` 也擋住對 auditor role 的 tools 寫入。
+- v1.4.99 新功能補上完整 pytest 涵蓋（36 個新 test case，含 v1.5.0 內建稽核員）：TOTP 模組、schema migration v6/v7、auditor seed top-up、is_auditor 邏輯（含 group 成員）、require_admin 白名單、2FA 登入流程、`/me/2fa` 自助、auditor 不可自停 2FA、**全新安裝 + 從 v5 schema 升級**兩種情境驗證資料保留、jtdt-auditor 自動建立 + 不可刪 + role 自動補回 + 無密碼時 login 拒絕。
+
+## [1.4.99] - 2026-05-07
+
+### 新增 — 合規 / 稽核員角色（重大）
+
+啟用認證後，原本只有 admin / 一般使用者兩層；admin 看得到所有稽核紀錄與檔案歷史，違反職責分離（separation of duties）原則。本版引入 **稽核員 (`auditor`) 角色**，類似 mail archive 的合規分離設計：
+
+- **新本機角色 `auditor`** — 自動加入既有客戶 DB 的 `roles` 表（`seed_builtin_roles()` top-up，**升級無痛、admin 完整權限不變**）
+- 稽核員**唯讀**存取：`/admin/audit*` `/admin/history/*` `/admin/uploads` `/admin/system-status`
+- **不可使用任何工具**、不可改設定、不可建 user / role
+- **強制 TOTP 2FA** — 第一次登入自動導 `/2fa-verify` 顯示 QR，掃 + 輸 6 碼才能進去；稽核員自己不能停用、admin 也無權替稽核員角色用戶取消強制
+- 稽核員每次 view 寫一筆 `auditor_view` audit event（含 path / method / query），**admin 看得到稽核員看了什麼、稽核員自己無法刪除**（UI 無刪除端點）
+- 多個稽核員可並存
+- **CLI 新指令**：`sudo jtdt audit-user create <username>` — 一次完成建立本機帳號 + 指派 `auditor` 角色 + 強制 2FA
+
+### 新增 — TOTP 2FA 自助啟用（所有角色）
+
+- 新頁 `/me/2fa`：任何登入 user 可自助啟用 / 重新生 / 停用 TOTP（auditor 角色除外，永遠強制）
+- 支援 Google Authenticator / Microsoft Authenticator / Authy / 1Password 任一 TOTP App
+- DB schema migration `_m6_totp_columns` ADD `users.totp_secret` / `totp_enabled` / `totp_required`（default 0，**升級不會強迫既有 user 啟用**）
+- 登入流程：password OK 後若 `totp_enabled=1` 或 `totp_required=1` 才導去 `/2fa-verify`，其他不變
+
+### 升級指引
+
+- **既有客戶升級無痛** — admin 仍看所有稽核 / 歷史，既有 user 行為不變（沒設 2FA 不會被強制）
+- 想啟用合規分離，三步：
+  1. `sudo jtdt audit-user create <name>` 建立本機稽核員帳號
+  2. 該員首次登入自動掃 QR 設定 2FA
+  3. 視需求把 admin 從稽核 / 歷史頁的角色拿掉（手動，看 admin 是否還想要看）— v1.4.99 暫不自動限制 admin
+- 新依賴：`pyotp` `qrcode`（自動裝）；schema migration `_m6` 自動套用
+
+### 新增 audit event 類型
+
+- `auditor_view` — 稽核員 view audit/history/uploads/system-status 的紀錄
+- `2fa_enabled` / `2fa_disabled` / `2fa_success` / `2fa_fail` / `2fa_setup_fail`
+
+---
+
 ## [1.4.98] - 2026-05-07
 
 ### 修正

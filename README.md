@@ -1,4 +1,4 @@
-# Jason Tools 文件工具箱 v1.4.98
+# Jason Tools 文件工具箱 v1.5.0
 
 > 整合式 PDF / Office 文件處理平台。包含 30 個工具：**表單自動填寫**、**用印與簽名**、**浮水印**、**N-up 多頁合併**、**檔案合併 / 頁面分拆 / 頁面轉向 / 頁面整理 / 頁碼**、**文書轉 PDF / 圖片**、**圖片轉 PDF**、**擷取文字 / 圖片 / 附件**、**字數統計**、**註解整理 / 清除 / 平面化**、**文件去識別化 / 文字去識別化**、**PDF 加密 / 解密**、**中繼資料清除**、**隱藏內容掃描**、**文件差異比對 / 文字差異比對**、**逐句翻譯**、**頁面編輯器**、**壓縮**。
 >
@@ -183,6 +183,49 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 <sup>†</sup> Linux / macOS 用 `sudo`；Windows 沒有 `sudo`，請改成「以系統管理員身分執行 PowerShell」後跑 `jtdt update` / `jtdt uninstall`。
 
 > **升級流程**：自動停服務 → 備份 `data/` → `git pull` → `uv sync` → 重啟 → 健康檢查。最近 3 份備份會自動保留。
+
+---
+
+## 認證 / 角色 / 稽核合規（v1.4.99 起）
+
+啟用認證後（單機模式不需要這段）支援職責分離（separation of duties）：
+
+| 角色 | 用途 | 工具權限 | 設定權限 | 可看稽核 / 歷史 / 上傳 / 系統狀態 | 強制 2FA |
+|---|---|---|---|---|---|
+| `admin` | 系統管理員 | ✓ 全部 | ✓ 全部 | ✓ | 可選 |
+| `default-user` | 一般使用者 | ✓（不含表單填寫 / 用印與簽名） | ✗ | ✗ | 可選 |
+| `clerk` 文管 | 文件管理 | 部分（合併 / 拆分 / 轉檔等） | ✗ | ✗ | 可選 |
+| `finance` 財務 | 財務 | default + 表單 / 用印 / 浮水印 / 加密 | ✗ | ✗ | 可選 |
+| `sales` 業務 | 業務 | default + 表單 / 用印 / 浮水印 | ✗ | ✗ | 可選 |
+| `legal-sec` 法務資安 | 法務資安 | default + 去識別化 / 隱藏掃描 / 加密解密 | ✗ | ✗ | 可選 |
+| **`auditor` 稽核員** | 合規稽核 | ✗ 不可使用任何工具 | ✗ | ✓ 唯讀 | **強制** |
+
+**稽核員（auditor）特色 — 符合 mail archive 風格的合規分離**：
+- 只看不改：可看稽核紀錄、表單填寫 / 用印 / 浮水印的歷史檔案、上傳檔案記錄、主機資源狀態
+- 看不到任何工具、任何系統設定、無法新增 / 編輯 user 與角色
+- **強制 TOTP 2FA**：第一次登入會被導去 `/2fa-verify` 自動 setup（掃 QR code → 輸入 6 碼）才能進去
+- 稽核員自己不能停用 2FA，admin 也無法替稽核員角色用戶取消強制
+- 稽核員每次 view 的動作會寫一筆 `auditor_view` audit event，admin 看得到、稽核員自己刪不掉（UI 無刪除端點）
+- 多個稽核員可並存（適用大公司 IT / 法務 / 內稽分權審視）
+
+### 建立稽核員帳號（CLI）
+
+```bash
+# 互動 prompt 輸入密碼（推薦）
+sudo jtdt audit-user create alice
+
+# 一次給密碼（自動化用）
+sudo jtdt audit-user create bob --password 'StrongP@ss123' --display-name '張稽核'
+```
+
+帳號建立後：
+1. 該 user 在 `/login` 用 username + password 登入
+2. **自動導向 `/2fa-verify` 並顯示 QR code** — 用 Google Authenticator / Microsoft Authenticator / Authy / 1Password 任一掃描
+3. 輸入 6 位數驗證碼完成首次設定 → 進入 sidebar 只看到稽核 / 歷史 / 上傳 / 系統狀態四項
+
+### 一般 user / admin 自助啟用 2FA
+
+`/me/2fa` 頁面：點「啟用 TOTP」→ 掃 QR → 輸 6 碼 → 完成。下次登入會多一步驗證碼。已啟用後可隨時停用（auditor 角色除外，永遠強制）。
 
 ---
 

@@ -184,11 +184,35 @@ def build_auth_router(templates) -> APIRouter:
         # human labels ("管理員") not just slugs ("admin"). Keep `roles` as
         # the slug list (backend contract) and add `roles_display`.
         role_name_by_id = {r["id"]: r["display_name"] for r in all_roles}
+        # Pull current lockout state so UI can flag locked users + offer
+        # "解鎖" button.
+        from ..core import auth_db
+        import time as _t
+        now = _t.time()
+        lock_rows = auth_db.conn().execute(
+            "SELECT key, locked_until FROM lockouts WHERE locked_until > ?",
+            (now,),
+        ).fetchall()
+        locked_by_uid: dict[int, float] = {}
+        locked_by_username: dict[str, float] = {}
+        for r in lock_rows:
+            key = r["key"] or ""
+            until = r["locked_until"]
+            if key.startswith("user:"):
+                rest = key.split(":", 2)[1]
+                if rest.isdigit():
+                    locked_by_uid[int(rest)] = until
+                else:
+                    locked_by_username[rest] = until
         for u in users:
             u["roles_display"] = [
                 {"id": rid, "display_name": role_name_by_id.get(rid, rid)}
                 for rid in (u.get("roles") or [])
             ]
+            until = (locked_by_uid.get(u["id"])
+                     or locked_by_username.get(u["username"]) or 0)
+            u["locked"] = bool(until and until > now)
+            u["locked_until"] = until or None
         return templates.TemplateResponse("admin_users.html", {
             "request": request,
             "users": users,
@@ -260,6 +284,70 @@ def build_auth_router(templates) -> APIRouter:
             target=str(uid),
         )
         return {"ok": True}
+
+    @router.post("/users/{uid}/reset-totp")
+    async def users_reset_totp(uid: int, request: Request):
+        """Admin 重設使用者的 2FA — 清掉 secret + enabled。下次登入會被導
+        去 /2fa-verify 強制 setup（重新顯示 QR）。用情境：使用者手機遺失
+        無法產生 6 碼、或 admin 想強制重設。"""
+        from ..core import auth_db, db, totp as _totp
+        conn = auth_db.conn()
+        row = conn.execute("SELECT username FROM users WHERE id=?",
+                           (uid,)).fetchone()
+        if not row:
+            raise HTTPException(404, "使用者不存在")
+        _totp.disable(uid)
+        # Also revoke active sessions so any cookie they have stops working
+        with db.tx(conn):
+            conn.execute("DELETE FROM sessions WHERE user_id=?", (uid,))
+        audit_db.log_event(
+            "user_2fa_reset", username=_actor(request),
+            ip=_client_ip(request), target=row["username"],
+        )
+        return {"ok": True}
+
+    @router.post("/users/{uid}/unlock")
+    async def users_unlock(uid: int, request: Request):
+        """清除這個 user 的密碼錯誤次數鎖定。Lockouts 表用 user_id 跟 IP
+        當 key — 這裡只清 user 的，IP 鎖另外有「清所有 IP 鎖」按鈕。"""
+        from ..core import auth_db, db
+        conn = auth_db.conn()
+        row = conn.execute("SELECT username FROM users WHERE id=?",
+                           (uid,)).fetchone()
+        if not row:
+            raise HTTPException(404, "使用者不存在")
+        with db.tx(conn):
+            cur = conn.execute(
+                "DELETE FROM lockouts WHERE key LIKE ?",
+                (f"user:{uid}:%",),
+            )
+            n_user = cur.rowcount
+            # Older format may have used username — also clean
+            cur2 = conn.execute(
+                "DELETE FROM lockouts WHERE key LIKE ?",
+                (f"user:{row['username']}:%",),
+            )
+            n_user += cur2.rowcount
+        audit_db.log_event(
+            "user_unlock", username=_actor(request), ip=_client_ip(request),
+            target=str(uid), details={"cleared": n_user},
+        )
+        return {"ok": True, "cleared": n_user}
+
+    @router.post("/auth-settings/unlock-all")
+    async def auth_unlock_all(request: Request):
+        """清除所有鎖定（含 IP-based）。緊急用 — 例如多人同時撞密碼鎖死全
+        辦公室 IP。"""
+        from ..core import auth_db, db
+        conn = auth_db.conn()
+        with db.tx(conn):
+            cur = conn.execute("DELETE FROM lockouts")
+            n = cur.rowcount
+        audit_db.log_event(
+            "lockouts_clear_all", username=_actor(request),
+            ip=_client_ip(request), details={"cleared": n},
+        )
+        return {"ok": True, "cleared": n}
 
     # ---------- /admin/groups ----------
 
@@ -401,7 +489,9 @@ def build_auth_router(templates) -> APIRouter:
                 "type": "user", "key": str(u["id"]),
                 "label": f"{u['display_name']} ({u['username']})",
                 "name": u["display_name"], "username": u["username"],
-                "source": u["source"], "is_admin_seed": u.get("is_admin_seed", False),
+                "source": u["source"],
+                "is_admin_seed": u.get("is_admin_seed", False),
+                "is_audit_seed": u.get("is_audit_seed", False),
                 "roles": permissions.list_roles_for_subject("user", str(u["id"])),
                 "direct_tools": permissions.list_direct_tools_for_subject("user", str(u["id"])),
             })
@@ -411,6 +501,7 @@ def build_auth_router(templates) -> APIRouter:
                 "label": f"群組：{g['name']}",
                 "name": g["name"], "username": "",
                 "source": g["source"], "is_admin_seed": False,
+                "is_audit_seed": False,
                 "roles": permissions.list_roles_for_subject("group", str(g["id"])),
                 "direct_tools": permissions.list_direct_tools_for_subject("group", str(g["id"])),
             })
@@ -429,6 +520,19 @@ def build_auth_router(templates) -> APIRouter:
         sk = body.get("subject_key")
         if st not in ("user", "group", "ou") or not sk:
             raise HTTPException(400, "subject_type / subject_key required")
+        # Built-in seed users (jtdt-admin / jtdt-auditor) 角色與工具是固定的，
+        # 不可改 — 拒絕。
+        if st == "user":
+            from ..core import auth_db
+            row = auth_db.conn().execute(
+                "SELECT username, is_admin_seed, is_audit_seed FROM users WHERE id=?",
+                (int(sk),),
+            ).fetchone()
+            if row and (row["is_admin_seed"] or row["is_audit_seed"]):
+                raise HTTPException(
+                    400,
+                    f"內建帳號（{row['username']}）的角色與工具權限固定，"
+                    "不可從權限矩陣修改。")
         try:
             if "roles" in body:
                 permissions.set_subject_roles(st, str(sk), body["roles"])

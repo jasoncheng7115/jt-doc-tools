@@ -1,6 +1,6 @@
 [project]
 name = "jt-doc-tools"
-version = "1.4.98"
+version = "1.5.0"
 description = "Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台"
 authors = [{ name = "Jason Cheng (Jason Tools)", email = "jason@jason.tools" }]
 requires-python = ">=3.10"
@@ -37,6 +37,10 @@ dependencies = [
     # 純 Python C-extension，每 OS 都有 wheel，跑不到 import 時 admin 頁
     # 改顯示「未安裝」warning，core 工具不受影響。
     "psutil>=5.9,<7",
+    # TOTP 2FA — 稽核員角色強制啟用，其他角色可選。pyotp 純 Python；
+    # qrcode + Pillow (Pillow 已是依賴) 用來生 setup 頁面的 QR code PNG。
+    "pyotp>=2.9,<3",
+    "qrcode>=7.4,<9",
 ]
 
 [project.scripts]

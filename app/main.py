@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.4.98"
+VERSION = "1.5.0"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -84,7 +84,22 @@ def _tpl_is_admin(request) -> bool:
         return False
 
 
+def _tpl_is_auditor(request) -> bool:
+    """Jinja global: True 當下使用者具 auditor 角色。Used for nav filtering
+    so auditors only see audit / history / uploads / system-status admin
+    pages. v1.4.99 起。"""
+    user = _tpl_current_user(request)
+    if user is None or user.get("source") == "off":
+        return False
+    try:
+        from .core import permissions as _perm
+        return bool(_perm.is_auditor(user.get("user_id", 0)))
+    except Exception:
+        return False
+
+
 templates.env.globals["is_admin"] = _tpl_is_admin
+templates.env.globals["is_auditor"] = _tpl_is_auditor
 # Per-tool English keyword aliases — typed in the sidebar search to find a
 # tool by its English term (e.g. "stamp" → PDF 蓋章).
 _TOOL_ALIASES = {
@@ -270,22 +285,36 @@ _NAV_TOOL_GROUPS_ALL = list(templates.env.globals["nav_tool_groups"])
 def _nav_settings_visible(request=None):
     """Filter nav_settings based on auth state and viewer's role.
 
-    - Auth OFF (單機模式): show only items without requires_auth (the
-      multi-user pages are meaningless without accounts).
-    - Auth ON, viewer is non-admin: hide everything (all admin pages
-      enforce admin role on the backend; surfacing them in the nav
-      just produces 403s and confusion).
-    - Auth ON, viewer is admin: show everything.
+    v1.5.0+ 強職責分離：admin 看不到 user 隱私資料的 4 頁（fill/stamp/
+    watermark history + uploads），那 4 頁只開給 auditor。設計理由：
+    admin 雖管系統，但合規上不該偷看 user 真實檔案內容。
+
+    - Auth OFF (單機模式): 只顯示不需 requires_auth 的項目
+    - Auth ON, admin: 看全部 admin 頁，**不含** auditor-exclusive 4 頁
+    - Auth ON, auditor: 只看到 audit / history / uploads / system-status
+    - Auth ON, 其他: 看不到 admin 區
     """
     from .core import auth_settings as _as, permissions as _perm
+    from .web.deps import _AUDITOR_EXCLUSIVE_PREFIXES, _AUDITOR_SHARED_PREFIXES
     enabled = _as.is_enabled()
     if not enabled:
         return [item for item in _NAV_SETTINGS_ALL
                 if not item.get("requires_auth")]
     user = getattr(getattr(request, "state", None), "user", None) if request else None
-    if not user or not _perm.is_admin(user.get("user_id", 0)):
+    if not user:
         return []
-    return list(_NAV_SETTINGS_ALL)
+    uid = user.get("user_id", 0)
+    if _perm.is_admin(uid):
+        # admin 看到的清單去掉 AUDITOR_EXCLUSIVE 4 頁
+        return [item for item in _NAV_SETTINGS_ALL
+                if not any(item["url"].startswith(p)
+                           for p in _AUDITOR_EXCLUSIVE_PREFIXES)]
+    if _perm.is_auditor(uid):
+        # 稽核員只看到 SHARED + EXCLUSIVE 兩組
+        allowed = _AUDITOR_SHARED_PREFIXES + _AUDITOR_EXCLUSIVE_PREFIXES
+        return [item for item in _NAV_SETTINGS_ALL
+                if any(item["url"].startswith(p) for p in allowed)]
+    return []
 
 
 def _nav_tool_groups_visible(request=None):
@@ -442,8 +471,10 @@ from fastapi.responses import JSONResponse as _JSONResponse  # noqa: E402
 from urllib.parse import quote as _qstr  # noqa: E402
 
 _PUBLIC_PREFIXES = ("/static/", "/login", "/logout", "/setup-admin",
-                    "/healthz", "/favicon", "/api/", "/branding/")
-_PUBLIC_EXACT = {"/login", "/logout", "/setup-admin", "/healthz", "/favicon.ico"}
+                    "/healthz", "/favicon", "/api/", "/branding/",
+                    "/2fa-verify")  # 2FA 驗證頁不需要 session（pending 階段）
+_PUBLIC_EXACT = {"/login", "/logout", "/setup-admin", "/healthz", "/favicon.ico",
+                 "/2fa-verify"}
 
 
 def _looks_like_xhr(request: Request) -> bool:
@@ -935,9 +966,38 @@ async def _startup():
         # Force-create the session secret on first boot so admin enabling
         # auth later doesn't see a missing-secret race.
         auth_settings.get_session_secret()
-        # Seed the 6 built-in roles (idempotent — won't overwrite admin's
+        # Seed the 7 built-in roles (idempotent — won't overwrite admin's
         # customisations from earlier runs).
         roles.seed_builtin_roles()
+        # Auto-create the built-in jtdt-auditor user if missing (v1.5.0+).
+        # Skip on auth=off — we don't want to invent an account before
+        # the customer has even set up authentication.
+        try:
+            if auth_settings.is_enabled():
+                created = roles.seed_default_auditor_user()
+                if created:
+                    logger.info(
+                        "Created built-in audit user 'jtdt-auditor' (no password "
+                        "yet); admin must run `sudo jtdt reset-password "
+                        "jtdt-auditor` before first use.")
+        except Exception:
+            logger.exception("seed_default_auditor_user failed")
+        # Enforce separation of duties on every startup — auditor users
+        # must only have the auditor role, no direct tool grants, and
+        # totp_required=1. Catches DB drift introduced by older versions
+        # or manual edits.
+        try:
+            if auth_settings.is_enabled():
+                summary = roles.enforce_auditor_isolation()
+                if summary["users_cleaned"]:
+                    logger.warning(
+                        "auditor isolation cleanup: %d user(s) had non-auditor "
+                        "roles or direct tool grants — removed. Details in "
+                        "audit log (event_type=auditor_isolation_cleanup).",
+                        summary["users_cleaned"],
+                    )
+        except Exception:
+            logger.exception("enforce_auditor_isolation failed")
         # Start the audit-forward background worker (no-op when no
         # destinations configured).
         audit_forward.start_worker()

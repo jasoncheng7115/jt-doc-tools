@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}兩步驟驗證 · {{ app_name }}{% endblock %}
+{% block content %}
+<div style="max-width: 460px; margin: 60px auto; padding: 28px 32px;
+            background: #fff; border-radius: 12px;
+            box-shadow: 0 6px 18px rgba(15,23,42,0.10);">
+  <h1 style="margin: 0 0 6px; font-size: 22px; color: #1e293b;">
+    {{ icon('lock', size=22) }} 兩步驟驗證 (TOTP)
+  </h1>
+  <p style="margin: 0 0 18px; color: #64748b; font-size: 13px;">
+    歡迎 <b>{{ display_name or username }}</b>，請輸入您 Authenticator App 顯示的 6 位數驗證碼。
+  </p>
+
+  {% if is_setup %}
+  <div style="background:#fef3c7; border:1px solid #fbbf24; color:#92400e;
+              padding: 12px 14px; border-radius: 8px; margin-bottom: 16px;
+              font-size: 13px;">
+    <b>⚠ 您的角色強制使用 2FA</b><br>
+    請先用 Google Authenticator / Microsoft Authenticator / Authy / 1Password
+    等掃描下方 QR code 加入帳號，再輸入該 App 顯示的 6 位數驗證碼完成首次設定。
+  </div>
+  {% if qr_url %}
+  <div style="text-align: center; margin: 14px 0;">
+    <img src="{{ qr_url }}" alt="TOTP QR Code"
+         style="width: 200px; height: 200px; border: 1px solid #e5e7eb;
+                border-radius: 8px;">
+  </div>
+  <details style="margin: 8px 0 14px;">
+    <summary style="cursor:pointer; font-size: 12.5px; color: #475569;">
+      無法掃描？點此手動輸入 secret
+    </summary>
+    <div style="margin-top: 8px; padding: 10px; background: #f8fafc;
+                border-radius: 6px; font-family: ui-monospace, monospace;
+                font-size: 12.5px; color: #1e293b; word-break: break-all;">
+      {{ secret_for_manual }}
+    </div>
+  </details>
+  {% endif %}
+  {% endif %}
+
+  {% if error %}
+  <div style="background:#fee2e2; border:1px solid #fca5a5; color:#991b1b;
+              padding: 10px 14px; border-radius: 8px; margin-bottom: 14px;
+              font-size: 13px;">
+    {{ error }}
+    {% if fails %}（已失敗 {{ fails }} 次，5 次後需重新登入）{% endif %}
+  </div>
+  {% endif %}
+
+  <form method="post" action="/2fa-verify" autocomplete="off">
+    <div style="margin-bottom: 14px;">
+      <label style="display: block; font-size: 13px; color: #475569;
+                    margin-bottom: 6px;">驗證碼（6 位數字）</label>
+      <input type="text" name="code" required autofocus
+             inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+             style="width: 100%; box-sizing: border-box; padding: 12px 14px;
+                    font-size: 22px; font-family: ui-monospace, monospace;
+                    letter-spacing: 6px; text-align: center;
+                    border: 1px solid var(--border); border-radius: 8px;">
+    </div>
+    <button type="submit" class="btn btn-primary"
+            style="width: 100%; padding: 11px; font-size: 14.5px;">
+      {{ icon('lock', size=14) }} 驗證並登入
+    </button>
+  </form>
+
+  <p style="margin: 18px 0 0; text-align: center; font-size: 12px; color: #94a3b8;">
+    <a href="/login" style="color: #94a3b8;">← 取消，回到登入頁</a>
+  </p>
+</div>
+{% endblock %}

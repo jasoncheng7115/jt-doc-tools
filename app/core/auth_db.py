@@ -238,10 +238,42 @@ def _m5_grant_translate_doc(conn: sqlite3.Connection) -> None:
     """)
 
 
+def _m6_totp_columns(conn: sqlite3.Connection) -> None:
+    """v6: 2FA / TOTP support (v1.4.99 起).
+
+    新增三欄供 TOTP 流程使用：
+      - totp_secret: 32-char base32 secret（pyotp.random_base32()）。NULL 表示
+        從未 setup 過。儲存明文（DB 加密本身就是放心的；secret 一旦外洩
+        TOTP 失效，靠 DB 整體權限管理）。
+      - totp_enabled: 0/1，使用者是否完成 TOTP 啟用（生成 secret 後還沒
+        驗證第一個 6 碼前不算啟用）。
+      - totp_required: 0/1，是否強制使用 TOTP（auditor 角色 user 為 1，
+        其他角色預設 0；admin 也可用 UI 開）。required + 未 enabled 的
+        user 第一次登入會被導去 setup page。"""
+    conn.executescript("""
+    ALTER TABLE users ADD COLUMN totp_secret TEXT;
+    ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN totp_required INTEGER NOT NULL DEFAULT 0;
+    """)
+
+
+def _m7_audit_seed_column(conn: sqlite3.Connection) -> None:
+    """v7: 加 `users.is_audit_seed` 欄位（v1.5.0 起）。
+
+    內建 `jtdt-auditor` 帳號在啟動時自動建立（`seed_default_auditor_user()`）；
+    is_audit_seed=1 表示該 row 是內建稽核員，UI / CLI 拒絕刪除（同 admin
+    用 is_admin_seed 的保護模式）。"""
+    conn.executescript("""
+    ALTER TABLE users ADD COLUMN is_audit_seed INTEGER NOT NULL DEFAULT 0;
+    """)
+
+
 MIGRATIONS = [_m1_initial, _m2_username_source_unique,
               _m3_rename_pdf_diff_to_doc_diff,
               _m4_grant_image_to_pdf,
-              _m5_grant_translate_doc]
+              _m5_grant_translate_doc,
+              _m6_totp_columns,
+              _m7_audit_seed_column]
 
 
 def auth_db_path() -> Path:

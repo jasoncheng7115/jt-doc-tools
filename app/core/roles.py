@@ -107,7 +107,31 @@ SEED_ROLES: list[dict] = [
             "pdf-encrypt", "pdf-decrypt",
         ],
     },
+    {
+        # 稽核員 — v1.4.99 起新增。職責分離：admin 管系統 / 工具，auditor
+        # 看稽核紀錄與歷史檔案。auditor 沒任何工具，也看不到 admin 設定區
+        # （除了稽核 / 歷史 / 上傳記錄 / 系統狀態）。本機帳號專用，強制 TOTP
+        # 2FA。is_protected=True 不可刪也不可改（避免誤把 audit 角色變廢）。
+        "id": "auditor",
+        "display_name": "稽核員",
+        "description": "唯讀存取稽核紀錄與檔案歷史（不可使用工具、不可改設定）。本機帳號 + 強制 2FA。",
+        "is_builtin": True,
+        "is_protected": True,
+        "tools": [],   # 沒有工具權限；稽核相關 admin 頁靠 is_auditor() 額外開放
+    },
 ]
+
+
+# v1.5.0 起：稽核員「能」看的 admin 頁清單。實際 access control 走
+# `app/web/deps.py:_AUDITOR_SHARED_PREFIXES` + `_AUDITOR_EXCLUSIVE_PREFIXES`
+# 兩組（admin 只能看 SHARED；EXCLUSIVE 連 admin 都擋）。這個 constant 保留
+# 給 search keyword / 老 import 相容用。
+AUDIT_VISIBLE_ADMIN_URLS = (
+    "/admin/audit",
+    "/admin/history",
+    "/admin/uploads",
+    "/admin/system-status",
+)
 
 
 # ---------- seed on startup ----------
@@ -162,6 +186,192 @@ def seed_builtin_roles() -> None:
         _perm.invalidate_cache()
     except Exception:
         pass
+
+
+# 內建稽核員帳號名稱 — 升級時若不存在會自動建立（v1.5.0 起）
+DEFAULT_AUDITOR_USERNAME = "jtdt-auditor"
+
+
+def seed_default_auditor_user() -> bool:
+    """確保內建本機稽核員帳號 `jtdt-auditor` 存在。
+
+    場景：
+      - 全新安裝（auth ON 後）：第一次啟動建立此帳號，admin 用
+        `sudo jtdt reset-password jtdt-auditor` 設密碼後即可使用
+      - 既有客戶升級（沒有任何 auditor）：升上 v1.5.0 自動補建，**不會**
+        覆蓋使用者已自建的 jtdt-auditor 帳號（INSERT OR IGNORE 由 username
+        unique 把關）
+      - admin 已用 `jtdt audit-user create xxx` 建過自訂稽核員：仍會建
+        jtdt-auditor，因為使用者明確說「**如果本來沒有 jtdt-auditor 要自動
+        建立**」
+
+    建立的 row 設定：
+      - source='local'
+      - password_hash=NULL → login 直接被 verify_password 拒，必須先
+        `jtdt reset-password jtdt-auditor` 才能用
+      - totp_required=1（auditor role + DB 欄位雙重保險）
+      - is_audit_seed=1 → user_manager.delete 拒絕刪除
+      - 自動指派 'auditor' role
+      - 寫一筆 `audit_seed_create` audit event
+
+    Returns: True 若這次有新建，False 若已存在不動。
+    """
+    from . import auth_db, audit_db
+    conn = auth_db.conn()
+    row = conn.execute(
+        "SELECT id FROM users WHERE username=? AND source='local'",
+        (DEFAULT_AUDITOR_USERNAME,),
+    ).fetchone()
+    if row:
+        # 已存在 — 確保 auditor role 至少有指派（避免 admin 不小心移走後沒救）
+        uid = row["id"]
+        has_role = conn.execute(
+            "SELECT 1 FROM subject_roles WHERE subject_type='user' "
+            "AND subject_key=? AND role_id='auditor'",
+            (str(uid),),
+        ).fetchone()
+        if not has_role:
+            with db.tx(conn):
+                conn.execute(
+                    "INSERT OR IGNORE INTO subject_roles(subject_type, "
+                    "subject_key, role_id) VALUES ('user', ?, 'auditor')",
+                    (str(uid),),
+                )
+        return False
+    # 新建
+    now = time.time()
+    with db.tx(conn):
+        cur = conn.execute(
+            "INSERT INTO users(username, display_name, password_hash, source, "
+            "enabled, is_admin_seed, is_audit_seed, created_at, last_login_at, "
+            "totp_secret, totp_enabled, totp_required) "
+            "VALUES (?, ?, NULL, 'local', 1, 0, 1, ?, 0, NULL, 0, 1)",
+            (DEFAULT_AUDITOR_USERNAME, "稽核員", now),
+        )
+        uid = cur.lastrowid
+        conn.execute(
+            "INSERT OR IGNORE INTO subject_roles(subject_type, subject_key, "
+            "role_id) VALUES ('user', ?, 'auditor')",
+            (str(uid),),
+        )
+    try:
+        audit_db.log_event(
+            "audit_seed_create", username="system", target=DEFAULT_AUDITOR_USERNAME,
+            details={"reason": "auto-create on startup",
+                     "next_step": "sudo jtdt reset-password jtdt-auditor"},
+        )
+    except Exception:
+        pass
+    try:
+        from . import permissions as _perm
+        _perm.invalidate_cache()
+    except Exception:
+        pass
+    return True
+
+
+def enforce_auditor_isolation() -> dict:
+    """職責分離強制執行：每個有 `auditor` 角色的 user，DB 內**不該有**其他
+    角色、不該有直接工具授權（subject_perms）、且 totp_required 必為 1。
+
+    跑時機：
+      - 每次啟動（main.py startup）— 升級時把舊 DB 不一致的狀態清乾淨
+      - admin 透過 /admin/permissions 把 auditor 角色給某 user 之後
+        （permissions.assign_role 內 hook）
+
+    清掉的資料寫進 audit log，admin 看得到稽核員身上原本還有什麼權限。
+
+    Returns dict: {users_cleaned, roles_removed, perms_removed, totp_forced}
+    """
+    from . import auth_db, audit_db, db, totp as _totp
+    conn = auth_db.conn()
+    summary = {
+        "users_cleaned": 0,
+        "roles_removed": [],     # list of (user_id, role_id)
+        "perms_removed": [],     # list of (user_id, tool_id)
+        "totp_forced": [],       # list of user_id
+    }
+    auditor_uids = [
+        r["subject_key"] for r in conn.execute(
+            "SELECT subject_key FROM subject_roles "
+            "WHERE subject_type='user' AND role_id='auditor'"
+        ).fetchall()
+    ]
+    if not auditor_uids:
+        return summary
+    for uid_str in auditor_uids:
+        try:
+            uid = int(uid_str)
+        except (TypeError, ValueError):
+            continue
+        # 1. 找出這個 user 還掛著哪些**其他**角色
+        other_roles = [
+            r["role_id"] for r in conn.execute(
+                "SELECT role_id FROM subject_roles "
+                "WHERE subject_type='user' AND subject_key=? AND role_id<>'auditor'",
+                (uid_str,),
+            ).fetchall()
+        ]
+        # 2. 直接 subject_perms（admin 用「進階」拐角繞 role 直接給工具）
+        direct_perms = [
+            r["tool_id"] for r in conn.execute(
+                "SELECT tool_id FROM subject_perms "
+                "WHERE subject_type='user' AND subject_key=?", (uid_str,),
+            ).fetchall()
+        ]
+        # 3. totp_required 狀態
+        urow = conn.execute(
+            "SELECT username, totp_required FROM users WHERE id=?", (uid,)
+        ).fetchone()
+        username = urow["username"] if urow else f"user_id={uid}"
+        needs_totp = bool(urow and not urow["totp_required"])
+        if not (other_roles or direct_perms or needs_totp):
+            continue   # 已經乾淨
+        with db.tx(conn):
+            if other_roles:
+                conn.execute(
+                    "DELETE FROM subject_roles "
+                    "WHERE subject_type='user' AND subject_key=? AND role_id<>'auditor'",
+                    (uid_str,),
+                )
+            if direct_perms:
+                conn.execute(
+                    "DELETE FROM subject_perms "
+                    "WHERE subject_type='user' AND subject_key=?", (uid_str,),
+                )
+            if needs_totp:
+                # Inline UPDATE — _totp.set_required() opens its own
+                # transaction, which would nest inside this `with db.tx`
+                # block (sqlite refuses).
+                conn.execute(
+                    "UPDATE users SET totp_required=1 WHERE id=?", (uid,))
+        for r in other_roles:
+            summary["roles_removed"].append((uid, r))
+        for t in direct_perms:
+            summary["perms_removed"].append((uid, t))
+        if needs_totp:
+            summary["totp_forced"].append(uid)
+        summary["users_cleaned"] += 1
+        try:
+            audit_db.log_event(
+                "auditor_isolation_cleanup",
+                username="system", target=username,
+                details={
+                    "user_id": uid,
+                    "removed_roles": other_roles,
+                    "removed_direct_tools": direct_perms,
+                    "totp_forced": needs_totp,
+                },
+            )
+        except Exception:
+            pass
+    if summary["users_cleaned"]:
+        try:
+            from . import permissions as _perm
+            _perm.invalidate_cache()
+        except Exception:
+            pass
+    return summary
 
 
 # ---------- CRUD ----------
@@ -246,8 +456,10 @@ def update(role_id: str, *, display_name: Optional[str] = None,
         if tools is not None:
             # admin role's tools are intentionally empty (means "all"); reject
             # any attempt to set tools for it.
-            if role_id == "admin":
-                pass  # silently no-op; admin role grants are implicit
+            # auditor role MUST have empty tools (separation-of-duties) —
+            # silently no-op even if admin POSTs a non-empty list.
+            if role_id in ("admin", "auditor"):
+                pass
             else:
                 conn.execute("DELETE FROM role_perms WHERE role_id=?", (role_id,))
                 for t in tools:

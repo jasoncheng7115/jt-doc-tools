@@ -113,7 +113,8 @@ def test_disable_auth_keeps_user_wipes_sessions(admin_session):
     # Confirm 1 user + 1 session right now
     user_count = auth_db.conn().execute("SELECT count(*) FROM users").fetchone()[0]
     sess_count = auth_db.conn().execute("SELECT count(*) FROM sessions").fetchone()[0]
-    assert user_count == 1
+    # admin + auto-seeded jtdt-auditor (v1.5.0+)
+    assert user_count == 2
     assert sess_count >= 1
 
     auth_settings.disable_auth(actor="jtdt-admin")
@@ -121,5 +122,6 @@ def test_disable_auth_keeps_user_wipes_sessions(admin_session):
     assert auth_settings.get_backend() == "off"
     user_count = auth_db.conn().execute("SELECT count(*) FROM users").fetchone()[0]
     sess_count = auth_db.conn().execute("SELECT count(*) FROM sessions").fetchone()[0]
-    assert user_count == 1   # user kept
+    # admin + auto-seeded jtdt-auditor (v1.5.0+)
+    assert user_count == 2   # user kept
     assert sess_count == 0   # sessions wiped
