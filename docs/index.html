@@ -525,7 +525,7 @@
       <div class="ent-card">
         <div class="ent-num">B</div>
         <h3>角色與權限</h3>
-        <p>6 個內建角色：<b>管理員</b>、<b>一般使用者</b>、<b>文管</b>、<b>財務</b>、<b>業務</b>、<b>法務資安</b>。可自訂新角色，指派工具使用權限到使用者 / 群組 / OU.in-memory cache 確保權限查詢不影響效能。</p>
+        <p>7 個內建角色：<b>管理員</b>、<b>稽核員</b>、<b>一般使用者</b>、<b>文管</b>、<b>財務</b>、<b>業務</b>、<b>法務資安</b>。可自訂新角色，指派工具使用權限到使用者 / 群組 / OU。in-memory cache 確保權限查詢不影響效能。</p>
       </div>
 
       <div class="ent-card">
@@ -550,6 +550,59 @@
         <div class="ent-num">F</div>
         <h3>檔案保留 / 清理</h3>
         <p>表單填寫 / 用印簽名 / 浮水印歷史 / 暫存上傳 / Job 結果 / 稽核 各類獨立保留天數設定，排程清理（啟動 + 每 6 小時）。可設「永久保留」（-1）。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======== Separation of Duties + 2FA (v1.5.0) ======== -->
+<section id="audit" class="section section-light">
+  <div class="container">
+    <div class="section-eyebrow">合規 / 職責分離（v1.5.0）</div>
+    <h2 class="section-title">稽核員角色 + 強制 2FA — mail archive 風格的合規分離</h2>
+    <p class="section-lead">啟用認證後，系統自動建立兩個內建帳號 <code>jtdt-admin</code> 與 <code>jtdt-auditor</code>，分屬不同角色 — 「管系統的人」與「看記錄的人」永遠分開，符合 SOX / ISO 27001 等合規規範。</p>
+
+    <div class="sod-table-wrap">
+      <table class="sod-table">
+        <thead>
+          <tr><th>權限</th><th><code>jtdt-admin</code><br><span class="muted">系統管理員</span></th><th><code>jtdt-auditor</code><br><span class="muted">合規稽核員</span></th></tr>
+        </thead>
+        <tbody>
+          <tr><td>使用任何工具</td><td class="ok">✓ 全部</td><td class="no">✗</td></tr>
+          <tr><td>改設定（user / 角色 / 認證 / 字型 / API token）</td><td class="ok">✓</td><td class="no">✗</td></tr>
+          <tr><td>看稽核記錄、系統狀態</td><td class="ok">✓</td><td class="ok">✓ 唯讀</td></tr>
+          <tr><td>看 user 隱私 4 頁<br><span class="muted">上傳記錄 / 表單填寫 / 用印簽名 / 浮水印歷史</span></td><td class="no"><b>✗（v1.5.0 強化）</b></td><td class="ok">✓ 唯讀</td></tr>
+          <tr><td>強制 2FA</td><td class="muted">可選</td><td class="ok"><b>強制（不可停用）</b></td></tr>
+          <tr><td>可被刪除</td><td class="no">✗ 受 <code>is_admin_seed</code> 保護</td><td class="no">✗ 受 <code>is_audit_seed</code> 保護</td></tr>
+          <tr><td>可在權限矩陣改 role / tool</td><td class="no">✗ 鎖住</td><td class="no">✗ 鎖住</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="sod-grid">
+      <div class="sod-card">
+        <h3>為什麼分兩個</h3>
+        <p>合規規範要求「**管系統的人**」與「**看記錄的人**」職責分離 — admin 不該偷看 user 真實上傳的檔案內容、稽核員不該動系統設定。任一方都不擁有完整存取權，這就是 separation of duties。</p>
+      </div>
+      <div class="sod-card">
+        <h3>強制 TOTP 2FA</h3>
+        <p>稽核員角色第一次登入會被導向 <code>/2fa-verify</code> 自動 setup（顯示 QR code）→ 用 Google Authenticator / Microsoft Authenticator / Authy / 1Password 任一掃描 → 輸入 6 碼完成。稽核員自己不能停用 2FA，admin 也無法替稽核員角色用戶取消強制。</p>
+      </div>
+      <div class="sod-card">
+        <h3>多稽核員支援</h3>
+        <p>除了內建 <code>jtdt-auditor</code>，admin 可用 <code>sudo jtdt audit-user create &lt;name&gt;</code> 加任意數量的稽核員（適合大公司 IT / 法務 / 內稽分權審視）。每個稽核員獨立 2FA。</p>
+      </div>
+      <div class="sod-card">
+        <h3>稽核員自身行為留痕</h3>
+        <p>稽核員每次 view 寫一筆 <code>auditor_view</code> audit event（path / method / IP），admin 看得到稽核員看了什麼，但稽核員自己刪不掉（UI 無刪除端點，本身就唯讀）。</p>
+      </div>
+      <div class="sod-card">
+        <h3>所有 user 都能用 2FA</h3>
+        <p>不只稽核員 — 任何 user（包含 LDAP / AD 帳號）可在「我的帳號」modal 自助啟用 TOTP 2FA。已啟用後可隨時停用（auditor 角色除外）。</p>
+      </div>
+      <div class="sod-card">
+        <h3>緊急復原 CLI</h3>
+        <p>admin 可離線復原：<code>jtdt auth show / disable / set-local</code>、<code>jtdt reset-password &lt;user&gt;</code>、<code>jtdt audit-user create</code>。即使忘密碼 / LDAP 設錯不需重灌、不會掉資料。</p>
       </div>
     </div>
   </div>

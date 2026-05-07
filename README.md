@@ -188,27 +188,56 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 
 ## 認證 / 角色 / 稽核合規（v1.4.99 起）
 
-啟用認證後（單機模式不需要這段）支援職責分離（separation of duties）：
+啟用認證後（單機模式不需要這段）支援職責分離（separation of duties）。
 
-| 角色 | 用途 | 工具權限 | 設定權限 | 可看稽核 / 歷史 / 上傳 / 系統狀態 | 強制 2FA |
-|---|---|---|---|---|---|
-| `admin` | 系統管理員 | ✓ 全部 | ✓ 全部 | ✓ | 可選 |
-| `default-user` | 一般使用者 | ✓（不含表單填寫 / 用印與簽名） | ✗ | ✗ | 可選 |
-| `clerk` 文管 | 文件管理 | 部分（合併 / 拆分 / 轉檔等） | ✗ | ✗ | 可選 |
-| `finance` 財務 | 財務 | default + 表單 / 用印 / 浮水印 / 加密 | ✗ | ✗ | 可選 |
-| `sales` 業務 | 業務 | default + 表單 / 用印 / 浮水印 | ✗ | ✗ | 可選 |
-| `legal-sec` 法務資安 | 法務資安 | default + 去識別化 / 隱藏掃描 / 加密解密 | ✗ | ✗ | 可選 |
-| **`auditor` 稽核員** | 合規稽核 | ✗ 不可使用任何工具 | ✗ | ✓ 唯讀 | **強制** |
+### 角色一覽
 
-**稽核員（auditor）特色 — 符合 mail archive 風格的合規分離**：
-- 只看不改：可看稽核紀錄、表單填寫 / 用印 / 浮水印的歷史檔案、上傳檔案記錄、主機資源狀態
-- 看不到任何工具、任何系統設定、無法新增 / 編輯 user 與角色
-- **強制 TOTP 2FA**：第一次登入會被導去 `/2fa-verify` 自動 setup（掃 QR code → 輸入 6 碼）才能進去
-- 稽核員自己不能停用 2FA，admin 也無法替稽核員角色用戶取消強制
-- 稽核員每次 view 的動作會寫一筆 `auditor_view` audit event，admin 看得到、稽核員自己刪不掉（UI 無刪除端點）
-- 多個稽核員可並存（適用大公司 IT / 法務 / 內稽分權審視）
+| 角色 | 用途 | 工具權限 | 設定權限 | 可看 audit / system-status | **可看 user 隱私 4 頁** | 強制 2FA |
+|---|---|---|---|---|---|---|
+| `admin` | 系統管理員 | ✓ 全部 | ✓ 全部 | ✓ | **✗（v1.5.0 強化）** | 可選 |
+| **`auditor`** 稽核員 | 合規稽核 | ✗ 不可使用任何工具 | ✗ | ✓ 唯讀 | ✓ 唯讀 | **強制** |
+| `default-user` 一般使用者 | 日常文書 | ✓（不含表單填寫 / 用印與簽名） | ✗ | ✗ | ✗ | 可選 |
+| `clerk` 文管 | 文件管理 | 部分（合併 / 拆分 / 轉檔等） | ✗ | ✗ | ✗ | 可選 |
+| `finance` 財務 | 財務 | default + 表單 / 用印 / 浮水印 / 加密 | ✗ | ✗ | ✗ | 可選 |
+| `sales` 業務 | 業務 | default + 表單 / 用印 / 浮水印 | ✗ | ✗ | ✗ | 可選 |
+| `legal-sec` 法務資安 | 法務資安 | default + 去識別化 / 隱藏掃描 / 加密解密 | ✗ | ✗ | ✗ | 可選 |
 
-### 建立稽核員帳號（CLI）
+**「user 隱私 4 頁」**：上傳檔案記錄、表單填寫歷史、用印簽名歷史、浮水印歷史。這 4 頁含 user 真實上傳 / 填寫的內容，**v1.5.0 起連 admin 都看不到**，只有稽核員可看。
+
+### 內建帳號：`jtdt-admin` 與 `jtdt-auditor`
+
+啟用認證後系統會自動維護兩個內建帳號，**用途分開、不可混用**：
+
+| 項目 | `jtdt-admin` | `jtdt-auditor` |
+|---|---|---|
+| 何時建立 | 第一次啟用認證時，由 `/setup-admin` 頁面建立 | 啟用認證時自動建立（v1.5.0+） |
+| 角色 | `admin`（管理員） | `auditor`（稽核員） |
+| 預設密碼 | 您建立時設定 | **無**（NULL）— 必須先 `sudo jtdt reset-password jtdt-auditor` 才能登入 |
+| 強制 2FA | 否（可選） | **是**（不可停用） |
+| 可使用工具 | ✓ 全部 | ✗ 完全不可 |
+| 可改設定 | ✓ 全部 | ✗ 完全不可 |
+| 可看 user 隱私 4 頁 | **✗** | ✓ 唯讀 |
+| 可被刪除 | ✗ 受 `is_admin_seed` 保護 | ✗ 受 `is_audit_seed` 保護 |
+| 可在 `/admin/permissions` 改角色 / 工具 | ✗ 鎖住 | ✗ 鎖住 |
+| 用途 | 日常維運：管理 user / 角色 / 認證設定 / 工具設定 / 升級 / 服務 | 合規稽核：查看 user 上傳了什麼 / 處理過什麼歷史 |
+
+**為什麼分兩個內建帳號**：合規規範（SOX / ISO 27001 等）要求「管系統的人」與「看記錄的人」分離 — admin 不該偷看 user 隱私資料，稽核員不該動系統設定。任何一方都不該擁有完整存取權，這就是 separation of duties。
+
+### 第一次設定流程（建議）
+
+```bash
+# 1. 啟用認證 + 建立 admin（在 web 設定頁 /admin/auth-settings 或 /setup-admin 操作）
+#    → jtdt-admin 帳號 + jtdt-auditor 帳號自動建立
+
+# 2. 替 jtdt-auditor 設密碼（admin 也無法看到 jtdt-auditor 的隱私頁面，所以必須先設）
+sudo jtdt reset-password jtdt-auditor
+
+# 3. 把上面設的密碼交給合規 / 稽核同仁
+#    他們在 /login 登入 → 自動導向 /2fa-verify 顯示 QR
+#    用 Authenticator app 掃 QR → 輸 6 碼完成首次設定
+```
+
+### 建立額外稽核員（多人合規團隊）
 
 ```bash
 # 互動 prompt 輸入密碼（推薦）
@@ -218,14 +247,28 @@ sudo jtdt audit-user create alice
 sudo jtdt audit-user create bob --password 'StrongP@ss123' --display-name '張稽核'
 ```
 
-帳號建立後：
-1. 該 user 在 `/login` 用 username + password 登入
-2. **自動導向 `/2fa-verify` 並顯示 QR code** — 用 Google Authenticator / Microsoft Authenticator / Authy / 1Password 任一掃描
-3. 輸入 6 位數驗證碼完成首次設定 → 進入 sidebar 只看到稽核 / 歷史 / 上傳 / 系統狀態四項
+新稽核員的密碼產生流程同上：第一次登入後自動走 `/2fa-verify` setup。
 
 ### 一般 user / admin 自助啟用 2FA
 
-`/me/2fa` 頁面：點「啟用 TOTP」→ 掃 QR → 輸 6 碼 → 完成。下次登入會多一步驗證碼。已啟用後可隨時停用（auditor 角色除外，永遠強制）。
+點 sidebar 上方自己的帳號名稱 → 「我的帳號」modal → **兩步驟驗證 (TOTP)** 區塊：
+
+- **未啟用**：按「啟用 2FA」→ 掃 QR → 輸 6 碼 → 完成
+- **已啟用**：可「重新生 secret」（換手機時用）或「停用 2FA」
+- **稽核員角色**：強制啟用，看得到「重新生 secret」但停用按鈕被擋
+
+下次登入會在密碼後多一步驗證碼。
+
+### 帳號鎖定 / 解鎖（v1.5.0 加）
+
+連錯密碼 5 次該帳號 + 來源 IP 會鎖 15 分鐘。admin 可在：
+
+- **`/admin/users`** 找到被鎖的 user，每行旁有黃底「解鎖」按鈕
+- **`/admin/auth-settings`** 點「清除所有鎖定」一鍵清光（多人撞密碼把整個辦公室 IP 鎖死時用）
+
+### admin 替 user 重設 2FA
+
+user 手機遺失 / 換手機時，admin 在 `/admin/users` 點該 user 旁的「重設 2FA」 → 清掉舊 secret + 撤銷所有 session → user 下次登入會重新看到 QR setup。
 
 ---
 
