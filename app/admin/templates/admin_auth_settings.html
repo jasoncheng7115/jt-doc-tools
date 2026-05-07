@@ -29,10 +29,12 @@
     <tr><th>鎖定時間</th><td>{{ settings.lockout_minutes }} 分</td></tr>
   </table>
   <p style="margin-top:18px;">
-    <button class="btn btn-danger" id="btnDisableAuth" type="button">{{ icon('unlock', size=14) }} 停用認證</button>
+    <button class="btn" id="btnUnlockAll" type="button">{{ icon('unlock', size=14) }} 清除所有鎖定</button>
+    <button class="btn btn-danger" id="btnDisableAuth" type="button" style="margin-left:8px;">{{ icon('unlock', size=14) }} 停用認證</button>
   </p>
   <p class="muted" style="font-size:12px;">
-    停用認證會立刻讓所有人都能存取系統（恢復預設）；現有使用者 / 角色 / 權限資料保留，下次再啟用會繼續用。
+    <b>清除所有鎖定</b>：清掉因為密碼錯誤次數過多而鎖住的帳號 / IP，緊急用（例如多人撞密碼把整個辦公室 IP 鎖死）。一般單一帳號鎖死可以從 <a href="/admin/users">使用者管理</a> 頁面點該帳號的「解鎖」即可，不必清全部。<br>
+    <b>停用認證</b>會立刻讓所有人都能存取系統（恢復預設）；現有使用者 / 角色 / 權限資料保留，下次再啟用會繼續用。
     <b>所有現有 session 會立刻失效。</b>
   </p>
 </div>
@@ -417,6 +419,19 @@ if (btn) btn.addEventListener('click', async () => {
   const r = await fetch('/admin/auth-settings/disable', {method:'POST'});
   if (r.ok) location.reload();
   else showAlert('停用失敗：' + await r.text());
+});
+
+const unlockBtn = document.getElementById('btnUnlockAll');
+if (unlockBtn) unlockBtn.addEventListener('click', async () => {
+  if (!(await showConfirm('清除「所有」帳號與 IP 的密碼錯誤鎖定？',
+        { title: '清除所有鎖定', okText: '清除' }))) return;
+  const r = await fetch('/admin/auth-settings/unlock-all', {method:'POST'});
+  if (r.ok) {
+    const j = await r.json();
+    showAlert(`已清除 ${j.cleared} 筆鎖定`);
+  } else {
+    showAlert('清除失敗：' + await r.text());
+  }
 });
 
 const CURRENT_BACKEND = {{ settings.backend|tojson }};

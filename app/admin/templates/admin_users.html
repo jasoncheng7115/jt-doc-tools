@@ -78,10 +78,21 @@
           —
         </td>
         <td>
+          {% if u.locked %}
+          <button class="btn btn-small" data-act="unlock" data-uid="{{ u.id }}" data-username="{{ u.username }}"
+                  title="清除這個帳號的密碼錯誤次數鎖定"
+                  style="background:#fef3c7;border-color:#f59e0b;color:#92400e;">{{ icon('unlock', size=12) }} 解鎖</button>
+          {% endif %}
           {% if u.is_admin_seed %}
           <button class="btn btn-small" type="button" disabled
                   title="內建管理員：權限固定為 admin，不可變更">{{ icon('lock', size=12) }} 內建</button>
           <button class="btn btn-small" data-act="reset-pwd" data-username="{{ u.username }}">{{ icon('lock', size=12) }} 重設密碼</button>
+          <button class="btn btn-small" data-act="reset-totp" data-username="{{ u.username }}" title="清除這個使用者的 TOTP secret，下次登入會看到 QR 重新 setup">{{ icon('refresh-cw', size=12) }} 重設 2FA</button>
+          {% elif u.is_audit_seed %}
+          <button class="btn btn-small" type="button" disabled
+                  title="內建稽核員：強制 2FA，無工具權限，不可刪">{{ icon('lock', size=12) }} 內建</button>
+          <button class="btn btn-small" data-act="reset-pwd" data-username="{{ u.username }}">{{ icon('lock', size=12) }} 重設密碼</button>
+          <button class="btn btn-small" data-act="reset-totp" data-username="{{ u.username }}" title="清除 TOTP secret，下次登入重新顯示 QR setup">{{ icon('refresh-cw', size=12) }} 重設 2FA</button>
           {% else %}
           <button class="btn btn-small" data-act="edit"
                   data-username="{{ u.username }}"
@@ -89,6 +100,7 @@
                   data-enabled="{{ '1' if u.enabled else '0' }}"
                   data-roles="{{ u.roles|join(',') }}">{{ icon('edit', size=12) }} 編輯</button>
           <button class="btn btn-small" data-act="reset-pwd" data-username="{{ u.username }}">{{ icon('lock', size=12) }} 重設密碼</button>
+          <button class="btn btn-small" data-act="reset-totp" data-username="{{ u.username }}" title="清除 TOTP secret，下次登入重新顯示 QR setup">{{ icon('refresh-cw', size=12) }} 重設 2FA</button>
           <button class="btn btn-small btn-danger" data-act="delete" data-username="{{ u.username }}">{{ icon('trash', size=12) }} 刪除</button>
           {% endif %}
         </td>
@@ -499,6 +511,25 @@ document.querySelectorAll('.user-table button').forEach(btn => {
       openReset(btn);
     } else if (act === 'edit') {
       openEdit(btn);
+    } else if (act === 'unlock') {
+      const r = await fetch(`/admin/users/${uid}/unlock`, {method:'POST'});
+      if (r.ok) {
+        const j = await r.json();
+        showAlert(`已清除 ${j.cleared} 筆鎖定`);
+        location.reload();
+      } else {
+        showAlert('解鎖失敗：' + await r.text());
+      }
+    } else if (act === 'reset-totp') {
+      if (!(await showConfirm(
+            `重設使用者「${btn.dataset.username}」的 2FA？\n\n清除原有 TOTP secret，使用者下次登入時會看到全新 QR code 重新 setup。所有現有 session 也會失效。`,
+            { title: '重設 2FA', okText: '重設' }))) return;
+      const r = await fetch(`/admin/users/${uid}/reset-totp`, {method:'POST'});
+      if (r.ok) {
+        showAlert('OK：使用者下次登入會重新看到 QR');
+      } else {
+        showAlert('失敗：' + await r.text());
+      }
     }
   });
 });

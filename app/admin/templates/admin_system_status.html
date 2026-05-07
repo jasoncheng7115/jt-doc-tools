@@ -289,8 +289,13 @@ function renderUsers(users) {
     $('ssUserStats').innerHTML = '<div class="muted">尚無使用者檔案紀錄</div>';
     return;
   }
-  // Sort copy of rows
+  // Sort copy of rows. 'viz' is a synthetic key that mirrors the bar
+  // length so sorting by 「活動量視覺化」 column matches what user sees.
+  const refOf = r => Math.max(r.bytes || 0, r.activity_30d_bytes || 0);
   const rows = users.users.slice().sort((a, b) => {
+    if (sortKey === 'viz') {
+      return sortDir * (refOf(a) - refOf(b));
+    }
     const va = a[sortKey], vb = b[sortKey];
     if (typeof va === 'string') {
       return sortDir * va.localeCompare(vb, 'zh-TW');
@@ -309,7 +314,7 @@ function renderUsers(users) {
     <th data-sort-key="bytes" class="num ${arrowFor('bytes')}" title="目前 disk 佔用">目前容量</th>
     <th data-sort-key="activity_30d_count" class="num ${arrowFor('activity_30d_count')}" title="近 30 天透過 audit_events 紀錄的工具呼叫次數">近 30 天上傳次數</th>
     <th data-sort-key="activity_30d_bytes" class="num ${arrowFor('activity_30d_bytes')}" title="近 30 天上傳總位元組（即使檔案已被排程清掉也會看到，自 audit 還原）">近 30 天上傳量</th>
-    <th class="${arrowFor('activity_30d_bytes')}" style="width:200px;">活動量視覺化</th>
+    <th data-sort-key="viz" class="${arrowFor('viz')}" style="width:200px;" title="按目前容量與近 30 天上傳量取最大值排序，與長條圖長度一致">活動量視覺化</th>
   </tr></thead><tbody>`;
   for (const r of rows) {
     const refBytes = Math.max(r.bytes || 0, r.activity_30d_bytes || 0);

@@ -26,7 +26,9 @@
       {% if r.is_protected %}<span class="badge" style="background:#dbeafe; color:#1e40af;">受保護</span>{% endif %}
     </div>
     <div>
+      {% if r.id not in ('admin', 'auditor') %}
       <button class="btn btn-small" data-act="save">{{ icon('save', size=12) }} 儲存</button>
+      {% endif %}
       {% if r.id != 'admin' %}
       <button class="btn btn-small" data-act="copy" title="複製此角色為新的可編輯角色">{{ icon('copy', size=12) }} 複製</button>
       {% endif %}
@@ -39,6 +41,10 @@
   {% if r.id == 'admin' %}
   <p style="background:#fef3c7; padding:8px 10px; border-radius:6px; font-size:12.5px;">
     🔒 admin 角色擁有所有工具與設定區的存取權，無需個別勾選。此角色不可刪、不可改名。
+  </p>
+  {% elif r.id == 'auditor' %}
+  <p style="background:#fef3c7; padding:8px 10px; border-radius:6px; font-size:12.5px;">
+    🔒 auditor 角色僅可唯讀存取稽核紀錄與檔案歷史，**無工具權限**（職責分離原則）。此角色不可刪、不可改名、不可指派工具。
   </p>
   {% else %}
   <div class="tool-toolbar">

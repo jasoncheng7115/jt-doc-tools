@@ -212,6 +212,11 @@ def reenable_local_with_existing(*, actor_ip: str = "") -> int:
     )
     logger.info("Auth re-enabled (backend=local), preserving %d existing users",
                 n_users)
+    # v1.5.0: ensure built-in audit user exists when auth turns on
+    try:
+        roles.seed_default_auditor_user()
+    except Exception:
+        logger.exception("seed_default_auditor_user failed during re-enable")
     return n_users
 
 
@@ -302,6 +307,11 @@ def enable_local_with_admin(
     )
     logger.info("Auth enabled (backend=local), admin user '%s' (id=%d) created",
                 admin_username, admin_user_id)
+    # v1.5.0: 建立內建稽核員帳號（password 留空，admin 用 reset-password 設定）
+    try:
+        roles.seed_default_auditor_user()
+    except Exception:
+        logger.exception("seed_default_auditor_user failed during bootstrap")
     return admin_user_id
 
 

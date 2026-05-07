@@ -112,6 +112,19 @@ def build_router(templates, tools, app_name: str, version: str) -> APIRouter:
                 [{"id": tid, "name": nav_lookup.get(tid, tid)} for tid in et],
                 key=lambda x: x["name"],
             )
+        # 2FA / TOTP self-service status — show in the account modal so
+        # any user can enable it (LDAP/AD users included; TOTP is local-app
+        # state, independent of password backend).
+        try:
+            from ..core import totp as _totp
+            tstate = _totp.get_user_totp_state(uid)
+        except Exception:
+            tstate = {"enabled": False, "required": False, "has_secret": False}
+        # Auditor users: required is hard-coded True even if DB column is 0
+        try:
+            forced_by_role = _perm.is_auditor(uid)
+        except Exception:
+            forced_by_role = False
         return {
             "auth_enabled": True,
             "username": user.get("username"),
@@ -121,6 +134,10 @@ def build_router(templates, tools, app_name: str, version: str) -> APIRouter:
             "roles": roles_out,
             "tools": tools_out,
             "tools_all": tools_all,
+            "totp": {
+                "enabled": tstate["enabled"],
+                "required": tstate["required"] or forced_by_role,
+            },
         }
 
     return router

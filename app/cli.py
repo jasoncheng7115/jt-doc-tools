@@ -374,6 +374,19 @@ def svc_update() -> int:
     cur = _read_version()
     print(f"Current version: v{cur}")
 
+    # Snapshot auth_settings.json BEFORE we touch anything. If anything in
+    # the upgrade flow (migration / seed / dep install / restart) somehow
+    # changes it, we restore the snapshot — auth backend / LDAP server URI
+    # / TLS settings must NEVER change just because of an upgrade.
+    # (User concern raised at v1.5.0: 「升級完為何 ldap 登入認證不見了」)
+    auth_settings_path = _data_dir() / "auth_settings.json"
+    pre_auth_snapshot: Optional[bytes] = None
+    if auth_settings_path.is_file():
+        try:
+            pre_auth_snapshot = auth_settings_path.read_bytes()
+        except OSError:
+            pass
+
     # 1. Stop service
     print("Stopping service ...")
     svc_stop()
@@ -485,7 +498,7 @@ def svc_update() -> int:
     if venv_py.exists():
         print("Verifying critical deps (fastapi / fitz / ldap3 / PIL / pdfplumber / docx / odf / pyzipper) ...")
         rc = subprocess.call([str(venv_py), "-c",
-            "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx, psutil"])
+            "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx, psutil, pyotp, qrcode"])
         if rc != 0:
             print("Dep import failed — upgrade may be incomplete, restoring", file=sys.stderr)
             _restore_ownership(root, owner)
@@ -530,6 +543,26 @@ def svc_update() -> int:
         except Exception as e:
             print(f"  warning: post-upgrade re-check failed: {e}",
                   file=sys.stderr)
+
+    # 5d. Verify auth_settings.json untouched. Compare bytes with the
+    # snapshot taken before svc_stop. The new code is on disk + deps
+    # synced + system deps installed — if anything in that chain (incl.
+    # the seed_default_auditor_user we added in v1.5.0) silently rewrote
+    # auth_settings.json, restore the snapshot and warn loudly. This
+    # also catches accidental future regressions.
+    if pre_auth_snapshot is not None and auth_settings_path.is_file():
+        try:
+            now_bytes = auth_settings_path.read_bytes()
+        except OSError:
+            now_bytes = b""
+        if now_bytes and now_bytes != pre_auth_snapshot:
+            print("WARNING: auth_settings.json changed during upgrade — restoring snapshot",
+                  file=sys.stderr)
+            try:
+                auth_settings_path.write_bytes(pre_auth_snapshot)
+                _chown_data_files_back()
+            except OSError as exc:
+                print(f"  failed to restore: {exc}", file=sys.stderr)
 
     # 5. Restart
     print("Starting new version ...")
@@ -1672,11 +1705,12 @@ def svc_auth_show() -> int:
         "labels = {'off': 'disabled', 'local': 'local', 'ldap': 'LDAP', 'ad': 'Active Directory'}\n"
         "print(f'Auth backend: {backend} ({labels.get(backend, backend)})')\n"
         "if backend in ('ldap', 'ad'):\n"
-        "    d = s.get('directory', {}) or {}\n"
-        "    print(f'  Server URI:  {d.get(\"uri\", \"(unset)\")}')\n"
+        "    d = s.get('ldap', {}) or {}\n"
+        "    print(f'  Server URI:  {d.get(\"server_url\", \"(unset)\")}')\n"
         "    print(f'  Search Base: {d.get(\"user_search_base\", \"(unset)\")}')\n"
-        "    print(f'  Bind DN:     {d.get(\"bind_dn\", \"(unset)\")}')\n"
+        "    print(f'  Bind DN:     {d.get(\"service_dn\", \"(unset)\")}')\n"
         "    print(f'  TLS:         {d.get(\"use_tls\", False)}')\n"
+        "    print(f'  Verify cert: {d.get(\"verify_cert\", False)}')\n"
     )
 
 
@@ -1693,10 +1727,118 @@ def svc_auth_disable() -> int:
         "from app.core import auth_settings\n"
         "before = auth_settings.get_backend()\n"
         "if before == 'off':\n"
-        "    print('Already 'off'; no change needed.'); raise SystemExit(0)\n"
+        "    print('Already off; no change needed.'); raise SystemExit(0)\n"
         "auth_settings.disable_auth(actor='cli', ip='localhost')\n"
         "print(f'OK: switched from {before} to off. Restart the service: jtdt restart')\n"
     )
+
+
+def svc_audit_user_create(username: str, password: Optional[str] = None,
+                           display_name: Optional[str] = None) -> int:
+    """Create a new local user with the `auditor` role + force TOTP 2FA.
+
+    Auditor 角色用途：唯讀存取稽核紀錄與檔案歷史，不能用工具、不能改設定。
+    符合 mail archive 風格的職責分離 — 確保「看記錄的人」與「管系統的人」
+    分開，admin 也看得到記錄但無法停用稽核員的 2FA 強制。
+
+    Steps:
+    1. Validate username format + uniqueness in users table
+    2. Prompt password twice (or take --password)
+    3. Create user with source=local, password_hash=scrypt(pw), totp_required=1
+    4. Assign 'auditor' role to that user (subject_roles)
+    5. Print next-steps (login + 2FA setup flow)
+    """
+    if not _is_admin():
+        print("Audit user creation requires admin privileges: sudo jtdt audit-user create <name>",
+              file=sys.stderr)
+        return 1
+
+    install_root = _install_root()
+    venv_python = install_root / ".venv" / "bin" / "python"
+    if not venv_python.exists():
+        print(f"venv python not found: {venv_python}", file=sys.stderr)
+        return 1
+
+    helper = f"""
+import sys, getpass, time
+import os
+os.environ.setdefault('JTDT_DATA_DIR', {repr(str(_data_dir()))})
+sys.path.insert(0, {repr(str(install_root))})
+
+from app.core import auth_db, passwords, audit_db, db, roles as _roles
+auth_db.init()
+audit_db.init()
+_roles.seed_builtin_roles()  # ensure 'auditor' role exists
+
+username = sys.argv[1].strip()
+preset_pw = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None
+display_name = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else username
+
+import re
+if not re.fullmatch(r'[A-Za-z][A-Za-z0-9._-]{{1,30}}', username):
+    print('Invalid username — letters/digits/._- only, 2-31 chars, must start with a letter',
+          file=sys.stderr)
+    sys.exit(2)
+
+conn = auth_db.conn()
+exists = conn.execute(
+    "SELECT 1 FROM users WHERE username=? AND source='local'", (username,)
+).fetchone()
+if exists:
+    print(f'User {{username!r}} already exists (local). Use reset-password to update.',
+          file=sys.stderr)
+    sys.exit(3)
+
+if preset_pw:
+    pw1 = preset_pw
+else:
+    pw1 = getpass.getpass(f'Password for new audit user {{username}}: ')
+    pw2 = getpass.getpass('Confirm password: ')
+    if pw1 != pw2:
+        print('Passwords do not match', file=sys.stderr)
+        sys.exit(4)
+
+ok, err = passwords.validate_password(pw1)
+if not ok:
+    print(err, file=sys.stderr); sys.exit(5)
+
+# Make sure 'auditor' role exists (seed_builtin_roles ran already)
+role = conn.execute("SELECT 1 FROM roles WHERE id='auditor'").fetchone()
+if not role:
+    print('auditor role not seeded — please run jtdt restart first then retry',
+          file=sys.stderr); sys.exit(6)
+
+now = time.time()
+new_hash = passwords.hash_password(pw1)
+with db.tx(conn):
+    cur = conn.execute(
+        "INSERT INTO users(username, display_name, password_hash, source, "
+        "enabled, is_admin_seed, created_at, last_login_at, "
+        "totp_secret, totp_enabled, totp_required) "
+        "VALUES (?,?,?,'local',1,0,?,0,NULL,0,1)",
+        (username, display_name, new_hash, now),
+    )
+    uid = cur.lastrowid
+    conn.execute(
+        "INSERT INTO subject_roles(subject_type, subject_key, role_id) "
+        "VALUES ('user', ?, 'auditor')",
+        (str(uid),),
+    )
+
+audit_db.log_event(
+    'user_create', username='cli', target=username,
+    details={{'source': 'local', 'role': 'auditor', 'totp_required': True}},
+)
+print(f'OK: created auditor user {{username!r}} (id={{uid}})')
+print('  Next: user logs in at /login → automatically forced to /2fa-verify')
+print('  → scan QR code with TOTP app → enter 6-digit code → done.')
+print('  Auditor can ONLY view: /admin/audit /admin/history/* /admin/uploads /admin/system-status')
+print('  Cannot use tools, cannot change settings, cannot disable own 2FA.')
+"""
+    cmd = [str(venv_python), "-c", helper, username, password or "", display_name or ""]
+    rc = subprocess.call(cmd)
+    _chown_data_files_back()
+    return rc
 
 
 def svc_auth_set_local() -> int:
@@ -1712,7 +1854,7 @@ def svc_auth_set_local() -> int:
         "auth_db.init()\n"
         "before = auth_settings.get_backend()\n"
         "if before == 'local':\n"
-        "    print('Already on 'local' backend.'); raise SystemExit(0)\n"
+        "    print('Already on local backend.'); raise SystemExit(0)\n"
         "s = auth_settings.get()\n"
         "s['backend'] = 'local'\n"
         "auth_settings.save(s)\n"
@@ -1721,7 +1863,7 @@ def svc_auth_set_local() -> int:
         "conn = auth_db.conn()\n"
         "with db.tx(conn):\n"
         "    conn.execute('DELETE FROM sessions')\n"
-        "print(f'OK: switched from {before} to 'local'. Restart: jtdt restart')\n"
+        "print(f'OK: switched from {before} to local. Restart: jtdt restart')\n"
         "print('  To reset admin password, run: sudo jtdt reset-password jtdt-admin')\n"
     )
 
@@ -1805,6 +1947,20 @@ def main(argv: list[str] | None = None) -> int:
     auth_sub.add_parser("disable", help="把認證 backend 切回 off（解除登入封鎖）")
     auth_sub.add_parser("set-local", help="把認證 backend 切到 local（本機帳號）")
 
+    p_audit = sub.add_parser(
+        "audit-user",
+        help="管理稽核員（auditor）帳號 — 唯讀稽核紀錄 + 強制 2FA",
+    )
+    audit_sub = p_audit.add_subparsers(dest="audit_cmd", required=True)
+    p_au_create = audit_sub.add_parser(
+        "create", help="建立新本機稽核員帳號（強制 2FA）",
+    )
+    p_au_create.add_argument("username", help="新稽核員帳號（英數開頭，2-31 字）")
+    p_au_create.add_argument("--password",
+                              help="預設密碼（避免互動 prompt；不建議在共享機器用）")
+    p_au_create.add_argument("--display-name", default=None,
+                              help="顯示名稱（沒給就用 username）")
+
     args = p.parse_args(argv)
     table = {
         "start": svc_start,
@@ -1831,6 +1987,12 @@ def main(argv: list[str] | None = None) -> int:
             return svc_auth_disable()
         if args.auth_cmd == "set-local":
             return svc_auth_set_local()
+        return 1
+    if args.cmd == "audit-user":
+        if args.audit_cmd == "create":
+            return svc_audit_user_create(
+                args.username, args.password, args.display_name,
+            )
         return 1
     return table[args.cmd]()
 

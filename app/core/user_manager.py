@@ -35,7 +35,8 @@ def list_users() -> list[dict]:
     conn = auth_db.conn()
     rows = conn.execute(
         "SELECT id, username, display_name, source, external_dn, enabled, "
-        "is_admin_seed, created_at, last_login_at FROM users ORDER BY username"
+        "is_admin_seed, is_audit_seed, password_hash, created_at, last_login_at "
+        "FROM users ORDER BY username"
     ).fetchall()
     out = []
     for r in rows:
@@ -45,6 +46,8 @@ def list_users() -> list[dict]:
             "source": r["source"], "external_dn": r["external_dn"],
             "enabled": bool(r["enabled"]),
             "is_admin_seed": bool(r["is_admin_seed"]),
+            "is_audit_seed": bool(r["is_audit_seed"]),
+            "password_set": r["password_hash"] is not None,
             "created_at": r["created_at"], "last_login_at": r["last_login_at"],
             "roles": permissions.list_roles_for_subject("user", str(r["id"])),
         })
@@ -213,12 +216,15 @@ def change_password(user_id: int, old_password: str, new_password: str,
 
 def delete(user_id: int) -> None:
     conn = auth_db.conn()
-    row = conn.execute("SELECT is_admin_seed FROM users WHERE id=?",
-                       (user_id,)).fetchone()
+    row = conn.execute(
+        "SELECT is_admin_seed, is_audit_seed FROM users WHERE id=?",
+        (user_id,)).fetchone()
     if not row:
         raise ValueError(f"使用者 id={user_id} 不存在")
     if row["is_admin_seed"]:
         raise ValueError("不能刪除初始管理員帳號")
+    if row["is_audit_seed"]:
+        raise ValueError("不能刪除內建稽核員帳號（jtdt-auditor）")
     # If this is the last admin, refuse — would lock everyone out.
     if "admin" in permissions.list_roles_for_subject("user", str(user_id)):
         # Count other admins.
