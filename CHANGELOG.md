@@ -4,6 +4,14 @@
 
 ---
 
+## [1.4.98] - 2026-05-07
+
+### 修正
+
+- **圖片轉 PDF：多頁圖（multi-page TIFF / 動畫 GIF / APNG / 動畫 WEBP / HEIC 連拍）只轉出第一頁**：根因 — `Image.open()` 預設只開第一個 frame，後端沒呼叫 `n_frames` + `seek(i)` 拆頁。修法：偵測 `n_frames > 1` 時逐 frame 拆成獨立 file_id，filename 自動加 `(2/3)` 編號方便辨識。前端同步處理 — 上傳結果是 array 時把 placeholder 替換成第一張 + 把剩下的插在後面（單頁回 dict 維持向下相容）
+
+---
+
 ## [1.4.97] - 2026-05-07
 
 ### 新增
