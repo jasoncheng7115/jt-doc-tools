@@ -4,6 +4,18 @@
 
 ---
 
+## [1.4.88] - 2026-05-07
+
+### 修正
+
+- **Windows Tesseract 安裝後仍顯示「缺」要手動加 PATH（GitHub issue #4）**：UB-Mannheim Tesseract 透過 winget 安裝有時不會自動加進 system PATH，造成 `Get-Command tesseract` 找不到 → install.ps1 顯示安裝失敗、`jtdt sys-deps` 報缺、pdf-editor OCR 不可用。客戶要手動加 `C:\Program Files\Tesseract-OCR` 到 PATH 然後重啟服務才行。三層修補：
+  1. **app code**：`app/core/sys_deps.py` 新增 `_find_tesseract_binary()` + `configure_pytesseract()` 探測標準安裝路徑（`C:\Program Files\Tesseract-OCR\tesseract.exe` 等）並自動設 `pytesseract.tesseract_cmd`，**不需 PATH** 也能跑；服務啟動時自動呼叫，pdf-editor `_ocr_bbox()` 也防御性再呼叫一次
+  2. **install.ps1**：新增 `Add-TesseractToPath`，winget 裝完或偵測到既有安裝時主動把 Tesseract 目錄補進 system PATH（重複呼叫 idempotent）
+  3. **jtdt update**：`_print_system_deps_summary` 改用 `_resolve_tesseract_binary()`，不再單靠 PATH 判定缺
+- TEST_PLAN §6.11.7 加入回歸測試清單
+
+---
+
 ## [1.4.87] - 2026-05-07
 
 ### 改善

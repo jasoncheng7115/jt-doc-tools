@@ -51,8 +51,56 @@ def _run_capture(args: list[str], timeout: float = 5.0) -> tuple[int, str, str]:
 
 # ---- per-dep probes ---------------------------------------------------------
 
-def _probe_tesseract() -> dict:
+def _find_tesseract_binary() -> str:
+    """Find tesseract executable. Tries PATH first, then standard install
+    locations on Windows / macOS — handles the very common case where the
+    user has installed Tesseract but not added it to PATH (GitHub issue #4).
+    Returns absolute path or empty string."""
     binary = shutil.which("tesseract")
+    if binary:
+        return binary
+    # Common Windows install locations (UB-Mannheim installer + winget)
+    if _is_windows():
+        candidates = [
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\Tesseract-OCR\tesseract.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WinGet\Packages\UB-Mannheim.TesseractOCR_Microsoft.Winget.Source_8wekyb3d8bbwe\tesseract.exe"),
+        ]
+    elif _is_macos():
+        candidates = [
+            "/opt/homebrew/bin/tesseract",
+            "/usr/local/bin/tesseract",
+            "/opt/local/bin/tesseract",  # MacPorts
+        ]
+    else:  # Linux
+        candidates = [
+            "/usr/bin/tesseract",
+            "/usr/local/bin/tesseract",
+        ]
+    for c in candidates:
+        if c and os.path.isfile(c) and os.access(c, os.X_OK if not _is_windows() else os.R_OK):
+            return c
+    return ""
+
+
+def configure_pytesseract() -> str:
+    """Set pytesseract.tesseract_cmd to the resolved binary path so OCR
+    works even when the user hasn't added Tesseract to PATH. Idempotent;
+    safe to call repeatedly. Returns the path used (or empty if none)."""
+    path = _find_tesseract_binary()
+    if not path:
+        return ""
+    try:
+        import pytesseract
+        pytesseract.pytesseract.tesseract_cmd = path
+    except Exception:
+        pass
+    return path
+
+
+def _probe_tesseract() -> dict:
+    binary = _find_tesseract_binary()
     if not binary:
         return {
             "installed": False,

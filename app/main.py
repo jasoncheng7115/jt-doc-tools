@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.4.87"
+VERSION = "1.4.88"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -945,6 +945,14 @@ async def _startup():
         logger.exception("auth/audit init failed: %s", exc)
     # Background sweeper for ephemeral uploads
     asyncio.create_task(_sweep_temp_files_loop())
+    # Configure pytesseract — finds tesseract.exe in standard install paths
+    # (Windows: C:\Program Files\Tesseract-OCR\) so OCR works even when
+    # user hasn't added it to PATH (GitHub issue #4).
+    try:
+        from .core import sys_deps as _sd
+        _sd.configure_pytesseract()
+    except Exception:
+        pass
 
 
 def run():
