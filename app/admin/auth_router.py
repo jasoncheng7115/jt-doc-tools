@@ -825,13 +825,20 @@ def build_auth_router(templates) -> APIRouter:
             "admin_system_status.html", {"request": request},
         )
 
-    @router.get("/system-status/data")
-    async def system_status_data():
+    @router.get("/system-status/host")
+    async def system_status_host():
+        """Fast — only psutil snapshot. Called every 5s by the auto-refresh."""
         from ..core import host_stats as _hs
-        return {
-            "host": _hs.get_host_stats(),
-            "users": _hs.get_user_file_stats(),
-        }
+        return _hs.get_host_stats()
+
+    @router.get("/system-status/users")
+    async def system_status_users(force: bool = False):
+        """Slow — walks filesystem to compute per-user file counts + bytes.
+        Cached 60s; pass `?force=1` to bypass cache (button on the page).
+        Heavy IO offloaded to thread pool to keep the event loop free."""
+        from ..core import host_stats as _hs
+        import asyncio as _asyncio
+        return await _asyncio.to_thread(_hs.get_user_file_stats, force)
 
     return router
 

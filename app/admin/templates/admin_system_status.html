@@ -41,6 +41,15 @@
 }
 .ss-bar-cell .bar-fill.warn { background: linear-gradient(90deg, #fbbf24, #d97706); }
 .ss-bar-cell .bar-fill.crit { background: linear-gradient(90deg, #f87171, #dc2626); }
+/* Skeleton — 用戶統計載入中的占位 */
+.ss-skeleton { padding: 6px 0; }
+.ss-skel-bar { height: 14px; background: linear-gradient(90deg, #f1f5f9, #e2e8f0, #f1f5f9);
+  background-size: 400% 100%; border-radius: 4px; margin: 6px 0;
+  animation: ss-skel-shimmer 1.4s ease-in-out infinite; }
+@keyframes ss-skel-shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
 .ss-disabled-banner { background:#fef3c7; border:1px solid #fbbf24; color:#92400e;
   padding:10px 14px; border-radius:8px; margin-bottom:12px; font-size:13.5px; }
 .ss-controls { display:flex; gap:10px; align-items:center; margin: 8px 0 14px; }
@@ -65,12 +74,30 @@
 <div class="ss-grid" id="ssHostGrid"></div>
 
 <div class="panel" style="margin-top:16px;">
-  <h2 style="margin-top:0;">使用者檔案用量</h2>
-  <p class="muted" style="font-size:12.5px; margin:0 0 8px;">
-    包含暫存上傳檔（owner ACL 紀錄追蹤）+ 表單填寫 / 用印 / 浮水印歷史目錄。
-    匿名 / 未追蹤的檔案歸到「(匿名)」列。
-  </p>
-  <div id="ssUserStats">載入中…</div>
+  <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:10px;">
+    <div>
+      <h2 style="margin:0 0 6px;">使用者檔案用量</h2>
+      <p class="muted" style="font-size:12.5px; margin:0;">
+        包含暫存上傳檔（owner ACL 紀錄追蹤）+ 表單填寫 / 用印 / 浮水印歷史目錄。
+        匿名 / 未追蹤的檔案歸到「(匿名)」列。檔案多時統計約需數秒～數十秒，
+        結果會 cache 60 秒。
+      </p>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <span class="muted" id="ssUserAge" style="font-size:12px;"></span>
+      <button class="btn" id="ssUserRefresh">{{ icon('refresh', size=14) }} 重新統計</button>
+    </div>
+  </div>
+  <div id="ssUserStats" style="margin-top:10px;">
+    <div class="ss-skeleton">
+      <div class="ss-skel-bar"></div>
+      <div class="ss-skel-bar"></div>
+      <div class="ss-skel-bar" style="width: 60%;"></div>
+      <div style="margin-top:10px; color:#94a3b8; font-size:13px;">
+        正在掃描檔案系統… (檔案多時可能需要數秒)
+      </div>
+    </div>
+  </div>
 </div>
 
 {% endblock %}
@@ -270,33 +297,35 @@ function renderUsers(users) {
     }
     return sortDir * ((va || 0) - (vb || 0));
   });
-  // Max bytes for bar scaling — use max user bytes (not total) so the
-  // top user fills the bar, others scale relatively
-  const maxBytes = Math.max(...rows.map(r => r.bytes), 1);
+  // Max bytes for bar scaling — use max activity_30d (more representative
+  // for activity over time) or current bytes
+  const maxRefBytes = Math.max(
+    ...rows.map(r => Math.max(r.bytes || 0, r.activity_30d_bytes || 0)), 1);
   const arrowFor = (k) =>
     sortKey === k ? (sortDir > 0 ? 'sort-asc' : 'sort-desc') : '';
   let html = `<table class="ss-table"><thead><tr>
     <th data-sort-key="username" class="${arrowFor('username')}">使用者</th>
-    <th data-sort-key="count" class="num ${arrowFor('count')}">檔案數</th>
-    <th data-sort-key="bytes" class="num ${arrowFor('bytes')}">容量</th>
-    <th data-sort-key="bytes" class="${arrowFor('bytes')}" style="width:200px;">用量比例</th>
-    <th class="num">佔總計</th>
+    <th data-sort-key="count" class="num ${arrowFor('count')}" title="目前 disk 上的檔案數">目前檔案數</th>
+    <th data-sort-key="bytes" class="num ${arrowFor('bytes')}" title="目前 disk 佔用">目前容量</th>
+    <th data-sort-key="activity_30d_count" class="num ${arrowFor('activity_30d_count')}" title="近 30 天透過 audit_events 紀錄的工具呼叫次數">近 30 天上傳次數</th>
+    <th data-sort-key="activity_30d_bytes" class="num ${arrowFor('activity_30d_bytes')}" title="近 30 天上傳總位元組（即使檔案已被排程清掉也會看到，自 audit 還原）">近 30 天上傳量</th>
+    <th class="${arrowFor('activity_30d_bytes')}" style="width:200px;">活動量視覺化</th>
   </tr></thead><tbody>`;
-  const total = users.total_bytes || 1;
   for (const r of rows) {
-    const pct = (r.bytes / total) * 100;
-    const barPct = (r.bytes / maxBytes) * 100;
+    const refBytes = Math.max(r.bytes || 0, r.activity_30d_bytes || 0);
+    const barPct = (refBytes / maxRefBytes) * 100;
     let barCls = '';
-    if (pct >= 50) barCls = 'crit';
-    else if (pct >= 25) barCls = 'warn';
+    if (barPct >= 80) barCls = 'crit';
+    else if (barPct >= 50) barCls = 'warn';
     html += `<tr>
       <td>${escapeHTML(r.username)}</td>
-      <td class="num">${r.count.toLocaleString()}</td>
-      <td class="num">${fmtBytes(r.bytes)}</td>
+      <td class="num">${(r.count || 0).toLocaleString()}</td>
+      <td class="num">${fmtBytes(r.bytes || 0)}</td>
+      <td class="num">${(r.activity_30d_count || 0).toLocaleString()}</td>
+      <td class="num">${fmtBytes(r.activity_30d_bytes || 0)}</td>
       <td class="ss-bar-cell"><div class="bar-track">
         <div class="bar-fill ${barCls}" style="width:${barPct.toFixed(1)}%"></div>
       </div></td>
-      <td class="num">${pct.toFixed(1)}%</td>
     </tr>`;
   }
   html += `</tbody><tfoot><tr style="font-weight:600; background:#f8fafc;">
@@ -304,7 +333,8 @@ function renderUsers(users) {
     <td class="num">${users.total_count.toLocaleString()}</td>
     <td class="num">${fmtBytes(users.total_bytes)}</td>
     <td></td>
-    <td class="num">100%</td>
+    <td class="num">${fmtBytes(users.activity_30d_total_bytes || 0)}</td>
+    <td></td>
   </tr></tfoot></table>`;
   $('ssUserStats').innerHTML = html;
   // Wire up header clicks for sorting
@@ -318,27 +348,63 @@ function renderUsers(users) {
   });
 }
 
-async function refresh() {
+async function refreshHost() {
   try {
-    const r = await fetch('/admin/system-status/data');
+    const r = await fetch('/admin/system-status/host');
     if (!r.ok) {
-      $('ssBanner').innerHTML = `<div class="ss-disabled-banner">取得資料失敗：HTTP ${r.status}</div>`;
+      $('ssBanner').innerHTML = `<div class="ss-disabled-banner">主機資料失敗：HTTP ${r.status}</div>`;
       return;
     }
-    const data = await r.json();
-    renderHost(data.host);
-    renderUsers(data.users);
-    prev = data;
+    const host = await r.json();
+    renderHost(host);
+    prev = { host };
     $('ssLastUpdate').textContent = '最後更新：' + new Date().toLocaleTimeString();
   } catch (e) {
-    $('ssBanner').innerHTML = `<div class="ss-disabled-banner">取得資料錯誤：${escapeHTML(e.message)}</div>`;
+    $('ssBanner').innerHTML = `<div class="ss-disabled-banner">主機資料錯誤：${escapeHTML(e.message)}</div>`;
+  }
+}
+
+let usersFetchInFlight = false;
+async function refreshUsers(force) {
+  if (usersFetchInFlight) return;  // 避免重複觸發
+  usersFetchInFlight = true;
+  if (force) {
+    $('ssUserStats').innerHTML = `<div class="ss-skeleton">
+      <div class="ss-skel-bar"></div><div class="ss-skel-bar"></div>
+      <div class="ss-skel-bar" style="width:60%;"></div>
+      <div style="margin-top:10px; color:#94a3b8; font-size:13px;">
+        正在重新統計（檔案多時可能需要數秒）…</div></div>`;
+    $('ssUserAge').textContent = '統計中…';
+  }
+  try {
+    const url = '/admin/system-status/users' + (force ? '?force=1' : '');
+    const r = await fetch(url);
+    if (!r.ok) {
+      $('ssUserStats').innerHTML = `<div class="ss-disabled-banner">取得使用者統計失敗：HTTP ${r.status}</div>`;
+      return;
+    }
+    const users = await r.json();
+    renderUsers(users);
+    if (users.from_cache && users.age_seconds) {
+      $('ssUserAge').textContent =
+        `資料時間：${Math.round(users.age_seconds)} 秒前 (cache)`;
+    } else {
+      $('ssUserAge').textContent = '資料時間：剛剛';
+    }
+  } catch (e) {
+    $('ssUserStats').innerHTML = `<div class="ss-disabled-banner">取得使用者統計錯誤：${escapeHTML(e.message)}</div>`;
+  } finally {
+    usersFetchInFlight = false;
   }
 }
 
 let timer = null;
 function startTimer() {
   if (timer) return;
-  timer = setInterval(refresh, 5000);
+  // host 每 5 秒、users 每 60 秒（cache TTL 同步）
+  timer = setInterval(() => {
+    refreshHost();
+  }, 5000);
 }
 function stopTimer() {
   if (timer) { clearInterval(timer); timer = null; }
@@ -347,9 +413,16 @@ $('ssAutoRefresh').addEventListener('change', () => {
   if ($('ssAutoRefresh').checked) startTimer();
   else stopTimer();
 });
-$('ssRefreshNow').addEventListener('click', refresh);
+$('ssRefreshNow').addEventListener('click', () => {
+  refreshHost();
+});
+$('ssUserRefresh').addEventListener('click', () => {
+  refreshUsers(true);  // force=1 bypass cache
+});
 
-refresh();
+// 初次載入：host 即刻顯示，users 並行載入（也走 cache）
+refreshHost();
+refreshUsers(false);
 startTimer();
 </script>
 {% endblock %}

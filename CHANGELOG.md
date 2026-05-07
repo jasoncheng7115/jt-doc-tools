@@ -4,6 +4,23 @@
 
 ---
 
+## [1.4.94] - 2026-05-07
+
+### 修正
+
+- **`/admin/system-status` 使用者表只看得到 admin 的問題**：客戶反映用了好幾天，多 user 上傳，卻只看到 admin 的紀錄。三個原因 + 三個修法：
+  1. **16 個工具沒呼叫 `upload_owner.record()`**（v1.4.83 只覆蓋 14 個）→ 那些工具的暫存檔沒 owner 歸屬。**修法**：表格新增「**近 30 天上傳次數 / 上傳量**」兩欄，從 `audit_events.tool_invoke` 事件還原（middleware 一律記錄 username + size_bytes，所有工具都涵蓋）。即使檔案已被 retention sweeper 清掉、或工具沒寫 owner record，仍能看到該 user 的真實活動量
+  2. **owner sidecar 隨 temp file 一起 2 小時就清** → 過去資料無法從 disk 還原。**修法**：同上，audit 事件預設保留 90 天
+  3. **匿名 / 未追蹤暫存檔不顯示** → admin 不知道沒歸屬的 disk 用量去哪。**修法**：新增「(未追蹤暫存)」row，匯總所有沒對應 owner sidecar 的 temp 檔
+- 表格欄位重排為「目前檔案數 / 目前容量 / 近 30 天上傳次數 / 近 30 天上傳量 / 活動量視覺化」；長條圖以 30 天活動或目前佔用較大者為基準
+
+### 改善
+
+- `/admin/system-status` 拆成兩個 endpoint：`/host` 走 5 秒輪詢即時更新 CPU/RAM/IO，`/users` 拉檔案統計（cache 60 秒）非同步載入，避免 disk walk 阻塞首頁載入
+- 使用者統計加 skeleton loading 狀態，刷新中顯示動畫
+
+---
+
 ## [1.4.93] - 2026-05-07
 
 ### 改善
