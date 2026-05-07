@@ -244,6 +244,52 @@ RE_EMAIL = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
 RE_CC = re.compile(r"\b(?:\d[ \-]?){13,19}\b")
 RE_IP = re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\b")
 
+# 台灣電子發票號碼 — 兩字母 + 8 位數，可選 dash 或空格分隔
+# 例：AB12345678 / AB-12345678 / AB 12345678。傳統發票字軌字號同格式
+RE_TW_EINVOICE = re.compile(r"\b[A-Z]{2}[ \-]?\d{8}\b")
+
+# 訂單 / 採購單 / 銷貨單編號 — PO/SO/INV/QT 等前綴 + 數字（可含 dash）
+# 例：PO-2025-001 / SO20250001 / INV-12345 / QT-2025-A001
+RE_ORDER_NUM = re.compile(
+    r"\b(?:PO|SO|PR|INV|QT|WO|RMA|DO|DN|CN)[\-_/]?\d{2,4}(?:[\-_/]?[A-Z0-9]{1,8}){0,3}\b",
+    re.IGNORECASE,
+)
+
+# VIN 車身號 — 17 字元 (排除 I/O/Q 防混淆)
+# 例：1HGCM82633A004352 / WDBNG70J5XA124567
+RE_VIN = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b")
+
+# GPS 座標 — 經緯度，多種寫法：
+#   25.0330,121.5654 / 25.0330°N, 121.5654°E / N25.0330 E121.5654
+#   25°2'1.2"N 121°33'55.4"E（DMS 格式）
+RE_GPS = re.compile(
+    r"(?:"
+    # 1) 純十進位：lat,lon 一組（lat ±90、lon ±180，最少 4 位精度避免抓到一般兩個小數）
+    r"(?<![\d.])[+\-]?(?:90(?:\.0+)?|[1-8]?\d\.\d{4,8})\s*[°]?\s*[NS]?"
+    r"\s*[,，]?\s*"
+    r"[+\-]?(?:180(?:\.0+)?|(?:1[0-7]\d|\d{1,2})\.\d{4,8})\s*[°]?\s*[EW]?"
+    r"|"
+    # 2) DMS（度分秒）：25°2'1.2"N 121°33'55.4"E
+    r"\d{1,3}°\s*\d{1,2}['′]\s*[\d.]+[\"″]\s*[NS]"
+    r"\s*[,，]?\s*"
+    r"\d{1,3}°\s*\d{1,2}['′]\s*[\d.]+[\"″]\s*[EW]"
+    r")"
+)
+
+# 航班號 — 2~3 字母航空公司代碼 + 1-4 數字（可帶 letter suffix）
+# 例：BR857 / BR0857 / CI-100 / TPE-NRT 7H123
+RE_FLIGHT = re.compile(
+    r"(?<![A-Z0-9])[A-Z]{2,3}\d{1,4}[A-Z]?(?![A-Z0-9])"
+)
+
+# 訂位代號 (PNR / Booking reference) — 6 字元英數，全大寫
+# 標籤式：「PNR: ABCDEF」/「Booking Ref: ABCDEF」/「訂位代號 ABCDEF」
+RE_PNR = re.compile(
+    r"(?:PNR|Booking\s*(?:Ref(?:erence)?)?(?:\s*No\.?)?|Confirmation\s*(?:Code|Number|No\.?)?|訂位代號|訂位編號|代號)"
+    r"\s*[:：]?\s*([A-Z0-9]{6})\b",
+    re.IGNORECASE,
+)
+
 # --- IT / DevOps patterns ---
 # 用於：把 log / 設定檔 / debug 訊息貼給 AI 問問題前，先把內網資訊塗掉。
 # 這些 default_on=False，使用者要自己勾選 — 一般商務文件容易誤抓。
@@ -506,11 +552,24 @@ CATALOG: list[Pattern] = [
     Pattern("tw_biz",    "統一編號",      RE_TW_BIZ,    _twbiz_valid,  _mask_twbiz, True,  group="企業資料", icon="hash"),
     Pattern("company",   "公司名稱",      RE_COMPANY,   _always,       _mask_company,
             False, value_group=1, group="企業資料", icon="building"),
+    Pattern("tw_einvoice", "電子發票號碼", RE_TW_EINVOICE, _always,
+            lambda v: _mask_keep_edges(v, 2, 2), False, group="企業資料", icon="hash"),
+    Pattern("order_num", "訂單 / 採購單號", RE_ORDER_NUM, _always,
+            lambda v: _mask_keep_edges(v, 3, 2), False, group="企業資料", icon="hash"),
     # 其他
     Pattern("person_name","人名",         RE_PERSON,    _always,       _mask_name,
             False, value_group=1, group="其他", icon="user"),
     Pattern("ip",        "IP 位址",       RE_IP,        _always,       _mask_ip,    False, group="IT 資料", icon="globe"),
     Pattern("plate",     "車牌",          RE_PLATE,     _always,       _mask_plate, False, group="其他", icon="car"),
+    Pattern("vin",       "車輛 VIN 碼",   RE_VIN,       _always,
+            lambda v: _mask_keep_edges(v, 3, 3), False, group="其他", icon="car"),
+    Pattern("gps",       "GPS 座標",      RE_GPS,       _always,
+            lambda v: "[GPS-REDACTED]", False, group="其他", icon="pin-map"),
+    Pattern("flight",    "航班號",        RE_FLIGHT,    _always,
+            lambda v: _mask_keep_edges(v, 2, 1), False, group="其他", icon="page"),
+    Pattern("pnr",       "訂位代號 (PNR)", RE_PNR,      _always,
+            lambda v: _mask_keep_edges(v, 2, 2), False, value_group=1,
+            group="其他", icon="book"),
     # IT / DevOps — 預設關，使用者要貼 log/設定檔給 AI 時自己勾。一般商務文件
     # 容易誤抓 (例如「2026.04.30 公司決議」會被當成 UUID-like)
     Pattern("hostname",  "主機名稱 (FQDN)", RE_HOSTNAME, _always,
