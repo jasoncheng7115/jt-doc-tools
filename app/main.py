@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.4.91"
+VERSION = "1.4.93"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -181,6 +181,9 @@ templates.env.globals["nav_settings"] = [
     {"icon": "gear", "name": "相依套件檢查", "description": "tesseract / Office / 字型 等系統套件狀態",
      "url": "/admin/sys-deps",
      "keywords": "system dependency dependencies check status tesseract ocr office libreoffice oxoffice 系統 依賴 相依 套件 檢查 狀態"},
+    {"icon": "eye", "name": "系統狀態", "description": "CPU / RAM / 磁碟 / 網路 / 各使用者檔案用量",
+     "url": "/admin/system-status",
+     "keywords": "system status cpu ram memory disk network io usage user storage 系統 狀態 主機 資源 監控 用量 容量 監測"},
     {"icon": "image", "name": "資產管理", "description": "上傳/編輯印章、簽名、Logo",
      "url": "/admin/assets",
      "keywords": "asset assets stamp signature logo image upload 圖片 印章 簽名 浮水印"},

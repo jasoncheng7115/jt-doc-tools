@@ -4,6 +4,27 @@
 
 ---
 
+## [1.4.93] - 2026-05-07
+
+### 改善
+
+- **PDF 編輯器：選物件後 toolbar 折行的視覺問題**：選物件後右屬性面板出現會擠縮 toolbar 寬度，原本 zoom 控制會掉到下一行，視覺上很亂。改善：①autosave 的 verbose hint「（改動後 ~1 秒自動重算）」在 1450px 以下隱藏，hover 仍透過 title 屬性看完整文字；②按鈕 padding 從 6px 12px 縮成 5px 9px；③zoom slider 寬度從 120px 縮成 90px / 70px。視窗 1450px 以下 toolbar 仍能維持單行
+- **`/admin/system-status` 使用者檔案表加入橫向長條圖 + 標題列點擊排序**：每個 user 一個 bar 顯示佔比（彩色 gradient，高佔比顯示 warn/crit 顏色），點選使用者 / 檔案數 / 容量標題切換排序方向（升降序）
+
+---
+
+## [1.4.92] - 2026-05-07
+
+### 新增
+
+- **新增 `/admin/system-status` 系統狀態頁**：CPU 使用率（含 load avg）、RAM + Swap、各分區 disk 容量、disk I/O 速率（read/write MB/s）、網路速率（bps）、本服務行程資源（PID / RSS / 執行緒 / CPU%）。下方表格列出**所有使用者的檔案數 + 容量**（含暫存上傳 owner ACL 紀錄 + 表單填寫 / 用印 / 浮水印歷史目錄）。每 5 秒自動刷新可關。新增 dependency `psutil>=5.9,<7`
+
+### 修正
+
+- **PDF 編輯器：點「選既有物件」選到「測試驗證」這類短中文片語，文字變成 OCR 結果「測試驗和 iia)」**：根因 — `_looks_garbled()` Signal b)「CJK ≥ 2 且 0 個 common chars 判 garbled」門檻太低，「測試驗證」4 字都不在 `_COMMON_TC` 集合裡 → 誤判 garbled → 觸發 OCR → OCR 在小 bbox 上吐出雜訊。修法：①Signal b) 門檻從 2 拉高到 8（真 Identity-H garbage 通常 10+ 字長）②`_COMMON_TC` 補入測 / 試 / 驗 / 證 / 收 / 評估等常見 business / test 字
+
+---
+
 ## [1.4.91] - 2026-05-07
 
 ### 修正

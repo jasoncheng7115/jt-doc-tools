@@ -1,6 +1,6 @@
 [project]
 name = "jt-doc-tools"
-version = "1.4.91"
+version = "1.4.93"
 description = "Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台"
 authors = [{ name = "Jason Cheng (Jason Tools)", email = "jason@jason.tools" }]
 requires-python = ">=3.10"
@@ -33,6 +33,10 @@ dependencies = [
     # brew / choco. Code path is `try: import pytesseract` — missing pkg or
     # binary degrades to "ask user to retype" UX, never breaks anything.
     "pytesseract>=0.3.10,<0.4",
+    # 主機資源監控 — admin 系統狀態頁顯示 CPU / RAM / disk / network / IO。
+    # 純 Python C-extension，每 OS 都有 wheel，跑不到 import 時 admin 頁
+    # 改顯示「未安裝」warning，core 工具不受影響。
+    "psutil>=5.9,<7",
 ]
 
 [project.scripts]
