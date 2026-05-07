@@ -162,6 +162,40 @@ function Test-Tesseract {
     return ($langs -match 'chi_tra')
 }
 
+function Ensure-TesseractChiTra {
+    # winget UB-Mannheim 的 silent install 預設元件不一定含 chi_tra；
+    # 直接把 traineddata 從官方 tessdata GitHub repo 下載到 tessdata 目錄
+    # 是最穩的補救（檔案 ~12MB，比 reinstall 整個 Tesseract 快也乾淨）。
+    $exe = Find-TesseractExe
+    if (-not $exe) { return }
+    $langs = & $exe --list-langs 2>&1 | Out-String
+    if ($langs -match 'chi_tra') { return }  # already there
+    $tessdataDir = Join-Path (Split-Path -Parent $exe) 'tessdata'
+    if (-not (Test-Path $tessdataDir)) {
+        Warn "tessdata dir not found: $tessdataDir (tesseract install layout 不標準，跳過 chi_tra 下載)"
+        return
+    }
+    # tessdata_fast/chi_tra.traineddata ~12MB, 快版（精度略低速度快），對 OCR
+    # 補捉 PDF 字夠用。要更精準可改抓 tessdata_best 但檔案大很多 (~50MB)。
+    $url = 'https://github.com/tesseract-ocr/tessdata_fast/raw/main/chi_tra.traineddata'
+    $dst = Join-Path $tessdataDir 'chi_tra.traineddata'
+    Log "Downloading chi_tra.traineddata (~12MB) for Chinese OCR..."
+    try {
+        Invoke-WebRequest -Uri $url -OutFile $dst -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+        if (Test-Path $dst) {
+            $sz = (Get-Item $dst).Length
+            if ($sz -gt 1000000) {
+                Ok "chi_tra.traineddata downloaded ($([math]::Round($sz/1MB,1)) MB)"
+            } else {
+                Warn "chi_tra download incomplete (only $sz bytes), removed"
+                Remove-Item $dst -Force -ErrorAction SilentlyContinue
+            }
+        }
+    } catch {
+        Warn "chi_tra download failed: $_  (Chinese OCR 不可用，可手動下載 https://github.com/tesseract-ocr/tessdata_fast 放到 $tessdataDir)"
+    }
+}
+
 function Add-TesseractToPath {
     # 加到 SYSTEM PATH 讓所有 process（包括 jt-doc-tools service）看得到。
     # 即使我們的 app 程式碼會 fallback 抓標準路徑，加進 PATH 仍是好習慣 —
@@ -185,18 +219,21 @@ function Add-TesseractToPath {
 }
 
 function Install-Tesseract {
-    if (Test-Tesseract) {
+    $exe = Find-TesseractExe
+    if ($exe) {
+        # 已裝（透過 winget / installer / 之前的 install.ps1），補強檢查 chi_tra
         Add-TesseractToPath
-        Ok "tesseract + chi_tra already installed"
-        return
+        Ensure-TesseractChiTra
+        if (Test-Tesseract) { Ok "tesseract + chi_tra already installed"; return }
     }
     Log "Installing tesseract OCR (soft optional; pdf-editor text recovery)..."
     try {
         if (Get-Command winget -ErrorAction SilentlyContinue) {
-            # UB-Mannheim build bundles all language data files including chi_tra
+            # UB-Mannheim 套件 silent install 可能不含 chi_tra，下面 Ensure 會補
             $proc = Start-Process winget -ArgumentList "install --id UB-Mannheim.TesseractOCR -e --silent --accept-package-agreements --accept-source-agreements" -Wait -PassThru -NoNewWindow -ErrorAction SilentlyContinue
             if ($proc.ExitCode -eq 0) {
                 Add-TesseractToPath
+                Ensure-TesseractChiTra  # 不論結果，都嘗試補 chi_tra
                 if (Test-Tesseract) {
                     Ok "tesseract installed via winget"
                     return
