@@ -436,7 +436,14 @@
         else pins.push(tid);
         savePins(pins);
         renderPinned();
+        // 通知首頁卡片同步刷新（同頁時不會觸發 storage event）
+        window.dispatchEvent(new CustomEvent('jtdt:pins-changed'));
       }
+      // 反過來：首頁釘選變更時，sidebar 也要重繪
+      window.addEventListener('jtdt:pins-changed', renderPinned);
+      window.addEventListener('storage', (e) => {
+        if (e.key === PINS_KEY) renderPinned();
+      });
       // 委派 click 處理（包含原本 + 釘選群組內 clone 的按鈕）
       sb.addEventListener('click', (e) => {
         const btn = e.target.closest('.sb-pin-btn');

@@ -15,6 +15,15 @@
   </div>
 </section>
 
+{# 釘選區 — 由 JS 依 localStorage 動態填入。沒釘選的工具就 hidden。 #}
+<section class="tool-group" id="homePinnedGroup" hidden>
+  <h2 class="tool-group-title">
+    <span style="color:#fbbf24;">{{ icon('star', size=18) }}</span>
+    釘選 <span class="tool-count" id="homePinnedCount">0</span>
+  </h2>
+  <div class="tool-grid" id="homePinnedGrid"></div>
+</section>
+
 {% for g in groups %}
 <section class="tool-group">
   <h2 class="tool-group-title">
@@ -22,10 +31,17 @@
   </h2>
   <div class="tool-grid">
     {% for t in g.tools %}
-    <a class="tool-card" href="/tools/{{ t.id }}/">
+    <a class="tool-card" href="/tools/{{ t.id }}/" data-tool-id="{{ t.id }}">
       <div class="tool-icon tile-color-{{ t.color|default(0) }}">{{ icon(t.icon or 'tool', size=26) }}</div>
       <div class="tool-name">{{ t.name }}</div>
       <div class="tool-desc">{{ t.description }}</div>
+      <button class="tool-pin-btn" type="button" tabindex="-1"
+              data-pin-tool="{{ t.id }}"
+              title="釘選 / 取消釘選">
+        <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2l2.39 4.84L20 7.6l-4 3.9L17 17l-5-2.6L7 17l1-5.5-4-3.9 5.61-.76L12 2z"/>
+        </svg>
+      </button>
     </a>
     {% endfor %}
   </div>
@@ -110,8 +126,24 @@
   padding: 18px; text-decoration: none; color: var(--text);
   transition: transform 0.08s, box-shadow 0.12s, border-color 0.12s;
   display: flex; flex-direction: column; gap: 8px;
+  position: relative;
 }
 .tool-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08); border-color: var(--primary); }
+/* 釘選按鈕 — 滑入卡片時才顯示，已釘選的常駐金色 */
+.tool-pin-btn {
+  position: absolute; top: 10px; right: 10px;
+  background: rgba(255,255,255,0.9); border: 1px solid var(--border); padding: 5px;
+  border-radius: 8px; cursor: pointer; color: #94a3b8;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.12s, background 0.12s, color 0.12s, border-color 0.12s;
+  z-index: 1;
+}
+.tool-card:hover .tool-pin-btn { opacity: 1; }
+.tool-pin-btn:hover { background: #fef3c7; color: #d97706; border-color: #fbbf24; }
+.tool-pin-btn.is-pinned {
+  opacity: 1; color: #d97706; background: #fef3c7; border-color: #fbbf24;
+}
+.tool-pin-btn.is-pinned svg { fill: #fbbf24; }
 .tool-icon {
   width: 44px; height: 44px; border-radius: 10px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -122,4 +154,70 @@
 .tool-name { font-size: 15.5px; font-weight: 600; }
 .tool-desc { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
 </style>
+<script>
+// 首頁釘選 — 同 sidebar 用 localStorage['jtdt:pinned']
+(function(){
+  const PINS_KEY = 'jtdt:pinned';
+  function loadPins() {
+    try { return JSON.parse(localStorage.getItem(PINS_KEY)) || []; }
+    catch (_e) { return []; }
+  }
+  function savePins(arr) {
+    try { localStorage.setItem(PINS_KEY, JSON.stringify(arr)); } catch (_e) {}
+  }
+  function renderPinned() {
+    const pins = loadPins();
+    const grp = document.getElementById('homePinnedGroup');
+    const cnt = document.getElementById('homePinnedCount');
+    const grid = document.getElementById('homePinnedGrid');
+    if (!grp || !grid) return;
+    // 先清掉所有按鈕的 is-pinned，再依當前 pins 重設
+    document.querySelectorAll('.tool-pin-btn').forEach(b => b.classList.remove('is-pinned'));
+    grid.innerHTML = '';
+    if (!pins.length) { grp.hidden = true; cnt.textContent = '0'; return; }
+    grp.hidden = false;
+    cnt.textContent = String(pins.length);
+    // 依 pins 順序找原始 card，clone 到釘選區
+    for (const tid of pins) {
+      // 避開釘選區自己（grid 內 clone 的 card 也有 data-tool-id）
+      const orig = document.querySelector(
+        '.tool-group:not(#homePinnedGroup) .tool-card[data-tool-id="' + tid + '"]'
+      );
+      if (!orig) continue;
+      const clone = orig.cloneNode(true);
+      const cloneBtn = clone.querySelector('.tool-pin-btn');
+      if (cloneBtn) cloneBtn.classList.add('is-pinned');
+      grid.appendChild(clone);
+      const origBtn = orig.querySelector('.tool-pin-btn');
+      if (origBtn) origBtn.classList.add('is-pinned');
+    }
+  }
+  function togglePin(tid) {
+    const pins = loadPins();
+    const idx = pins.indexOf(tid);
+    if (idx >= 0) pins.splice(idx, 1);
+    else pins.push(tid);
+    savePins(pins);
+    renderPinned();
+    // 通知 sidebar 也重繪（若同頁載入了 sidebar 的 renderPinned）
+    // 跨 tab/window 用 storage 事件；同頁我們直接呼叫 sidebar 全域邏輯
+    // 但 sidebar JS 在 base.html 裡是 IIFE 沒暴露，所以靠 storage event
+    // 在同頁是不會觸發的 — 解法是 dispatch 一個 custom event
+    window.dispatchEvent(new CustomEvent('jtdt:pins-changed'));
+  }
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.tool-pin-btn');
+    if (!btn) return;
+    e.preventDefault(); e.stopPropagation();
+    togglePin(btn.dataset.pinTool);
+  });
+  // 監聽其它分頁更新（cross-tab sync）
+  window.addEventListener('storage', (e) => {
+    if (e.key === PINS_KEY) renderPinned();
+  });
+  // 監聽 sidebar 釘選變更（同頁，從 sidebar 按鈕觸發）
+  window.addEventListener('jtdt:pins-changed', renderPinned);
+  renderPinned();
+})();
+</script>
 {% endblock %}
