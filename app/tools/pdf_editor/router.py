@@ -321,6 +321,14 @@ def _looks_garbled(text: str) -> bool:
     # Signal b) multiple CJK but no common chars → garbled
     if cjk_count >= 2 and common_hits == 0:
         return True
+    # Signal c) — long run of identical letters/digits (8+) is essentially
+    # never real text. 客戶踩過：TOC 的 leader dots「........」用 Identity-H
+    # subset font，glyph index 0x65 對應「.」glyph 但 ToUnicode 把它 map 回
+    # codepoint 0x65 = 'e'，extract 變「eeeeeeee...」。閾值 8+ 避免誤判
+    # 編號/序號的 5-7 連碼。Real text 連 8 個同字母不存在。
+    import re as _re
+    if _re.search(r"([A-Za-z0-9])\1{7,}", text):
+        return True
     return False
 
 
@@ -625,6 +633,15 @@ def _replace_all_fonts_sync(src, upload_id: str, font_id: str):
                     for sp in line.get("spans", []) or []:
                         txt = sp.get("text") or ""
                         if not txt.strip():
+                            continue
+                        # Skip garbled spans — Identity-H subset 字型 ToUnicode
+                        # 壞掉時 PyMuPDF extract 會回 raw glyph code（例如
+                        # 全是「eeeeeee」對應原本的 leader dots「........」）。
+                        # 換字型若把這種 garbage 重新貼回去會看到一行 eeee
+                        # 蓋住原本的 dots（v1.4.90 客戶踩到）。
+                        font_name = sp.get("font") or ""
+                        if not _font_has_tounicode(doc, page, font_name) \
+                                or _looks_garbled(txt):
                             continue
                         spans.append(sp)
             if not spans:
