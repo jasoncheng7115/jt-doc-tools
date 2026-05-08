@@ -48,7 +48,7 @@
 
 ### 新增 — 合規 / 稽核員角色（重大）
 
-啟用認證後，原本只有 admin / 一般使用者兩層；admin 看得到所有稽核紀錄與檔案歷史，違反職責分離（separation of duties）原則。本版引入 **稽核員 (`auditor`) 角色**，類似 mail archive 的合規分離設計：
+啟用認證後，原本只有 admin / 一般使用者兩層；admin 看得到所有稽核紀錄與檔案歷史，違反職責分離（separation of duties）原則。本版引入 **稽核員 (`auditor`) 角色**，類似郵件歸檔（mail archive）的合規分離設計：
 
 - **新本機角色 `auditor`** — 自動加入既有客戶 DB 的 `roles` 表（`seed_builtin_roles()` top-up，**升級無痛、admin 完整權限不變**）
 - 稽核員**唯讀**存取：`/admin/audit*` `/admin/history/*` `/admin/uploads` `/admin/system-status`
