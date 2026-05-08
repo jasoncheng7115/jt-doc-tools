@@ -221,7 +221,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 | 可在 `/admin/permissions` 改角色 / 工具 | ✗ 鎖住 | ✗ 鎖住 |
 | 用途 | 日常維運：管理 user / 角色 / 認證設定 / 工具設定 / 升級 / 服務 | 合規稽核：查看 user 上傳了什麼 / 處理過什麼歷史 |
 
-**為什麼分兩個內建帳號**：合規規範（SOX / ISO 27001 等）要求「管系統的人」與「看記錄的人」分離 — admin 不該偷看 user 隱私資料，稽核員不該動系統設定。任何一方都不該擁有完整存取權，這就是 separation of duties。
+**為什麼分兩個內建帳號**：合規規範（ISO 27001 等）要求「管系統的人」與「看記錄的人」分離 — admin 不該偷看 user 隱私資料，稽核員不該動系統設定。任何一方都不該擁有完整存取權，這就是 separation of duties。
 
 ### 第一次設定流程（建議）
 
