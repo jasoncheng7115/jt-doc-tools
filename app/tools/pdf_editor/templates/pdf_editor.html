@@ -487,6 +487,23 @@ const $ = (id) => document.getElementById(id);
 function setStatus(msg) { $('peStatus').textContent = msg || ''; }
 
 // ============ Toolbar ============
+// 每個工具對應的游標，讓使用者一眼看出接下來的操作。
+// CSS cursor keyword 跨瀏覽器都支援。
+const TOOL_CURSOR = {
+  select:    'default',     // 一般箭頭
+  pick:      'pointer',     // 食指 — 點選既有物件
+  text:      'text',        // I 字 — 輸入文字
+  image:     'copy',        // 帶 + 號 — 放置圖片
+  whiteout:  'crosshair',   // 拖出白底矩形
+  rect:      'crosshair',
+  ellipse:   'crosshair',
+  line:      'crosshair',
+  arrow:     'crosshair',
+  pencil:    'crosshair',
+  highlight: 'text',        // 像 text 一樣選文字後高亮
+  sticky:    'copy',        // 點下去放 sticky note
+};
+
 function setTool(name) {
   currentTool = name;
   document.querySelectorAll('.pe-toolbar button').forEach(b => b.classList.remove('active'));
@@ -495,6 +512,7 @@ function setTool(name) {
                ellipse:'toolEllipse', pencil:'toolPencil',
                highlight:'toolHighlight', sticky:'toolStickyNote'};
   $(map[name])?.classList.add('active');
+  const cur = TOOL_CURSOR[name] || 'default';
   pageCanvases.forEach(c => {
     c.selection = (name === 'select');
     c.isDrawingMode = (name === 'pencil');
@@ -502,8 +520,14 @@ function setTool(name) {
       c.freeDrawingBrush.color = '#000';
       c.freeDrawingBrush.width = 2;
     }
+    // Fabric.js 自己 manage canvas 上的游標 — 設 defaultCursor 才會讓
+    // 滑鼠在空白區域顯示對的游標；hoverCursor 是 hover 在物件上時用的，
+    // 維持 'move' 讓使用者知道可以拖物件（select 模式才會 hit-test）。
+    c.defaultCursor = cur;
+    c.hoverCursor = (name === 'select') ? 'move' : cur;
   });
-  $('canvasWrap').style.cursor = name === 'select' ? 'default' : 'crosshair';
+  // Wrapper 也設一份，避免 canvas 邊界外露的部分游標不對
+  $('canvasWrap').style.cursor = cur;
 }
 
 const TOOL_KEYS = {
