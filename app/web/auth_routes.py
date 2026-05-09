@@ -265,8 +265,11 @@ def build_router(templates) -> APIRouter:
                 ip=_client_ip(request),
                 details={"reason": str(e), "fail_count": n + 1},
             )
-            return JSONResponse({"error": "rejected", "detail": str(e)},
-                                status_code=400)
+            # v1.5.4 CodeQL py/stack-trace-exposure FP: e is our own ValueError
+            # from user_manager.change_password (e.g.「舊密碼錯誤」/「密碼太短」),
+            # 沒有 stack trace 資訊。給 user 看才知道為什麼被拒。
+            return JSONResponse({"error": "rejected", "detail": str(e)},  # noqa: E501
+                                status_code=400)  # codeql[py/stack-trace-exposure]
         # Success — clear fail counter
         _CHGPW_FAILS.pop(uid, None)
         audit_db.log_event(
@@ -580,19 +583,34 @@ def build_router(templates) -> APIRouter:
 def _safe_next(target: str) -> str:
     """Sanitise the post-login redirect target so it stays on this site.
 
-    Reject anything that's:
-      - empty
-      - contains :// (would let attacker redirect cross-origin)
-      - starts with // (protocol-relative)
-      - starts with / followed by another / (also protocol-relative)
+    v1.5.4 加嚴（CodeQL py/url-redirection）：用 urllib.parse + 多層黑名單
+    防 open redirect。Reject anything that's:
+      - empty / non-string
+      - contains :// (cross-origin redirect)
+      - starts with // (protocol-relative URL —「//evil.com」會被當成 https URL)
+      - starts with /\ (Windows path-separator bypass)
+      - has a non-empty scheme or netloc after parsing (defence in depth)
+      - contains control chars (\\r \\n \\0 → CRLF injection in Location header)
     Default to '/' on rejection.
     """
-    if not target:
+    if not isinstance(target, str) or not target:
         return "/"
-    if "://" in target:
+    # Strip leading whitespace which some browsers/proxies allow
+    s = target
+    if any(c in s for c in ("\r", "\n", "\0", "\\")):
         return "/"
-    if target.startswith("//"):
+    if "://" in s:
         return "/"
-    if not target.startswith("/"):
+    if s.startswith("//"):
         return "/"
-    return target
+    if not s.startswith("/"):
+        return "/"
+    # Defence in depth — parse and assert no scheme / netloc
+    try:
+        from urllib.parse import urlparse
+        u = urlparse(s)
+        if u.scheme or u.netloc:
+            return "/"
+    except Exception:
+        return "/"
+    return s

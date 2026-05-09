@@ -176,16 +176,29 @@ function _refreshDropZoneLabel() {
   const files = Array.from(fontFile.files || []);
   btnUploadFont.disabled = !files.length;
   const text = fontDropZone.querySelector('.fnt-drop-text');
+  // v1.5.4: 改 createElement / textContent 防 XSS — 檔名是 user-supplied
+  // (惡意檔名 `<script>alert(1)</script>.ttf` 之前會被當 HTML 渲染)
+  text.replaceChildren();
   if (!files.length) {
     fontDropZone.classList.remove('has-file');
-    text.innerHTML = '<b>點此挑選</b>或拖曳字型檔到此<span class="fnt-drop-hint">.ttf / .otf / .ttc，可多選</span>';
+    const b = document.createElement('b'); b.textContent = '點此挑選';
+    const hint = document.createElement('span');
+    hint.className = 'fnt-drop-hint'; hint.textContent = '.ttf / .otf / .ttc，可多選';
+    text.appendChild(b);
+    text.appendChild(document.createTextNode('或拖曳字型檔到此'));
+    text.appendChild(hint);
     return;
   }
   fontDropZone.classList.add('has-file');
   const names = files.length === 1
     ? files[0].name
     : files[0].name + ` 等 ${files.length} 個檔案`;
-  text.innerHTML = '<b>已選擇：</b>' + names + '<span class="fnt-drop-hint">點選「上傳」開始</span>';
+  const b = document.createElement('b'); b.textContent = '已選擇：';
+  const hint = document.createElement('span');
+  hint.className = 'fnt-drop-hint'; hint.textContent = '點選「上傳」開始';
+  text.appendChild(b);
+  text.appendChild(document.createTextNode(names));
+  text.appendChild(hint);
 }
 ['dragenter','dragover'].forEach(ev => fontDropZone.addEventListener(ev, e => {
   e.preventDefault(); fontDropZone.classList.add('is-dragover');

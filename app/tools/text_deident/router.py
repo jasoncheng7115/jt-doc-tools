@@ -533,8 +533,11 @@ async def detect(request: Request):
                 extras = _llm_extra_findings(text, already_known)
                 if extras:
                     findings = _attach_llm_spans(text, extras, findings)
-            except Exception as e:
-                llm_warning = f"LLM 補偵測失敗：{e}"
+            except Exception:
+                # v1.5.4 CodeQL py/stack-trace-exposure: 不漏 exception 給 user
+                import logging as _lg
+                _lg.getLogger(__name__).exception("LLM augment failed")
+                llm_warning = "LLM 補偵測失敗,僅顯示 regex 結果"
     # Aggregate counts for UI summary
     counts: dict[str, int] = {}
     for f in findings:

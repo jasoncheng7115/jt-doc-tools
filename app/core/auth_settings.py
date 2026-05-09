@@ -305,8 +305,9 @@ def enable_local_with_admin(
         target="local",
         details={"admin_user_id": admin_user_id},
     )
+    from .log_safe import safe_log
     logger.info("Auth enabled (backend=local), admin user '%s' (id=%d) created",
-                admin_username, admin_user_id)
+                safe_log(admin_username), admin_user_id)
     # v1.5.0: 建立內建稽核員帳號（password 留空，admin 用 reset-password 設定）
     try:
         roles.seed_default_auditor_user()

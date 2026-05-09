@@ -4,6 +4,34 @@
 
 ---
 
+## [1.5.4] - 2026-05-09
+
+### 資安（重大,GitHub native scan 結果一波清理）
+
+- **Dependabot 22 alerts 全清** — bump 5 個套件到底線：
+  - `Pillow>=12.2.0,<13`：6 個 high CVE（FITS GZIP / PSD OOB / PSD Tile Integer / PDF Trailer InfLoop / Font Integer / Nested coords heap）
+  - `Jinja2>=3.1.6,<4`：3 個 sandbox breakout
+  - `starlette>=0.49.3,<0.53`：Range header O(n²) DoS in FileResponse
+  - `fastapi>=0.124.0,<0.140`：跟著 starlette 升（fastapi 0.119 不支援 starlette 0.49+）
+- **CodeQL High `js/xss-through-dom` 12 個** 全修：
+  - `static/js/modal.js`：refactor 從 `card.innerHTML = template` 改純 createElement
+  - `static/js/drag_position_editor.js`：`.src = url` 改透過新加的 `window.safeImgSrc()` 驗 URL
+  - `pdf_watermark.html` / `pdf_stamp.html`：3 個 `editor.$assetImg.src = url` 走 safeImgSrc
+  - `pdf_rotate.html` / `doc_deident.html` / `pdf_annotations*.html`（5 個 lightbox）：`lb.innerHTML = '<img>'` 改 createElement
+  - `admin/templates/fonts.html`：drop-zone label `text.innerHTML = '<b>已選擇</b>' + filename + ...` 改 createElement（filename 是 user-controlled 真 XSS bug）
+  - 新加 `static/js/safe_url.js` — `safeImgSrc()` allowlist 只允許 `/` `./` `blob:` `data:image/` `http(s)://`
+- **CodeQL High `py/polynomial-redos` #13** — `RE_AD_DN` regex 加長度上限 + 去掉重複的 UID alternative + 收進 char class,5 個 ReDoS regression test 通過
+- **CodeQL Medium `py/stack-trace-exposure` 7 個** — `app/main.py:873` 真漏（改 logger.exception + generic 訊息）；`doc_deident` / `text_deident` 兩個 LLM augment fail 同樣處理；`auth_routes.py` 改密碼錯誤訊息加 codeql FP 標記（user-facing 訊息必要）；`admin/router.py` LLM endpoint 兩個 ValueError FP 同樣標記
+- **CodeQL Medium `py/url-redirection` 2 個** — `_safe_next()` 加嚴：urllib.parse 驗 scheme + netloc、reject CRLF / NUL / 反斜線、reject 非 string、27 個 regression test 通過
+- **CodeQL Medium `py/log-injection` 9 個** — 新加 `app/core/log_safe.py:safe_log()` helper（strip CR/LF/NUL,bound 200 char）;在 `pdf_editor` / `pdf_extract_text` / `auth_settings` / `auth_ldap` 9 個 logger 呼叫站點 wrap user-supplied 變數
+
+### 工具流程
+
+- **新加 `tools/check_version_consistency.py`** — 驗 `app/main.py:VERSION` / `pyproject.toml` / `uv.lock` / `github/README.md` 標題 / `github/CHANGELOG.md` 最新一筆 5 處版號完全一致；不一致直接 exit 1 印 diff 表
+- **`tests/test_version_consistency.py`** — pytest case 包裝上面,wired 進 `TEST_PLAN.md §5` 發版前必跑
+- **`tests/test_redos_ad_dn.py`** + **`tests/test_open_redirect.py`** + **`tests/test_llm_url_ssrf.py`** + **`tests/test_path_traversal_audit.py`** 都列入「每次發版必跑」
+- 全 pytest 從 437 → 470（新加 33 個 OWASP regression）
+
 ## [1.5.3] - 2026-05-09
 
 ### 資安（重大）

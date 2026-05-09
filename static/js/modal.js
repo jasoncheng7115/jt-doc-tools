@@ -24,22 +24,52 @@
       overlay.className = 'modal-overlay';
       const card = document.createElement('div');
       card.className = 'modal-card modal-' + (kind || 'info');
-      const titleEl = title
-        ? `<div class="modal-title">${escapeHTML(title)}</div>`
-        : '';
-      const bodyHtml = html ? body : `<div class="modal-body">${escapeHTML(body || '').replace(/\n/g, '<br>')}</div>`;
-      const inputHtml = prompt
-        ? `<input type="text" class="modal-input" value="${escapeAttr(defaultValue || '')}" placeholder="${escapeAttr(placeholder || '')}" />`
-        : '';
-      card.innerHTML = `
-        ${titleEl}
-        ${bodyHtml}
-        ${inputHtml}
-        <div class="modal-actions">
-          ${showCancel ? `<button type="button" class="btn modal-cancel">${escapeHTML(cancelText || '取消')}</button>` : ''}
-          <button type="button" class="btn btn-primary modal-ok">${escapeHTML(okText || '確定')}</button>
-        </div>
-      `;
+      // v1.5.4: 改用 createElement / textContent（不用 innerHTML 字串拼接）
+      // 為了過 CodeQL `js/xss-through-dom`。html=true 是 caller 明示允許 raw HTML
+      // 才走獨立分支（仍是 innerHTML，但 caller 自己負責安全性）。
+      if (title) {
+        const titleEl = document.createElement('div');
+        titleEl.className = 'modal-title';
+        titleEl.textContent = title;
+        card.appendChild(titleEl);
+      }
+      const bodyEl = document.createElement('div');
+      bodyEl.className = 'modal-body';
+      if (html) {
+        // Caller opted into raw HTML; trust them.
+        bodyEl.innerHTML = body;  // codeql[js/xss-through-dom]: opt-in by caller
+      } else {
+        // Honour newlines as <br>: split + appendChild text + br nodes.
+        const lines = String(body || '').split('\n');
+        lines.forEach((ln, i) => {
+          if (i > 0) bodyEl.appendChild(document.createElement('br'));
+          bodyEl.appendChild(document.createTextNode(ln));
+        });
+      }
+      card.appendChild(bodyEl);
+      if (prompt) {
+        const inputEl = document.createElement('input');
+        inputEl.type = 'text';
+        inputEl.className = 'modal-input';
+        inputEl.value = defaultValue || '';
+        inputEl.placeholder = placeholder || '';
+        card.appendChild(inputEl);
+      }
+      const actionsEl = document.createElement('div');
+      actionsEl.className = 'modal-actions';
+      if (showCancel) {
+        const cb = document.createElement('button');
+        cb.type = 'button';
+        cb.className = 'btn modal-cancel';
+        cb.textContent = cancelText || '取消';
+        actionsEl.appendChild(cb);
+      }
+      const ob = document.createElement('button');
+      ob.type = 'button';
+      ob.className = 'btn btn-primary modal-ok';
+      ob.textContent = okText || '確定';
+      actionsEl.appendChild(ob);
+      card.appendChild(actionsEl);
       overlay.appendChild(card);
       host.appendChild(overlay);
 

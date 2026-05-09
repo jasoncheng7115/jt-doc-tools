@@ -394,7 +394,7 @@ document.addEventListener('change', (e) => {
       const id = getSelectedStamp();
       const preset = getSelectedStampPreset();
       if (id && editor.$assetImg) {
-        editor.$assetImg.src = getSelectedStampImageUrl();
+        editor.$assetImg.src = window.safeImgSrc(getSelectedStampImageUrl());
       }
       if (preset) {
         editor.value = {

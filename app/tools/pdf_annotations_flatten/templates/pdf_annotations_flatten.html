@@ -224,7 +224,11 @@ $("bakedGrid").addEventListener("click", (e) => {
   if (t.tagName === "IMG" && t.dataset.page) {
     const lb = document.createElement("div");
     lb.className = "af-lightbox";
-    lb.innerHTML = `<img src="${t.src}" alt="">`;
+    // v1.5.4: createElement 防 XSS（CodeQL js/xss-through-dom）
+    const lbImg = document.createElement("img");
+    lbImg.src = t.src;
+    lbImg.alt = "";
+    lb.appendChild(lbImg);
     lb.addEventListener("click", () => lb.remove());
     document.body.appendChild(lb);
   }

@@ -385,7 +385,7 @@ async function ensureEditor(){
   if (editor) {
     editor.setPaper(previewInfo?.paper_w_mm || 210, previewInfo?.paper_h_mm || 297);
     if (previewInfo?.preview_url) editor.setBackground(previewInfo.preview_url);
-    if (editor.$assetImg) editor.$assetImg.src = url;
+    if (editor.$assetImg) editor.$assetImg.src = window.safeImgSrc(url);
     await applyAssetAspectToEditor(url);
     return;
   }
@@ -453,7 +453,7 @@ function refreshSim(){
   // Refresh the position editor's draggable image when text params change.
   if (editor && editor.$assetImg && src === 'text') {
     const url = getEditorAssetUrl();
-    if (url) editor.$assetImg.src = url;
+    if (url) editor.$assetImg.src = window.safeImgSrc(url);
   }
   clearTimeout(simDebounce);
   simDebounce = setTimeout(async () => {
@@ -499,7 +499,7 @@ document.addEventListener('change', (e) => {
     if (editor && editor.$assetImg && getSource() === 'asset') {
       const url = getEditorAssetUrl();
       if (url) {
-        editor.$assetImg.src = url;
+        editor.$assetImg.src = window.safeImgSrc(url);
         applyAssetAspectToEditor(url);
       }
     }

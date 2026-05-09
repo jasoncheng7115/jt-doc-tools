@@ -988,9 +988,10 @@ def _insert_mixed_text(page, x: float, y: float, text: str, *,
         if ok_font is None:
             # 所有 fallback 都炸 — 印 warning 讓 admin 知道（避免悄悄變空白）
             import logging as _lg
+            from ...core.log_safe import safe_log
             _lg.getLogger(__name__).warning(
-                "insert_text all fallbacks failed for run %r (cjk=%s, tried=%s): %s",
-                run[:20], is_cjk, fallbacks, last_err)
+                "insert_text all fallbacks failed for run %s (cjk=%s, tried=%s): %s",
+                safe_log(run[:20]), is_cjk, safe_log(fallbacks), safe_log(last_err))
             ok_font = fn  # for length calculation
         # Advance x by measured width of that run
         try:
@@ -1217,9 +1218,10 @@ async def save(request: Request):
                 # 不送上來，這裡是雙保險。
                 if obj.get("type") == "text" and not str(obj.get("text") or "").strip():
                     import logging as _lg
+                    from ...core.log_safe import safe_log
                     _lg.getLogger(__name__).warning(
                         "skipping redact for text obj with empty text "
-                        "(original_bbox=%s) — would leave blank area", orig)
+                        "(original_bbox=%s) — would leave blank area", safe_log(orig))
                     continue
                 ox0, oy0, ox1, oy1 = [float(v) for v in orig]
                 page.add_redact_annot(
@@ -1475,16 +1477,17 @@ async def save(request: Request):
                         continue
                     # 診斷：印出每個 text obj 的關鍵欄位 + page.rotation（v1.4.13 #6 偵錯用）
                     import logging as _lg
+                    from ...core.log_safe import safe_log
                     _lg.getLogger(__name__).info(
-                        "pdf-editor insert text page=%d rect=%s text=%r "
-                        "font_pref=%s font_size=%.1f color=%r has_orig_bbox=%s "
+                        "pdf-editor insert text page=%d rect=%s text=%s "
+                        "font_pref=%s font_size=%.1f color=%s has_orig_bbox=%s "
                         "page.rotation=%d page.mediabox=%s page.rect=%s",
                         pno, [round(rect.x0,1), round(rect.y0,1),
                               round(rect.x1,1), round(rect.y1,1)],
-                        text[:50],
-                        obj.get("font") or "default",
+                        safe_log(text[:50]),
+                        safe_log(obj.get("font") or "default"),
                         float(obj.get("font_size") or 11),
-                        obj.get("color"),
+                        safe_log(obj.get("color")),
                         has_orig,
                         page.rotation,
                         [round(v,1) for v in (page.mediabox.x0, page.mediabox.y0,

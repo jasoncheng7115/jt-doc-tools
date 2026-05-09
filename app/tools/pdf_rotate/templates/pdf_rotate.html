@@ -377,7 +377,10 @@ document.querySelectorAll('.rt-mode-buttons .rt-mb').forEach(btn => {
 function openLightbox(url) {
   const lb = document.createElement('div');
   lb.className = 'page-lightbox';
-  lb.innerHTML = `<img src="${url}"/>`;
+  // v1.5.4: 改 createElement 防 XSS（CodeQL js/xss-through-dom）
+  const img = document.createElement('img');
+  img.src = url;
+  lb.appendChild(img);
   lb.addEventListener('click', () => lb.remove());
   document.body.appendChild(lb);
 }
