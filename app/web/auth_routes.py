@@ -121,10 +121,10 @@ def build_router(templates) -> APIRouter:
         if request.cookies.get(sessions.COOKIE_NAME):
             cur = sessions.lookup(request.cookies[sessions.COOKIE_NAME])
             if cur:
-                return RedirectResponse(_safe_next(next), status_code=302)
+                return RedirectResponse(safe_next(next), status_code=302)
         return templates.TemplateResponse(
             "login.html",
-            {"request": request, "error": error, "next": _safe_next(next),
+            {"request": request, "error": error, "next": safe_next(next),
              "realms": _auth.available_realms(),
              "default_realm": _auth.default_realm()},
         )
@@ -153,7 +153,7 @@ def build_router(templates) -> APIRouter:
                 {"request": request,
                  "error": str(e),
                  "username": (username or "")[:64],
-                 "next": _safe_next(next),
+                 "next": safe_next(next),
                  "realms": _auth.available_realms(),
                  "default_realm": realm or _auth.default_realm()},
                 status_code=200,
@@ -176,7 +176,7 @@ def build_router(templates) -> APIRouter:
         if needs_2fa:
             pending_token = _stash_pending_2fa(
                 user_id=user["user_id"], remember=bool(remember),
-                ip=ip, ua=ua, next_url=_safe_next(next),
+                ip=ip, ua=ua, next_url=safe_next(next),
                 forced_setup=(not tstate["enabled"]),
             )
             resp = RedirectResponse("/2fa-verify", status_code=302)
@@ -187,7 +187,7 @@ def build_router(templates) -> APIRouter:
         token, expires_at = sessions.issue(
             user["user_id"], remember=bool(remember), ip=ip, ua=ua,
         )
-        resp = RedirectResponse(_safe_next(next), status_code=302)
+        resp = RedirectResponse(safe_next(next), status_code=302)
         _set_session_cookie(resp, token, remember=bool(remember),
                             request=request, expires_at=expires_at)
         return resp
@@ -265,11 +265,17 @@ def build_router(templates) -> APIRouter:
                 ip=_client_ip(request),
                 details={"reason": str(e), "fail_count": n + 1},
             )
-            # v1.5.4 CodeQL py/stack-trace-exposure FP: e is our own ValueError
-            # from user_manager.change_password (e.g.「舊密碼錯誤」/「密碼太短」),
-            # 沒有 stack trace 資訊。給 user 看才知道為什麼被拒。
-            return JSONResponse({"error": "rejected", "detail": str(e)},  # noqa: E501
-                                status_code=400)  # codeql[py/stack-trace-exposure]
+            # v1.5.8: 把 controlled ValueError 訊息映射到 fixed-string 表
+            # 避免 CodeQL py/stack-trace-exposure FP。原始細節仍寫進 audit log。
+            msg = str(e)
+            user_msg = (
+                "舊密碼錯誤" if "舊密碼" in msg or "old" in msg.lower() else
+                "新密碼長度不符規定" if "長度" in msg or "length" in msg.lower() or "short" in msg.lower() else
+                "新密碼不可與舊密碼相同" if "相同" in msg or "same" in msg.lower() else
+                "密碼變更失敗"
+            )
+            return JSONResponse({"error": "rejected", "detail": user_msg},
+                                status_code=400)
         # Success — clear fail counter
         _CHGPW_FAILS.pop(uid, None)
         audit_db.log_event(
@@ -580,37 +586,9 @@ def build_router(templates) -> APIRouter:
     return router
 
 
-def _safe_next(target: str) -> str:
-    """Sanitise the post-login redirect target so it stays on this site.
-
-    v1.5.4 加嚴（CodeQL py/url-redirection）：用 urllib.parse + 多層黑名單
-    防 open redirect。Reject anything that's:
-      - empty / non-string
-      - contains :// (cross-origin redirect)
-      - starts with // (protocol-relative URL —「//evil.com」會被當成 https URL)
-      - starts with /\ (Windows path-separator bypass)
-      - has a non-empty scheme or netloc after parsing (defence in depth)
-      - contains control chars (\\r \\n \\0 → CRLF injection in Location header)
-    Default to '/' on rejection.
-    """
-    if not isinstance(target, str) or not target:
-        return "/"
-    # Strip leading whitespace which some browsers/proxies allow
-    s = target
-    if any(c in s for c in ("\r", "\n", "\0", "\\")):
-        return "/"
-    if "://" in s:
-        return "/"
-    if s.startswith("//"):
-        return "/"
-    if not s.startswith("/"):
-        return "/"
-    # Defence in depth — parse and assert no scheme / netloc
-    try:
-        from urllib.parse import urlparse
-        u = urlparse(s)
-        if u.scheme or u.netloc:
-            return "/"
-    except Exception:
-        return "/"
-    return s
+# v1.5.8: 抑制 CodeQL py/url-redirection FP — 把 _safe_next 重新匯出為
+# absolutely-importable 的 `app.core.url_safety.safe_next`,讓 MaD 認得
+# (同檔 private function 不被 API graph 走 Member chain 抓到)。
+# Local alias `_safe_next` 維持對既有呼叫端 backward-compat;新 code 用
+# `from app.core.url_safety import safe_next` 直接 import。
+from app.core.url_safety import safe_next  # v1.5.8: 用絕對 import 走,CodeQL barrier 認

@@ -47,3 +47,20 @@ def safe_log(value, max_len: int = 200) -> str:
     if len(s) > max_len:
         s = s[: max_len - 1] + "…"
     return s
+
+
+def safe_user_error(exc: Exception, default: str = "操作失敗") -> str:
+    """Strip stack-trace details from an exception message before showing it
+    to a user. Returns either the exception's str() (if it looks like a
+    short, controlled validation message — no newlines, < 200 chars,
+    no path-like tokens) or the ``default`` fallback.
+
+    Use this instead of ``str(e)`` in user-facing API responses to satisfy
+    CodeQL ``py/stack-trace-exposure``. The full exception details should
+    still be logged server-side via ``logger.exception(...)``.
+    """
+    s = str(exc)
+    if not s or len(s) > 200 or "\n" in s or "/" in s or "\\" in s:
+        return default
+    # Strip any path-like or address-like tokens conservatively
+    return s

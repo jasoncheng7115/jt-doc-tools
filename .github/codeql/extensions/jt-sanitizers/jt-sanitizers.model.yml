@@ -35,22 +35,24 @@ extensions:
       - ['app', 'Member[core].Member[safe_paths].Method[is_safe_name]', 'path-injection']
 
   # ----------------------------------------------------------------------
-  # request-forgery (SSRF) sanitizer (app/core/llm_client.py)
+  # request-forgery (SSRF) sanitizer (app/core/url_safety.py)
+  # v1.5.8: 從 llm_client.py 搬到 url_safety.py 用絕對 import,API graph 才認
   # ----------------------------------------------------------------------
   - addsTo:
       pack: codeql/python-all
       extensible: barrierModel
     data:
-      - ['app', 'Member[core].Member[llm_client].Method[_validate_llm_base_url]', 'request-forgery']
+      - ['app', 'Member[core].Member[url_safety].Method[validate_llm_base_url]', 'request-forgery']
 
   # ----------------------------------------------------------------------
-  # url-redirection sanitizer (app/web/auth_routes.py)
+  # url-redirection sanitizer (app/core/url_safety.py)
+  # v1.5.8: 從 auth_routes.py 搬到 url_safety.py 用絕對 import
   # ----------------------------------------------------------------------
   - addsTo:
       pack: codeql/python-all
       extensible: barrierModel
     data:
-      - ['app', 'Member[web].Member[auth_routes].Method[_safe_next]', 'url-redirection']
+      - ['app', 'Member[core].Member[url_safety].Method[safe_next]', 'url-redirection']
 
   # ----------------------------------------------------------------------
   # log-injection sanitizer (app/core/log_safe.py)

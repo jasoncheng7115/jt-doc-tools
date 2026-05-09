@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.core.llm_client import LLMClient, _validate_llm_base_url
+from app.core.llm_client import LLMClient
+from app.core.url_safety import validate_llm_base_url as _validate_llm_base_url
 
 
 # --- happy path ---------------------------------------------------------
@@ -96,4 +97,7 @@ def test_admin_save_rejects_metadata_host():
     assert r.status_code == 400, r.text
     body = r.json()
     assert body.get("ok") is False
-    assert "block" in (body.get("error") or "").lower() or "metadata" in (body.get("error") or "").lower()
+    # v1.5.8: error message 改成 fixed-string 訊息表（防 stack-trace-exposure），
+    # 對 metadata host 拒絕回「Base URL host 已被列入黑名單」
+    err = (body.get("error") or "")
+    assert "黑名單" in err or "blocked" in err.lower(), f"unexpected error: {err}"

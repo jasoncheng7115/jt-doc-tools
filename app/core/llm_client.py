@@ -30,41 +30,11 @@ from urllib.parse import urlparse
 import httpx
 
 
-# SSRF defence — admin-configured Ollama / vLLM URL is partially user-controlled.
-# Block URL schemes that aren't http/https (file:// / gopher:// / dict:// 等),
-# block cloud metadata IPs (AWS / GCP / Azure / Alibaba / Oracle / DigitalOcean),
-# and reject blank / non-string input. Private LAN IPs (10/8, 172.16/12, 192.168/16,
-# 127/8) ARE allowed because internal Ollama on LAN/loopback is the deployment norm.
-_ALLOWED_SCHEMES = ("http", "https")
-_BLOCKED_HOSTS = frozenset({
-    "169.254.169.254",   # AWS / GCP / Azure / OCI / Alibaba metadata
-    "100.100.100.200",   # Alibaba Cloud metadata
-    "fd00:ec2::254",     # AWS IMDSv2 IPv6
-    "metadata.google.internal",
-    "metadata.goog",
-})
-
-
-def _validate_llm_base_url(url: str) -> str:
-    """Validate admin-supplied LLM base URL; raise ValueError on suspicious input.
-
-    Returns the URL with trailing slash stripped. Called by ``LLMClient.__init__``
-    so every constructed client has a sanitised base_url.
-    """
-    if not isinstance(url, str) or not url.strip():
-        raise ValueError("LLM base_url must be a non-empty string")
-    u = url.strip()
-    parsed = urlparse(u)
-    if parsed.scheme.lower() not in _ALLOWED_SCHEMES:
-        raise ValueError(
-            f"LLM base_url scheme must be http or https, got {parsed.scheme!r}"
-        )
-    host = (parsed.hostname or "").lower()
-    if not host:
-        raise ValueError("LLM base_url must include a host")
-    if host in _BLOCKED_HOSTS:
-        raise ValueError(f"LLM base_url host {host!r} is blocked (cloud metadata)")
-    return u.rstrip("/")
+# v1.5.8: SSRF validator 搬到 app.core.url_safety 以絕對 import 路徑走,
+# 讓 CodeQL MaD barrierModel 認得（同檔 private function 不被 API graph 抓到）。
+# 維持 _validate_llm_base_url 別名給 backward-compat;`__init__` 走別名 OK,
+# regression tests `tests/test_llm_url_ssrf.py` 也走別名。
+from app.core.url_safety import validate_llm_base_url as _validate_llm_base_url  # noqa: F401
 
 
 @dataclass
@@ -172,7 +142,9 @@ class LLMClient:
         api_key: Optional[str] = None,
         timeout: float = 60.0,
     ):
-        self.base_url = _validate_llm_base_url(base_url)
+        # v1.5.8: 用絕對 import 形式 call,讓 CodeQL barrierModel 認得
+        from app.core.url_safety import validate_llm_base_url
+        self.base_url = validate_llm_base_url(base_url)
         self.api_key = api_key
         self.timeout = timeout
 

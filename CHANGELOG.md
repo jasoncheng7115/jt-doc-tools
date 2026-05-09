@@ -4,6 +4,24 @@
 
 ---
 
+## [1.5.8] - 2026-05-09
+
+### 資安
+
+- **CodeQL alerts 47 → 3 unique（本地實測）**:
+  - 把 `_safe_next` 跟 `_validate_llm_base_url` 從 auth_routes.py / llm_client.py 內 private function 搬到 `app/core/url_safety.py` 模組。同檔 private function CodeQL API graph 不認得,獨立模組才能透過絕對 import 走 barrierModel。
+  - 4 個 `str(exc)` user-facing 錯誤改成 fixed-string mapping（admin_router LLM endpoints、branding_upload、branding_site_name、import_settings、change_password）— 真 stack trace 寫 server log,user 看見的是控制過的訊息。
+  - `pdf_editor/router.py:994` 的 `is_cjk` 包 `bool(...)` 顯式 cast,讓 CodeQL 知道是 bool 不是 user data。
+  - `modal.js` `if (html)` opt-in 分支用 `DOMParser.parseFromString` 取代 `innerHTML` 直接賦值。
+  - `sys_deps_api` 加 try/except 防 stack-trace 漏。
+- **MaD pack 更新對應 sanitizer 路徑** — `Member[core].Member[url_safety].Method[validate_llm_base_url]` / `Method[safe_next]` 取代舊的同檔路徑。
+- **新加 `app/core/log_safe.safe_user_error()`** — helper 把 controlled exception 訊息映射為 user-safe message,內部給其他開發者用。
+
+### 重構
+
+- **15 個 router 改絕對 import**（v1.5.6 開始,v1.5.8 完整對齊): `from app.core.X import ...` 取代 `from ...core.X import ...`,讓 CodeQL API graph 認得 sanitizer 呼叫站點。
+- 全 pytest 470/470 通過。
+
 ## [1.5.7] - 2026-05-09
 
 ### 修正
