@@ -4,6 +4,16 @@
 
 ---
 
+## [1.5.5] - 2026-05-09
+
+### 改善
+
+- **pdf-editor 加 4 個翻頁按鈕** — 在頁碼指示器旁加「第一頁 / 上一頁 / 下一頁 / 最後一頁」工具列按鈕,符合一般 PDF reader 的操作慣例。每個按鈕：
+  - 帶 SVG 圖示（雙箭頭 / 單箭頭）
+  - 在邊界（已在第 1 頁 / 最後一頁）時自動 disable
+  - 鍵盤捷徑：Home / End / PageUp / PageDown(在 input/textarea 內不會攔截)
+- **修 CodeQL `js/xss-through-dom` #52**：`drag_position_editor.js:45` 拿掉「safeImgSrc 不存在時 fallback 用未檢查 url」分支(safe_url.js 在 base.html 一律載入,不需 fallback)
+
 ## [1.5.4] - 2026-05-09
 
 ### 資安（重大,GitHub native scan 結果一波清理）
