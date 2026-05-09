@@ -1,0 +1,49 @@
+# GitHub CodeQL — 靜態程式碼分析（SAST），偵測 SQL injection、XSS、
+# path traversal、command injection、SSRF、insecure deserialization 等。
+# Docs: https://docs.github.com/en/code-security/code-scanning
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # 每週一台北時間 03:00（UTC 19:00 週日）跑一次完整掃描
+    # 即使該週沒 commit 也跑，捕捉 CodeQL 引擎更新後新加的規則
+    - cron: '0 19 * * 0'
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write   # 寫進 Security tab 的 Code scanning alerts
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['python', 'javascript']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # security-extended 比預設多 ~30 條規則，
+          # security-and-quality 額外加品質規則（會多 noise，先不開）
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

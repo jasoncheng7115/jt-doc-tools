@@ -1,0 +1,31 @@
+# GitHub Dependabot — 自動偵測依賴套件的已知 CVE，每週開 PR bump 版本
+# Docs: https://docs.github.com/en/code-security/dependabot
+version: 2
+updates:
+  # Python deps via pyproject.toml + uv.lock
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Taipei"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "security"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    # 只關心 security update + 主要 deps；patch 級別 bump 也接受
+    versioning-strategy: "increase-if-necessary"
+
+  # GitHub Actions workflows themselves
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "ci"
+    commit-message:
+      prefix: "ci"
