@@ -4,6 +4,21 @@
 
 ---
 
+## [1.5.2] - 2026-05-09
+
+### 修正
+
+- **pdf-editor「選既有物件」對某些 PDF 顯示一排亂碼 `eeoeeoeeo...`**（客戶 Action1_GettingStarted.pdf p.2 目錄頁）
+  - 根因 1：`_looks_garbled()` Signal d) 把合法的 leader dots `..........` 當成週期重複 → 觸發 OCR fallback
+  - 根因 2：OCR (tesseract) 把成排小點認成 `eeeeeee...` 回傳前端
+  - 根因 3：原邏輯只要字型沒 `/ToUnicode` CMap 就視為 unreliable，但 PyMuPDF 從字型名稱（MS JhengHei 等）已能猜對 Unicode，那條檢查多餘
+  - 修法：①Signal d) cycle 必須含字母/數字才 flag（純標點 cycle 是合法排版元素）②拿掉 `_font_has_tounicode` 檢查，只信 `_looks_garbled` 的文字內容判斷 → 信任 PyMuPDF 抽出來的乾淨原文，不再對 leader dots 觸發 OCR
+
+### 改善
+
+- **pdf-editor 工具列每個按鈕對應游標形狀** — V 選取（箭頭）、S 選既有（食指）、T 文字（I 字）、W/R/O/L/A/P 形狀類（十字）、I/N 圖片+便箋（複製游標 帶 + 號）、H 螢光筆（I 字），點選工具後游標立刻反映即將進行的操作
+- 新增 32 個 pytest case `tests/test_looks_garbled.py`：4 種 garbled signals 完整 coverage + leader dots / 分隔線 / `***` 等合法 punctuation cycle 不誤判
+
 ## [1.5.1] - 2026-05-09
 
 ### 修正

@@ -333,6 +333,19 @@ def _looks_garbled(text: str) -> bool:
     import re as _re
     if _re.search(r"([A-Za-z0-9])\1{7,}", text):
         return True
+    # Signal d) — short cycle (period 2-4) repeating 4+ times that contains
+    # at least one letter/digit. issue 客戶 PDF 踩過：CMap 把單一 dot glyph
+    # 拆成多 byte UTF-8 序列「eeo」/「ee®」/「@@.」，重複時形成
+    # 「eeoeeoeeoeeo...」週期-3 模式。Signal c) 抓不到（不是同字元連發），
+    # 這條補上。
+    #
+    # 重要：cycle 必須含字母/數字才算 garbled — 純標點重複（leader dots
+    # 「.....」、分隔線「-----」、星號「*****」）是合法排版元素，不是
+    # 字型問題。之前版本誤把 leader dots 標 garbled → 觸發 OCR → tesseract
+    # 把 dots 認成「eeeee」回傳前端 → 使用者看到一排亂碼。
+    m = _re.search(r"(.{2,4})\1{3,}", text)
+    if m and _re.search(r"[A-Za-z0-9]", m.group(1)):
+        return True
     return False
 
 
@@ -409,18 +422,19 @@ async def detect_objects(request: Request):
                         b = col_int & 0xff
                         span_text = span.get("text", "")
                         span_font = span.get("font", "")
-                        # Detect garbled extraction. Two checks:
-                        #  1) Font lacks /ToUnicode CMap (truly broken).
-                        #  2) Heuristic on the extracted text itself — catches
-                        #     PDFs whose CMap exists but is identity (returns
-                        #     GIDs as Unicode); this is the common case where
-                        #     登入系統 → 翕⊕ㄱ 戔ㄱ.
-                        unreliable = False
-                        if span_text:
-                            if not _font_has_tounicode(doc, page, span_font):
-                                unreliable = True
-                            elif _looks_garbled(span_text):
-                                unreliable = True
+                        # Detect garbled extraction — only via the text-shape
+                        # heuristic _looks_garbled. Earlier we ALSO marked
+                        # text unreliable whenever the font had no /ToUnicode
+                        # CMap, but PyMuPDF often guesses unicode correctly
+                        # from the font name alone (especially MS JhengHei).
+                        # That belt-and-suspenders check produced false
+                        # positives that triggered OCR on clean text — and
+                        # OCR mis-recognized leader dots「.....」as「eeeee」,
+                        # making the editor canvas show garbage. The heuristic
+                        # alone is sufficient (covers PUA glyphs, math
+                        # operators, lone bopomofo, repeated cycles, etc.)
+                        # so trust PyMuPDF when the text doesn't look broken.
+                        unreliable = bool(span_text) and _looks_garbled(span_text)
                         # When extraction is unreliable, OCR the bbox region
                         # to recover real text. Only fall back to "ask user
                         # to retype" if OCR is unavailable or returns nothing.
