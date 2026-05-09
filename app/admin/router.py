@@ -629,8 +629,15 @@ def build_router(templates) -> APIRouter:
     @router.post("/api/llm/settings")
     async def api_llm_settings_save(request: Request):
         from ..core.llm_settings import llm_settings
-        body = await request.json()
-        return llm_settings.update(body or {})
+        from ..core.llm_client import _validate_llm_base_url
+        body = await request.json() or {}
+        bu = (body.get("base_url") or "").strip()
+        if bu:
+            try:
+                _validate_llm_base_url(bu)
+            except ValueError as exc:
+                return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        return llm_settings.update(body)
 
     @router.post("/api/llm/test-connection")
     async def api_llm_test_connection(request: Request):
@@ -644,7 +651,10 @@ def build_router(templates) -> APIRouter:
         if not base_url:
             return {"ok": False, "error": "Base URL 未填"}
         # Cap test timeout at 30s so admin page doesn't hang
-        client = LLMClient(base_url=base_url, api_key=api_key, timeout=min(timeout, 30))
+        try:
+            client = LLMClient(base_url=base_url, api_key=api_key, timeout=min(timeout, 30))
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
         result = client.test_connection()
         return {
             "ok": result.ok,

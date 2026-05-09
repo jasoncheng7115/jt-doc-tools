@@ -44,7 +44,11 @@ async def load(request: Request, file: UploadFile = File(...)):
 
 
 @router.get("/thumb/{upload_id}/{page}")
-async def thumb(upload_id: str, page: int, large: bool = False):
+async def thumb(upload_id: str, page: int, request: Request, large: bool = False):
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
     src = settings.temp_dir / f"pnL_{upload_id}.pdf"
     if not src.exists():
         raise HTTPException(404, "upload not found (expired?)")
@@ -112,6 +116,7 @@ def _draw_pageno(
 
 @router.post("/preview-thumb")
 async def preview_thumb(
+    request: Request,
     upload_id: str = Form(...),
     page: int = Form(...),
     position: str = Form("br"),
@@ -125,6 +130,10 @@ async def preview_thumb(
 ):
     """Apply the page-number to ONE page in-memory and return a PNG thumb so
     the user sees the *real* rendered output rather than a UI overlay."""
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
     src = settings.temp_dir / f"pnL_{upload_id}.pdf"
     if not src.exists():
         raise HTTPException(404, "upload not found (expired?)")

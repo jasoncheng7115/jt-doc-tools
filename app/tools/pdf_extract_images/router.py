@@ -47,7 +47,11 @@ async def load(request: Request, file: UploadFile = File(...)):
 
 
 @router.get("/page-thumb/{upload_id}/{page}")
-async def page_thumb(upload_id: str, page: int, large: bool = False):
+async def page_thumb(upload_id: str, page: int, request: Request, large: bool = False):
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
     src = settings.temp_dir / f"exL_{upload_id}.pdf"
     if not src.exists():
         raise HTTPException(404, "upload not found (expired?)")
@@ -140,12 +144,16 @@ async def extract(request: Request, file: UploadFile = File(...)):
 
 
 @router.get("/file/{batch_id}/{name}")
-async def get_file(batch_id: str, name: str):
-    safe = Path(name).name
-    fp = settings.temp_dir / f"ext_{batch_id}" / safe
+async def get_file(batch_id: str, name: str, request: Request):
+    from ...core.safe_paths import require_uuid_hex, safe_join
+    from ...core import upload_owner as _uo
+    require_uuid_hex(batch_id, "batch_id")
+    _uo.require(batch_id, request)
+    bdir = settings.temp_dir / f"ext_{batch_id}"
+    fp = safe_join(bdir, name)
     if not fp.exists():
         raise HTTPException(404)
-    media = "image/png" if safe.lower().endswith(".png") else "application/octet-stream"
+    media = "image/png" if fp.name.lower().endswith(".png") else "application/octet-stream"
     return FileResponse(str(fp), media_type=media)
 
 

@@ -68,7 +68,11 @@ _VALID_MODES = {"rotate-90", "rotate-180", "rotate-270", "flip-h", "flip-v"}
 
 
 @router.get("/thumb/{upload_id}/{page}")
-async def thumb(upload_id: str, page: int, large: bool = False, mode: str = ""):
+async def thumb(upload_id: str, page: int, request: Request, large: bool = False, mode: str = ""):
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
     src = settings.temp_dir / f"rotL_{upload_id}.pdf"
     if not src.exists():
         raise HTTPException(404, "upload not found (expired?)")
@@ -276,12 +280,15 @@ _UPLOAD_ID_RE = re.compile(r"^[a-f0-9]{32}$")
 
 @router.post("/finalize")
 async def finalize(
+    request: Request,
     upload_id: str = Form(...),
     per_page: str = Form(""),
 ):
     """Build the rotated PDF from the file stashed by /load + per-page map."""
     if not _UPLOAD_ID_RE.match(upload_id or ""):
         raise HTTPException(400, "invalid upload_id")
+    from ...core import upload_owner as _uo
+    _uo.require(upload_id, request)
     src = settings.temp_dir / f"rotL_{upload_id}.pdf"
     if not src.exists():
         raise HTTPException(410, "上傳已過期，請重新上傳")
@@ -301,12 +308,15 @@ async def finalize(
 
 @router.post("/finalize-png")
 async def finalize_png(
+    request: Request,
     upload_id: str = Form(...),
     per_page: str = Form(""),
 ):
     """Bake rotation, render each page to PNG, return ZIP."""
     if not _UPLOAD_ID_RE.match(upload_id or ""):
         raise HTTPException(400, "invalid upload_id")
+    from ...core import upload_owner as _uo
+    _uo.require(upload_id, request)
     src = settings.temp_dir / f"rotL_{upload_id}.pdf"
     if not src.exists():
         raise HTTPException(410, "上傳已過期，請重新上傳")

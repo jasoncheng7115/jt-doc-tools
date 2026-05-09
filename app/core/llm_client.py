@@ -25,8 +25,46 @@ import json
 import time
 from dataclasses import dataclass, field
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
+
+
+# SSRF defence — admin-configured Ollama / vLLM URL is partially user-controlled.
+# Block URL schemes that aren't http/https (file:// / gopher:// / dict:// 等),
+# block cloud metadata IPs (AWS / GCP / Azure / Alibaba / Oracle / DigitalOcean),
+# and reject blank / non-string input. Private LAN IPs (10/8, 172.16/12, 192.168/16,
+# 127/8) ARE allowed because internal Ollama on LAN/loopback is the deployment norm.
+_ALLOWED_SCHEMES = ("http", "https")
+_BLOCKED_HOSTS = frozenset({
+    "169.254.169.254",   # AWS / GCP / Azure / OCI / Alibaba metadata
+    "100.100.100.200",   # Alibaba Cloud metadata
+    "fd00:ec2::254",     # AWS IMDSv2 IPv6
+    "metadata.google.internal",
+    "metadata.goog",
+})
+
+
+def _validate_llm_base_url(url: str) -> str:
+    """Validate admin-supplied LLM base URL; raise ValueError on suspicious input.
+
+    Returns the URL with trailing slash stripped. Called by ``LLMClient.__init__``
+    so every constructed client has a sanitised base_url.
+    """
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError("LLM base_url must be a non-empty string")
+    u = url.strip()
+    parsed = urlparse(u)
+    if parsed.scheme.lower() not in _ALLOWED_SCHEMES:
+        raise ValueError(
+            f"LLM base_url scheme must be http or https, got {parsed.scheme!r}"
+        )
+    host = (parsed.hostname or "").lower()
+    if not host:
+        raise ValueError("LLM base_url must include a host")
+    if host in _BLOCKED_HOSTS:
+        raise ValueError(f"LLM base_url host {host!r} is blocked (cloud metadata)")
+    return u.rstrip("/")
 
 
 @dataclass
@@ -134,8 +172,7 @@ class LLMClient:
         api_key: Optional[str] = None,
         timeout: float = 60.0,
     ):
-        # Strip trailing slash so concatenation is consistent.
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _validate_llm_base_url(base_url)
         self.api_key = api_key
         self.timeout = timeout
 

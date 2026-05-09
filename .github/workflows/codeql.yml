@@ -9,9 +9,10 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # 每週一台北時間 03:00（UTC 19:00 週日）跑一次完整掃描
+    # 每週一台北時間 09:00 跑一次完整掃描（與 dependabot.yml 同步排程）
     # 即使該週沒 commit 也跑，捕捉 CodeQL 引擎更新後新加的規則
-    - cron: '0 19 * * 0'
+    # cron 使用 UTC：01:00 UTC = 09:00 Asia/Taipei
+    - cron: '0 1 * * 1'
 
 permissions:
   actions: read
@@ -39,6 +40,7 @@ jobs:
           # security-extended 比預設多 ~30 條規則，
           # security-and-quality 額外加品質規則（會多 noise，先不開）
           queries: security-extended
+          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
