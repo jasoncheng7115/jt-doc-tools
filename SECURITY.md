@@ -1,6 +1,6 @@
-# 資安政策 / OWASP Top 10 對照
+# 資安政策 / OWASP Top 10 (2025) 對照
 
-本文件說明 jt-doc-tools 的資安設計、OWASP Top 10 (2021) 各分類覆蓋方式、與漏洞回報管道。
+本文件說明 jt-doc-tools 的資安設計、OWASP Top 10 (2025) 各分類覆蓋方式、與漏洞回報管道。
 
 ## 漏洞回報
 
@@ -16,20 +16,22 @@
 4. **凡事留痕**：登入 / 登出 / 失敗 / 鎖定 / 設定變更 / 工具呼叫 / 上傳檔名全部寫 audit log，async + WAL 不影響服務效能，可轉送外部 SIEM。
 5. **不上雲**：所有檔案處理只發生在客戶自己伺服器，不外送任何資料；唯一可選的外部呼叫是管理員自行設定的 LDAP / AD 認證或 LLM (Ollama，預設關閉)。
 
-## OWASP Top 10 (2021) 對照
+## OWASP Top 10 (2025) 對照
+
+> 2025 版主要變動：A02 從 Cryptographic Failures 換成 Security Misconfiguration（升 #2）；A03 改為 **Software Supply Chain Failures**（涵蓋舊版 A06）；A05 Injection 把 XSS 整合進來；新增 **A10 Mishandling of Exceptional Conditions**（取代舊版 SSRF — SSRF 併入 A06 Insecure Design）。
 
 | 分類 | 風險 | 我們的對策 |
 |---|---|---|
-| **A01 Broken Access Control** | 未授權存取 | RBAC + `require_admin` / `require_login` / `require_tool` decorators / `upload_owner` ACL（`<temp>/.owners/<id>.json` sidecar）/ `safe_paths.safe_join()` 防 path traversal / 稽核員「硬牆」effective_tools 對 auditor 永遠回 `set()`（v1.5.0） |
-| **A02 Cryptographic Failures** | 弱加密 / 明文密碼 | 密碼 stdlib `scrypt`（N=2^17, r=8, p=1, 32 byte salt）/ Session cookie `HttpOnly` + `SameSite=Lax` + `Secure`（HTTPS 自動）/ session token 存 sha256 hash，DB 外洩無法倒推 / `auth_settings.json`（含 LDAP service password）chmod 0o600 / TOTP secret 32-char base32（pyotp.random_base32） |
-| **A03 Injection** | SQL / 模板注入 | 全部 SQL 走 sqlite3 `?` 參數綁定（zero string concatenation with user input）/ Jinja2 預設 autoescape (FastAPI Jinja2Templates 預設開啟) / 唯一兩處 f-string in execute 是組固定欄位的 WHERE 子句，user 值仍透過 `params` tuple 綁定 |
-| **A04 Insecure Design** | 設計缺陷 | 職責分離（admin / auditor）/ 內建 SEED 帳號（jtdt-admin / jtdt-auditor）權限固定不可改 / 啟動時 `enforce_auditor_isolation` 自動修正 dirty DB / `jtdt update` snapshot auth_settings.json 防 upgrade 弄壞設定 / 三平台一致（Linux/macOS/Windows） |
-| **A05 Security Misconfiguration** | 設定漏洞 | Security headers middleware 統一加：CSP / X-Content-Type-Options / X-Frame-Options / Referrer-Policy / Permissions-Policy / HSTS（HTTPS 才加）/ CSP `default-src 'self'` + `connect-src 'self'`（阻 SSRF-via-browser）+ `object-src 'none'` + `frame-ancestors 'self'` + `base-uri 'self'` + `form-action 'self'` |
-| **A06 Vulnerable & Outdated Components** | 依賴有漏洞 | 全部依賴在 `pyproject.toml` 明確版本範圍（不用 `>=*`）/ uv.lock 鎖死可重現安裝 / `pyotp`、`qrcode`、`ldap3` 等都選 active maintained 套件 / install.ps1 對 WinSW.exe 比對 SHA256（防供應鏈攻擊） |
-| **A07 Identification & Auth Failures** | 認證薄弱 | 密碼 min 8 / max 256 chars 驗證 / 失敗 5 次自動鎖 15 分鐘（per-user + per-IP 雙計數）/ TOTP 2FA（RFC 6238，pyotp）/ 稽核員強制 2FA / admin 可設「強制 2FA」/ session 失效時間可設（預設 7 天，remember me 30 天）/ 改密碼 / TOTP 重置會撤銷所有現有 session |
-| **A08 Software & Data Integrity Failures** | 供應鏈 / 完整性 | 一行安裝指令走 HTTPS（GitHub raw / cdn.jsdelivr.net）/ install.ps1 對 WinSW SHA256 pinning（兩處 source code 同步）/ 不執行 user-supplied code（無 eval / pickle / exec on user data）/ 沒用任何 unsigned 第三方 binary |
-| **A09 Security Logging & Monitoring Failures** | 看不到攻擊 | audit_db (SQLite WAL + async writer queue) 記每個關鍵 event：login_success / login_fail / logout / password_change / password_change_fail / password_change_lockout / 2fa_enabled / 2fa_disabled / 2fa_success / 2fa_fail / 2fa_setup_fail / auditor_view / auditor_isolation_cleanup / role_update / user_create / user_delete / user_pwd_reset / user_2fa_reset / lockouts_clear_all / audit_seed_create / tool_invoke / file_upload / settings_change / log forwarding 失敗也寫 / 預設保留 90 天 / 可轉送 syslog / CEF / GELF 給 SIEM |
-| **A10 SSRF** | 偽造伺服器端請求 | **無任何 endpoint 接收 user-supplied URL 並向外發 request**：唯一外部呼叫是 admin-configured LDAP server（預設關閉）+ admin-configured LLM (Ollama，預設關閉)。CSP `connect-src 'self'` 阻 browser-driven SSRF；regression test `test_a10_no_user_controlled_outbound_urls` 掃 source 確認無新進 SSRF |
+| **A01:2025 Broken Access Control** | 未授權存取 | RBAC + `require_admin` / `require_login` / `require_tool` decorators / `upload_owner` ACL（`<temp>/.owners/<id>.json` sidecar）/ `safe_paths.safe_join()` 防 path traversal / 稽核員「硬牆」effective_tools 對 auditor 永遠回 `set()`（v1.5.0）/ admin 看不到 user 隱私 4 頁 |
+| **A02:2025 Security Misconfiguration** | 設定漏洞 | Security headers middleware：CSP / X-Content-Type-Options / X-Frame-Options / Referrer-Policy / Permissions-Policy / HSTS（HTTPS 才加）/ CSP `default-src 'self'` + `connect-src 'self'`（阻 SSRF-via-browser）+ `object-src 'none'` + `frame-ancestors 'self'` + `base-uri 'self'` + `form-action 'self'` / 預設 backend=off，啟用認證後 default-deny / 內建帳號 SEED 保護 / `jtdt update` snapshot auth_settings.json 防升級弄壞設定 |
+| **A03:2025 Software Supply Chain Failures** | 依賴 / 供應鏈 | 全部依賴在 `pyproject.toml` 明確版本範圍 / `uv.lock` 鎖死可重現安裝 / GitHub Dependabot 每週掃 CVE / install.ps1 對 WinSW.exe SHA256 pinning（兩處 source code 同步）/ 一行安裝指令走 HTTPS（GitHub raw + cdn.jsdelivr.net）/ install.sh / install.ps1 開頭 preflight 三個 host（github.com / cdn.jsdelivr.net / astral.sh）、不通 8 秒內 fail-fast |
+| **A04:2025 Cryptographic Failures** | 弱加密 / 明文密碼 | 密碼 stdlib `scrypt`（N=2^17, r=8, p=1, 32 byte salt）/ Session cookie `HttpOnly` + `SameSite=Lax` + `Secure`（HTTPS 自動）/ session token 存 sha256 hash，DB 外洩無法倒推 / `auth_settings.json`（含 LDAP service password）chmod 0o600 / TOTP secret 32-char base32（pyotp.random_base32） |
+| **A05:2025 Injection (含 XSS)** | SQL / 模板 / XSS 注入 | 全部 SQL 走 sqlite3 `?` 參數綁定（zero string concatenation with user input）/ Jinja2 預設 autoescape (FastAPI Jinja2Templates 預設開啟) / `escapeHtml()` 在動態 JS render 也跑一次 / 唯一兩處 f-string in execute 是組固定欄位的 WHERE 子句，user 值仍透過 `params` tuple 綁定 / regression test `test_a03_xss_in_login_username_escaped` |
+| **A06:2025 Insecure Design (含 SSRF)** | 設計缺陷 / SSRF | 職責分離（admin / auditor）/ 內建 SEED 帳號（jtdt-admin / jtdt-auditor）權限固定不可改 / 啟動時 `enforce_auditor_isolation` 自動修正 dirty DB / 三平台行為一致（Linux/macOS/Windows）/ **無任何 endpoint 接收 user-supplied URL 並向外發 request**（SSRF 防護）/ 唯一外部呼叫是 admin-configured LDAP server（預設關閉）+ admin-configured LLM (Ollama，預設關閉)/ regression test 掃 source 確認無新進 SSRF |
+| **A07:2025 Authentication Failures** | 認證薄弱 | 密碼 min 8 / max 256 chars 驗證 / 失敗 5 次自動鎖 15 分鐘（per-user + per-IP 雙計數）/ TOTP 2FA（RFC 6238，pyotp）/ 稽核員強制 2FA / admin 可設「強制 2FA」/ session 失效時間可設（預設 7 天，remember me 30 天）/ 改密碼 / TOTP 重置會撤銷所有現有 session / admin 可在 web UI 解鎖 user / 一鍵清除所有鎖定 |
+| **A08:2025 Software & Data Integrity Failures** | 程式 / 資料完整性 | install.ps1 對 WinSW SHA256 pinning / 不執行 user-supplied code（無 eval / pickle / exec on user data）/ 沒用任何 unsigned 第三方 binary / SQL migration 全部前進不破壞（v6 / v7 都是 ALTER TABLE ADD COLUMN with DEFAULT）/ audit log 結構不可從 web UI 刪除 |
+| **A09:2025 Logging & Alerting Failures** | 看不到攻擊 | audit_db (SQLite WAL + async writer queue) 記每個關鍵 event（login / logout / lockout / 密碼變更 / 2FA / auditor_view / role_update / user_create/delete/pwd_reset/2fa_reset / lockouts_clear_all / audit_seed_create / tool_invoke / file_upload / settings_change / log forwarding 失敗也寫）/ 預設保留 90 天 / 可轉送 syslog / CEF / GELF 給 SIEM（Splunk / Graylog / ArcSight） |
+| **A10:2025 Mishandling of Exceptional Conditions** | 例外處理不當 | 所有外部 I/O（subprocess / 網路 / 檔案）有 timeout 並 catch；錯誤訊息不洩漏 stack trace 給 user（只給友善中文訊息，stack trace 寫 server log）/ FastAPI exception handler 統一 wrap 4xx/5xx；audit log 失敗不阻塞 request（best-effort）/ jtdt update / install 任一步失敗自動 rollback + 還原 service / 缺 LibreOffice / Tesseract / 字型有友善提示，不會 crash |
 
 ## 自動化驗證
 

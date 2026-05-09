@@ -4,6 +4,31 @@
 
 ---
 
+## [1.5.1] - 2026-05-09
+
+### 修正
+
+- **Windows OxOffice / LibreOffice 轉檔全部卡 60s timeout**（[GitHub issue #5](https://github.com/jasoncheng7115/jt-doc-tools/issues/5)，客戶 Win11 / Server 2025 都踩到）
+  - 根因 1：`-env:UserInstallation` 的 `file://` URL 用字串 concat，Windows path 帶 backslash 會變成 `file://C:\Users\...\profile`（無效 URI）→ soffice fallback 到 LocalSystem 預設 profile → 在 service Session 0 卡住
+  - 根因 2：Windows Service (Session 0) 跑 soffice 沒給 `CREATE_NO_WINDOW` + `DETACHED_PROCESS` flag，soffice 嘗試 attach console 卡住
+  - 根因 3：LocalSystem service env 缺乾淨的 `TEMP` / `TMP` 變數
+  - 修法：新增 `_profile_uri()` helper 用 `Path.as_uri()` 產正確 URI（`file:///C:/Users/...`）；新增 `_build_soffice_cmd()` helper 統一 cross-platform args + Windows creationflags + 乾淨 env；`convert_to_pdf()` 與 `convert_to_text()` 兩個 entry point 都改用新 helper
+
+### 新增 — 資安強化
+
+- **CSP (Content-Security-Policy) header**：之前刻意沒設，現補上（`default-src 'self'` + `connect-src 'self'` 阻 SSRF-via-browser + `object-src 'none'` + `frame-ancestors 'self'` + `base-uri 'self'` + `form-action 'self'`）
+- **OWASP Top 10 (2025) 完整對照** + `tests/test_owasp_top10.py` 15 個 regression case（每次發版必跑）
+- **GitHub 平台層自動掃描**：
+  - `.github/dependabot.yml`：每週掃 Python deps + GitHub Actions 已知 CVE
+  - `.github/workflows/codeql.yml`：每次 push + PR + 週日跑 CodeQL SAST（Python + JavaScript，security-extended 規則組）
+  - 配合 repo Settings → Code security 開啟 secret scanning + push protection + private vulnerability reporting
+- 新 `SECURITY.md` 文件：說明資安政策、OWASP Top 10 (2025) 對照、漏洞回報管道
+
+### 文件
+
+- README 加目錄（內容已成長，導覽方便）
+- README + docs/index.html 完整解釋稽核員角色 + jtdt-admin / jtdt-auditor 內建帳號用法與分別
+
 ## [1.5.0] - 2026-05-07
 
 ### 重要行為變更 — admin 看不到 user 隱私資料的 4 頁（職責分離強化）
