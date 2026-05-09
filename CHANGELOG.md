@@ -4,6 +4,13 @@
 
 ---
 
+## [1.5.7] - 2026-05-09
+
+### 修正
+
+- **CodeQL workflow 失敗 (configuration error)** — v1.5.6 在 `codeql-config.yml` 用 `packs:` 引用 MaD pack `jasoncheng7115/jt-doc-tools-extensions`,但 codeql-action init 把 `packs:` 當 query pack 處理 → 嘗試從 GHCR 下載 → 找不到 → init 步驟 fail → 整個 CodeQL run 變紅。
+  - 修法：① 拿掉 `codeql-config.yml` 內的 `packs:` 引用,② 把 MaD pack 從 `.github/codeql/extensions/qlpack.yml` 搬到 `.github/codeql/extensions/jt-sanitizers/qlpack.yml`(GitHub Actions auto-discover convention)。
+
 ## [1.5.6] - 2026-05-09
 
 ### 資安
