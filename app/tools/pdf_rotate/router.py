@@ -69,7 +69,7 @@ _VALID_MODES = {"rotate-90", "rotate-180", "rotate-270", "flip-h", "flip-v"}
 
 @router.get("/thumb/{upload_id}/{page}")
 async def thumb(upload_id: str, page: int, request: Request, large: bool = False, mode: str = ""):
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner as _uo
     require_uuid_hex(upload_id, "upload_id")
     _uo.require(upload_id, request)

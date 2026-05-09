@@ -394,7 +394,7 @@ async def detect_objects(request: Request):
     y = float(body.get("y", 0))
     if not upload_id:
         raise HTTPException(400, "upload_id required")
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner as _uo
     require_uuid_hex(upload_id, "upload_id")
     _uo.require(upload_id, request)
@@ -735,7 +735,7 @@ async def replace_all_fonts(request: Request):
     font_id = str(body.get("font_id") or "pymupdf:default")
     if not upload_id:
         raise HTTPException(400, "upload_id required")
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner as _uo
     require_uuid_hex(upload_id, "upload_id")
     _uo.require(upload_id, request)
@@ -763,7 +763,7 @@ async def undo_replace_all_fonts(request: Request):
     upload_id = (body.get("upload_id") or "").strip()
     if not upload_id:
         raise HTTPException(400, "upload_id required")
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner as _uo
     require_uuid_hex(upload_id, "upload_id")
     _uo.require(upload_id, request)
@@ -804,7 +804,7 @@ async def upload_image(
     import uuid as _uuid
     if not upload_id:
         raise HTTPException(400, "upload_id required")
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner as _uo
     require_uuid_hex(upload_id, "upload_id")
     _uo.require(upload_id, request)
@@ -988,7 +988,7 @@ def _insert_mixed_text(page, x: float, y: float, text: str, *,
         if ok_font is None:
             # 所有 fallback 都炸 — 印 warning 讓 admin 知道（避免悄悄變空白）
             import logging as _lg
-            from ...core.log_safe import safe_log
+            from app.core.log_safe import safe_log
             _lg.getLogger(__name__).warning(
                 "insert_text all fallbacks failed for run %s (cjk=%s, tried=%s): %s",
                 safe_log(run[:20]), is_cjk, safe_log(fallbacks), safe_log(last_err))
@@ -1128,7 +1128,7 @@ async def load(request: Request, file: UploadFile = File(...)):
 @router.get("/preview/{filename}")
 async def preview(filename: str, request: Request):
     # Strict allowlist + path containment + per-upload ACL.
-    from ...core.safe_paths import safe_join, is_safe_name
+    from app.core.safe_paths import safe_join, is_safe_name
     from ...core import upload_owner
     if not (filename.startswith("pe_") and is_safe_name(filename)):
         raise HTTPException(400, "invalid filename")
@@ -1144,7 +1144,7 @@ async def preview(filename: str, request: Request):
 
 @router.get("/file/{upload_id}")
 async def original_file(upload_id: str, request: Request):
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner
     require_uuid_hex(upload_id, "upload_id")
     upload_owner.require(upload_id, request)
@@ -1177,7 +1177,7 @@ async def save(request: Request):
     upload_id = (body.get("upload_id") or "").strip()
     if not upload_id:
         raise HTTPException(400, "upload_id required")
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner as _uo
     require_uuid_hex(upload_id, "upload_id")
     _uo.require(upload_id, request)
@@ -1218,7 +1218,7 @@ async def save(request: Request):
                 # 不送上來，這裡是雙保險。
                 if obj.get("type") == "text" and not str(obj.get("text") or "").strip():
                     import logging as _lg
-                    from ...core.log_safe import safe_log
+                    from app.core.log_safe import safe_log
                     _lg.getLogger(__name__).warning(
                         "skipping redact for text obj with empty text "
                         "(original_bbox=%s) — would leave blank area", safe_log(orig))
@@ -1477,7 +1477,7 @@ async def save(request: Request):
                         continue
                     # 診斷：印出每個 text obj 的關鍵欄位 + page.rotation（v1.4.13 #6 偵錯用）
                     import logging as _lg
-                    from ...core.log_safe import safe_log
+                    from app.core.log_safe import safe_log
                     _lg.getLogger(__name__).info(
                         "pdf-editor insert text page=%d rect=%s text=%s "
                         "font_pref=%s font_size=%.1f color=%s has_orig_bbox=%s "
@@ -1656,7 +1656,7 @@ async def save(request: Request):
 
 @router.get("/download/{upload_id}")
 async def download(upload_id: str, request: Request):
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner
     require_uuid_hex(upload_id, "upload_id")
     upload_owner.require(upload_id, request)

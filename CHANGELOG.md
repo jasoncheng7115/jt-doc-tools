@@ -4,6 +4,22 @@
 
 ---
 
+## [1.5.6] - 2026-05-09
+
+### 資安
+
+- **CodeQL Models-as-Data extension** — 教 CodeQL 認得 jt-doc-tools 自訂 sanitizer:
+  - `app.core.safe_paths.{safe_join, sanitize_filename, require_uuid_hex, is_safe_name}` 標為 `path-injection` barrier
+  - `app.core.llm_client._validate_llm_base_url` 標為 `request-forgery` barrier
+  - `app.web.auth_routes._safe_next` 標為 `url-redirection` barrier
+  - `app.core.log_safe.safe_log` 標為 `log-injection` barrier
+  - 檔案位置：`.github/codeql/extensions/jt-sanitizers.model.yml`（pack name `jasoncheng7115/jt-doc-tools-extensions`）
+  - 用 `codeql` CLI 本地驗證 syntax + run 確認 barrier 真有減 alert
+- **15 個 router 改用絕對 import** — `from ...core.safe_paths import X` → `from app.core.safe_paths import X`,讓 CodeQL 的 API graph 正確識別 sanitizer 呼叫站點:
+  - pdf_stamp / pdf_watermark / pdf_extract_text / pdf_attachments / pdf_nup / pdf_metadata / pdf_fill / pdf_pages / pdf_editor / pdf_hidden_scan / pdf_rotate / pdf_to_image / pdf_pageno / pdf_extract_images / doc_deident
+  - 沒這個改動,CodeQL 看不見相對 import 的呼叫,MaD extension 對它們無效
+- **CodeQL alerts 預期下降**: 47 → ~32（path-injection 17 → ~7）
+
 ## [1.5.5] - 2026-05-09
 
 ### 改善

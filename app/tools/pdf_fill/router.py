@@ -433,7 +433,7 @@ async def llm_review_apply(request: Request):
         raise HTTPException(400, "upload_id required")
     if not corrections:
         raise HTTPException(400, "no corrections to apply")
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner as _uo
     require_uuid_hex(upload_id, "upload_id")
     _uo.require(upload_id, request)
@@ -549,7 +549,7 @@ async def regenerate(request: Request):
     overrides = body.get("placements") or []
     if not upload_id:
         raise HTTPException(400, "upload_id required")
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner as _uo
     require_uuid_hex(upload_id, "upload_id")
     _uo.require(upload_id, request)
@@ -609,7 +609,7 @@ async def save_template(request: Request):
     placements = body.get("placements") or []
     if not upload_id or not name:
         raise HTTPException(400, "upload_id and name required")
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner as _uo
     require_uuid_hex(upload_id, "upload_id")
     _uo.require(upload_id, request)
@@ -708,7 +708,7 @@ async def submit(
 
 @router.get("/preview/{name}")
 async def serve_preview(name: str, request: Request):
-    from ...core.safe_paths import safe_join
+    from app.core.safe_paths import safe_join
     from ...core import upload_owner
     p = safe_join(settings.temp_dir, name)
     # ACL — extract upload_id prefix, deny if not the owner (auth ON)
@@ -728,7 +728,7 @@ async def download_filled(upload_id: str, request: Request, name: str = "filled.
     filename (e.g. ``<orig>_filled.pdf``) so the user gets a meaningful
     file name instead of the generic ``filled.pdf``.
     """
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner
     require_uuid_hex(upload_id, "upload_id")
     upload_owner.require(upload_id, request)

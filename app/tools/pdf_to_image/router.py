@@ -128,7 +128,7 @@ async def convert(
 
 @router.get("/preview/{filename}")
 async def preview(filename: str, request: Request):
-    from ...core.safe_paths import safe_join, is_safe_name
+    from app.core.safe_paths import safe_join, is_safe_name
     from ...core import upload_owner
     if not (filename.startswith("p2i_") and is_safe_name(filename)):
         raise HTTPException(400, "invalid filename")
@@ -143,7 +143,7 @@ async def preview(filename: str, request: Request):
 
 @router.get("/download/{upload_id}")
 async def download(upload_id: str, request: Request):
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner
     require_uuid_hex(upload_id, "upload_id")
     upload_owner.require(upload_id, request)
