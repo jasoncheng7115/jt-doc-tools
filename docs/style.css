@@ -1065,14 +1065,41 @@ code {
 }
 .llm-card .llm-effect {
   margin-top: auto;
-  padding: 10px 12px;
-  background: #f0fdf4;
-  border-left: 3px solid #16a34a;
+  padding: 12px 14px;
+  background: #ecfdf5;
+  border-left: 4px solid #059669;
   border-radius: 4px;
-  font-size: 13px;
-  color: #15803d;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #064e3b;
+  font-weight: 500;
 }
-.llm-card .llm-effect b { color: #14532d; }
+.llm-card .llm-effect b {
+  color: #022c22;
+  font-weight: 700;
+}
+.llm-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.llm-card-icon {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef2ff;
+  color: #4338ca;
+  border-radius: 8px;
+  flex: 0 0 auto;
+}
+.llm-card-icon svg { width: 20px; height: 20px; }
+.llm-card-vision .llm-card-icon {
+  background: #fdf2f8;
+  color: #be185d;
+}
 .llm-tag {
   display: inline-block;
   padding: 3px 10px;

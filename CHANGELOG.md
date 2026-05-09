@@ -4,6 +4,14 @@
 
 ---
 
+## [1.5.11] - 2026-05-10
+
+### 介紹網站微調
+
+- **LLM 區「效果」綠底框** 對比加強：背景 #ecfdf5 / border #059669 / 文字 #064e3b（深綠 on 淺綠），原本 #15803d 在淺綠背景對比不足
+- **每張 LLM 卡片加 icon** — 8 個 Lucide-style SVG icon：翻譯、文字段、表單校驗、文件 deident、文字 deident、bar-chart、訊息泡泡、git-compare
+- text 卡片配 #eef2ff/#4338ca 藍紫色，vision 卡片配 #fdf2f8/#be185d 粉紅色
+
 ## [1.5.10] - 2026-05-10
 
 ### 文件 / 介紹網站
