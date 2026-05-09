@@ -1,6 +1,6 @@
 [project]
 name = "jt-doc-tools"
-version = "1.5.2"
+version = "1.5.3"
 description = "Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台"
 authors = [{ name = "Jason Cheng (Jason Tools)", email = "jason@jason.tools" }]
 requires-python = ">=3.10"
@@ -10,15 +10,18 @@ license = "Apache-2.0"
 # 鎖定版本以避免 uv sync 抓到不相容的最新版（例如 starlette 1.0
 # 改了 TemplateResponse 簽名）。要升版請先在 dev 端驗證再放寬。
 dependencies = [
-    "fastapi==0.115.0",
-    "uvicorn[standard]==0.32.0",
-    "starlette<0.42",
-    "python-multipart==0.0.12",
-    "jinja2==3.1.4",
+    "fastapi>=0.115.0,<0.120",
+    "uvicorn[standard]>=0.32.0,<0.40",
+    # starlette>=0.47.2 修 multipart/form-data DoS (GHSA-2c2j-9gv5-cj73);
+    # python-multipart>=0.0.18 修 arbitrary file write + DoS (GHSA-59g5-xgcq-4qw3 等);
+    # Pillow>=11.3.0 修 FITS GZIP decompression bomb + PSD OOB write
+    "starlette>=0.47.2,<0.50",
+    "python-multipart>=0.0.18,<0.1",
+    "jinja2>=3.1.4,<4",
     "pydantic>=2.9.0,<3",
     "pydantic-settings>=2.5.0,<3",
     "PyMuPDF>=1.26.0,<2",
-    "Pillow>=10.4.0,<12",
+    "Pillow>=11.3.0,<12",
     "pdfplumber>=0.11.0",
     "pyzipper>=0.3.6",
     "httpx>=0.27,<1",
@@ -53,3 +56,8 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["app*"]
 exclude = ["tests*", "temp*", "data*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]

@@ -84,7 +84,11 @@ async def load(request: Request, file: UploadFile = File(...)):
 
 
 @router.get("/thumb/{upload_id}/{page}")
-async def thumb(upload_id: str, page: int, large: bool = False):
+async def thumb(upload_id: str, page: int, request: Request, large: bool = False):
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
     src = settings.temp_dir / f"pgL_{upload_id}.pdf"
     if not src.exists():
         raise HTTPException(404, "upload not found (expired?)")
@@ -103,6 +107,10 @@ async def submit_from_upload(
     order: str = Form(...),       # comma-separated 1-based page numbers
     filename: str = Form(""),
 ):
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
     src = settings.temp_dir / f"pgL_{upload_id}.pdf"
     if not src.exists():
         raise HTTPException(404, "upload not found (expired?)")

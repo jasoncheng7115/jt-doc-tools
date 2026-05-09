@@ -4,6 +4,39 @@
 
 ---
 
+## [1.5.3] - 2026-05-09
+
+### 資安（重大）
+
+- **GitHub Dependabot 41 alerts 全清** — 5 個 unique CVE：
+  - `python-multipart>=0.0.18`：修任意檔案寫入 + 畸形 boundary DoS
+  - `Pillow>=11.3.0,<12`：修 FITS GZIP decompression bomb + PSD OOB write
+  - `starlette>=0.47.2,<0.50`：修 multipart/form-data DoS（GHSA-2c2j-9gv5-cj73）
+  - `fastapi>=0.115.0,<0.120`、`uvicorn>=0.32.0,<0.40`、`jinja2>=3.1.4,<4` 一併放寬上限
+- **GitHub CodeQL Critical：Partial SSRF** in `app/core/llm_client.py:_validate_llm_base_url`
+  - 新增 URL allowlist：只允許 http / https scheme，黑名單雲端 metadata host（AWS/GCP/Azure/Alibaba/OCI 169.254.169.254、metadata.google.internal 等）
+  - 私網 IP（10/8、172.16/12、192.168/16、127/8）仍允許 — 本機 / LAN Ollama 是常見部署
+  - admin 設定保存與測試連線兩個入口都驗證
+  - 補 27 個 regression test (`tests/test_llm_url_ssrf.py`)
+- **GitHub CodeQL High：Path Injection 12 個 endpoint 補 ACL**
+  - `pdf_pageno/thumb` + `preview-thumb`、`pdf_pages/thumb` + `submit-from-upload`、`pdf_rotate/thumb` + `finalize` + `finalize-png`、`pdf_extract_images/page-thumb` + `file/{batch_id}/{name}`、`pdf_attachments/stripped`、`image_to_pdf/thumb` + `full` + `delete`
+  - 全部加上 `safe_paths.require_uuid_hex(upload_id)` + `upload_owner.require(upload_id, request)` 雙層檢查
+  - 客戶啟用認證後不再有「拿到別人 upload_id 就能下載 / 看預覽 / 刪檔」的跨 user 漏洞
+- **新增 `tests/test_path_traversal_audit.py`** — AST 結構審計：每個 router endpoint 帶 user-input 參數且做檔案存取的，必須能追蹤到 `safe_join` / `sanitize_filename` / `require_uuid_hex` / `upload_owner.require` 之一；missing 即測試 fail，避免未來 endpoint 又漏 ACL
+- **`SECURITY.md` OWASP Top 10 (2025) 改為 H3 區塊 + bullet 列表** — 之前的單欄表格被 inline code 撐到斷行不好讀；現在 10 個分類各自獨立段落，「我們的對策」改稱「防護機制」（更正式）
+- **CodeQL 排程改為每週一台北時間 09:00**（cron `0 1 * * 1` UTC = 09:00 Asia/Taipei）— 與 dependabot 一致；之前 codeql.yml 是「每週日 UTC 19:00」、dependabot 是「每週一台北 09:00」格式不統一
+- **`.github/codeql/codeql-config.yml`** 新增 — 之後可加 sanitizer model pack 進一步減少 CodeQL false positive
+
+### 改善
+
+- **pdf-editor 頂端工具列** — 「已自動儲存」狀態文字之前在工具列下方獨立一行（flex 100%），現在改為 toolbar 末端的固定 chip：
+  - 預設 #f9fafb 灰底框，存檔成功變淺綠（`is-saved`）、錯誤變淺紅（`is-error`）
+  - 空狀態自動顯示「就緒」placeholder，不會空一塊
+- **pdf-editor 加頁碼指示器 + 跳頁輸入** — toolbar 「符合視窗」按鈕後新增 `頁碼 [N] / [總頁數]`：
+  - 滾動時自動偵測當前可視頁面（IntersectionObserver、root=canvasWrap），更新輸入框
+  - 輸入頁碼按 Enter 直接 `scrollIntoView` 跳到目標頁
+  - 與既有縮放、自動預覽、復原 / 重做按鈕並列，方便長 PDF 翻頁
+
 ## [1.5.2] - 2026-05-09
 
 ### 修正
@@ -1705,7 +1738,7 @@
 
 ### 修正（install.ps1 Win11 全套通了）
 
-驗證在 Win11 x64 一行 install 從 0 到健康檢查全綠：service running、`jtdt.cmd` 建好、`.venv/pyvenv.cfg` 存在、ldap3 2.9.1 可 import、healthz `{"ok":true}`。
+驗證在 Win11 x64 一行 install 從 0 到健康檢查全數綠燈：service running、`jtdt.cmd` 建好、`.venv/pyvenv.cfg` 存在、ldap3 2.9.1 可 import、healthz `{"ok":true}`。
 
 - **`$ErrorActionPreference = 'Continue'`**：原本 'Stop' 會把 nssm / git / uv 任何寫一行 stderr 當成 fatal error 結束 install.ps1。改 Continue 後仍以 `$LASTEXITCODE` 顯式判斷失敗，但 stderr 寫入不再致死。
 - **`uv sync --reinstall`**：之前如果 base managed Python 因為其他安裝有殘留 `__editable__.jt_doc_tools.pth`，新 venv 跑 `uv sync` 會 cache hit 認為「已裝過」只裝 jt-doc-tools 本身、其他 44 個依賴一個都不裝。`--reinstall` 強制全重裝。
@@ -2464,7 +2497,7 @@
   - 新增 `_m2_username_source_unique` migration（rebuild users 表，資料完整保留）。
   - 移除 `_sync_user` 裡誤導的「本機已有同名帳號」錯誤訊息（已不再會發生）。
   - 仍然保留 **同 backend 內 username 撞 DN** 的拒絕邏輯（避免身分覆蓋）。
-- 測試從 collision-fails 改為 coexist-succeeds，4 個 case 全綠。
+- 測試從 collision-fails 改為 coexist-succeeds，4 個 case 全數綠燈。
 
 ---
 

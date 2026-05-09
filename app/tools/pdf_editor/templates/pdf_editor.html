@@ -111,9 +111,35 @@
   flex: 0 0 auto;
 }
 .pe-status {
-  flex: 1 1 100%; color: #6b7280; font-size: 12px;
-  min-width: 0; padding: 2px 4px;
+  display: inline-flex; align-items: center; gap: 6px;
+  color: #475569; font-size: 12px;
+  padding: 4px 10px; border: 1px solid #e5e7eb; border-radius: 6px;
+  background: #f9fafb; white-space: nowrap;
+  min-width: 180px; flex: 1 1 0;
+  overflow: hidden; text-overflow: ellipsis;
+  transition: background-color 0.18s, color 0.18s, border-color 0.18s;
 }
+.pe-status:empty::before {
+  content: "就緒"; color: #94a3b8;
+}
+.pe-status.is-saved { color: #047857; border-color: #a7f3d0; background: #ecfdf5; }
+.pe-status.is-error { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
+.pe-page-ctl {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px; border: 1px solid #e5e7eb; border-radius: 6px;
+  background: #f9fafb; font-size: 12px; color: #475569;
+  white-space: nowrap;
+}
+.pe-page-ctl input[type="number"] {
+  width: 56px; padding: 2px 6px; font-size: 13px;
+  border: 1px solid #cbd5e1; border-radius: 4px; text-align: center;
+  -moz-appearance: textfield;
+}
+.pe-page-ctl input[type="number"]::-webkit-inner-spin-button,
+.pe-page-ctl input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+.pe-page-ctl .pe-page-total { color: #94a3b8; }
 .pe-zoom-ctl {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 8px; border: 1px solid #e5e7eb; border-radius: 6px;
@@ -284,6 +310,12 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px; height:13px;"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>
         符合視窗
       </button>
+    </div>
+    <div class="pe-page-ctl" title="輸入頁碼後按 Enter 直接跳到該頁">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px; height:13px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      頁碼
+      <input type="number" id="pePageInput" min="1" value="1" step="1">
+      <span class="pe-page-total">/ <span id="pePageTotal">—</span></span>
     </div>
     <span class="pe-status" id="peStatus"></span>
   </div>
@@ -484,7 +516,13 @@ async function doAutoSave() {
 }
 
 const $ = (id) => document.getElementById(id);
-function setStatus(msg) { $('peStatus').textContent = msg || ''; }
+function setStatus(msg, kind) {
+  const el = $('peStatus');
+  el.textContent = msg || '';
+  el.classList.remove('is-saved', 'is-error');
+  if (kind === 'saved') el.classList.add('is-saved');
+  else if (kind === 'error') el.classList.add('is-error');
+}
 
 // ============ Toolbar ============
 // 每個工具對應的游標，讓使用者一眼看出接下來的操作。
@@ -577,6 +615,7 @@ function buildCanvases() {
     const w_px = pg.width_pt * PT2PX, h_px = pg.height_pt * PT2PX;
     const pageDiv = document.createElement('div');
     pageDiv.className = 'pe-page';
+    pageDiv.dataset.pageIndex = String(pIdx + 1);
     pageDiv.style.width = w_px + 'px';
     pageDiv.style.height = h_px + 'px';
     const img = document.createElement('img');
@@ -596,6 +635,55 @@ function buildCanvases() {
     pageCanvases.push(fc);
   });
   applyZoom();
+  setupPageTracking();
+}
+
+// ============ Page indicator + jump-to-page ============
+let _pageInputDirty = false;
+function setupPageTracking() {
+  const total = pages.length;
+  const totalEl = $('pePageTotal'); if (totalEl) totalEl.textContent = String(total);
+  const inp = $('pePageInput');
+  if (inp) { inp.max = String(total); inp.value = '1'; }
+  const wrap = $('canvasWrap');
+  if (!wrap || !window.IntersectionObserver) return;
+  if (window._pePageObs) { try { window._pePageObs.disconnect(); } catch (_) {} }
+  const visibility = new Map();
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(en => {
+      const n = parseInt(en.target.dataset.pageIndex || '0', 10);
+      if (!n) return;
+      visibility.set(n, en.isIntersecting ? en.intersectionRatio : 0);
+    });
+    let best = 1, bestRatio = -1;
+    for (const [n, r] of visibility.entries()) {
+      if (r > bestRatio) { bestRatio = r; best = n; }
+    }
+    if (!_pageInputDirty && inp && document.activeElement !== inp) {
+      inp.value = String(best);
+    }
+  }, { root: wrap, threshold: [0, 0.25, 0.5, 0.75, 1] });
+  document.querySelectorAll('.pe-page').forEach(el => obs.observe(el));
+  window._pePageObs = obs;
+}
+function gotoPage(n) {
+  const total = pages.length;
+  if (!total) return;
+  const idx = Math.max(1, Math.min(total, n | 0));
+  const target = document.querySelector(`.pe-page[data-page-index="${idx}"]`);
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const inp = $('pePageInput'); if (inp) inp.value = String(idx);
+}
+{
+  const _pi = $('pePageInput');
+  if (_pi) {
+    _pi.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); _pageInputDirty = false; gotoPage(parseInt(_pi.value || '1', 10)); }
+    });
+    _pi.addEventListener('input', () => { _pageInputDirty = true; });
+    _pi.addEventListener('blur', () => { _pageInputDirty = false; });
+    _pi.addEventListener('change', () => { _pageInputDirty = false; gotoPage(parseInt(_pi.value || '1', 10)); });
+  }
 }
 
 function applyZoom() {
@@ -2117,7 +2205,7 @@ async function savePdf(isAuto, opts) {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify(model),
     });
-    if (!r.ok) { setStatus('儲存失敗：' + await r.text()); return; }
+    if (!r.ok) { setStatus('儲存失敗：' + await r.text(), 'error'); return; }
     const data = await r.json();
     pages = data.pages;
     document.querySelectorAll('.pe-page img.bg').forEach((img, i) => {
@@ -2180,8 +2268,8 @@ async function savePdf(isAuto, opts) {
     // Remember if we skipped the active object, so selection:cleared
     // can trigger a follow-up save to finally bake it in.
     needBakeOnDeselect = anySkipped;
-    setStatus(isAuto ? '已自動儲存。' : '已儲存。預覽已更新，點「下載 PDF」取回。');
-  } catch (e) { setStatus('儲存錯誤：' + e.message); }
+    setStatus(isAuto ? '已自動儲存。' : '已儲存。預覽已更新，點「下載 PDF」取回。', 'saved');
+  } catch (e) { setStatus('儲存錯誤：' + e.message, 'error'); }
   finally { if (!isAuto) hideLoading(); }
 }
 

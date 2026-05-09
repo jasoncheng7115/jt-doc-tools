@@ -157,7 +157,11 @@ async def strip_attachments(request: Request):
 
 
 @router.get("/stripped/{uid}")
-async def stripped(uid: str):
+async def stripped(uid: str, request: Request):
+    from ...core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(uid, "uid")
+    _uo.require(uid, request)
     out = settings.temp_dir / f"att_{uid}_stripped.pdf"
     if not out.exists():
         raise HTTPException(404)

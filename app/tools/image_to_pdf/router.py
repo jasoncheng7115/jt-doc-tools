@@ -161,8 +161,10 @@ async def upload(request: Request, file: UploadFile = File(...)):
 
 
 @router.get("/thumb/{fid}")
-async def thumb(fid: str):
+async def thumb(fid: str, request: Request):
+    from ...core import upload_owner as _uo
     fid = _validate_fid(fid)
+    _uo.require(fid, request)
     p = _thumb_path(fid)
     if not p.exists():
         raise HTTPException(404, "thumbnail not found")
@@ -171,8 +173,10 @@ async def thumb(fid: str):
 
 
 @router.get("/full/{fid}")
-async def full(fid: str):
+async def full(fid: str, request: Request):
+    from ...core import upload_owner as _uo
     fid = _validate_fid(fid)
+    _uo.require(fid, request)
     p = _full_path(fid)
     if not p.exists():
         raise HTTPException(404, "preview not found")
@@ -181,11 +185,13 @@ async def full(fid: str):
 
 
 @router.post("/delete/{fid}")
-async def delete_image(fid: str):
+async def delete_image(fid: str, request: Request):
     """Best-effort cleanup of one upload. Frontend calls this when a card is
     removed so disk doesn't fill up — but generate() doesn't depend on it
     (the generate request just lists which file_ids to include)."""
+    from ...core import upload_owner as _uo
     fid = _validate_fid(fid)
+    _uo.require(fid, request)
     for p in (_img_path(fid), _thumb_path(fid), _full_path(fid)):
         try:
             p.unlink(missing_ok=True)

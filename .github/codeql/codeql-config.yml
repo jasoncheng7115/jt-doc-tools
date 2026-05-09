@@ -1,0 +1,17 @@
+# CodeQL config — points at sanitiser model extensions in the same folder.
+#
+# Background: app/core/safe_paths.py exposes 4 helpers that neutralise
+# path-traversal taint, but CodeQL's stock library doesn't know about them.
+# Without modelling, every endpoint that does
+#   `safe_join(base, user_filename)` → file access
+# raises a `py/path-injection` "Uncontrolled data used in path expression"
+# alert (42 such alerts on initial scan, all false positives — the chain
+# is sanitised, just through helpers CodeQL hasn't been told about).
+#
+# Docs: https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-the-codeql-workflow-for-compiled-languages
+# MaD docs: https://codeql.github.com/docs/codeql-language-guides/customizing-library-models-for-python/
+
+name: jt-doc-tools CodeQL config
+
+queries:
+  - uses: security-extended
