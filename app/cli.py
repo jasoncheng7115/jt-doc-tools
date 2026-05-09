@@ -1738,7 +1738,7 @@ def svc_audit_user_create(username: str, password: Optional[str] = None,
     """Create a new local user with the `auditor` role + force TOTP 2FA.
 
     Auditor 角色用途：唯讀存取稽核紀錄與檔案歷史，不能用工具、不能改設定。
-    符合 mail archive 風格的職責分離 — 確保「看記錄的人」與「管系統的人」
+    符合郵件歸檔（mail archive）風格的職責分離 — 確保「看記錄的人」與「管系統的人」
     分開，admin 也看得到記錄但無法停用稽核員的 2FA 強制。
 
     Steps:

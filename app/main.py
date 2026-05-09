@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.5.0"
+VERSION = "1.5.1"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -492,25 +492,46 @@ def _looks_like_xhr(request: Request) -> bool:
 async def _security_headers(request: Request, call_next):
     """Add baseline browser-side defence headers on every response.
 
+    OWASP A05 (Security Misconfiguration) coverage:
     - X-Content-Type-Options: nosniff — stops MIME sniffing letting
-      uploaded SVG/HTML execute as the wrong type.
-    - X-Frame-Options: SAMEORIGIN — clickjacking defence (modern equivalent
-      is CSP frame-ancestors but XFO covers older browsers).
+      uploaded SVG/HTML execute as the wrong type
+    - X-Frame-Options: SAMEORIGIN — clickjacking defence (older browsers)
+    - Content-Security-Policy: see CSP_DIRECTIVES below
     - Referrer-Policy: strict-origin-when-cross-origin — don't leak full
-      URLs (which contain upload_id UUIDs) to external sites.
+      URLs (which contain upload_id UUIDs) to external sites
     - Permissions-Policy: deny features we don't use; reduces fingerprinting
-      and stops a XSS from accessing camera/mic/geolocation.
+      and stops a XSS from accessing camera/mic/geolocation
     - Strict-Transport-Security: only when request comes via HTTPS so we
-      don't lock plain-HTTP intranet installs out for a year.
-
-    CSP intentionally NOT set — the editor uses inline `<style>` and
-    inline event handlers in dynamically-built UI; a tight CSP would
-    break Fabric.js / template render. Revisit when we externalise
-    inline scripts."""
+      don't lock plain-HTTP intranet installs out for a year
+    """
     response = await call_next(request)
     h = response.headers
     h.setdefault("X-Content-Type-Options", "nosniff")
     h.setdefault("X-Frame-Options", "SAMEORIGIN")
+    # CSP — permissive enough to allow inline <style> / event handlers
+    # used by templates + the one external CDN (Fabric.js for pdf-editor),
+    # tight enough to block exfil to attacker hosts (XSS data exfil) and
+    # plugin objects.
+    h.setdefault("Content-Security-Policy", (
+        "default-src 'self'; "
+        # inline 'unsafe-inline' needed for templates' <style> + event handlers;
+        # jsDelivr allowed for Fabric.js (pdf-editor) only.
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline'; "
+        # data: for QR PNGs (TOTP setup) + base64 thumbs; blob: for PDF.js
+        "img-src 'self' data: blob:; "
+        "font-src 'self' data:; "
+        # XHR/fetch only to self → blocks browser-driven SSRF / data exfil
+        "connect-src 'self'; "
+        # blocks plugins (Flash / PDF readers as objects)
+        "object-src 'none'; "
+        # clickjacking defence (modern equivalent of X-Frame-Options)
+        "frame-ancestors 'self'; "
+        # blocks <base href="evil"> injection
+        "base-uri 'self'; "
+        # forms only post to self
+        "form-action 'self'"
+    ))
     h.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     h.setdefault("Permissions-Policy",
                  "camera=(), microphone=(), geolocation=(), interest-cohort=()")

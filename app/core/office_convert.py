@@ -69,6 +69,57 @@ def detect_engine() -> str:
 _soffice_lock = threading.Lock()
 
 
+def _build_soffice_cmd(soffice: str, args: list[str]) -> tuple[list, dict]:
+    """Build subprocess.Popen kwargs for cross-platform soffice invocation.
+
+    Returns (argv, popen_kwargs). popen_kwargs may include `creationflags`
+    (Windows) or wrap the cmd with osascript (macOS).
+    """
+    import sys as _sys
+    import os as _os
+    import shlex as _shlex
+    kwargs: dict = {}
+    if _sys.platform == "darwin":
+        # macOS: 直接 fork+exec soffice 會 SIGABRT (拿不到 WindowServer)，
+        # `open -W -a` 又會被當 GUI app 啟動而忽略 --headless。改用 osascript
+        # 的 `do shell script` — 它在 user 的 Aqua context 跑，spawn 出來的
+        # shell 子行程能繼承 GUI session 連線。
+        quoted = " ".join(_shlex.quote(x) for x in [soffice] + args)
+        escaped = quoted.replace("\\", "\\\\").replace('"', '\\"')
+        return ["osascript", "-e", f'do shell script "{escaped}"'], kwargs
+    if _sys.platform.startswith("win"):
+        # Windows: 在 Service (Session 0) 跑時，soffice 預設會嘗試 attach console
+        # → 卡住。CREATE_NO_WINDOW 強制 detached console。
+        # 另外一些 LocalSystem service env 缺 TEMP/TMP → 給乾淨的 env 帶 .venv
+        # 的 PATH 與我們可寫的 TEMP，避免 soffice 跑去寫系統路徑被擋。
+        kwargs["creationflags"] = (
+            getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+            | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+        )
+        # 繼承 env 但確保 TEMP 是 writable（service-isolated session 的
+        # %TEMP% 預設是 C:\Windows\Temp，理論上 writable，但保險起見明確設）
+        env = dict(_os.environ)
+        env.setdefault("TEMP", env.get("TMP") or _os.environ.get("TEMP", ""))
+        env.setdefault("TMP", env["TEMP"])
+        kwargs["env"] = env
+    return [soffice] + args, kwargs
+
+
+def _profile_uri(profile_path: Path) -> str:
+    """Build a valid `file://` URI for the soffice -env:UserInstallation arg.
+
+    Bug fix (issue #5, v1.5.1): on Windows we used to build
+    `file://C:\\Users\\...\\profile` by string concat. That's a malformed URI
+    (Windows file URIs need three slashes + forward slashes:
+    `file:///C:/Users/.../profile`). soffice silently fell back to the
+    LocalSystem default profile → first-time setup hung in Session 0
+    → all conversions timeout at 60s.
+
+    Path.as_uri() does the right thing on all platforms.
+    """
+    return profile_path.resolve().as_uri()
+
+
 def convert_to_pdf(src: Path, dst_pdf: Path, timeout: float = 60.0) -> None:
     """Run soffice headless to convert ``src`` into ``dst_pdf``.
 
@@ -97,9 +148,8 @@ def convert_to_pdf(src: Path, dst_pdf: Path, timeout: float = 60.0) -> None:
         # the headless run forever. Throwing the profile away each call avoids the
         # entire problem (cost is ~200ms first-run init, acceptable).
         profile_path = Path(td) / "profile"
-        user_install = "file://" + str(profile_path.resolve())
         soffice_args = [
-            f"-env:UserInstallation={user_install}",
+            f"-env:UserInstallation={_profile_uri(profile_path)}",
             "--safe-mode",       # skip user customisations + recovery prompt
             "--headless",
             "--norestore",
@@ -111,25 +161,16 @@ def convert_to_pdf(src: Path, dst_pdf: Path, timeout: float = 60.0) -> None:
             "--outdir", td,
             str(src),
         ]
-        # macOS: 直接 fork+exec soffice 會 SIGABRT (拿不到 WindowServer)，
-        # `open -W -a` 又會被當 GUI app 啟動而忽略 --headless。改用 osascript
-        # 的 `do shell script` — 它在 user 的 Aqua context 跑，spawn 出來的
-        # shell 子行程能繼承 GUI session 連線。
-        import sys as _sys
-        import shlex as _shlex
-        if _sys.platform == "darwin":
-            quoted = " ".join(_shlex.quote(x) for x in [soffice] + soffice_args)
-            # Escape for AppleScript double-quoted string literal
-            escaped = quoted.replace("\\", "\\\\").replace('"', '\\"')
-            cmd = ["osascript", "-e", f'do shell script "{escaped}"']
-        else:
-            cmd = [soffice] + soffice_args
+        cmd, popen_kwargs = _build_soffice_cmd(soffice, soffice_args)
         # Serialise: at most one soffice at a time. Even though each call now
         # has its own profile, two concurrent osascript→soffice on macOS still
         # race on the WindowServer/Aqua bootstrap. Cheap to lock; ~no overhead
         # in the common single-user case.
         with _soffice_lock:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                **popen_kwargs,
+            )
             try:
                 stdout, stderr = proc.communicate(timeout=timeout)
             except subprocess.TimeoutExpired:
@@ -175,9 +216,8 @@ def convert_to_text(src: Path, timeout: float = 60.0) -> str:
         )
     with tempfile.TemporaryDirectory() as td:
         profile_path = Path(td) / "profile"
-        user_install = "file://" + str(profile_path.resolve())
         soffice_args = [
-            f"-env:UserInstallation={user_install}",
+            f"-env:UserInstallation={_profile_uri(profile_path)}",
             "--safe-mode",
             "--headless",
             "--norestore",
@@ -189,16 +229,12 @@ def convert_to_text(src: Path, timeout: float = 60.0) -> str:
             "--outdir", td,
             str(src),
         ]
-        import sys as _sys
-        import shlex as _shlex
-        if _sys.platform == "darwin":
-            quoted = " ".join(_shlex.quote(x) for x in [soffice] + soffice_args)
-            escaped = quoted.replace("\\", "\\\\").replace('"', '\\"')
-            cmd = ["osascript", "-e", f'do shell script "{escaped}"']
-        else:
-            cmd = [soffice] + soffice_args
+        cmd, popen_kwargs = _build_soffice_cmd(soffice, soffice_args)
         with _soffice_lock:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                **popen_kwargs,
+            )
             try:
                 stdout, stderr = proc.communicate(timeout=timeout)
             except subprocess.TimeoutExpired:
