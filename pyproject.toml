@@ -1,6 +1,6 @@
 [project]
 name = "jt-doc-tools"
-version = "1.5.3"
+version = "1.5.4"
 description = "Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台"
 authors = [{ name = "Jason Cheng (Jason Tools)", email = "jason@jason.tools" }]
 requires-python = ">=3.10"
@@ -10,18 +10,23 @@ license = "Apache-2.0"
 # 鎖定版本以避免 uv sync 抓到不相容的最新版（例如 starlette 1.0
 # 改了 TemplateResponse 簽名）。要升版請先在 dev 端驗證再放寬。
 dependencies = [
-    "fastapi>=0.115.0,<0.120",
+    # fastapi 0.124+ 才放寬 starlette 至 0.49+,我們需要 starlette>=0.49.3
+    # 修 Range DoS,所以 fastapi 也要一併往上推
+    "fastapi>=0.124.0,<0.140",
     "uvicorn[standard]>=0.32.0,<0.40",
-    # starlette>=0.47.2 修 multipart/form-data DoS (GHSA-2c2j-9gv5-cj73);
-    # python-multipart>=0.0.18 修 arbitrary file write + DoS (GHSA-59g5-xgcq-4qw3 等);
-    # Pillow>=11.3.0 修 FITS GZIP decompression bomb + PSD OOB write
-    "starlette>=0.47.2,<0.50",
+    # CVE 補丁底線（v1.5.4 加嚴）：
+    # - starlette>=0.49.3：Range header O(n²) DoS in FileResponse
+    # - python-multipart>=0.0.18：arbitrary file write + DoS
+    # - jinja2>=3.1.6：3 個 sandbox breakout (filename / format / attr filter)
+    # - Pillow>=12.2.0：FITS GZIP bomb / PSD OOB / PSD Tile Integer Overflow /
+    #   PDF Trailer InfLoop / Font Integer Overflow / Nested coords heap overflow
+    "starlette>=0.49.3,<0.53",
     "python-multipart>=0.0.18,<0.1",
-    "jinja2>=3.1.4,<4",
+    "jinja2>=3.1.6,<4",
     "pydantic>=2.9.0,<3",
     "pydantic-settings>=2.5.0,<3",
     "PyMuPDF>=1.26.0,<2",
-    "Pillow>=11.3.0,<12",
+    "Pillow>=12.2.0,<13",
     "pdfplumber>=0.11.0",
     "pyzipper>=0.3.6",
     "httpx>=0.27,<1",

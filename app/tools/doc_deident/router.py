@@ -297,10 +297,11 @@ async def detect(
                                         }
                                         all_findings.append(f)
                                         llm_added += 1
-        except Exception as exc:
+        except Exception:
+            # v1.5.4 CodeQL py/stack-trace-exposure: 不漏 exception 訊息給 user
             import logging as _lg
-            _lg.getLogger(__name__).warning("LLM augment failed: %s", exc)
-            llm_warning = f"LLM 補偵測失敗：{exc}"
+            _lg.getLogger(__name__).exception("LLM augment failed")
+            llm_warning = "LLM 補偵測失敗,僅顯示 regex 結果"
 
     by_type: dict[str, int] = {}
     for f in all_findings:

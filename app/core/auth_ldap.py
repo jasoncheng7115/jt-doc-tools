@@ -236,7 +236,8 @@ def authenticate(username: str, password: str, *, ip: str = "") -> dict:
                            details={"reason": "ldap_user_not_found"})
         raise AuthError("帳號或密碼錯誤")
     if len(entries) > 1:
-        logger.warning("LDAP returned multiple users for %r — refusing", username)
+        from .log_safe import safe_log
+        logger.warning("LDAP returned multiple users for %s — refusing", safe_log(username))
         raise AuthError("LDAP 設定錯誤：搜尋到多筆同名使用者")
 
     entry = entries[0]

@@ -636,6 +636,9 @@ def build_router(templates) -> APIRouter:
             try:
                 _validate_llm_base_url(bu)
             except ValueError as exc:
+                # v1.5.4 CodeQL FP: exc 是我們自己 _validate_llm_base_url 丟的
+                # ValueError,訊息是「scheme must be http or https」這類控制字串,
+                # 沒有 stack trace。codeql[py/stack-trace-exposure]
                 return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
         return llm_settings.update(body)
 
@@ -654,7 +657,8 @@ def build_router(templates) -> APIRouter:
         try:
             client = LLMClient(base_url=base_url, api_key=api_key, timeout=min(timeout, 30))
         except ValueError as exc:
-            return {"ok": False, "error": str(exc)}
+            # v1.5.4 CodeQL FP: 同上,我們自己控制的 ValueError 訊息,no stack trace
+            return {"ok": False, "error": str(exc)}  # codeql[py/stack-trace-exposure]
         result = client.test_connection()
         return {
             "ok": result.ok,

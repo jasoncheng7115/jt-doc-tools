@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.5.3"
+VERSION = "1.5.4"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -868,9 +868,11 @@ async def api_llm_review(
 
     try:
         return await _asyncio.to_thread(_run)
-    except Exception as e:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
+        # v1.5.4 CodeQL py/stack-trace-exposure: 不漏 stack trace 給 user
+        logger.exception("LLM review job failed")
         return JSONResponse(
-            {"error": f"{type(e).__name__}: {e}"}, status_code=500)
+            {"error": "LLM 處理失敗,請查看 server log"}, status_code=500)
     finally:
         for fp in (src, dst):
             try: fp.unlink()

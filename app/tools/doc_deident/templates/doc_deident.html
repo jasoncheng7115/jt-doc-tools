@@ -389,8 +389,16 @@ document.getElementById('ddPreviewGrid').addEventListener('click', (e) => {
   const full = img.dataset.full || img.src;
   const lb = document.createElement('div');
   lb.className = 'dd-lightbox';
-  lb.innerHTML = `<button class="dd-lightbox-close" type="button">×</button>
-                  <img src="${full}" alt="" />`;
+  // v1.5.4: 改 createElement 防 XSS（CodeQL js/xss-through-dom）
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'dd-lightbox-close';
+  closeBtn.type = 'button';
+  closeBtn.textContent = '×';
+  const lbImg = document.createElement('img');
+  lbImg.src = full;
+  lbImg.alt = '';
+  lb.appendChild(closeBtn);
+  lb.appendChild(lbImg);
   lb.addEventListener('click', () => lb.remove());
   document.addEventListener('keydown', function esc(ev){
     if (ev.key === 'Escape') { lb.remove(); document.removeEventListener('keydown', esc); }

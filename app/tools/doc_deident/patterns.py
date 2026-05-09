@@ -307,8 +307,13 @@ RE_HOSTNAME = re.compile(
 RE_MAC = re.compile(r"\b(?:[0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}\b")
 
 # AD / LDAP DN — 含 CN= / OU= / DC= 任意組合
+# v1.5.4 防 ReDoS（GHSA-via CodeQL #13）：①去掉重複的 UID 字面，②單字母
+# alternative 收進 char class（少一輪 alternation backtrack），③長度上限
+# 收緊（[^,\s]+ → [^,\s]{1,128}，每段 RDN value 最多 128 char）+ 重複次數
+# 收緊（{1,} → {1,30}，真實 DN 一般 ≤ 10 個 RDN）；攻擊 string 不會引發指數爆炸
 RE_AD_DN = re.compile(
-    r"\b(?:CN|OU|DC|UID|O|L|ST|C|UID|E)=[^,\s]+(?:,\s*(?:CN|OU|DC|UID|O|L|ST|C|UID|E)=[^,\s]+){1,}\b",
+    r"\b(?:UID|CN|OU|DC|ST|[OLCE])=[^,\s]{1,128}"
+    r"(?:,\s*(?:UID|CN|OU|DC|ST|[OLCE])=[^,\s]{1,128}){1,30}\b",
     re.IGNORECASE,
 )
 

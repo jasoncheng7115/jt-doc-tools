@@ -42,7 +42,7 @@
       this.$guideV = this.root.querySelector('.dpe-guide.v');
       this.$guideH = this.root.querySelector('.dpe-guide.h');
 
-      this.$assetImg.src = this.asset_url;
+      this.$assetImg.src = (window.safeImgSrc ? window.safeImgSrc(this.asset_url) : this.asset_url);
       this.$lock.checked = this.lockAspect;
       this._setPaperSelect();
 

@@ -422,9 +422,10 @@ async def llm_reflow(request: Request):
             yield _sse({"type": "done", "preview_md": md[:5000],
                         "ok": 0, "skipped": 0, "total": 0})
             return
+        from ...core.log_safe import safe_log
         logger.info(
             "LLM reflow start: batch=%s model=%s total=%d",
-            batch_id, model_name, total,
+            safe_log(batch_id), safe_log(model_name), total,
         )
         for done, (pi, bi) in enumerate(worklist, start=1):
             b = doc["pages"][pi]["blocks"][bi]
