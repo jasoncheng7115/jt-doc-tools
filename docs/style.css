@@ -1041,6 +1041,7 @@ code {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 18px;
   margin: 40px 0 32px;
+  align-items: stretch;     /* 同一列卡片強制等高 */
 }
 .llm-card {
   position: relative;
@@ -1056,12 +1057,14 @@ code {
   margin: 14px 0 10px;
   font-size: 17px;
   color: #1e293b;
+  min-height: 1.4em;        /* 標題行數一致 */
 }
 .llm-card p {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   font-size: 14px;
   line-height: 1.65;
   color: #475569;
+  min-height: 4.95em;        /* ~3 行,讓描述區塊高度視覺一致 */
 }
 .llm-card .llm-effect {
   margin-top: auto;
@@ -1073,6 +1076,9 @@ code {
   line-height: 1.6;
   color: #064e3b;
   font-weight: 500;
+  min-height: 3.2em;          /* 留 2 行高度,保證所有卡片底部對齊 */
+  display: flex;
+  align-items: center;
 }
 .llm-card .llm-effect b {
   color: #022c22;
