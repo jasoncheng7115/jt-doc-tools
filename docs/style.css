@@ -1079,38 +1079,38 @@ code {
   font-weight: 700;
 }
 .llm-card-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 .llm-card-icon {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: #eef2ff;
   color: #4338ca;
-  border-radius: 8px;
-  flex: 0 0 auto;
+  border-radius: 10px;
 }
-.llm-card-icon svg { width: 20px; height: 20px; }
+.llm-card-icon svg { width: 22px; height: 22px; }
 .llm-card-vision .llm-card-icon {
   background: #fdf2f8;
   color: #be185d;
 }
+/* TEXT / VISION tag 浮在卡片右上角,與 icon 視覺分離 */
+.llm-card { position: relative; }
 .llm-tag {
+  position: absolute;
+  top: 16px;
+  right: 16px;
   display: inline-block;
   padding: 3px 10px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   background: #dbeafe;
   color: #1e40af;
   border-radius: 999px;
-  align-self: flex-start;
 }
 .llm-card-vision .llm-tag {
   background: #fce7f3;
