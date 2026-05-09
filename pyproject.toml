@@ -10,7 +10,7 @@ license = "Apache-2.0"
 # 鎖定版本以避免 uv sync 抓到不相容的最新版（例如 starlette 1.0
 # 改了 TemplateResponse 簽名）。要升版請先在 dev 端驗證再放寬。
 dependencies = [
-    "fastapi==0.115.0",
+    "fastapi==0.136.1",
     "uvicorn[standard]==0.32.0",
     "starlette<0.42",
     "python-multipart==0.0.12",
