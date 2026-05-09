@@ -30,6 +30,7 @@
     <nav class="topnav">
       <a href="#why">為什麼自架</a>
       <a href="#features">功能</a>
+      <a href="#llm">AI 加值</a>
       <a href="#screenshots">畫面</a>
       <a href="#enterprise">企業管理</a>
       <a href="#disclaimer">免責</a>
@@ -304,6 +305,91 @@
           </li>
         </ul>
       </article>
+    </div>
+  </div>
+</section>
+
+<!-- ======== LLM AI 加值 ======== -->
+<section id="llm" class="section section-light">
+  <div class="container">
+    <div class="section-eyebrow">AI 加值（選用）</div>
+    <h2 class="section-title">8 個工具支援 LLM AI，效率與品質再升一級</h2>
+    <p class="section-lede">
+      接你自己的 LLM（本機 Ollama / vLLM / LM Studio / DGX Spark 都可），
+      即可在這 8 個工具開啟智慧選項。<b>核心工具完全不依賴 LLM</b>，沒設定也照樣 100% 可用。
+    </p>
+
+    <div class="llm-grid">
+
+      <article class="llm-card">
+        <div class="llm-tag">text</div>
+        <h3>逐句翻譯</h3>
+        <p>翻譯時保留段落 / 標題 / 清單結構，可提示專業領域用詞（法律 / 醫療）。</p>
+        <p class="llm-effect"><b>效果</b>：50 頁合約翻譯，半天 → 10 分鐘</p>
+      </article>
+
+      <article class="llm-card">
+        <div class="llm-tag">text</div>
+        <h3>擷取文字（段落重排）</h3>
+        <p>把 PDF 雙欄、表格、頁眉頁腳被切散的句子重新接回完整段落。</p>
+        <p class="llm-effect"><b>效果</b>：30 頁論文做摘錄，30 分鐘 → 3 分鐘</p>
+      </article>
+
+      <article class="llm-card llm-card-vision">
+        <div class="llm-tag">vision</div>
+        <h3>表單自動填寫（校驗）</h3>
+        <p>填完後 LLM 看渲染後的 PNG，偵測欄位錯位 / 截斷 / checkbox 沒勾對。</p>
+        <p class="llm-effect"><b>效果</b>：批次填 50 份廠商表，人工逐張檢查 → 只看 LLM flag 那幾張</p>
+      </article>
+
+      <article class="llm-card">
+        <div class="llm-tag">text</div>
+        <h3>文件去識別化（補偵測）</h3>
+        <p>regex 抓固定格式，LLM 補抓「客戶代號 A-2024-0815」「主管 王經理」這類 context-sensitive 案例。</p>
+        <p class="llm-effect"><b>效果</b>：法務 / 合規清舊合約批次，從一份份標 → 跑完只看 review 報告</p>
+      </article>
+
+      <article class="llm-card">
+        <div class="llm-tag">text</div>
+        <h3>文字去識別化（補偵測）</h3>
+        <p>同上但接受純文字輸入：客服 ticket、Slack 對話備份、log 含使用者識別碼等。</p>
+        <p class="llm-effect"><b>效果</b>：處理「沒結構但有 context」的文字，regex 完全抓不到的可以靠 LLM 補</p>
+      </article>
+
+      <article class="llm-card">
+        <div class="llm-tag">text</div>
+        <h3>字數統計（摘要 / 關鍵字）</h3>
+        <p>計完字數後額外生成 3-5 句摘要 + TOP 10 關鍵概念。</p>
+        <p class="llm-effect"><b>效果</b>：拿到 80 頁報告，30 秒讀完摘要就抓住主軸</p>
+      </article>
+
+      <article class="llm-card">
+        <div class="llm-tag">text</div>
+        <h3>註解整理（自動分組）</h3>
+        <p>多筆審閱意見自動分「<b>重大</b> / 一般 / 提問」三類。</p>
+        <p class="llm-effect"><b>效果</b>：30 條註解的合約，排序時間 15 分鐘 → 30 秒，只看重大那幾條</p>
+      </article>
+
+      <article class="llm-card">
+        <div class="llm-tag">text</div>
+        <h3>文件差異比對（變動摘要）</h3>
+        <p>行 diff 之外多給「<b>主要修改了哪幾條條款 / 段落</b>」自然語言摘要。</p>
+        <p class="llm-effect"><b>效果</b>：100 行 diff 從一行行讀 → 直接看 LLM 出的 3-5 條重點</p>
+      </article>
+
+    </div>
+
+    <div class="llm-deploy">
+      <h3 class="llm-deploy-title">部署選項</h3>
+      <ul class="llm-deploy-list">
+        <li><b>本機 Ollama</b> · 個人 / 小團隊試用，消費級 GPU 可跑 qwen3:8b、gemma3:4b</li>
+        <li><b>DGX Spark / 工作站</b> · 公司內部單一 LLM 伺服器，跑 qwen3-vl:8b（視覺）/ gemma3:27b（高品質文字）</li>
+        <li><b>vLLM / LM Studio / jan.ai</b> · 任何 OpenAI-compatible 後端</li>
+      </ul>
+      <p class="llm-deploy-note">
+        預設關閉。<code>/admin/llm-settings</code> 啟用後內建 SSRF 防護（URL allowlist + 雲端 metadata host blocklist），內網 LAN IP 允許但雲端 metadata IP 會被拒。詳見
+        <a href="https://github.com/jasoncheng7115/jt-doc-tools/blob/main/LLM.md">LLM.md</a>。
+      </p>
     </div>
   </div>
 </section>

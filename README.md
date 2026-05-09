@@ -1,4 +1,4 @@
-# Jason Tools 文件工具箱 v1.5.9
+# Jason Tools 文件工具箱 v1.5.10
 
 > 整合式 PDF / Office 文件處理平台,30 個工具一站式解決:**填單用印**、**浮水印**、**多頁合併 / 拆分 / 旋轉 / 整理**、**轉檔**、**去識別化**、**字數統計**、**註解整理**、**差異比對**、**逐句翻譯**、**頁面編輯器**、**加密 / 解密**...
 >
@@ -70,6 +70,25 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 
 ---
 
+## LLM AI 加值（選用，預設關閉）
+
+接 OpenAI-compatible 後端（本機 Ollama / vLLM / LM Studio / DGX Spark）後，**8 個工具**自動多出聰明選項：
+
+| 工具 | LLM 做什麼 | 模式 |
+|---|---|---|
+| 逐句翻譯 | 翻譯時保留排版 + 領域專業用詞 | text |
+| 擷取文字 | 把 PDF 雙欄切斷的句子重新接回 | text |
+| 表單自動填寫 | 填完後 LLM 看 PNG 校驗欄位錯位 / 截斷 | **vision** |
+| 文件去識別化 | regex 抓不到的客戶代號 / 主管姓名 / 內部編號 | text |
+| 文字去識別化 | 同上,純文字輸入版 | text |
+| 字數統計 | 額外生成 3-5 句摘要 + TOP 10 關鍵字 | text |
+| 註解整理 | 多筆審閱意見自動分「重大 / 一般 / 提問」 | text |
+| 文件差異比對 | 行 diff 之外多給「主要修改了哪幾條條款」自然語言摘要 | text |
+
+**核心工具完全不依賴 LLM**;沒設定就跟以前一樣全部能用。詳見 **[LLM.md](LLM.md)**。
+
+---
+
 ## 文件導覽
 
 | 文件 | 內容 |
@@ -78,6 +97,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 | **[OPS.md](OPS.md)** | 日常運維:`jtdt` 指令、升級、反向代理(nginx/Caddy)、監聽位置、備份還原、排程清理 |
 | **[AUTH.md](AUTH.md)** | 認證 / RBAC / 內建帳號(jtdt-admin / jtdt-auditor)/ 2FA / 帳號鎖定 / 緊急復原 |
 | **[API.md](API.md)** | REST API:Bearer token、endpoint 一覽、上傳格式、回傳格式、錯誤碼、curl / Python 範例、Job 流程 |
+| **[LLM.md](LLM.md)** | LLM AI 加值功能(預設關閉):8 個工具如何用 LLM、效果範例、部署選項(Ollama / vLLM / DGX Spark) |
 | **[SECURITY.md](SECURITY.md)** | 資安政策、OWASP Top 10 (2025) 對照、漏洞回報管道、GitHub native scan 整合 |
 | **[CHANGELOG.md](CHANGELOG.md)** | 完整更新記錄 |
 | **[TEST_PLAN.md](TEST_PLAN.md)** | 測試清單、發版前檢查 |

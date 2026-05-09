@@ -1034,3 +1034,95 @@ code {
   font-size: 13px;
   color: #64748b;
 }
+
+/* ====== LLM AI section ====== */
+.llm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  margin: 40px 0 32px;
+}
+.llm-card {
+  position: relative;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px 22px 18px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+}
+.llm-card h3 {
+  margin: 14px 0 10px;
+  font-size: 17px;
+  color: #1e293b;
+}
+.llm-card p {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #475569;
+}
+.llm-card .llm-effect {
+  margin-top: auto;
+  padding: 10px 12px;
+  background: #f0fdf4;
+  border-left: 3px solid #16a34a;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #15803d;
+}
+.llm-card .llm-effect b { color: #14532d; }
+.llm-tag {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: #dbeafe;
+  color: #1e40af;
+  border-radius: 999px;
+  align-self: flex-start;
+}
+.llm-card-vision .llm-tag {
+  background: #fce7f3;
+  color: #9f1239;
+}
+.llm-deploy {
+  margin-top: 28px;
+  padding: 24px 28px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.llm-deploy-title {
+  margin: 0 0 14px;
+  font-size: 16px;
+  color: #1e293b;
+}
+.llm-deploy-list {
+  margin: 0 0 14px;
+  padding-left: 22px;
+}
+.llm-deploy-list li {
+  margin-bottom: 8px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #475569;
+}
+.llm-deploy-list b { color: #1e293b; }
+.llm-deploy-note {
+  margin: 14px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.65;
+}
+.llm-deploy-note code {
+  background: #e2e8f0;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 12.5px;
+}
