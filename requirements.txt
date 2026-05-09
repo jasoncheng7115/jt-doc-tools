@@ -1,7 +1,7 @@
 # 自動化生成 — 與 pyproject.toml [project.dependencies] 保持同步
 # 主要依賴的權威來源是 pyproject.toml + uv.lock；本檔提供給沒裝 uv、
 # 想直接 pip install -r 的環境作備援。
-fastapi==0.115.0
+fastapi==0.136.1
 uvicorn[standard]==0.32.0
 starlette<0.42
 python-multipart==0.0.12
