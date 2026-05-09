@@ -36,7 +36,7 @@ dependencies = [
     # 主機資源監控 — admin 系統狀態頁顯示 CPU / RAM / disk / network / IO。
     # 純 Python C-extension，每 OS 都有 wheel，跑不到 import 時 admin 頁
     # 改顯示「未安裝」warning，core 工具不受影響。
-    "psutil>=5.9,<7",
+    "psutil>=5.9,<8",
     # TOTP 2FA — 稽核員角色強制啟用，其他角色可選。pyotp 純 Python；
     # qrcode + Pillow (Pillow 已是依賴) 用來生 setup 頁面的 QR code PNG。
     "pyotp>=2.9,<3",
