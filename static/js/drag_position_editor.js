@@ -42,7 +42,9 @@
       this.$guideV = this.root.querySelector('.dpe-guide.v');
       this.$guideH = this.root.querySelector('.dpe-guide.h');
 
-      this.$assetImg.src = (window.safeImgSrc ? window.safeImgSrc(this.asset_url) : this.asset_url);
+      // safeImgSrc 在 base.html 透過 /static/js/safe_url.js 一律載入,所以
+      // 不留 fallback —— 避免 CodeQL 看到「fallback 仍是未檢查的 url」誤判。
+      this.$assetImg.src = window.safeImgSrc(this.asset_url);
       this.$lock.checked = this.lockAspect;
       this._setPaperSelect();
 

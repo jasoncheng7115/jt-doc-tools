@@ -140,6 +140,26 @@
   -webkit-appearance: none; margin: 0;
 }
 .pe-page-ctl .pe-page-total { color: #94a3b8; }
+.pe-page-nav {
+  display: inline-flex; align-items: center; gap: 0;
+  margin-left: 4px;
+}
+.pe-page-nav .pe-nav-btn {
+  background: #fff; border: 1px solid #cbd5e1;
+  padding: 2px 6px; cursor: pointer; color: #475569;
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 22px; min-width: 24px;
+}
+.pe-page-nav .pe-nav-btn:hover:not(:disabled) {
+  background: #f1f5f9; color: #1e293b;
+}
+.pe-page-nav .pe-nav-btn:disabled {
+  color: #cbd5e1; cursor: not-allowed; background: #f8fafc;
+}
+.pe-page-nav .pe-nav-btn:first-child { border-radius: 4px 0 0 4px; }
+.pe-page-nav .pe-nav-btn:last-child  { border-radius: 0 4px 4px 0; }
+.pe-page-nav .pe-nav-btn + .pe-nav-btn { border-left: 0; }
+.pe-page-nav .pe-nav-btn svg { width: 12px; height: 12px; }
 .pe-zoom-ctl {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 8px; border: 1px solid #e5e7eb; border-radius: 6px;
@@ -316,6 +336,20 @@
       頁碼
       <input type="number" id="pePageInput" min="1" value="1" step="1">
       <span class="pe-page-total">/ <span id="pePageTotal">—</span></span>
+      <span class="pe-page-nav">
+        <button type="button" class="pe-nav-btn" id="pePageFirst" title="第一頁 (Home)" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+        </button>
+        <button type="button" class="pe-nav-btn" id="pePagePrev" title="上一頁 (PageUp)" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <button type="button" class="pe-nav-btn" id="pePageNext" title="下一頁 (PageDown)" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+        <button type="button" class="pe-nav-btn" id="pePageLast" title="最後一頁 (End)" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+        </button>
+      </span>
     </div>
     <span class="pe-status" id="peStatus"></span>
   </div>
@@ -640,11 +674,24 @@ function buildCanvases() {
 
 // ============ Page indicator + jump-to-page ============
 let _pageInputDirty = false;
+let _curPage = 1;
+function _refreshNavBtns() {
+  const total = pages.length;
+  const at = _curPage;
+  const f = $('pePageFirst'), p = $('pePagePrev'),
+        n = $('pePageNext'),  l = $('pePageLast');
+  if (f) f.disabled = !total || at <= 1;
+  if (p) p.disabled = !total || at <= 1;
+  if (n) n.disabled = !total || at >= total;
+  if (l) l.disabled = !total || at >= total;
+}
 function setupPageTracking() {
   const total = pages.length;
   const totalEl = $('pePageTotal'); if (totalEl) totalEl.textContent = String(total);
   const inp = $('pePageInput');
   if (inp) { inp.max = String(total); inp.value = '1'; }
+  _curPage = 1;
+  _refreshNavBtns();
   const wrap = $('canvasWrap');
   if (!wrap || !window.IntersectionObserver) return;
   if (window._pePageObs) { try { window._pePageObs.disconnect(); } catch (_) {} }
@@ -659,9 +706,11 @@ function setupPageTracking() {
     for (const [n, r] of visibility.entries()) {
       if (r > bestRatio) { bestRatio = r; best = n; }
     }
+    _curPage = best;
     if (!_pageInputDirty && inp && document.activeElement !== inp) {
       inp.value = String(best);
     }
+    _refreshNavBtns();
   }, { root: wrap, threshold: [0, 0.25, 0.5, 0.75, 1] });
   document.querySelectorAll('.pe-page').forEach(el => obs.observe(el));
   window._pePageObs = obs;
@@ -673,6 +722,8 @@ function gotoPage(n) {
   const target = document.querySelector(`.pe-page[data-page-index="${idx}"]`);
   if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const inp = $('pePageInput'); if (inp) inp.value = String(idx);
+  _curPage = idx;
+  _refreshNavBtns();
 }
 {
   const _pi = $('pePageInput');
@@ -684,6 +735,24 @@ function gotoPage(n) {
     _pi.addEventListener('blur', () => { _pageInputDirty = false; });
     _pi.addEventListener('change', () => { _pageInputDirty = false; gotoPage(parseInt(_pi.value || '1', 10)); });
   }
+  // 第一頁 / 上一頁 / 下一頁 / 最後一頁 — toolbar 按鈕
+  const _bf = $('pePageFirst'), _bp = $('pePagePrev'),
+        _bn = $('pePageNext'),  _bl = $('pePageLast');
+  if (_bf) _bf.addEventListener('click', () => gotoPage(1));
+  if (_bp) _bp.addEventListener('click', () => gotoPage(_curPage - 1));
+  if (_bn) _bn.addEventListener('click', () => gotoPage(_curPage + 1));
+  if (_bl) _bl.addEventListener('click', () => gotoPage(pages.length));
+  // 鍵盤捷徑 — Home / End / PageUp / PageDown（避開輸入中元素）
+  document.addEventListener('keydown', (e) => {
+    if (!pages.length) return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ||
+              t.isContentEditable)) return;
+    if (e.key === 'Home')      { e.preventDefault(); gotoPage(1); }
+    else if (e.key === 'End')  { e.preventDefault(); gotoPage(pages.length); }
+    else if (e.key === 'PageUp')   { e.preventDefault(); gotoPage(_curPage - 1); }
+    else if (e.key === 'PageDown') { e.preventDefault(); gotoPage(_curPage + 1); }
+  });
 }
 
 function applyZoom() {

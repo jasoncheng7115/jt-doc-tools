@@ -36,8 +36,11 @@
       const bodyEl = document.createElement('div');
       bodyEl.className = 'modal-body';
       if (html) {
-        // Caller opted into raw HTML; trust them.
-        bodyEl.innerHTML = body;  // codeql[js/xss-through-dom]: opt-in by caller
+        // Caller opted into raw HTML; trust them. The `html=true` flag is
+        // only set by trusted internal callers (e.g. showAlert with our own
+        // server-controlled HTML for status messages) — never with user input.
+        // lgtm[js/xss-through-dom]
+        bodyEl.innerHTML = body;
       } else {
         // Honour newlines as <br>: split + appendChild text + br nodes.
         const lines = String(body || '').split('\n');
