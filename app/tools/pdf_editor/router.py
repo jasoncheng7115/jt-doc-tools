@@ -991,7 +991,7 @@ def _insert_mixed_text(page, x: float, y: float, text: str, *,
             from app.core.log_safe import safe_log
             _lg.getLogger(__name__).warning(
                 "insert_text all fallbacks failed for run %s (cjk=%s, tried=%s): %s",
-                safe_log(run[:20]), is_cjk, safe_log(fallbacks), safe_log(last_err))
+                safe_log(run[:20]), bool(is_cjk), safe_log(fallbacks), safe_log(last_err))
             ok_font = fn  # for length calculation
         # Advance x by measured width of that run
         try:

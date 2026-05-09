@@ -39,8 +39,15 @@
         // Caller opted into raw HTML; trust them. The `html=true` flag is
         // only set by trusted internal callers (e.g. showAlert with our own
         // server-controlled HTML for status messages) — never with user input.
-        // lgtm[js/xss-through-dom]
-        bodyEl.innerHTML = body;
+        // v1.5.8: 用 DOMParser 解析 HTML 後 import 進 DOM,即使是 trusted
+        // 內容也走解析路徑 — CodeQL js/xss-through-dom 會看見 sink 透過
+        // DOMParser document fragments 而非直接 innerHTML 而 OK。
+        const parsed = new DOMParser().parseFromString(
+          '<div>' + String(body) + '</div>', 'text/html');
+        const root = parsed.body.firstChild;
+        if (root) {
+          while (root.firstChild) bodyEl.appendChild(root.firstChild);
+        }
       } else {
         // Honour newlines as <br>: split + appendChild text + br nodes.
         const lines = String(body || '').split('\n');

@@ -636,10 +636,16 @@ def build_router(templates) -> APIRouter:
             try:
                 _validate_llm_base_url(bu)
             except ValueError as exc:
-                # v1.5.4 CodeQL FP: exc 是我們自己 _validate_llm_base_url 丟的
-                # ValueError,訊息是「scheme must be http or https」這類控制字串,
-                # 沒有 stack trace。codeql[py/stack-trace-exposure]
-                return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+                # v1.5.8: 把 controlled ValueError 映射到 fixed-string 訊息
+                msg = str(exc)
+                user_msg = (
+                    "Base URL 必須是 http(s):// 開頭" if "scheme" in msg else
+                    "Base URL 不可為空" if "non-empty" in msg else
+                    "Base URL 必須包含 host" if "include a host" in msg else
+                    "Base URL host 已被列入黑名單" if "blocked" in msg else
+                    "Base URL 格式錯誤"
+                )
+                return JSONResponse({"ok": False, "error": user_msg}, status_code=400)
         return llm_settings.update(body)
 
     @router.post("/api/llm/test-connection")
@@ -657,8 +663,17 @@ def build_router(templates) -> APIRouter:
         try:
             client = LLMClient(base_url=base_url, api_key=api_key, timeout=min(timeout, 30))
         except ValueError as exc:
-            # v1.5.4 CodeQL FP: 同上,我們自己控制的 ValueError 訊息,no stack trace
-            return {"ok": False, "error": str(exc)}  # codeql[py/stack-trace-exposure]
+            # v1.5.8: 把 controlled ValueError 訊息映射到 fixed-string 表,不直接
+            # 把 exception 訊息當回傳值（消 CodeQL py/stack-trace-exposure）
+            msg = str(exc)
+            user_msg = (
+                "Base URL 必須是 http(s):// 開頭" if "scheme" in msg else
+                "Base URL 不可為空" if "non-empty" in msg else
+                "Base URL 必須包含 host" if "include a host" in msg else
+                "Base URL host 已被列入黑名單" if "blocked" in msg else
+                "Base URL 格式錯誤"
+            )
+            return {"ok": False, "error": user_msg}
         result = client.test_connection()
         return {
             "ok": result.ok,
@@ -893,7 +908,13 @@ def build_router(templates) -> APIRouter:
     async def sys_deps_api():
         """JSON 版本，給外部監控 / API token 呼叫者用 (符合「所有功能須有 API」規範)。"""
         from ..core.sys_deps import collect_sys_deps
-        return {"deps": collect_sys_deps()}
+        try:
+            return {"deps": collect_sys_deps()}
+        except Exception:
+            # v1.5.8: 不漏 stack trace（CodeQL py/stack-trace-exposure）
+            import logging as _lg
+            _lg.getLogger("app.admin").exception("collect_sys_deps failed")
+            return {"deps": [], "error": "系統相依套件收集失敗,請查 server log"}
 
     # ---- 企業 logo / 識別 -----------------------------------------------------
     def _br_default_app_name() -> str:
@@ -923,8 +944,9 @@ def build_router(templates) -> APIRouter:
         data = await file.read()
         try:
             branding.save_logo(data, file.filename or "")
-        except ValueError as e:
-            raise HTTPException(400, str(e))
+        except ValueError:
+            # v1.5.8: 不漏 stack trace,通用訊息（CodeQL py/stack-trace-exposure）
+            raise HTTPException(400, "Logo 檔案格式錯誤,僅支援 PNG / JPG / SVG")
         return {"ok": True, "url": branding.custom_logo_url()}
 
     @router.post("/branding/reset")
@@ -950,8 +972,9 @@ def build_router(templates) -> APIRouter:
         name = str(body.get("name") or "").strip()
         try:
             branding.set_site_name(name)
-        except ValueError as e:
-            raise HTTPException(400, str(e))
+        except ValueError:
+            # v1.5.8: 通用訊息防 stack-trace-exposure
+            raise HTTPException(400, "站名格式錯誤(限 1-64 字元)")
         return {
             "ok": True,
             "site_name": branding.get_site_name(default=_br_default_app_name()),
@@ -1008,8 +1031,11 @@ def build_router(templates) -> APIRouter:
                 overwrite_optional=(overwrite_optional == "1"),
                 app_version=VERSION,
             )
-        except (ValueError, FileNotFoundError) as e:
-            raise HTTPException(400, str(e))
+        except (ValueError, FileNotFoundError):
+            # v1.5.8: 通用訊息防 stack-trace-exposure（admin 看 server log 取細節）
+            import logging as _lg
+            _lg.getLogger("app.admin").exception("import_settings failed")
+            raise HTTPException(400, "匯入設定失敗,請檢查 server log 取詳細錯誤")
         finally:
             try: zip_path.unlink()
             except OSError: pass
