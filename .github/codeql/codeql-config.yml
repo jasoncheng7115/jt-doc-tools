@@ -16,9 +16,8 @@ name: jt-doc-tools CodeQL config
 queries:
   - uses: security-extended
 
-# v1.5.5: 載入自訂 sanitizer model,讓 CodeQL 認識 safe_paths.* /
-# _validate_llm_base_url / _safe_next / safe_log 為 barrier。
-# Pack 結構: .github/codeql/extensions/{qlpack.yml + jt-sanitizers.model.yml}
-packs:
-  - jasoncheng7115/jt-doc-tools-extensions
+# v1.5.5: 自訂 sanitizer model 透過 codeql-action/init `additional-packs`
+# input 載入 (見 .github/workflows/codeql.yml)。`packs:` 這裡是給 query packs
+# 用的,data extension pack 不能放這個欄位 — 否則 init 會嘗試從 GHCR 下載,
+# 找不到就 fail (踩過此雷,v1.5.7 修)。
 
