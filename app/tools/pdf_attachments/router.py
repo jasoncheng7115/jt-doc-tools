@@ -73,7 +73,7 @@ async def scan(request: Request, file: UploadFile = File(...)):
 
 @router.get("/file/{uid}/{name}")
 async def get_file(uid: str, name: str, request: Request):
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner
     require_uuid_hex(uid, "uid")
     upload_owner.require(uid, request)
@@ -158,7 +158,7 @@ async def strip_attachments(request: Request):
 
 @router.get("/stripped/{uid}")
 async def stripped(uid: str, request: Request):
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner as _uo
     require_uuid_hex(uid, "uid")
     _uo.require(uid, request)

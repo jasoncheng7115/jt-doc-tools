@@ -1,0 +1,62 @@
+# CodeQL Models-as-Data — declare jt-doc-tools 自訂 sanitizer 為 barrier。
+# 參考: https://codeql.github.com/docs/codeql-language-guides/customizing-library-models-for-python/
+#
+# 使用 barrierModel: 把 ReturnValue 標為對應 kind 的 barrier。
+# 範例參考: codeql/python-all/.../AntiSSRF.model.yml + Django.model.yml
+#
+# Path 表示法:
+#   Member[<func_name>].ReturnValue   = 函式回傳值
+#   Member[<func_name>].Argument[N]   = 第 N 個參數
+#
+# Kind 對應到對應的 taint-tracking query:
+#   path-injection      = py/path-injection（Uncontrolled data used in path expression）
+#   request-forgery     = py/full-ssrf, py/partial-ssrf
+#   url-redirection     = py/url-redirection
+#   log-injection       = py/log-injection
+#   stack-trace-exposure 不適用 barrier(資料 sink 是錯誤訊息回傳,不是 taint flow)
+#
+# 注意：
+# - 用 sourceModel 的 type 必須是頂層 module name (e.g. 'app')
+# - 改 sanitizer signature 後要回來更新此檔
+# - 推 GitHub 前用 `codeql resolve extensions` 驗證沒語法錯
+
+extensions:
+  # ----------------------------------------------------------------------
+  # path-injection sanitizers (app/core/safe_paths.py)
+  # type 用完整 dotted module name (API::moduleImport('app.core.safe_paths'))
+  # ----------------------------------------------------------------------
+  - addsTo:
+      pack: codeql/python-all
+      extensible: barrierModel
+    data:
+      - ['app', 'Member[core].Member[safe_paths].Method[safe_join]', 'path-injection']
+      - ['app', 'Member[core].Member[safe_paths].Method[sanitize_filename]', 'path-injection']
+      - ['app', 'Member[core].Member[safe_paths].Method[require_uuid_hex]', 'path-injection']
+      - ['app', 'Member[core].Member[safe_paths].Method[is_safe_name]', 'path-injection']
+
+  # ----------------------------------------------------------------------
+  # request-forgery (SSRF) sanitizer (app/core/llm_client.py)
+  # ----------------------------------------------------------------------
+  - addsTo:
+      pack: codeql/python-all
+      extensible: barrierModel
+    data:
+      - ['app', 'Member[core].Member[llm_client].Method[_validate_llm_base_url]', 'request-forgery']
+
+  # ----------------------------------------------------------------------
+  # url-redirection sanitizer (app/web/auth_routes.py)
+  # ----------------------------------------------------------------------
+  - addsTo:
+      pack: codeql/python-all
+      extensible: barrierModel
+    data:
+      - ['app', 'Member[web].Member[auth_routes].Method[_safe_next]', 'url-redirection']
+
+  # ----------------------------------------------------------------------
+  # log-injection sanitizer (app/core/log_safe.py)
+  # ----------------------------------------------------------------------
+  - addsTo:
+      pack: codeql/python-all
+      extensible: barrierModel
+    data:
+      - ['app', 'Member[core].Member[log_safe].Method[safe_log]', 'log-injection']

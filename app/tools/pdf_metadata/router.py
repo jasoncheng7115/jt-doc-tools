@@ -161,7 +161,7 @@ async def clean(request: Request):
 
 @router.get("/download/{uid}")
 async def download(uid: str, request: Request, name: str = "clean.pdf"):
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner
     require_uuid_hex(uid, "uid")
     upload_owner.require(uid, request)

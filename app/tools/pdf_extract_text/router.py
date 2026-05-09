@@ -328,7 +328,7 @@ async def extract(request: Request, file: UploadFile = File(...)):
 
 @router.get("/download/{batch_id}/{fmt}")
 async def download(batch_id: str, fmt: str, request: Request):
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner
     require_uuid_hex(batch_id, "batch_id")
     upload_owner.require(batch_id, request)
@@ -422,7 +422,7 @@ async def llm_reflow(request: Request):
             yield _sse({"type": "done", "preview_md": md[:5000],
                         "ok": 0, "skipped": 0, "total": 0})
             return
-        from ...core.log_safe import safe_log
+        from app.core.log_safe import safe_log
         logger.info(
             "LLM reflow start: batch=%s model=%s total=%d",
             safe_log(batch_id), safe_log(model_name), total,

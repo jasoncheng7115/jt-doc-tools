@@ -386,7 +386,7 @@ async def generate(opts: NupOptions):
 
 @router.get("/download/{upload_id}")
 async def download(upload_id: str, request: Request):
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner
     require_uuid_hex(upload_id, "upload_id")
     upload_owner.require(upload_id, request)

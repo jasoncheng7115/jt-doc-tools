@@ -1,0 +1,7 @@
+name: jasoncheng7115/jt-doc-tools-extensions
+version: 0.0.1
+library: true
+extensionTargets:
+  codeql/python-all: '*'
+dataExtensions:
+  - "*.model.yml"

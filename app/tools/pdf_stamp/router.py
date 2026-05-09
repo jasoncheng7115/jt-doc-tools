@@ -487,7 +487,7 @@ async def preview_stamped(
 @router.get("/preview/{name}")
 async def serve_preview(name: str, request: Request):
     from fastapi.responses import FileResponse
-    from ...core.safe_paths import safe_join
+    from app.core.safe_paths import safe_join
     from ...core import upload_owner
     p = safe_join(settings.temp_dir, name)
     uid = upload_owner.extract_upload_id(name)

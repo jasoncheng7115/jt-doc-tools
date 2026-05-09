@@ -48,7 +48,7 @@ async def load(request: Request, file: UploadFile = File(...)):
 
 @router.get("/page-thumb/{upload_id}/{page}")
 async def page_thumb(upload_id: str, page: int, request: Request, large: bool = False):
-    from ...core.safe_paths import require_uuid_hex
+    from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner as _uo
     require_uuid_hex(upload_id, "upload_id")
     _uo.require(upload_id, request)
@@ -145,7 +145,7 @@ async def extract(request: Request, file: UploadFile = File(...)):
 
 @router.get("/file/{batch_id}/{name}")
 async def get_file(batch_id: str, name: str, request: Request):
-    from ...core.safe_paths import require_uuid_hex, safe_join
+    from app.core.safe_paths import require_uuid_hex, safe_join
     from ...core import upload_owner as _uo
     require_uuid_hex(batch_id, "batch_id")
     _uo.require(batch_id, request)
