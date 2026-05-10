@@ -4,6 +4,13 @@
 
 ---
 
+## [1.5.14] - 2026-05-10
+
+### 修正
+
+- **「效果」框內「效」「果」字被拆成兩行**(v1.5.13 慘案)— `.llm-effect` 加 `display: flex; align-items: center` 後,`<b>效果</b>` 變成獨立 flex item 被 shrink 到「效 \\n 果」垂直排列。拿掉 flex 改純 padding + min-height。
+- **TEXT / VISION 標籤位置** — 從右上角絕對定位改回跟 icon 同一橫排 flex,中軸對齊,固定 height 22px line-height 1 避免 baseline 飄移。
+
 ## [1.5.13] - 2026-05-10
 
 ### 介紹網站微調
