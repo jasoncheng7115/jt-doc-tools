@@ -115,6 +115,8 @@ class LLMSettingsManager:
          "use": "把多筆審閱意見自動分『重大 / 一般 / 提問』三類", "kind": "text"},
         {"id": "doc-diff",         "name": "文件差異比對（LLM 變動摘要）",
          "use": "比對行差異後，告訴使用者主要修改了哪幾條條款 / 段落", "kind": "text"},
+        {"id": "submission-check", "name": "送件前檢核（LLM 變體合併 / 範本痕跡）",
+         "use": "公司命名變體合併（光寶 ↔ LITE-ON）+ 漏改範本進階推論", "kind": "text"},
     ]
 
     def get_model_for(self, tool_id: str) -> str:

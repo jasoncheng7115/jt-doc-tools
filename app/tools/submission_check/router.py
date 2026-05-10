@@ -29,6 +29,10 @@ from ...core.safe_paths import is_uuid_hex
 from . import case_manager as _cm
 from .checks import l1_rules as _l1
 from .checks import consistency as _consistency
+from .checks import l2_ocr as _l2
+from .checks import l3_llm as _l3
+from .checks import important as _important
+from . import override as _override
 
 router = APIRouter()
 
@@ -215,6 +219,39 @@ async def get_result(case_id: str, version: str, request: Request):
     return rep
 
 
+@router.post("/override/{case_id}")
+async def post_override(case_id: str, request: Request,
+                          finding_key: str = Form(...),
+                          verdict: str = Form(...),
+                          reason: str = Form("")):
+    """加 / 更新 override 註解。"""
+    if not _cm.CASE_ID_RE.match(case_id):
+        raise HTTPException(400, "invalid case_id")
+    case = _cm.load_case(case_id)
+    if not case:
+        raise HTTPException(404, "case 不存在")
+    _check_case_acl(case, request)
+    user = getattr(request.state, "user", None) if hasattr(request, "state") else None
+    by_user = (user or {}).get("username") if isinstance(user, dict) else None
+    try:
+        o = _override.add_override(case_id, finding_key, verdict, reason, by_user)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "override": o}
+
+
+@router.delete("/override/{case_id}/{finding_key}")
+async def delete_override(case_id: str, finding_key: str, request: Request):
+    if not _cm.CASE_ID_RE.match(case_id):
+        raise HTTPException(400, "invalid case_id")
+    case = _cm.load_case(case_id)
+    if not case:
+        raise HTTPException(404, "case 不存在")
+    _check_case_acl(case, request)
+    ok = _override.remove_override(case_id, finding_key)
+    return {"ok": ok}
+
+
 @router.get("/file/{case_id}/{file_id}")
 async def get_file(case_id: str, file_id: str, request: Request):
     """取個別檔 — for 前端跳頁預覽。"""
@@ -271,9 +308,14 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
 
     findings_per_file: dict[str, list[dict]] = {}
     per_file_entities: dict[str, dict] = {}
+    per_file_text: dict[str, str] = {}     # 抽出的所有文字（給 amount/date/attachment 用）
+    per_file_amounts: dict[str, list] = {}
+    per_file_dates: dict[str, list] = {}
+    ocr_total_elapsed = 0.0
+    ocr_files_processed = 0
 
     for i, f in enumerate(files):
-        job.progress = (i + 0.1) / max(n, 1) * 0.8
+        job.progress = (i + 0.1) / max(n, 1) * 0.7
         job.message = f"檢查中：{f.get('name', '?')} ({i+1}/{n})"
         file_id = f["file_id"]
         matches = list(fdir.glob(f"{file_id}.*"))
@@ -287,27 +329,163 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
             }]
             continue
         path = matches[0]
+        # L1 規則
         findings = _l1.scan_file(path, mime_hint=f.get("mime", ""))
-        findings_per_file[file_id] = findings
+        # 文字層實體 + 抽 text（給 important checks 用）
         try:
-            ents = _consistency.extract_entities_from_file(path)
+            suffix = path.suffix.lower()
+            if suffix == ".pdf":
+                text_layer = _consistency._extract_pdf_text(path)
+            elif suffix in (".docx", ".doc"):
+                text_layer = _consistency._extract_docx_text(path)
+            else:
+                text_layer = ""
+            if text_layer:
+                per_file_text[file_id] = text_layer
+                per_file_amounts[file_id] = _important.extract_amounts(text_layer)
+                per_file_dates[file_id] = _important.extract_dates(text_layer)
+            ents = _consistency.extract_entities_from_text(text_layer) if text_layer else {}
             if ents:
                 per_file_entities[file_id] = ents
         except Exception:
             pass
+        # L2 OCR — 對掃描 PDF / 圖片補抽
+        try:
+            ocr_res = _l2.ocr_file(path)
+            ocr_total_elapsed += ocr_res.get("elapsed", 0.0)
+            if ocr_res.get("ran"):
+                ocr_files_processed += 1
+                # 把 OCR 文字餵回 entity extraction
+                ocr_text = ocr_res.get("text", "")
+                if ocr_text:
+                    # 把 OCR 文字 merge 進 per_file_text 給 important checks
+                    per_file_text[file_id] = (per_file_text.get(file_id, "") + "\n" + ocr_text).strip()
+                    # 抽 amount / date 補進
+                    extra_amts = _important.extract_amounts(ocr_text)
+                    if extra_amts:
+                        per_file_amounts.setdefault(file_id, [])
+                        for v in extra_amts:
+                            if v not in per_file_amounts[file_id]:
+                                per_file_amounts[file_id].append(v)
+                    extra_dates = _important.extract_dates(ocr_text)
+                    if extra_dates:
+                        per_file_dates.setdefault(file_id, [])
+                        for d in extra_dates:
+                            if d not in per_file_dates[file_id]:
+                                per_file_dates[file_id].append(d)
+                    extra_ents = _consistency.extract_entities_from_text(ocr_text)
+                    if extra_ents:
+                        # merge 進該檔的 entities (相加)
+                        existing = per_file_entities.get(file_id, {})
+                        for kind, counter in extra_ents.items():
+                            tgt = existing.setdefault(kind, type(counter)())
+                            tgt.update(counter)
+                        per_file_entities[file_id] = existing
+            # L2 findings (OCR truncated / skipped 等資訊)
+            findings.extend(_l2.make_findings(file_id, ocr_res, file_name=f.get("name", "")))
+        except Exception:
+            pass
+        findings_per_file[file_id] = findings
 
-    job.progress = 0.85
+    job.progress = 0.80
     job.message = "跨檔身分一致性分析中..."
 
     # 跨檔 hash 重複
     cross_findings = _l1.cross_file_duplicate_hash(files)
 
-    # Sprint 2: 跨檔實體聚合 + 一致性 findings
+    # 跨檔實體聚合
     aggregated = _consistency.aggregate_across_files(per_file_entities)
+
+    # L3: LLM 變體合併（如果 LLM enabled）
+    l3_used = False
+    if _l3.llm_available():
+        try:
+            job.progress = 0.85
+            job.message = "L3 LLM：變體合併中..."
+            company_values = [e["value"] for e in aggregated.get("company", [])]
+            if len(company_values) >= 2:
+                groups = _l3.merge_entity_variants(company_values)
+                aggregated = _l3.apply_variant_groups_to_aggregated(aggregated, groups)
+                l3_used = True
+        except Exception:
+            pass
+
+    # 一致性 findings
     consistency_findings = _consistency.detect_consistency_findings(
         aggregated, ground_truth=case.get("ground_truth"), files_meta=files,
     )
     cross_findings.extend(consistency_findings)
+
+    # E 類重要檢查項：金額一致 + 日期合理 + 附件清單
+    try:
+        cross_findings.extend(_important.detect_amount_inconsistency(per_file_amounts, files))
+    except Exception:
+        pass
+    try:
+        deadline_str = (case.get("ground_truth") or {}).get("deadline") or ""
+        cross_findings.extend(_important.detect_expired_dates(per_file_dates, files, deadline_str))
+    except Exception:
+        pass
+    try:
+        cross_findings.extend(_important.detect_attachment_count_mismatch(per_file_text, files))
+    except Exception:
+        pass
+
+    # L3: 修改範本痕跡推論
+    l3_residue_count = 0
+    if _l3.llm_available():
+        try:
+            job.progress = 0.92
+            job.message = "L3 LLM：範本痕跡推論中..."
+            file_summaries = []
+            for f in files:
+                # 取該檔的文字（PDF 文字層或 OCR）— 若 per_file_entities 有就找對應；否則重抽前 500 字
+                fid = f["file_id"]
+                matches = list(fdir.glob(f"{fid}.*"))
+                if not matches:
+                    continue
+                snippet = ""
+                try:
+                    suffix = matches[0].suffix.lower()
+                    if suffix == ".pdf":
+                        import fitz
+                        doc = fitz.open(str(matches[0]))
+                        try:
+                            snippet = (doc[0].get_text() if doc.page_count > 0 else "")[:500]
+                        finally:
+                            doc.close()
+                    elif suffix in (".docx",):
+                        snippet = _consistency._extract_docx_text(matches[0])[:500]
+                except Exception:
+                    pass
+                if snippet:
+                    file_summaries.append({"file_id": fid, "name": f.get("name", "?"),
+                                            "snippet": snippet})
+            gt_main = ((case.get("ground_truth") or {}).get("main_entity") or {}).get("name") or ""
+            l3_findings = _l3.detect_template_residue(file_summaries, ground_truth_main=gt_main)
+            # 把 _for_file 的 finding 塞進該檔 findings_per_file
+            for fnd in l3_findings:
+                tgt = fnd.pop("_for_file", None)
+                if tgt and tgt in findings_per_file:
+                    findings_per_file[tgt].append(fnd)
+                else:
+                    cross_findings.append(fnd)
+                l3_residue_count += 1
+            l3_used = True
+        except Exception:
+            pass
+
+    # 套 user override 註解（將被 user 標 OK / 誤報的 finding 降級）
+    fresh_case = _cm.load_case(case_id) or case
+    findings_per_file = {
+        fid: _override.apply_overrides_to_findings(fresh_case, fds)
+        for fid, fds in findings_per_file.items()
+    }
+    cross_findings = _override.apply_overrides_to_findings(fresh_case, cross_findings)
+    n_overrides_applied = sum(
+        1 for fds in findings_per_file.values()
+        for fd in fds if fd.get("_override")
+    ) + sum(1 for fd in cross_findings if fd.get("_override"))
 
     # summary
     n_fail = sum(1 for f in files
@@ -334,7 +512,13 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
             "files_count": n,
             "score": score,
             "fail": n_fail, "warn": n_warn, "info": n_info,
-            "layers": {"L1": "done", "L2": "partial (文字層)", "L3": "skipped"},
+            "overrides_applied": n_overrides_applied,
+            "layers": {
+                "L1": "done",
+                "L2": (f"done ({ocr_files_processed} 檔 OCR, {ocr_total_elapsed:.1f}s)"
+                       if ocr_files_processed > 0 else "skipped (無需 OCR 或 tesseract 未裝)"),
+                "L3": ("done (LLM)" if l3_used else "skipped (LLM 未設定)"),
+            },
         },
         "findings_per_file": findings_per_file,
         "cross_findings": cross_findings,
