@@ -1,7 +1,7 @@
 """送件前檢核（submission-check）— 對一批文件做 L1 規則 / L2 OCR / L3 LLM 三層檢核。
 
 典型場景：投標 / KYC / HR 到職 / 報帳 / 訴狀附件 / 申請件 / 工程交付 / 保險理賠
-等「多檔混格式 + 有特定 ground truth + 對外送出前」的文件包健檢。
+等「多檔混格式 + 有特定基準資訊 + 對外送出前」的文件包健檢。
 """
 from pathlib import Path
 

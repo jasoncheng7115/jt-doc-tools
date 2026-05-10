@@ -34,7 +34,7 @@ CATEGORY_TO_TOOL: dict[str, tuple[str, str, str]] = {
     "tax-id-invalid":  ("/tools/pdf-editor/", "PDF 編輯器",
                          "找出統編位置修正校驗碼。"),
     "tax-id-mismatch": ("/tools/pdf-editor/", "PDF 編輯器",
-                         "找出非預期統編並改成 ground truth 的統編。"),
+                         "找出非預期統編並改成基準資訊內的統編。"),
     "tax-id-multiple": ("",  "",
                          "全 batch 多個有效統編 — 請人工確認預期主角統編。"),
     "identity-mismatch": ("/tools/pdf-editor/", "PDF 編輯器",
