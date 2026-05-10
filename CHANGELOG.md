@@ -30,9 +30,16 @@
   - **日期合理性鏈**（任何證書 / 證明日期早於案件截止日 → 過期警示）
   - **附件清單對應**（標單聲明附件 N 件，實際上傳 M 份不符 → 警示）
 
+- **Sprint 7**：跟既有工具 chaining — 每個 finding 標註對應修正工具（metadata 殘留 → metadata-clean、JS / 嵌入物 → pdf-hidden-scan、漏改範本 / 統編錯 → pdf-editor、章缺漏 → pdf-stamp 等）。報告每項顯示「→ tool」按鈕直接跳對應工具。
+- **Sprint 7**：案件清單搜尋 — 支援按主角名 / 統編 / case_id 模糊搜 + status 篩選。
+- **Sprint 8**：Admin 儀表板 `/tools/submission-check/admin-stats` — 跨案件 stats（30 / 90 / 365 天區間）：案件總數、檔案數、平均就緒度、狀態分布、三層使用率、Top 10 失敗類型、嚴重度分布。
+
 ### 後續未做
 
-- Sprint 7+: L3 vision 偽造偵測（章 / 印 / PS 痕跡）、報告 PDF 鑑識輸出、admin 儀表板、實體字典 R 階段
+- L3 vision 偽造偵測（章 / 印 / PS 痕跡，需 vision LLM）
+- 完整鑑識報告 PDF 輸出格式
+- 實體字典 R 階段（11 天獨立子系統）
+- 案件批次上傳 / 匯出 (v2 backlog)
 
 ## [1.5.18] - 2026-05-10
 

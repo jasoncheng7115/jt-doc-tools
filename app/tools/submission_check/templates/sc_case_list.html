@@ -28,6 +28,23 @@
     <a href="." style="background:#3b82f6; color:#fff; padding:6px 12px; border-radius:6px; text-decoration:none; font-size:13px;">＋ 新建案件</a>
   </div>
 
+  <form method="get" action="cases" style="background:#fff; border:1px solid #e5e7eb; border-radius:6px; padding:10px; margin-bottom:12px; display:flex; gap:8px; align-items:center;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="搜尋主角名 / 統編 / case_id"
+           style="flex:1; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:13px;">
+    <select name="status" style="padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:13px;">
+      <option value="">所有狀態</option>
+      <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>draft</option>
+      <option value="running" {% if status_filter == 'running' %}selected{% endif %}>running</option>
+      <option value="done" {% if status_filter == 'done' %}selected{% endif %}>done</option>
+      <option value="error" {% if status_filter == 'error' %}selected{% endif %}>error</option>
+      <option value="archived" {% if status_filter == 'archived' %}selected{% endif %}>archived</option>
+    </select>
+    <button type="submit" style="background:#475569; color:#fff; border:0; padding:6px 14px; border-radius:4px; cursor:pointer; font-size:13px;">搜尋</button>
+    {% if q or status_filter %}
+    <a href="cases" style="color:#64748b; font-size:12px;">清除</a>
+    {% endif %}
+  </form>
+
   {% if cases %}
   <table class="scl-tbl">
     <thead><tr>

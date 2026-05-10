@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}送件檢核儀表板 · {{ app_name }}{% endblock %}
+
+{% block head %}
+<style>
+.scs-wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.scs-cards { display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:16px; }
+.scs-card { background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:14px; text-align:center; }
+.scs-card .num { font-size:28px; font-weight:600; color:#1e40af; }
+.scs-card .lbl { font-size:11px; color:#64748b; margin-top:4px; }
+.scs-section { background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:14px; margin-bottom:14px; }
+.scs-section h3 { font-size:14px; margin:0 0 10px; color:#1e293b; }
+.scs-tbl { width:100%; font-size:13px; border-collapse: collapse; }
+.scs-tbl th, .scs-tbl td { padding:6px 10px; border-bottom:1px solid #f1f5f9; text-align:left; }
+.scs-tbl th { background:#f8fafc; color:#475569; font-weight:500; }
+.scs-bar { display:inline-block; height:8px; background:#3b82f6; border-radius:2px; vertical-align:middle; }
+.scs-filter { background:#fff; padding:8px; border:1px solid #e5e7eb; border-radius:6px; margin-bottom:12px; }
+.scs-filter a { display:inline-block; padding:3px 10px; margin-right:6px; font-size:12px; color:#475569; text-decoration:none; border:1px solid #cbd5e1; border-radius:14px; }
+.scs-filter a.active { background:#3b82f6; color:#fff; border-color:#3b82f6; }
+.scs-empty { text-align:center; padding:24px; color:#94a3b8; font-size:13px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="scs-wrap">
+  <h1 style="font-size:22px; margin-bottom:10px;">送件檢核儀表板（admin）</h1>
+
+  <div class="scs-filter">
+    時間區間：
+    <a href="admin-stats?days=7" {% if days == 7 %}class="active"{% endif %}>近 7 天</a>
+    <a href="admin-stats?days=30" {% if days == 30 %}class="active"{% endif %}>近 30 天</a>
+    <a href="admin-stats?days=90" {% if days == 90 %}class="active"{% endif %}>近 90 天</a>
+    <a href="admin-stats?days=365" {% if days == 365 %}class="active"{% endif %}>近 1 年</a>
+  </div>
+
+  {% if stats.cases_total == 0 %}
+    <div class="scs-empty">所選區間內沒有案件。</div>
+  {% else %}
+    <div class="scs-cards">
+      <div class="scs-card"><div class="num">{{ stats.cases_total }}</div><div class="lbl">案件總數</div></div>
+      <div class="scs-card"><div class="num">{{ stats.files_total }}</div><div class="lbl">檔案總數</div></div>
+      <div class="scs-card"><div class="num">{{ stats.avg_score if stats.avg_score is not none else "—" }}</div><div class="lbl">平均就緒度</div></div>
+      <div class="scs-card"><div class="num">{{ stats.by_status.get("done", 0) }}</div><div class="lbl">已完成案件</div></div>
+    </div>
+
+    <div class="scs-section">
+      <h3>狀態分布</h3>
+      <table class="scs-tbl">
+        {% for st, n in stats.by_status.items() %}
+        <tr><td>{{ st }}</td><td style="width:60%">
+          <span class="scs-bar" style="width:{{ (n / stats.cases_total * 300)|int }}px;"></span>
+          {{ n }}
+        </td></tr>
+        {% endfor %}
+      </table>
+    </div>
+
+    <div class="scs-section">
+      <h3>三層使用統計（已 done 案件中）</h3>
+      <table class="scs-tbl">
+        {% for layer, n in stats.layer_used.items() %}
+        <tr><td>{{ layer }}</td><td>{{ n }} 個案件</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+
+    <div class="scs-section">
+      <h3>Top 10 失敗 / 警告類型</h3>
+      <table class="scs-tbl">
+        <thead><tr><th>類型</th><th>次數</th></tr></thead>
+        <tbody>
+        {% for cat, n in stats.top_categories %}
+        <tr><td>{{ cat or "(未分類)" }}</td><td>{{ n }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="scs-section">
+      <h3>嚴重度分布</h3>
+      <table class="scs-tbl">
+        {% for sev, n in stats.severity_breakdown.items() %}
+        <tr><td>{{ sev }}</td><td>{{ n }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  {% endif %}
+
+  <p style="text-align:center; margin-top:16px;">
+    <a href="cases" style="color:#3b82f6; font-size:13px;">→ 查看所有案件清單</a>
+  </p>
+</div>
+{% endblock %}
