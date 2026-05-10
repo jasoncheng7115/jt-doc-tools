@@ -323,19 +323,39 @@ def detect_consistency_findings(
             })
         # 單一非我方統編 → 資訊性，不算問題
 
-    # ─── 統編校驗碼錯誤（單獨 finding，不論有無 ground truth） ───
+    # ─── 8 位數疑似統編但校驗碼不過（單獨 finding） ───
+    # 注意：8 位數字可能是客戶代號 / 訂單號 / 員工編號 / 外國公司編號等，不一定是統編
+    # 規則：
+    #   - 只出現 1 次 → warn（單次出現校驗失敗，較可能是 typo）
+    #   - 出現於多檔 或 ≥ 3 次 → info（已建立的識別碼，多半是合法客戶 / 內部代號）
     from .l1_rules import _validate_tax_id
     for entry in tax_ids:
         if not _validate_tax_id(entry["value"]):
+            n_files = len(entry["files"])
+            n_count = entry["total_count"]
+            if n_files >= 2 or n_count >= 3:
+                # 高頻 / 跨檔 → 多半是穩定的客戶 / 內部識別碼，info 提醒
+                sev = "info"
+                title = f"8 位數字「{entry['value']}」非台灣統編格式（已多處引用）"
+                detail = (f"出現於 {_names(entry['files'])}（共 {n_count} 次）。"
+                          "已穩定出現於多檔 / 多次 — 應為客戶代號 / 訂單號 / 內部編號 / 外國公司編號，"
+                          "不是台灣統編。本提示僅供 user 確認。")
+            else:
+                # 單次 → 可能是 typo
+                sev = "warn"
+                title = f"8 位數字「{entry['value']}」不符台灣統編校驗"
+                detail = (f"出現於 {_names(entry['files'])}。"
+                          "若這是台灣統編 → 校驗碼錯（可能輸入錯誤 / 位數錯位）；"
+                          "若這是客戶代號 / 訂單號 / 員工編號 / 外國公司編號 → 可忽略本警告。")
             findings.append({
                 "layer": "L1",
-                "severity": "fail",
+                "severity": sev,
                 "category": "tax-id-invalid",
-                "title": f"統編「{entry['value']}」校驗碼錯誤",
-                "detail": (f"出現於 {_names(entry['files'])}（共 {entry['total_count']} 次），"
-                           "可能輸入錯誤或位數錯位。"),
+                "title": title,
+                "detail": detail,
                 "page": None,
-                "evidence": {"tax_id": entry["value"], "files": entry["files"]},
+                "evidence": {"value": entry["value"], "files": entry["files"],
+                             "occurrences": n_count},
             })
 
     # ─── 案號比對 ───
