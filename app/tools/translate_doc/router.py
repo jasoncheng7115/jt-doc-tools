@@ -295,7 +295,7 @@ def _translate_sentences(
     if client is None:
         raise HTTPException(503, "LLM 服務未啟用，請到「設定 → LLM 設定」開啟")
     # Per-tool 模型覆寫優先；admin 在 LLM 設定頁可以給 translate-doc 指定
-    # 不同模型（例如純文字翻譯用 gemma3:27b，校驗仍用 gemma4:26b）
+    # 不同模型（例如純文字翻譯用 gemma4:26b，校驗仍用 gemma4:26b）
     model = llm_settings.get_model_for("translate-doc")
     conf = llm_settings.get()
     # 並行數 — admin 在 LLM 設定可調，預設 4。對 1-句 case 退化成同步呼叫。

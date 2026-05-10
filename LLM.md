@@ -108,7 +108,7 @@
 | 部署 | 適用 | 模型範例 |
 |---|---|---|
 | **本機 Ollama** | 個人 / 小團隊試用 | `gemma3:4b`（消費級 GPU 可跑；vision 任務建議改跑 `gemma4:26b`） |
-| **DGX Spark / 工作站** | 公司內部單一 LLM 伺服器 | `gemma4:26b`（視覺，預設）、`gemma3:27b`（高品質文字） |
+| **DGX Spark / 工作站** | 公司內部單一 LLM 伺服器 | `gemma4:26b`（預設；視覺 + 文字皆可） |
 | **vLLM / LM Studio / jan.ai** | 偏好其他 OpenAI-compat 後端 | 視 backend 而定 |
 | **遠端 OpenAI / Anthropic** | 不在意資料外送的場景 | 預設**不**支援（專案精神是不上雲），但 OpenAI-compat URL 可設，風險自負 |
 

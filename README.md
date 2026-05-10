@@ -1,12 +1,12 @@
-# Jason Tools 文件工具箱 v1.5.17
+# Jason Tools 文件工具箱 v1.5.18
 
-> 整合式 PDF / Office 文件處理平台,30 個工具一站式解決:**填單用印**、**浮水印**、**多頁合併 / 拆分 / 旋轉 / 整理**、**轉檔**、**去識別化**、**字數統計**、**註解整理**、**差異比對**、**逐句翻譯**、**頁面編輯器**、**加密 / 解密**...
+> 整合式 PDF / Office 文件處理平台，30 個工具一站式解決：**填單用印**、**浮水印**、**多頁合併 / 拆分 / 旋轉 / 整理**、**轉檔**、**去識別化**、**字數統計**、**註解整理**、**差異比對**、**逐句翻譯**、**頁面編輯器**、**加密 / 解密**...
 >
-> 企業功能:**本機 / LDAP / AD 多領域認證**、**RBAC 角色權限**、**稽核記錄**、**SIEM 轉送**(syslog / CEF / GELF)、**字型管理**、**REST API**。
+> 企業功能：**本機 / LDAP / AD 多領域認證**、**RBAC 角色權限**、**稽核記錄**、**SIEM 轉送**(syslog / CEF / GELF)、**字型管理**、**REST API**。
 >
-> **不上雲,資料留在自己手中。** Linux / macOS / Windows 三平台都可單機跑或內網架站給多人用。
+> **不上雲，資料留在自己手中。** Linux / macOS / Windows 三平台都可單機跑或內網架站給多人用。
 
-完整介紹網站:<https://jasoncheng7115.github.io/jt-doc-tools/>
+完整介紹網站：<https://jasoncheng7115.github.io/jt-doc-tools/>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![CodeQL](https://github.com/jasoncheng7115/jt-doc-tools/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/jasoncheng7115/jt-doc-tools/actions/workflows/codeql.yml)
@@ -41,7 +41,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 ### 填單用印
 - **表單自動填寫** — 自動偵測欄位 + 模板填值
 - **用印與簽名** — 拖放套用印章 / 簽名
-- **浮水印** — 文字 / 圖片浮水印,支援多檔批次
+- **浮水印** — 文字 / 圖片浮水印，支援多檔批次
 
 ### 檔案編輯
 - **頁面編輯器** — 文字框 / 形狀 / 白底 / 螢光筆 / 簽名 / 註解 / 真刪物件
@@ -66,7 +66,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 - **逐句翻譯**
 - **壓縮**
 
-> 標 [需 OxOffice/LibreOffice] 的工具會用到 OxOffice / LibreOffice(OxOffice 優先,OSSII 維護的台灣本地化 fork,CJK 支援更好)。其他 23 個工具只處理 PDF / 純文字 / 圖片,不需要 Office 引擎。安裝腳本會自動處理。
+> 標 [需 OxOffice/LibreOffice] 的工具會用到 OxOffice / LibreOffice(OxOffice 優先，OSSII 維護的台灣本地化 fork,CJK 支援更好)。其他 23 個工具只處理 PDF / 純文字 / 圖片，不需要 Office 引擎。安裝腳本會自動處理。
 
 ---
 
@@ -80,12 +80,12 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 | 擷取文字 | 把 PDF 雙欄切斷的句子重新接回 | text |
 | 表單自動填寫 | 填完後 LLM 看 PNG 校驗欄位錯位 / 截斷 | **vision** |
 | 文件去識別化 | regex 抓不到的客戶代號 / 主管姓名 / 內部編號 | text |
-| 文字去識別化 | 同上,純文字輸入版 | text |
+| 文字去識別化 | 同上，純文字輸入版 | text |
 | 字數統計 | 額外生成 3-5 句摘要 + TOP 10 關鍵字 | text |
 | 註解整理 | 多筆審閱意見自動分「重大 / 一般 / 提問」 | text |
 | 文件差異比對 | 行 diff 之外多給「主要修改了哪幾條條款」自然語言摘要 | text |
 
-**核心工具完全不依賴 LLM**;沒設定就跟以前一樣全部能用。詳見 **[LLM.md](LLM.md)**。
+**核心工具完全不依賴 LLM**；沒設定就跟以前一樣全部能用。詳見 **[LLM.md](LLM.md)**。
 
 ---
 
@@ -94,7 +94,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 | 文件 | 內容 |
 |---|---|
 | **[INSTALL.md](INSTALL.md)** | 三平台詳細安裝、必要工具、安裝位置、系統需求、解除安裝 |
-| **[OPS.md](OPS.md)** | 日常運維:`jtdt` 指令、升級、反向代理(nginx/Caddy)、監聽位置、備份還原、排程清理 |
+| **[OPS.md](OPS.md)** | 日常運維：`jtdt` 指令、升級、反向代理(nginx/Caddy)、監聽位置、備份還原、排程清理 |
 | **[AUTH.md](AUTH.md)** | 認證 / RBAC / 內建帳號(jtdt-admin / jtdt-auditor)/ 2FA / 帳號鎖定 / 緊急復原 |
 | **[API.md](API.md)** | REST API:Bearer token、endpoint 一覽、上傳格式、回傳格式、錯誤碼、curl / Python 範例、Job 流程 |
 | **[LLM.md](LLM.md)** | LLM AI 加值功能(預設關閉):8 個工具如何用 LLM、效果範例、部署選項(Ollama / vLLM / DGX Spark) |
@@ -108,10 +108,10 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 ## 隱私 / 安全要點
 
 - **不上雲、資料留在自己手中** — 所有檔案處理發生在你的伺服器上
-- **資料目錄獨立** — 不會跟使用者個人檔案混在一起,Windows 不 roam
-- **預設不啟用認證**(單機模式) — 全新安裝跟以前一樣大家直接用;要多人或內網部署再啟用
+- **資料目錄獨立** — 不會跟使用者個人檔案混在一起，Windows 不 roam
+- **預設不啟用認證**(單機模式) — 全新安裝跟以前一樣大家直接用；要多人或內網部署再啟用
 - **稽核記錄 + SIEM 轉送** — 啟用認證後所有敏感操作記下並可即時轉發
-- **可選 LLM 校驗** — 預設關閉,自接 Ollama / 本機 LLM 才會啟用,不打雲端
+- **可選 LLM 校驗** — 預設關閉，自接 Ollama / 本機 LLM 才會啟用，不打雲端
 
 詳見 [SECURITY.md](SECURITY.md)。
 
@@ -142,13 +142,13 @@ Apache License 2.0 — 詳見 [LICENSE](LICENSE)。第三方套件授權見 [THI
 
 ## 免責聲明
 
-本軟體依「現狀」(AS IS)提供,**不附任何明示或暗示之保證**,包含但不限於商業適售性、特定用途之適用性、不侵權之保證。
+本軟體依「現狀」(AS IS)提供，**不附任何明示或暗示之保證**，包含但不限於商業適售性、特定用途之適用性、不侵權之保證。
 
 - 使用者應**自行承擔**使用本軟體之全部風險
-- 對於本軟體導致之任何**直接、間接、附帶、衍生性或懲罰性損害**(含資料毀損、商業中斷、收益損失、商譽損害等),作者與貢獻者**概不負責**
-- 涉及個人資料、敏感商業文件處理時,使用者應**自行確保符合**所在地之個人資料保護法、公司資安政策、以及相關法規(包含但不限於我國個人資料保護法、營業秘密法)
-- 本軟體之 LLM / AI 校驗等功能為**選用且預設關閉**;若啟用後接外部模型供應商,相關資料傳輸風險由使用者自負
-- 本軟體之輸出結果(如表單自動填寫、去識別化、OCR、LLM 校對)僅供**輔助參考**,最終正確性仍須由使用者確認;對重要文件請務必對照原檔複核
+- 對於本軟體導致之任何**直接、間接、附帶、衍生性或懲罰性損害**(含資料毀損、商業中斷、收益損失、商譽損害等)，作者與貢獻者**概不負責**
+- 涉及個人資料、敏感商業文件處理時，使用者應**自行確保符合**所在地之個人資料保護法、公司資安政策、以及相關法規(包含但不限於我國個人資料保護法、營業秘密法)
+- 本軟體之 LLM / AI 校驗等功能為**選用且預設關閉**；若啟用後接外部模型供應商，相關資料傳輸風險由使用者自負
+- 本軟體之輸出結果(如表單自動填寫、去識別化、OCR、LLM 校對)僅供**輔助參考**，最終正確性仍須由使用者確認；對重要文件請務必對照原檔複核
 - 本軟體與 Adobe、Microsoft、OSSII、TheDocumentFoundation 等任何第三方公司**無任何附屬、贊助或背書關係**
 
 繼續使用即視為接受上述條款。
