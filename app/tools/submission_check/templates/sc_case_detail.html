@@ -75,7 +75,7 @@
 
 {% block content %}
 <p class="muted" style="font-size:12px; margin-bottom:4px;"><a href="../cases" style="color:#64748b;">← 案件清單</a></p>
-<h1>{{ icon('id-card', size=22) }} 案件 {{ case.case_id[:8] }}…</h1>
+<h1>{{ icon('id-card', size=22) }} 案件 <span title="{{ case.case_id }}" style="font-family:ui-monospace,Menlo,monospace; font-weight:500;">{{ case.case_id[:8] }}</span></h1>
 
 <div class="panel scd-meta">
   <dl>
