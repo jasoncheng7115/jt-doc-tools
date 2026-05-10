@@ -22,13 +22,17 @@
     - 統編 8 碼校驗碼錯誤直接 fail
     - 政府機關預設視為「對方候選」不誤標
 
-### 後續 sprint（暫未上線）
+- **Sprint 3**：L2 真 OCR pipeline — 對掃描 PDF / JPG / PNG / TIFF 跑 tesseract（chi_tra+chi_sim+eng），抽出來的文字再送 entity extraction 補抓章 / 影像證書內字。PDF 有文字層自動跳過（避免重複）。每檔上限 30 頁防大檔卡住。
+- **Sprint 4**：L3 LLM 文字層 — `submission-check` 列入 `KNOWN_LLM_TOOLS`：(a) **fuzzy 變體合併**（○○ ↔ ○○ ↔ (brand) 自動聚成一群避免誤標 mismatch），(b) **修改範本痕跡推論**（讀前 500 字判斷哪些檔疑似從別案範本沿用未改）。沒設定 LLM 自動 fallback 不影響整體運作。
+- **Sprint 5**：User override 註解 — 對任何 finding 可標「誤報」/「已確認 OK」/「不修」+ 原因 + user。重跑時自動套用 override，被標的 finding 降級為 info。`POST /override/{case_id}` + `DELETE /override/{case_id}/{finding_key}` endpoints。
+- **Sprint 6 部分**：E 類重要檢查項：
+  - **金額一致性**（標單 / 報價 / 估價 / 合約位數錯位偵測，例：3,500,000 vs 35,000,000 標 warn）
+  - **日期合理性鏈**（任何證書 / 證明日期早於案件截止日 → 過期警示）
+  - **附件清單對應**（標單聲明附件 N 件，實際上傳 M 份不符 → 警示）
 
-- Sprint 2: 身分一致性核心（公司名 / 統編 / 人名跨檔比對）+ 金額 / 日期 / 附件清單 / 章組合
-- Sprint 3: L2 OCR pipeline（tesseract）
-- Sprint 4: L3 LLM（fuzzy 變體合併、修改範本痕跡推論、vision 偽造偵測）
-- Sprint 5: 跟既有工具 chaining、案件 lifecycle / Re-run、User override 註解
-- Sprint 6: 完整鑑識報告 PDF 輸出、admin 儀表板、多語言、實體字典
+### 後續未做
+
+- Sprint 7+: L3 vision 偽造偵測（章 / 印 / PS 痕跡）、報告 PDF 鑑識輸出、admin 儀表板、實體字典 R 階段
 
 ## [1.5.18] - 2026-05-10
 
