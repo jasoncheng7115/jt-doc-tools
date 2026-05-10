@@ -47,7 +47,7 @@
   </div>
 
   <details class="panel" open>
-    <summary><h2 style="margin-top:0;">狀態分布</h2></summary>
+    <summary>狀態分布</summary>
     <table class="scs-tbl">
       {% for st, n in stats.by_status.items() %}
       <tr><td style="width:120px;">{{ st }}</td><td>
@@ -59,7 +59,7 @@
   </details>
 
   <details class="panel" open>
-    <summary><h2 style="margin-top:0;">三層使用統計（已 done 案件中）</h2></summary>
+    <summary>三層使用統計（已 done 案件中）</summary>
     <table class="scs-tbl">
       {% for layer, n in stats.layer_used.items() %}
       <tr><td style="width:120px;">{{ layer }}</td><td>{{ n }} 個案件</td></tr>
@@ -68,7 +68,7 @@
   </details>
 
   <details class="panel" open>
-    <summary><h2 style="margin-top:0;">Top 10 失敗 / 警告類型</h2></summary>
+    <summary>Top 10 失敗 / 警告類型</summary>
     <table class="scs-tbl">
       <thead><tr><th>類型</th><th>次數</th></tr></thead>
       <tbody>
@@ -80,7 +80,7 @@
   </details>
 
   <details class="panel">
-    <summary><h2 style="margin-top:0;">嚴重度分布</h2></summary>
+    <summary>嚴重度分布</summary>
     <table class="scs-tbl">
       {% for sev, n in stats.severity_breakdown.items() %}
       <tr><td style="width:120px;">{{ sev }}</td><td>{{ n }}</td></tr>

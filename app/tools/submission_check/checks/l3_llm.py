@@ -1,7 +1,7 @@
 """L3 LLM — 用 LLM 做 fuzzy 變體合併、placeholder 判讀、修改範本痕跡推論。
 
 核心 entry：
-- merge_entity_variants() — 把「○○ / ○○ / (brand) / ○○集團」聚成同一群
+- merge_entity_variants() — 把「某某 / 某某科技 / SOME-CORP / 某某集團」聚成同一群
 - detect_template_residue() — 用 LLM 看「這份文件是否從另一份 case 範本沿用未改」
 - (vision 偽造偵測 留 v2)
 
@@ -58,8 +58,8 @@ def _safe_json_extract(text: str) -> dict:
 def merge_entity_variants(values: list[str]) -> list[list[str]]:
     """讓 LLM 把命名變體合成 group。
 
-    Input: ["○○", "○○股份有限公司", "(brand)", "○○", "○○工業"]
-    Output: [["○○", "○○股份有限公司", "(brand)"], ["○○", "○○工業"]]
+    Input: ["某某科技", "某某科技股份有限公司", "SOME-CORP", "另一家", "另一家工業"]
+    Output: [["某某科技", "某某科技股份有限公司", "SOME-CORP"], ["另一家", "另一家工業"]]
 
     沒 LLM 時回 [[v] for v in values]（每個 value 各成一群）。
     """
@@ -76,7 +76,7 @@ def merge_entity_variants(values: list[str]) -> list[list[str]]:
     prompt = (
         "請判斷以下機構 / 公司命名變體中，哪些是同一個實體（同集團 / 同公司不同稱呼 / 中英對照）。\n"
         "規則：\n"
-        "1. 同公司不同稱呼算同一個：簡稱 + 全名 + 英文名（例如「○○」「○○」「○○股份有限公司」「(brand)」算同一個）\n"
+        "1. 同公司不同稱呼算同一個：簡稱 + 全名 + 英文名（例如「某某」「某某科技」「某某科技股份有限公司」「SOME-CORP」算同一個）\n"
         "2. 同集團 / 子母公司視為同群\n"
         "3. 截然不同的兩家公司分開\n"
         "4. 政府機關上下級關係算同群（例如「○○部」與「○○部所屬○○局」算同群）\n"
