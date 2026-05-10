@@ -158,6 +158,7 @@ def list_cases(owner_uid: Optional[int] = None,
             files_summary = f"{files_list[0].get('name', '(未命名)')} 等 {len(files_list)} 個"
         out.append({
             "case_id": case["case_id"],
+            "name": case.get("name") or "",
             "status": case["status"],
             "main_entity": (case.get("ground_truth") or {}).get("main_entity"),
             "files_count": len(files_list),

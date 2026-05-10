@@ -75,7 +75,10 @@
 
 {% block content %}
 <p class="muted" style="font-size:12px; margin-bottom:4px;"><a href="../cases" style="color:#64748b;">← 案件清單</a></p>
-<h1>{{ icon('id-card', size=22) }} 案件 <span title="{{ case.case_id }}" style="font-family:ui-monospace,Menlo,monospace; font-weight:500;">{{ case.case_id[:8] }}</span></h1>
+<h1>{{ icon('id-card', size=22) }}
+  {% if case.name %}{{ case.name }}{% else %}<span style="color:#94a3b8;">(未命名案件)</span>{% endif %}
+  <span title="{{ case.case_id }}" style="font-family:ui-monospace,Menlo,monospace; font-weight:400; font-size:14px; color:#94a3b8; margin-left:8px;">{{ case.case_id[:8] }}</span>
+</h1>
 
 <div class="panel scd-meta">
   <dl>
