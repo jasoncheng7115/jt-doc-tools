@@ -103,18 +103,21 @@ def _scan_pdf(path: Path) -> list[dict]:
             pass
 
         # === 結構面：incremental update（修訂歷史） ===
+        # PDF 規範：每存檔一次寫一個 `%%EOF`。1 個 = 正常單次存；> 1 個 = 真的有
+        # incremental update，可能藏舊版內容。不用 xref 數推估（會誤判內容豐富的單頁）。
         try:
-            # PyMuPDF 0.22+ 有 doc.is_dirty / doc.has_history; fallback 用 xref 大小判斷
-            xref_count = doc.xref_length()
-            page_count = doc.page_count
-            if xref_count > page_count * 50 and page_count > 0:
-                # heuristic: xref 異常多 → 可能有 incremental 殘留
+            with open(path, "rb") as fb:
+                raw = fb.read()
+            eof_count = raw.count(b"%%EOF")
+            if eof_count > 1:
                 findings.append({
-                    "layer": "L1", "severity": "info",
+                    "layer": "L1", "severity": "warn",
                     "category": "incremental",
-                    "title": "PDF 物件數異常多（可能含修訂歷史）",
-                    "detail": f"xref entries={xref_count}, pages={page_count}；建議送件前用 pdf-metadata 重存乾淨版。",
-                    "page": None, "evidence": {"xref_count": xref_count},
+                    "title": f"PDF 含 {eof_count} 次儲存的修訂歷史",
+                    "detail": (f"檔案內有 {eof_count} 個 EOF marker，"
+                               "代表此 PDF 經過 incremental save，可能藏有舊版內容。"
+                               "建議送件前用 pdf-metadata 重存乾淨版。"),
+                    "page": None, "evidence": {"eof_count": eof_count},
                 })
         except Exception:
             pass
