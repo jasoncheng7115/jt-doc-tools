@@ -1,24 +1,21 @@
 {% extends "base.html" %}
+{% from "components/icons.html" import icon %}
 
 {% block title %}案件 {{ case.case_id[:8] }} · {{ app_name }}{% endblock %}
 
 {% block head %}
 <style>
-.scd-wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
-.scd-meta { background:#fff; border:1px solid #e5e7eb; border-radius:6px; padding:14px; margin-bottom:16px; }
 .scd-meta dl { display:grid; grid-template-columns: 110px 1fr; gap:6px 12px; margin:0; font-size:13px; }
 .scd-meta dt { color:#64748b; }
 .scd-meta dd { margin:0; color:#1e293b; }
-.scd-summary { display:flex; gap:12px; margin:12px 0; }
-.scd-summary .card { flex:1; background:#f8fafc; padding:12px; border-radius:6px; border:1px solid #e5e7eb; text-align:center; }
+.scd-summary { display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin:12px 0; }
+.scd-summary .card { background:#f8fafc; padding:12px; border-radius:6px; border:1px solid #e5e7eb; text-align:center; }
 .scd-summary .card .num { font-size:24px; font-weight:600; }
 .scd-summary .card.score .num { color:#3b82f6; }
 .scd-summary .card.fail .num { color:#dc2626; }
 .scd-summary .card.warn .num { color:#f59e0b; }
 .scd-summary .card.info .num { color:#0891b2; }
 .scd-summary .card .lbl { font-size:11px; color:#64748b; margin-top:4px; }
-.scd-version { background:#fff; border:1px solid #e5e7eb; border-radius:6px; padding:14px; margin-bottom:16px; }
-.scd-version h3 { font-size:15px; margin:0 0 8px; }
 .scd-finding { padding:8px 12px; border-left:4px solid #cbd5e1; background:#f8fafc; margin:6px 0; font-size:13px; border-radius:3px; }
 .scd-finding.fail { border-color:#dc2626; background:#fef2f2; }
 .scd-finding.warn { border-color:#f59e0b; background:#fffbeb; }
@@ -37,131 +34,129 @@
 .scd-override-note { display:inline-block; font-size:10px; color:#10b981; margin-left:6px; }
 .scd-finding.has-override { opacity:0.6; }
 .scd-finding.has-override .scd-finding-title::before { content:"✓ 已標 — "; color:#10b981; font-weight:400; }
-.scd-actions { display:flex; gap:8px; margin-top:12px; }
-.scd-actions a, .scd-actions button {
-  background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:6px 12px; border-radius:6px;
-  font-size:13px; cursor:pointer; text-decoration:none;
-}
-.scd-actions a.primary, .scd-actions button.primary { background:#3b82f6; color:#fff; border-color:#3b82f6; }
-.scd-file-section { margin-top:14px; padding-top:14px; border-top:1px solid #f1f5f9; }
-.scd-file-section h4 { font-size:13px; margin:0 0 6px; color:#475569; }
+.scd-file-name { font-size:13px; font-weight:500; color:#334155; margin:8px 0 4px; }
+.scd-file-name .sz { color:#94a3b8; font-weight:400; font-size:11px; }
+.scd-no-finding { font-size:12px; color:#10b981; padding:4px 12px; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="scd-wrap">
-  <div style="margin-bottom:8px;">
-    <a href="../cases" style="color:#64748b; font-size:12px;">← 案件清單</a>
-  </div>
-  <h1 style="font-size:22px;">案件 {{ case.case_id[:8] }}…</h1>
+<p class="muted" style="font-size:12px; margin-bottom:4px;"><a href="../cases" style="color:#64748b;">← 案件清單</a></p>
+<h1>{{ icon('id-card', size=22) }} 案件 {{ case.case_id[:8] }}…</h1>
 
-  <div class="scd-meta">
-    <dl>
-      <dt>狀態</dt><dd>{{ case.status }}</dd>
-      <dt>檔案數</dt><dd>{{ case.files|length }}</dd>
-      <dt>主角</dt><dd>
-        {% if case.ground_truth.main_entity %}
-          {{ case.ground_truth.main_entity.name }}
-          {% if case.ground_truth.main_entity.identifier %}
-            <span style="color:#64748b;">（{{ case.ground_truth.main_entity.identifier }}）</span>
-          {% endif %}
-        {% else %}<span style="color:#94a3b8;">(未設定)</span>{% endif %}
-      </dd>
-      {% if case.ground_truth.counterparty %}
-      <dt>對方</dt><dd>{{ case.ground_truth.counterparty.name }}</dd>
-      {% endif %}
-      {% if case.ground_truth.case_number %}
-      <dt>案號</dt><dd>{{ case.ground_truth.case_number }}</dd>
-      {% endif %}
-      {% if case.ground_truth.deadline %}
-      <dt>截止日</dt><dd>{{ case.ground_truth.deadline }}</dd>
-      {% endif %}
-    </dl>
-    <div class="scd-actions">
-      <button class="primary" onclick="rerunCheck('{{ case.case_id }}')">重新檢核（新版本）</button>
-    </div>
-  </div>
-
-  {% if not versions_with_reports %}
-    <div style="text-align:center; padding:32px; color:#94a3b8;">
-      尚無檢核版本，按上方「重新檢核」開始第一次檢核。
-    </div>
-  {% endif %}
-
-  {% for v in versions_with_reports %}
-    <div class="scd-version">
-      <h3>版本 {{ v.version }}</h3>
-      {% if v.report %}
-        {% set s = v.report.summary %}
-        <div class="scd-summary">
-          <div class="card score"><div class="num">{{ s.score }}</div><div class="lbl">就緒度</div></div>
-          <div class="card fail"><div class="num">{{ s.fail }}</div><div class="lbl">失敗</div></div>
-          <div class="card warn"><div class="num">{{ s.warn }}</div><div class="lbl">警告</div></div>
-          <div class="card info"><div class="num">{{ s.info }}</div><div class="lbl">資訊</div></div>
-        </div>
-        <div style="font-size:12px; color:#64748b;">
-          層級:
-          {% for layer, st in s.layers.items() %}
-            <span style="margin-right:8px;">{{ layer }}: {{ st }}</span>
-          {% endfor %}
-        </div>
-
-        {% if v.report.cross_findings %}
-        <div class="scd-file-section">
-          <h4>跨檔發現</h4>
-          {% for fd in v.report.cross_findings %}
-            <div class="scd-finding {{ fd.severity }}{% if fd._override %} has-override{% endif %}">
-              <span class="scd-layer">{{ fd.layer }}</span>
-              <span class="scd-finding-title">{{ fd.title }}</span>
-              <div class="scd-finding-detail">{{ fd.detail }}</div>
-              {% if fd._override %}
-              <div class="scd-override-note">{{ fd._override.verdict }} — {{ fd._override.reason or '無註記' }} (by {{ fd._override.by_user or 'anonymous' }})</div>
-              {% endif %}
-              <div class="scd-finding-actions">
-                {% if fd.chaining and fd.chaining.tool_url %}
-                <a class="chain" href="{{ fd.chaining.tool_url }}" target="_blank" title="{{ fd.chaining.hint }}">→ {{ fd.chaining.label }}</a>
-                {% endif %}
-                {% if not fd._override %}
-                <button class="ok" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'confirmed_ok')">標已確認 OK</button>
-                <button class="fp" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'false_positive')">標誤報</button>
-                {% else %}
-                <button onclick="removeOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}')">移除標記</button>
-                {% endif %}
-              </div>
-            </div>
-          {% endfor %}
-        </div>
+<div class="panel scd-meta">
+  <dl>
+    <dt>狀態</dt><dd><span style="font-weight:500;">{{ case.status }}</span></dd>
+    <dt>檔案數</dt><dd>{{ case.files|length }}</dd>
+    <dt>主角</dt><dd>
+      {% if case.ground_truth.main_entity %}
+        {{ case.ground_truth.main_entity.name }}
+        {% if case.ground_truth.main_entity.identifier %}
+          <span class="muted">（{{ case.ground_truth.main_entity.identifier }}）</span>
         {% endif %}
+      {% else %}<span style="color:#94a3b8;">(未設定)</span>{% endif %}
+    </dd>
+    {% if case.ground_truth.counterparty %}
+    <dt>對方</dt><dd>{{ case.ground_truth.counterparty.name }}</dd>
+    {% endif %}
+    {% if case.ground_truth.case_number %}
+    <dt>案號</dt><dd>{{ case.ground_truth.case_number }}</dd>
+    {% endif %}
+    {% if case.ground_truth.deadline %}
+    <dt>截止日</dt><dd>{{ case.ground_truth.deadline }}</dd>
+    {% endif %}
+  </dl>
+  <div style="margin-top:12px;">
+    <button class="btn btn-primary" onclick="rerunCheck('{{ case.case_id }}')">{{ icon('refresh', size=14) }} 重新檢核（新版本）</button>
+  </div>
+</div>
 
-        <div class="scd-file-section">
-          <h4>逐檔結果</h4>
-          {% for f in case.files %}
-            {% set fds = v.report.findings_per_file.get(f.file_id, []) %}
-            <div style="margin-bottom:10px;">
-              <div style="font-size:13px; font-weight:500; color:#334155; margin-bottom:4px;">
-                {{ f.name }} <span style="color:#94a3b8; font-weight:400;">({{ (f.size/1024)|round(1) }} KB)</span>
-              </div>
-              {% if fds %}
-                {% for fd in fds %}
-                <div class="scd-finding {{ fd.severity }}">
-                  <span class="scd-layer">{{ fd.layer }}</span>
-                  <span class="scd-finding-title">{{ fd.title }}</span>
-                  {% if fd.page %}<span style="color:#64748b; font-size:11px;">　p.{{ fd.page }}</span>{% endif %}
-                  <div class="scd-finding-detail">{{ fd.detail }}</div>
-                </div>
-                {% endfor %}
+{% if not versions_with_reports %}
+  <div class="panel" style="text-align:center; color:#94a3b8;">
+    尚無檢核版本，按上方「重新檢核」開始第一次檢核。
+  </div>
+{% endif %}
+
+{% for v in versions_with_reports %}
+  <details class="panel" {% if loop.last %}open{% endif %}>
+    <summary><h2 style="margin-top:0;">版本 {{ v.version }}</h2></summary>
+    {% if v.report %}
+      {% set s = v.report.summary %}
+      <div class="scd-summary">
+        <div class="card score"><div class="num">{{ s.score }}</div><div class="lbl">就緒度</div></div>
+        <div class="card fail"><div class="num">{{ s.fail }}</div><div class="lbl">失敗</div></div>
+        <div class="card warn"><div class="num">{{ s.warn }}</div><div class="lbl">警告</div></div>
+        <div class="card info"><div class="num">{{ s.info }}</div><div class="lbl">資訊</div></div>
+      </div>
+      <div class="muted" style="font-size:12px;">
+        層級:
+        {% for layer, st in s.layers.items() %}
+          <span style="margin-right:8px;">{{ layer }}: {{ st }}</span>
+        {% endfor %}
+      </div>
+
+      {% if v.report.cross_findings %}
+      <h3 style="margin-top:14px; font-size:13px; color:#475569;">跨檔發現</h3>
+      {% for fd in v.report.cross_findings %}
+        <div class="scd-finding {{ fd.severity }}{% if fd._override %} has-override{% endif %}">
+          <span class="scd-layer">{{ fd.layer }}</span>
+          <span class="scd-finding-title">{{ fd.title }}</span>
+          <div class="scd-finding-detail">{{ fd.detail }}</div>
+          {% if fd._override %}
+          <div class="scd-override-note">{{ fd._override.verdict }} — {{ fd._override.reason or '無註記' }} (by {{ fd._override.by_user or 'anonymous' }})</div>
+          {% endif %}
+          <div class="scd-finding-actions">
+            {% if fd.chaining and fd.chaining.tool_url %}
+            <a class="chain" href="{{ fd.chaining.tool_url }}" target="_blank" title="{{ fd.chaining.hint }}">→ {{ fd.chaining.label }}</a>
+            {% endif %}
+            {% if not fd._override %}
+            <button class="ok" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'confirmed_ok')">標已確認 OK</button>
+            <button class="fp" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'false_positive')">標誤報</button>
+            {% else %}
+            <button onclick="removeOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}')">移除標記</button>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+      {% endif %}
+
+      <h3 style="margin-top:14px; font-size:13px; color:#475569;">逐檔結果</h3>
+      {% for f in case.files %}
+        {% set fds = v.report.findings_per_file.get(f.file_id, []) %}
+        <div class="scd-file-name">{{ f.name }} <span class="sz">({{ (f.size/1024)|round(1) }} KB)</span></div>
+        {% if fds %}
+          {% for fd in fds %}
+          <div class="scd-finding {{ fd.severity }}{% if fd._override %} has-override{% endif %}">
+            <span class="scd-layer">{{ fd.layer }}</span>
+            <span class="scd-finding-title">{{ fd.title }}</span>
+            {% if fd.page %}<span class="muted" style="font-size:11px;">　p.{{ fd.page }}</span>{% endif %}
+            <div class="scd-finding-detail">{{ fd.detail }}</div>
+            {% if fd._override %}
+            <div class="scd-override-note">{{ fd._override.verdict }} — {{ fd._override.reason or '無註記' }} (by {{ fd._override.by_user or 'anonymous' }})</div>
+            {% endif %}
+            <div class="scd-finding-actions">
+              {% if fd.chaining and fd.chaining.tool_url %}
+              <a class="chain" href="{{ fd.chaining.tool_url }}" target="_blank" title="{{ fd.chaining.hint }}">→ {{ fd.chaining.label }}</a>
+              {% endif %}
+              {% if not fd._override %}
+              <button class="ok" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'confirmed_ok')">標已確認 OK</button>
+              <button class="fp" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'false_positive')">標誤報</button>
               {% else %}
-                <div style="font-size:12px; color:#10b981; padding:4px 12px;">✓ 無發現</div>
+              <button onclick="removeOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}')">移除標記</button>
               {% endif %}
             </div>
+          </div>
           {% endfor %}
-        </div>
-      {% else %}
-        <div style="color:#94a3b8;">報告未產生</div>
-      {% endif %}
-    </div>
-  {% endfor %}
-</div>
+        {% else %}
+          <div class="scd-no-finding">✓ 無發現</div>
+        {% endif %}
+      {% endfor %}
+    {% else %}
+      <div class="muted">報告未產生</div>
+    {% endif %}
+  </details>
+{% endfor %}
+
 {% endblock %}
 
 {% block scripts %}
@@ -174,9 +169,7 @@ async function rerunCheck(caseId) {
     const j = await r.json();
     alert("檢核已啟動，job_id=" + j.job_id + " (新版本 " + j.version + ")\n稍後重新整理本頁查看結果");
     setTimeout(() => location.reload(), 3000);
-  } catch (e) {
-    alert("失敗：" + e.message);
-  }
+  } catch (e) { alert("失敗：" + e.message); }
 }
 
 async function markOverride(caseId, findingKey, verdict) {

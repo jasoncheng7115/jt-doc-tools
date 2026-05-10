@@ -12,7 +12,7 @@ metadata = ToolMetadata(
     id="submission-check",
     name="送件前檢核",
     description="一批文件送出去前的最後一關自查：身分一致性、metadata 殘留、漏改範本、章/簽完整、偽造痕跡，三層檢核（規則 / OCR / LLM）。",
-    icon="check-circle",
+    icon="id-card",
     category="資安處理",
     version="0.1.0",
 )
