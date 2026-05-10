@@ -37,6 +37,27 @@ def is_tesseract_available() -> bool:
     return bool(shutil.which("tesseract"))
 
 
+def get_available_langs() -> list[str]:
+    """回 tesseract 已安裝的語言清單（給 LED hover 顯示用）。"""
+    try:
+        from app.core.sys_deps import configure_pytesseract
+        configure_pytesseract()
+        import pytesseract
+        return list(pytesseract.get_languages(config="") or [])
+    except Exception:
+        return []
+
+
+def get_active_ocr_langs() -> str:
+    """回實際 OCR 會用到的語言組合（過濾掉沒裝的）。"""
+    available = set(get_available_langs())
+    if not available:
+        return ""
+    wanted = ["chi_tra", "chi_sim", "eng"]
+    active = [l for l in wanted if l in available]
+    return "+".join(active) if active else "eng"
+
+
 def _has_text_layer(pdf_path: Path) -> bool:
     """檢查 PDF 是否有實質文字層（避免對已抽得到字的檔案重複 OCR）。"""
     try:

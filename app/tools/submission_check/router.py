@@ -36,6 +36,7 @@ from .checks import l4_vision as _l4
 from .checks import important as _important
 from . import override as _override
 from . import chaining as _chaining
+from . import self_entities as _self_ents
 
 
 def _set_layer_status(job, layer: str, status: str, extra: str = "") -> None:
@@ -89,6 +90,78 @@ async def page_case_list(request: Request, q: str = "", status: str = "") -> HTM
     return templates.TemplateResponse("sc_case_list.html",
                                        {"request": request, "title": "案件清單",
                                         "cases": cases, "q": q, "status_filter": status})
+
+
+@router.get("/self-entities", response_class=HTMLResponse)
+async def page_self_entities(request: Request) -> HTMLResponse:
+    """我方資料管理頁 — 預先登錄自家公司 / 子公司 / 客戶常用資訊。"""
+    templates = request.app.state.templates
+    user = getattr(request.state, "user", None) if hasattr(request, "state") else None
+    user_key = _self_ents._user_key(user)
+    entities = _self_ents.load_entities(user_key)
+    return templates.TemplateResponse("sc_self_entities.html",
+                                       {"request": request, "title": "我方資料管理",
+                                        "entities": entities})
+
+
+@router.get("/api/self-entities")
+async def api_list_self_entities(request: Request):
+    user = getattr(request.state, "user", None) if hasattr(request, "state") else None
+    user_key = _self_ents._user_key(user)
+    return {"entities": _self_ents.load_entities(user_key)}
+
+
+@router.post("/api/self-entities")
+async def api_create_self_entity(request: Request,
+                                  name: str = Form(...),
+                                  tax_id: str = Form(""),
+                                  address: str = Form(""),
+                                  aliases: str = Form(""),
+                                  type: str = Form("company"),
+                                  note: str = Form("")):
+    if not name.strip():
+        raise HTTPException(400, "name 必填")
+    user = getattr(request.state, "user", None) if hasattr(request, "state") else None
+    user_key = _self_ents._user_key(user)
+    aliases_list = [a.strip() for a in aliases.split(",") if a.strip()] if aliases else []
+    try:
+        e = _self_ents.add_entity(user_key, {
+            "name": name, "tax_id": tax_id, "address": address,
+            "aliases": aliases_list, "type": type, "note": note,
+        })
+    except ValueError as ex:
+        raise HTTPException(400, str(ex))
+    return {"ok": True, "entity": e}
+
+
+@router.put("/api/self-entities/{entity_id}")
+async def api_update_self_entity(entity_id: str, request: Request,
+                                   name: str = Form(...),
+                                   tax_id: str = Form(""),
+                                   address: str = Form(""),
+                                   aliases: str = Form(""),
+                                   type: str = Form("company"),
+                                   note: str = Form("")):
+    user = getattr(request.state, "user", None) if hasattr(request, "state") else None
+    user_key = _self_ents._user_key(user)
+    aliases_list = [a.strip() for a in aliases.split(",") if a.strip()] if aliases else []
+    ok = _self_ents.update_entity(user_key, entity_id, {
+        "name": name, "tax_id": tax_id, "address": address,
+        "aliases": aliases_list, "type": type, "note": note,
+    })
+    if not ok:
+        raise HTTPException(404, "entity not found")
+    return {"ok": True}
+
+
+@router.delete("/api/self-entities/{entity_id}")
+async def api_delete_self_entity(entity_id: str, request: Request):
+    user = getattr(request.state, "user", None) if hasattr(request, "state") else None
+    user_key = _self_ents._user_key(user)
+    ok = _self_ents.delete_entity(user_key, entity_id)
+    if not ok:
+        raise HTTPException(404, "entity not found")
+    return {"ok": True}
 
 
 @router.get("/admin-stats", response_class=HTMLResponse)
@@ -645,13 +718,14 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
         _set_layer_status(job, "L3", "skipped", "tesseract 未安裝")
         _set_layer_status(job, "L4", "skipped", "tesseract 未安裝")
     else:
+        active_langs = _l2.get_active_ocr_langs() or "eng"
         if ocr_files_processed > 0:
-            _set_layer_status(job, "L3", "done", f"{ocr_files_processed} 檔全頁 OCR")
+            _set_layer_status(job, "L3", "done", f"{ocr_files_processed} 檔全頁 OCR ({active_langs})")
         else:
             _set_layer_status(job, "L3", "skipped", "無掃描檔需要全頁 OCR")
         # L4 嵌入圖 OCR
         if embed_image_total > 0:
-            _set_layer_status(job, "L4", "done", f"{embed_image_total} 張圖 OCR")
+            _set_layer_status(job, "L4", "done", f"{embed_image_total} 張圖 OCR ({active_langs})")
         else:
             _set_layer_status(job, "L4", "skipped", "PDF 內無嵌入圖片")
 

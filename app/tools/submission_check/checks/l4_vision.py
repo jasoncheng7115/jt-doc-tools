@@ -151,21 +151,33 @@ def vision_check_file(file_path: Path, ground_truth_main: str = "",
     if not pages_to_send:
         return []
 
+    from datetime import date as _date
+    today = _date.today().isoformat()
+    today_year = _date.today().year
     prompt = (
-        "你是文件鑑識助理。請看這張影像（送件文件的渲染頁），"
+        "你是文件鑑識助理。請看這張影像（送件文件的渲染頁）。\n"
+        f"**今日日期是 {today}**（西元 {today_year} 年）。請以此為基準判斷日期是否合理；"
+        f"任何小於等於 {today_year} 年的日期都不是未來日期，不要標為「未來日期異常」。\n"
+        "\n"
         "判斷是否有以下問題：\n"
-        "1. 偽造 / PS 痕跡：數字 / 日期 / 文字看起來被改過（重描、字型不一致、像素邊緣異常）\n"
+        "1. 偽造 / PS 痕跡：數字 / 日期 / 文字「視覺上」看起來被改過（重描、字型不一致、像素邊緣異常）\n"
+        "   — 只看「畫面像素層級」異常，不要因為日期值合理或不合理就下結論\n"
         "2. 章 / 印異常：章不完整、看起來是貼上的、章內字看不清\n"
         "3. 圖層拼貼：不同部分明顯來自不同來源（背景顏色 / 解析度 / 字體不一）\n"
         f"4. 身分一致性：影像內出現的公司 / 機構名是否吻合預期主角「{ground_truth_main or '(未指定)'}」"
         f"{f'、對方「{ground_truth_counterparty}」' if ground_truth_counterparty else ''}\n"
         "\n"
+        "**重要規則**：\n"
+        "- 描述異常時，**務必標出實際看到的數值 / 日期 / 公司名 / 章內字**（例：「日期 2025-03-21 字型不一致」、「章內寫『某某有限公司之印』」）\n"
+        "- 純粹日期值合不合理（早 / 晚 / 過期 / 未來）**不是視覺異常**，不要標進此檢查（已有規則層處理）\n"
+        "- 只回報「疑似」級別，不下「確認偽造」結論\n"
+        "\n"
         "回 **JSON only**：\n"
         '{"anomalies": [{"type": "tamper|stamp|layer|identity", "confidence": "high|med|low",'
-        ' "description": "<簡短說明>"}], "overall_concern": "high|med|low|none",'
+        ' "description": "<簡短說明，含實際看到的數值 / 字>"}],'
+        ' "overall_concern": "high|med|low|none",'
         ' "summary": "<整體一句話評估>"}\n'
         "\n"
-        "注意：只回報「疑似」級別，不下「確認偽造」結論。"
         "若視覺看不出明顯問題，回 {\"anomalies\": [], \"overall_concern\": \"none\", \"summary\": \"未發現視覺異常\"}"
     )
     findings: list[dict] = []
