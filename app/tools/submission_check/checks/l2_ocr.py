@@ -115,6 +115,64 @@ def _ocr_pdf_pages(pdf_path: Path, langs: str = DEFAULT_LANGS,
     return ("\n\n".join(texts), pages_done, truncated)
 
 
+def extract_and_ocr_pdf_images(pdf_path: Path, langs: str = DEFAULT_LANGS,
+                                  max_images: int = 80,
+                                  min_size_px: int = 80) -> tuple[str, int]:
+    """從 PDF 抽出所有嵌入圖片，逐張跑 OCR。
+
+    PDF 即使有完整文字層，圖片內仍可能有重要文字（章 / 印 / 截圖型證書 / 公司
+    LOGO 字樣）— 這些必須單獨 OCR。
+
+    回 (ocr_text, image_count_processed)。跳過太小的裝飾圖（< min_size_px 邊長）。
+    """
+    try:
+        import fitz
+    except ImportError:
+        return ("", 0)
+    try:
+        doc = fitz.open(str(pdf_path))
+    except Exception:
+        return ("", 0)
+
+    texts: list[str] = []
+    processed = 0
+    try:
+        for pno in range(doc.page_count):
+            page = doc[pno]
+            try:
+                imgs = page.get_images(full=False) or []
+            except Exception:
+                imgs = []
+            for img in imgs:
+                if processed >= max_images:
+                    break
+                xref = img[0]
+                try:
+                    base = doc.extract_image(xref)
+                    if not base:
+                        continue
+                    width = base.get("width", 0)
+                    height = base.get("height", 0)
+                    # 跳過太小的裝飾圖（icon / 點綴）
+                    if width < min_size_px or height < min_size_px:
+                        continue
+                    img_bytes = base.get("image")
+                    if not img_bytes:
+                        continue
+                    t = _ocr_image_bytes(img_bytes, langs=langs)
+                    if t.strip():
+                        texts.append(f"[Page {pno+1} Image {xref}]\n{t}")
+                    processed += 1
+                except Exception:
+                    continue
+            if processed >= max_images:
+                break
+    finally:
+        doc.close()
+
+    return ("\n\n".join(texts), processed)
+
+
 def ocr_file(path: Path, langs: str = DEFAULT_LANGS) -> dict:
     """L2 OCR 主 entry。
 

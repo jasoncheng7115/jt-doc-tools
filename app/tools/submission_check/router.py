@@ -457,16 +457,26 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
     ocr_files_processed = 0
     vision_calls = 0
 
-    # 初始化 4 層燈號狀態
+    # 初始化 6 層燈號狀態
     job.meta = job.meta or {}
-    job.meta["layers"] = {"L1": "running", "L2": "pending", "L3": "pending", "L4": "pending"}
+    job.meta["layers"] = {
+        "L1": "running",   # 規則
+        "L2": "pending",   # 文字抽取
+        "L3": "pending",   # 全頁 OCR
+        "L4": "pending",   # 嵌入圖 OCR
+        "L5": "pending",   # LLM 文字
+        "L6": "pending",   # LLM 視覺
+    }
 
+    embed_image_total = 0
     for i, f in enumerate(files):
-        job.progress = (i + 0.1) / max(n, 1) * 0.5
-        job.message = f"L1+L2 檢查中：{f.get('name', '?')} ({i+1}/{n})"
-        # L2 標 running 一旦進入第一檔的 OCR
+        job.progress = (i + 0.1) / max(n, 1) * 0.45
+        job.message = f"檢查中：{f.get('name', '?')} ({i+1}/{n})"
+        # 一旦進入第一檔，標 L2/L3/L4 為 running（並行進行同檔三件事）
         if i == 0:
             _set_layer_status(job, "L2", "running")
+            _set_layer_status(job, "L3", "running")
+            _set_layer_status(job, "L4", "running")
         file_id = f["file_id"]
         matches = list(fdir.glob(f"{file_id}.*"))
         if not matches:
@@ -531,20 +541,64 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
                             tgt = existing.setdefault(kind, type(counter)())
                             tgt.update(counter)
                         per_file_entities[file_id] = existing
-            # L2 findings (OCR truncated / skipped 等資訊)
+            # L3 (full-page OCR) findings (truncated / skipped 等資訊)
             findings.extend(_l2.make_findings(file_id, ocr_res, file_name=f.get("name", "")))
         except Exception:
             pass
+
+        # L4: 嵌入圖片 OCR — 即使 PDF 有完整文字層，圖片內字 (章/印/截圖證書) 也要抽
+        try:
+            if path.suffix.lower() == ".pdf" and _l2.is_tesseract_available():
+                img_text, n_imgs = _l2.extract_and_ocr_pdf_images(path)
+                if n_imgs > 0:
+                    embed_image_total += n_imgs
+                    if img_text.strip():
+                        per_file_text[file_id] = (per_file_text.get(file_id, "") + "\n" + img_text).strip()
+                        # entity 補抽
+                        extra_ents = _consistency.extract_entities_from_text(img_text)
+                        if extra_ents:
+                            existing = per_file_entities.get(file_id, {})
+                            for kind, counter in extra_ents.items():
+                                tgt = existing.setdefault(kind, type(counter)())
+                                tgt.update(counter)
+                            per_file_entities[file_id] = existing
+                        # amount / date 補抽
+                        extra_amts = _important.extract_amounts(img_text)
+                        if extra_amts:
+                            per_file_amounts.setdefault(file_id, [])
+                            for v in extra_amts:
+                                if v not in per_file_amounts[file_id]:
+                                    per_file_amounts[file_id].append(v)
+                        extra_dates = _important.extract_dates(img_text)
+                        if extra_dates:
+                            per_file_dates.setdefault(file_id, [])
+                            for d in extra_dates:
+                                if d not in per_file_dates[file_id]:
+                                    per_file_dates[file_id].append(d)
+        except Exception:
+            pass
+
         findings_per_file[file_id] = findings
 
-    # L1 / L2 都跑完
+    # L1 / L2 / L3 / L4 都跑完
     _set_layer_status(job, "L1", "done")
-    if ocr_files_processed > 0:
-        _set_layer_status(job, "L2", "done", f"{ocr_files_processed} 檔 OCR")
-    elif not _l2.is_tesseract_available():
-        _set_layer_status(job, "L2", "skipped", "tesseract 未安裝")
+    # L2 文字抽取一定跑（從 PDF / DOCX 文字層）
+    text_extracted = sum(1 for v in per_file_text.values() if v)
+    _set_layer_status(job, "L2", "done", f"{text_extracted} 檔抽出文字")
+    # L3 全頁 OCR（掃描檔）
+    if not _l2.is_tesseract_available():
+        _set_layer_status(job, "L3", "skipped", "tesseract 未安裝")
+        _set_layer_status(job, "L4", "skipped", "tesseract 未安裝")
     else:
-        _set_layer_status(job, "L2", "skipped", "無影像 / 掃描內容需 OCR")
+        if ocr_files_processed > 0:
+            _set_layer_status(job, "L3", "done", f"{ocr_files_processed} 檔全頁 OCR")
+        else:
+            _set_layer_status(job, "L3", "skipped", "無掃描檔需要全頁 OCR")
+        # L4 嵌入圖 OCR
+        if embed_image_total > 0:
+            _set_layer_status(job, "L4", "done", f"{embed_image_total} 張圖 OCR")
+        else:
+            _set_layer_status(job, "L4", "skipped", "PDF 內無嵌入圖片")
 
     job.progress = 0.55
     job.message = "跨檔身分一致性分析中..."
@@ -555,13 +609,13 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
     # 跨檔實體聚合
     aggregated = _consistency.aggregate_across_files(per_file_entities)
 
-    # L3: LLM 變體合併（如果 LLM enabled）
+    # L5: LLM 文字 — 變體合併
     l3_used = False
     if _l3.llm_available():
-        _set_layer_status(job, "L3", "running")
+        _set_layer_status(job, "L5", "running")
         try:
             job.progress = 0.60
-            job.message = "L3 LLM Text：變體合併中..."
+            job.message = "L5 LLM 文字：變體合併中..."
             company_values = [e["value"] for e in aggregated.get("company", [])]
             if len(company_values) >= 2:
                 groups = _l3.merge_entity_variants(company_values)
@@ -591,12 +645,12 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
     except Exception:
         pass
 
-    # L3: 修改範本痕跡推論
+    # L5: LLM 文字 — 修改範本痕跡推論
     l3_residue_count = 0
     if _l3.llm_available():
         try:
             job.progress = 0.70
-            job.message = "L3 LLM Text：範本痕跡推論中..."
+            job.message = "L5 LLM 文字：範本痕跡推論中..."
             file_summaries = []
             for f in files:
                 # 取該檔的文字（PDF 文字層或 OCR）— 若 per_file_entities 有就找對應；否則重抽前 500 字
@@ -636,14 +690,15 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
             pass
 
     if l3_used:
-        _set_layer_status(job, "L3", "done", "LLM 文字分析完成")
+        _set_layer_status(job, "L5", "done", "LLM 文字分析完成")
     else:
-        _set_layer_status(job, "L3", "skipped", "LLM 未設定")
+        _set_layer_status(job, "L5", "skipped", "LLM 未設定")
 
-    # L4: Vision LLM — 對每檔渲染後送 vision LLM
+    # L6: LLM 視覺 — 對每檔渲染後送 vision LLM
     l4_used = False
+    # 重新處理 findings_per_file 中由 L4 vision 加的 findings 標記為 layer="L6"
     if _l4.vision_available():
-        _set_layer_status(job, "L4", "running")
+        _set_layer_status(job, "L6", "running")
         try:
             gt_main = ((case.get("ground_truth") or {}).get("main_entity") or {}).get("name") or ""
             gt_cp = ((case.get("ground_truth") or {}).get("counterparty") or {}).get("name") or ""
@@ -653,28 +708,30 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
                 if not fpaths:
                     continue
                 job.progress = 0.78 + (i + 1) / max(n, 1) * 0.18
-                job.message = f"L4 Vision LLM：分析 {f.get('name', '?')} ({i+1}/{n})..."
+                job.message = f"L6 LLM 視覺：分析 {f.get('name', '?')} ({i+1}/{n})..."
                 try:
                     v_findings = _l4.vision_check_file(fpaths[0], gt_main, gt_cp)
+                    # 將 layer 從 L4 改成 L6 (與 6 層架構對齊)
+                    for fnd in v_findings:
+                        fnd["layer"] = "L6"
                     if v_findings:
                         findings_per_file.setdefault(fid, []).extend(v_findings)
                     vision_calls += 1
                 except Exception:
                     pass
             l4_used = True
-            _set_layer_status(job, "L4", "done", f"{vision_calls} 檔 vision 分析")
+            _set_layer_status(job, "L6", "done", f"{vision_calls} 檔視覺分析")
         except Exception:
-            _set_layer_status(job, "L4", "error", "vision 階段異常")
+            _set_layer_status(job, "L6", "error", "vision 階段異常")
     else:
-        # 區分原因
         try:
             from app.core.llm_settings import llm_settings
             if not llm_settings.is_enabled():
-                _set_layer_status(job, "L4", "skipped", "LLM 未設定")
+                _set_layer_status(job, "L6", "skipped", "LLM 未設定")
             else:
-                _set_layer_status(job, "L4", "skipped", "目前 LLM 模型非 vision")
+                _set_layer_status(job, "L6", "skipped", "目前 LLM 模型非 vision")
         except Exception:
-            _set_layer_status(job, "L4", "skipped", "LLM 未設定")
+            _set_layer_status(job, "L6", "skipped", "LLM 未設定")
 
     # 套 user override 註解 + chaining 提示
     fresh_case = _cm.load_case(case_id) or case
