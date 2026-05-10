@@ -14,6 +14,20 @@
 .sc-files .rm { border:0; background:transparent; cursor:pointer; color:#dc2626; padding:0 4px; }
 .sc-progress { margin-top:8px; height:6px; background:#e5e7eb; border-radius:3px; overflow:hidden; }
 .sc-progress > div { height:100%; background:#3b82f6; width:0%; transition: width .3s; }
+.sc-stations { display:flex; align-items:center; justify-content:center; gap:8px; margin-top:14px; padding:8px 0; }
+.sc-st { text-align:center; min-width:64px; font-size:12px; color:#475569; }
+.sc-st b { font-size:13px; color:#1e293b; }
+.sc-st .lbl { font-size:11px; color:#94a3b8; }
+.sc-st .dot { display:block; width:18px; height:18px; border-radius:50%; margin:0 auto 4px; background:#e5e7eb; border:2px solid #cbd5e1; transition:.25s; }
+.sc-st-line { flex:0 0 30px; height:2px; background:#e5e7eb; }
+.sc-st.pending .dot { background:#e5e7eb; border-color:#cbd5e1; }
+.sc-st.running .dot { background:#fbbf24; border-color:#f59e0b; box-shadow:0 0 0 4px rgba(245,158,11,0.2); animation: scPulse 1s infinite; }
+.sc-st.done .dot { background:#10b981; border-color:#059669; }
+.sc-st.skipped .dot { background:#cbd5e1; border-color:#94a3b8; }
+.sc-st.skipped { color:#94a3b8; }
+.sc-st.skipped .dot::after { content:"–"; color:#fff; font-size:14px; line-height:14px; display:block; text-align:center; }
+.sc-st.error .dot { background:#dc2626; border-color:#991b1b; }
+@keyframes scPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.15)} }
 @media (max-width: 700px) {
   .sc-fields { grid-template-columns: 1fr; }
 }
@@ -60,6 +74,15 @@
   <button class="btn btn-primary" id="btnRun" disabled>{{ icon('play', size=14) }} 開始檢核</button>
   <span id="status" class="muted" style="margin-left:12px; font-size:13px;">請先上傳至少一個檔案</span>
   <div class="sc-progress" style="display:none;" id="progressBar"><div></div></div>
+  <div class="sc-stations" id="stations" style="display:none;">
+    <div class="sc-st" data-layer="L1"><span class="dot"></span><b>L1</b><br><span class="lbl">規則檢查</span></div>
+    <div class="sc-st-line"></div>
+    <div class="sc-st" data-layer="L2"><span class="dot"></span><b>L2</b><br><span class="lbl">OCR</span></div>
+    <div class="sc-st-line"></div>
+    <div class="sc-st" data-layer="L3"><span class="dot"></span><b>L3</b><br><span class="lbl">LLM 文字</span></div>
+    <div class="sc-st-line"></div>
+    <div class="sc-st" data-layer="L4"><span class="dot"></span><b>L4</b><br><span class="lbl">LLM 視覺</span></div>
+  </div>
 </div>
 
 {% endblock %}
@@ -107,11 +130,26 @@
     refreshList();
   });
 
+  function setStations(layers) {
+    if (!layers) return;
+    document.getElementById('stations').style.display = 'flex';
+    ['L1','L2','L3','L4'].forEach(L => {
+      const el = document.querySelector('.sc-st[data-layer="' + L + '"]');
+      if (!el) return;
+      el.classList.remove('pending','running','done','skipped','error');
+      const st = layers[L] || 'pending';
+      el.classList.add(st);
+      const extra = layers[L + '_extra'];
+      if (extra) el.title = st + ': ' + extra;
+    });
+  }
+
   btnRun.addEventListener('click', async () => {
     btnRun.disabled = true;
     statusEl.textContent = '上傳中…';
     progressBar.style.display = 'block';
     progressInner.style.width = '10%';
+    setStations({L1:'pending', L2:'pending', L3:'pending', L4:'pending'});
     const fd = new FormData();
     files.forEach(f => fd.append('files', f));
     const tn = id => (document.getElementById(id).value || '').trim();
@@ -141,6 +179,7 @@
         const jj = await jr.json();
         progressInner.style.width = (50 + jj.progress * 50) + '%';
         if (jj.message) statusEl.textContent = jj.message;
+        if (jj.meta && jj.meta.layers) setStations(jj.meta.layers);
         if (jj.status === 'done') {
           progressInner.style.width = '100%';
           statusEl.textContent = '完成，跳轉到報告…';

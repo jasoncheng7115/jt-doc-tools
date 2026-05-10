@@ -24,6 +24,19 @@ DEFAULT_LANGS = "chi_tra+chi_sim+eng"
 MAX_OCR_PAGES = 30  # 單檔上限
 
 
+def is_tesseract_available() -> bool:
+    """檢查 tesseract binary 是否可用。"""
+    import shutil
+    try:
+        from app.core.sys_deps import configure_pytesseract
+        path = configure_pytesseract()
+        if path:
+            return True
+    except Exception:
+        pass
+    return bool(shutil.which("tesseract"))
+
+
 def _has_text_layer(pdf_path: Path) -> bool:
     """檢查 PDF 是否有實質文字層（避免對已抽得到字的檔案重複 OCR）。"""
     try:
@@ -137,12 +150,9 @@ def ocr_file(path: Path, langs: str = DEFAULT_LANGS) -> dict:
             out["skip_reason"] = f"圖片 OCR 失敗：{e}"
         return out
 
-    # PDF → 先看有沒有文字層
+    # PDF → 一律跑 OCR（即使有文字層 — 掃描檔有時 PDF 編輯器會插假文字層或 garbage 文字，
+    # 仍需要 OCR 從圖層真正讀字以正確比對；而且章 / 印 / 圖內字只有 OCR 抓得到）
     if suffix == ".pdf":
-        if _has_text_layer(path):
-            out["skip_reason"] = "已有文字層，跳過 OCR"
-            out["elapsed"] = time.time() - started
-            return out
         text, pages, truncated = _ocr_pdf_pages(path, langs=langs)
         out["text"] = text
         out["ran"] = pages > 0
