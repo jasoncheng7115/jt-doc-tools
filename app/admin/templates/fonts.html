@@ -177,7 +177,7 @@ function _refreshDropZoneLabel() {
   btnUploadFont.disabled = !files.length;
   const text = fontDropZone.querySelector('.fnt-drop-text');
   // v1.5.4: 改 createElement / textContent 防 XSS — 檔名是 user-supplied
-  // (惡意檔名 `<script>alert(1)</script>.ttf` 之前會被當 HTML 渲染)
+  // 之前直接 innerHTML 會把惡意檔名內的 HTML 當標籤渲染。
   text.replaceChildren();
   if (!files.length) {
     fontDropZone.classList.remove('has-file');
