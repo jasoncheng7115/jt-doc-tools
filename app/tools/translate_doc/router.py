@@ -236,25 +236,25 @@ def _build_prompt(src_text: str, source_lang: str, target_lang: str,
             "address→位址（IP/記憶體上下文，不是「地址」）、port→連接埠 / 通訊埠（不是「端口」）、"
             "container→容器（OK）、virtualization→虛擬化、virtual machine→虛擬機（OK）。"
         )
-    # v1.5.15: domain hint(選填) — user 在 UI 填的「文件領域」直接放進
-    # prompt,讓 LLM 知道這是法律 / 醫療 / 技術 / 財務等場景,挑對應專業用詞
+    # v1.5.15: domain hint（選填）— user 在 UI 填的「文件領域」直接放進
+    # prompt，讓 LLM 知道這是法律 / 醫療 / 技術 / 財務等場景，挑對應專業用詞
     domain_hint = ""
     d = (domain or "").strip()
     if d:
-        # 截斷防 prompt-injection,留 80 chars 已足夠描述領域
+        # 截斷防 prompt-injection，留 80 chars 已足夠描述領域
         d = d[:80].replace("\n", " ").replace("\r", " ")
         domain_hint = (
             f"**文件領域**：{d}。請依此領域的慣用術語、文體與專業用詞翻譯，"
-            "縮寫保持原貌(如 SLA / API / GDPR)，技術名詞不要過度本地化。"
+            "縮寫保持原貌（如 SLA / API / GDPR），技術名詞不要過度本地化。"
         )
     return (
         f"請把下面這句從「{src_name}」翻譯為「{tgt_name}」，"
         "翻譯要忠實、通順、符合該語言慣用的書寫風格。"
         + tw_terminology
         + domain_hint +
-        "只輸出翻譯結果,不要附上原文、不要加任何標記、不要解釋、"
+        "只輸出翻譯結果，不要附上原文、不要加任何標記、不要解釋、"
         "不要 markdown、不要前綴、不要後綴。"
-        "如果原文是專有名詞或無法翻譯,照原樣輸出即可。\n\n"
+        "如果原文是專有名詞或無法翻譯，照原樣輸出即可。\n\n"
         f"原文：{src_text}"
     )
 
@@ -295,7 +295,7 @@ def _translate_sentences(
     if client is None:
         raise HTTPException(503, "LLM 服務未啟用，請到「設定 → LLM 設定」開啟")
     # Per-tool 模型覆寫優先；admin 在 LLM 設定頁可以給 translate-doc 指定
-    # 不同模型（例如純文字翻譯用 qwen3:32b，校驗仍用 gemma4:26b）
+    # 不同模型（例如純文字翻譯用 gemma3:27b，校驗仍用 gemma4:26b）
     model = llm_settings.get_model_for("translate-doc")
     conf = llm_settings.get()
     # 並行數 — admin 在 LLM 設定可調，預設 4。對 1-句 case 退化成同步呼叫。

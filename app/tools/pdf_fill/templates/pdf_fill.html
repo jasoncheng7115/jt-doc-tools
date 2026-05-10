@@ -1178,7 +1178,7 @@ function llmErrorCard(raw) {
       type: 'warn',
       title: 'LLM 回應無法解析為 JSON',
       detail: `模型有回應但格式不是預期的 JSON。原始訊息：${raw}`,
-      hint: `可能是模型能力不足或 prompt 被誤解。試換一個視覺能力較強的模型（例：qwen3-vl:8b）。`,
+      hint: `可能是模型能力不足或 prompt 被誤解。試換一個視覺能力較強的模型（例：gemma4:26b）。`,
     });
   }
   if (s.includes('empty response')) {

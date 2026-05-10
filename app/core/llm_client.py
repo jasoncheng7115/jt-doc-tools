@@ -1,4 +1,4 @@
-"""OpenAI-compat HTTP client for vision LLM (qwen3-vl, gemma, etc.).
+"""OpenAI-compat HTTP client for vision LLM (gemma4, gemma3, etc.).
 
 This module is part of the **附加功能** (add-on) LLM review feature. It is
 imported lazily — never from core code paths — so missing / misconfigured
@@ -327,12 +327,12 @@ class LLMClient:
 
         # IMPORTANT design notes:
         # 1. We DON'T set response_format=json_object. For many vision models
-        #    (incl. qwen3-vl via Ollama) that constraint makes the model much
-        #    less thorough. We let it output prose + extract JSON ourselves.
+        #    that constraint makes the model much less thorough. We let it
+        #    output prose + extract JSON ourselves.
         # 2. We USE stream=True so the HTTP socket stays active via chunked
         #    SSE events. Non-streaming requests hold the socket silent for
         #    the entire generation, which trips httpx's read_timeout on
-        #    anything longer than ~120s (qwen3-vl reasoning often is).
+        #    anything longer than ~120s (vision reasoning often is).
         payload = {
             "model": model,
             "temperature": temperature,

@@ -1,9 +1,9 @@
 """Per-field LLM review (NEW APPROACH — overnight 2026-04-24 finding).
 
 Replaces the whole-page "find errors in this 21-box form" prompt that hangs
-qwen3-vl:4b for 10+ minutes. Instead crops each filled field into a tiny tile
-and asks a binary "is this value correctly filled?" — completes in 30-60s
-total for 20+ fields.
+small vision models for 10+ minutes. Instead crops each filled field into a
+tiny tile and asks a binary "is this value correctly filled?" — completes in
+30-60s total for 20+ fields.
 
 Drop-in alongside `app/core/llm_review.py:review()`. Returns the same
 `ReviewResult` shape so the existing frontend code keeps working.

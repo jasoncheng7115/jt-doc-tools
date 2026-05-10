@@ -29,21 +29,19 @@ DEFAULT_SETTINGS: dict = {
     # to any reachable LLM endpoint via /admin/llm-settings.
     "base_url": "http://localhost:11434/v1",
     "api_key": None,                # Ollama doesn't need; reserved for cloud
-    # gemma4:26b MoE — validated SOTA on 4-PDF matrix (100% accuracy, 5× faster
-    # than qwen3-vl:8b). qwen3-vl:8b kept as low-VRAM fallback (~8GB vs 18GB).
-    # Do not drop below qwen3-vl:8b (documented unreliable).
+    # gemma4:26b MoE — validated SOTA on 4-PDF matrix (100% accuracy, ~11s avg).
     "model": "gemma4:26b",
     # 各工具個別模型 — admin 在 LLM 設定頁可以為支援 LLM 的工具個別指定模型，
     # 沒指定 / 留空就用上面的預設 model。Key 是 tool_id，value 是模型名稱
-    # 字串。範例：{"translate-doc": "qwen3:32b", "pdf-fill": "gemma4:26b"}
+    # 字串。範例：{"translate-doc": "gemma3:27b", "pdf-fill": "gemma4:26b"}
     "model_per_tool": {},
     # 翻譯並行數 — 逐句翻譯每句一個 prompt 序列送 LLM 太慢；並行能 4-8 倍速。
     # 過高會壓垮本機 Ollama 或讓 GPU OOM；admin 自己依 LLM server 體質設。
     "translate_concurrency": 4,
     "timeout_seconds": 300,          # single HTTP call ceiling — vision + reasoning easily >120s
-    # (default bumped to 300 because qwen3-vl cold start + image processing
-    #  + reasoning often exceeds 120s; even with streaming the socket can
-    #  stay silent >30-60s while the model "reads" the image)
+    # (default 300 because vision cold start + image processing + reasoning
+    #  often exceeds 120s; even with streaming the socket can stay silent
+    #  >30-60s while the model "reads" the image)
     "default_review_rounds": 2,      # 1-5
     "confidence_threshold": 0.6,     # corrections below this are shown as low-confidence suggestions
     "consecutive_required": 2,       # same correction must appear N rounds in a row

@@ -4,25 +4,35 @@
 
 ---
 
+## [1.5.16] - 2026-05-10
+
+### 變更
+
+- **LLM 文件 / UI / 程式碼移除 qwen3-vl 引用，預設 vision 模型統一為 `gemma4:26b`** —
+  - `LLM.md`、`docs/index.html` 部署選項、admin LLM 設定頁建議區、pdf-fill JSON 解析錯誤 hint 都不再提 qwen3-vl
+  - 程式註解（`llm_settings.py` / `llm_client.py` / `llm_review.py` / `llm_review_per_field.py`）移除 qwen3-vl 字樣，改用通用「vision model」描述
+  - `get_review_prompt()` 內仍保留 qwen 分派分支供既有 qwen 使用者向下相容，僅移除推薦
+- **中文文案半形標點全面清理** — LLM.md / docs/index.html `#llm` 區 / translate-doc `domain_hint` prompt 內所有中文旁的 `,` `:` `;` 改全形「，：；」（規則：括號可半形、逗號句號分號冒號必為全形）
+
 ## [1.5.15] - 2026-05-10
 
 ### 新增
 
-- **逐句翻譯加「文件領域」hint** — UI 在原文 / 目標語言下方多一個輸入框「例:法律合約 / 醫療報告 / 軟體技術文件 / 財務報表 / 學術論文 / 新聞稿…」
-  - 選填,留空跟以前一樣
-  - 填了會進 LLM prompt:「**文件領域**:〈user 輸入〉。請依此領域的慣用術語、文體與專業用詞翻譯,縮寫保持原貌(SLA / API / GDPR),技術名詞不要過度本地化。」
+- **逐句翻譯加「文件領域」hint** — UI 在原文 / 目標語言下方多一個輸入框「例：法律合約 / 醫療報告 / 軟體技術文件 / 財務報表 / 學術論文 / 新聞稿…」
+  - 選填，留空跟以前一樣
+  - 填了會進 LLM prompt：「**文件領域**：〈user 輸入〉。請依此領域的慣用術語、文體與專業用詞翻譯，縮寫保持原貌（SLA / API / GDPR），技術名詞不要過度本地化。」
   - 同時通過 `/translate-batch` / `/translate-one` / `/api/translate-doc` 三個 endpoint
   - 截斷 80 chars + strip CR/LF 防 prompt injection
 
-### 修正(文案準確性)
+### 修正（文案準確性）
 
-- **LLM 工具描述全面 audit** — 移除誇大 / 不存在的功能宣稱:
-  - 「批次填 50 份廠商表」→ pdf-fill 實際是單份單次,改為「30 欄的廠商表免逐欄校對」
-  - 「法務 / 合規清舊合約批次」→ doc-deident 是單份,改為「regex 抓不到的 context-sensitive 欄位 LLM 補一網」
-  - 「保留 Word/ODT 排版重新輸出」→ translate-doc 實際輸出 web 並排對照表,移除錯誤宣稱
-  - 「表格內容被 PyMuPDF 拆得亂七八糟時 → LLM 重組回 markdown 表格」→ pdf-extract-text 沒此功能,移除
-  - 「自動分『重大 / 一般 / 提問』三類」→ pdf-annotations 實際是 LLM 動態分群,改為「依註解內容主題自動分群」
-  - 所有「省時感:X 分鐘 → Y 分鐘」具體數字移除,改為描述性效果
+- **LLM 工具描述全面 audit** — 移除誇大 / 不存在的功能宣稱：
+  - 「批次填 50 份廠商表」→ pdf-fill 實際是單份單次，改為「30 欄的廠商表免逐欄校對」
+  - 「法務 / 合規清舊合約批次」→ doc-deident 是單份，改為「regex 抓不到的 context-sensitive 欄位 LLM 補一網」
+  - 「保留 Word/ODT 排版重新輸出」→ translate-doc 實際輸出 web 並排對照表，移除錯誤宣稱
+  - 「表格內容被 PyMuPDF 拆得亂七八糟時 → LLM 重組回 markdown 表格」→ pdf-extract-text 沒此功能，移除
+  - 「自動分『重大 / 一般 / 提問』三類」→ pdf-annotations 實際是 LLM 動態分群，改為「依註解內容主題自動分群」
+  - 所有「省時感：X 分鐘 → Y 分鐘」具體數字移除，改為描述性效果
 - 同步更新 `LLM.md` 與 `docs/index.html` 8 張 LLM 卡片描述
 
 ## [1.5.14] - 2026-05-10
