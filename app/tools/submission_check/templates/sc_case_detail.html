@@ -79,7 +79,7 @@
 
 {% for v in versions_with_reports %}
   <details class="panel" {% if loop.last %}open{% endif %}>
-    <summary><h2 style="margin-top:0;">版本 {{ v.version }}</h2></summary>
+    <summary>版本 {{ v.version }}</summary>
     {% if v.report %}
       {% set s = v.report.summary %}
       <div class="scd-summary">

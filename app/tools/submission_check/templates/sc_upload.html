@@ -25,17 +25,17 @@
 <p class="muted">一批文件送出去前的最後一關自查 — 三層檢核（規則 / OCR / LLM）找出 metadata 殘留、漏改範本、章 / 簽缺漏、偽造痕跡等問題。<a href="cases" style="color:#3b82f6;">查看歷史案件 →</a></p>
 
 <details class="panel" open>
-  <summary><h2 style="margin-top:0;">1. 上傳檔案</h2></summary>
+  <summary>1. 上傳檔案</summary>
   {% with upload_id='scUp', accept='.pdf,.docx,.doc,.jpg,.jpeg,.png,.tif,.tiff', multiple=true, hint='.pdf / .docx / .jpg / .png，可多檔（上限 50 檔 / 200 MB）' %}{% include "components/file_upload.html" %}{% endwith %}
   <ul class="sc-files" id="fileList"></ul>
 </details>
 
 <details class="panel" open>
-  <summary><h2 style="margin-top:0;">2. 案件 Ground Truth <span class="muted" style="font-weight:400; color:#94a3b8; font-size:12px;">（選填，但填越多越準）</span></h2></summary>
+  <summary>2. 案件 Ground Truth <span class="muted" style="font-weight:normal; font-size:12px; margin-left:8px;">（選填，但填越多越準）</span></summary>
   <div class="sc-fields">
     <div class="sc-field">
       <label>本案主角名稱 <span class="muted">（公司 / 機關 / 學校 / 個人 等）</span></label>
-      <input type="text" id="mainEntityName" placeholder="例：鼎立科技股份有限公司 / ○○部 / 國立範例大學">
+      <input type="text" id="mainEntityName" placeholder="例：某某科技股份有限公司 / 某某部 / 某某大學">
     </div>
     <div class="sc-field">
       <label>主角識別碼 <span class="muted">（統編 / 機關代碼 / 身分證 等，選填）</span></label>
@@ -43,7 +43,7 @@
     </div>
     <div class="sc-field">
       <label>對方 / 收件方</label>
-      <input type="text" id="counterpartyName" placeholder="例：○○局 / 客戶名稱">
+      <input type="text" id="counterpartyName" placeholder="例：某某局 / 某某客戶">
     </div>
     <div class="sc-field">
       <label>案號</label>
