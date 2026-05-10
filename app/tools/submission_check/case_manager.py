@@ -116,8 +116,13 @@ def add_file_to_case(case: dict, file_id: str, original_name: str,
 
 
 def list_cases(owner_uid: Optional[int] = None,
-               admin: bool = False, limit: int = 50) -> list[dict]:
-    """列出案件（admin 看全部、其他 user 看自己的）。"""
+               admin: bool = False, auditor: bool = False,
+               include_deleted: bool = False, limit: int = 50) -> list[dict]:
+    """列出案件。
+    - admin / auditor：看全部
+    - 一般 user：只看自己的
+    - 預設不含已刪除案件；auditor 預設 include_deleted=True 看歷史
+    """
     out: list[dict] = []
     for cdir in sorted(_root().iterdir(), reverse=True):
         if not cdir.is_dir():
@@ -127,7 +132,12 @@ def list_cases(owner_uid: Optional[int] = None,
         case = load_case(cdir.name)
         if not case:
             continue
-        if not admin and case.get("owner_uid") != owner_uid:
+        # 權限過濾
+        if not (admin or auditor) and case.get("owner_uid") != owner_uid:
+            continue
+        # 已刪除過濾
+        is_deleted = bool(case.get("deleted_at"))
+        if is_deleted and not include_deleted:
             continue
         out.append({
             "case_id": case["case_id"],
@@ -137,10 +147,29 @@ def list_cases(owner_uid: Optional[int] = None,
             "current_version": case.get("current_version"),
             "created_at": case.get("created_at"),
             "updated_at": case.get("updated_at"),
+            "owner_uid": case.get("owner_uid"),
+            "deleted_at": case.get("deleted_at"),
+            "deleted_by": case.get("deleted_by"),
         })
         if len(out) >= limit:
             break
     return out
+
+
+def soft_delete_case(case_id: str, by_user: Optional[str] = None) -> bool:
+    """軟刪除案件 — 標記 deleted_at + deleted_by，原始檔案保留供稽核。
+    回 True 表示成功；False 表示 case 不存在。
+    """
+    case = load_case(case_id)
+    if not case:
+        return False
+    if case.get("deleted_at"):
+        return True  # 已是刪除狀態
+    case["deleted_at"] = time.time()
+    case["deleted_by"] = by_user or "anonymous"
+    case["status"] = "deleted"
+    save_case(case)
+    return True
 
 
 def new_version(case: dict) -> str:
