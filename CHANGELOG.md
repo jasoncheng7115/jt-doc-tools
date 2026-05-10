@@ -4,6 +4,13 @@
 
 ---
 
+## [1.5.17] - 2026-05-10
+
+### 修正
+
+- **字型管理頁無法上傳 / 操作（issue #15）** — `app/admin/templates/fonts.html` 第 180 行 v1.5.4 加 XSS 防護時寫的範例註解 `// (惡意檔名 \`<script>alert(1)</script>.ttf\` 之前會被當 HTML 渲染)` 內含字面 `</script>`，瀏覽器 HTML parser 不在乎是不是在 JS 註解內，看到就提前關 script 標籤 → 後面 109 行 JS 全變純文字，上傳 / 隱藏切換 / 刪除自訂字型按鈕全失效。改為純中文敘述，移除字面 `</script>`。
+- 全面掃描所有 template 內 script 區塊，確認 fonts.html 是唯一一處此類雷。
+
 ## [1.5.16] - 2026-05-10
 
 ### 變更
