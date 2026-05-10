@@ -759,9 +759,17 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
         except Exception:
             pass
 
-    # 一致性 findings
+    # 一致性 findings — 帶入 user 的我方資料以排除自家公司誤標
+    self_ents_list = []
+    try:
+        owner_uid = case.get("owner_uid")
+        user_key = str(owner_uid) if owner_uid is not None else "anonymous"
+        self_ents_list = _self_ents.load_entities(user_key)
+    except Exception:
+        pass
     consistency_findings = _consistency.detect_consistency_findings(
         aggregated, ground_truth=case.get("ground_truth"), files_meta=files,
+        self_entities=self_ents_list,
     )
     cross_findings.extend(consistency_findings)
 

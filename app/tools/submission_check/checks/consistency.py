@@ -164,18 +164,44 @@ def detect_consistency_findings(
     aggregated: dict,
     ground_truth: Optional[dict] = None,
     files_meta: Optional[list[dict]] = None,
+    self_entities: Optional[list[dict]] = None,
 ) -> list[dict]:
     """產出跨檔一致性 findings。
 
     模式 1（有 ground truth）：抓所有「跟 ground truth 不符」的 value 出現
     模式 2（沒 ground truth）：頻率分析 — 主角候選頻率高 + outlier (< 推薦 20%)
+
+    若 self_entities 有提供，會自動把屬於 user 自家的實體 / 統編排除（不誤標）。
     """
     findings: list[dict] = []
     files_meta = files_meta or []
+    self_entities = self_entities or []
     file_id_to_name = {f["file_id"]: f.get("name", "?") for f in files_meta}
 
     def _names(file_ids: list[str]) -> str:
         return ", ".join(file_id_to_name.get(fid, fid[:8]) for fid in file_ids[:5])
+
+    # 蒐集 self entities 的名稱（含別名）+ 統編 set 給後續比對
+    self_names_norm: list[str] = []
+    self_tax_ids: set = set()
+    for se in self_entities:
+        names = [se.get("name", "")] + (se.get("aliases") or [])
+        for n in names:
+            n_norm = _normalize(n)
+            if n_norm:
+                self_names_norm.append(n_norm)
+        tid = _normalize(se.get("tax_id") or "")
+        if tid and tid.isdigit():
+            self_tax_ids.add(tid)
+
+    def _is_self_entity(v: str) -> bool:
+        if not v:
+            return False
+        v_norm = _normalize(v)
+        for sn in self_names_norm:
+            if sn and (sn in v_norm or v_norm in sn):
+                return True
+        return False
 
     gt = ground_truth or {}
     gt_main = (gt.get("main_entity") or {}).get("name") or ""
@@ -207,6 +233,8 @@ def detect_consistency_findings(
                 continue
             if _is_counterparty(v):
                 continue
+            if _is_self_entity(v):
+                continue  # 自家公司 — 已登錄為我方資料，不算 mismatch
             findings.append({
                 "layer": "L2",
                 "severity": "warn",
@@ -276,20 +304,24 @@ def detect_consistency_findings(
                 })
     elif len(tax_ids) > 1:
         # 沒 ground truth：多統編並存可能是多家 / 漏改
-        # 用既有 L1 校驗碼 helper
+        # 排除已登錄為「我方資料」的統編（user 自家公司統編出現是正常的）
         from .l1_rules import _validate_tax_id
         valid_tids = [t for t in tax_ids if _validate_tax_id(t["value"])]
-        if len(valid_tids) > 1:
+        non_self_tids = [t for t in valid_tids if t["value"] not in self_tax_ids]
+        # 只警告非我方統編；單一非我方統編當資訊提示，多個則警告
+        if len(non_self_tids) >= 2:
             findings.append({
                 "layer": "L1",
                 "severity": "warn",
                 "category": "tax-id-multiple",
-                "title": f"本案件 出現 {len(valid_tids)} 個有效統編",
-                "detail": ("多個統編並存可能是聯合投標 / 多家代理，"
-                           "或是漏改舊統編。請確認預期主角統編。"),
+                "title": f"本案件出現 {len(non_self_tids)} 個非我方有效統編",
+                "detail": ("多個非我方統編並存 — 可能是聯合投標 / 多家代理，或漏改舊統編。"
+                           " 統編：" + ", ".join(t["value"] for t in non_self_tids)),
                 "page": None,
-                "evidence": {"tax_ids": [t["value"] for t in valid_tids]},
+                "evidence": {"non_self_tax_ids": [t["value"] for t in non_self_tids],
+                             "files": list({fid for t in non_self_tids for fid in t.get("files", [])})},
             })
+        # 單一非我方統編 → 資訊性，不算問題
 
     # ─── 統編校驗碼錯誤（單獨 finding，不論有無 ground truth） ───
     from .l1_rules import _validate_tax_id
