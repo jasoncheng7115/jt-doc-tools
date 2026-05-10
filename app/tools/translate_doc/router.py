@@ -209,7 +209,8 @@ _LANG_NAMES = {
 }
 
 
-def _build_prompt(src_text: str, source_lang: str, target_lang: str) -> str:
+def _build_prompt(src_text: str, source_lang: str, target_lang: str,
+                  domain: str = "") -> str:
     src_name = _LANG_NAMES.get(source_lang, source_lang or "原文")
     tgt_name = _LANG_NAMES.get(target_lang, target_lang or "目標語言")
     # 針對台灣繁體要求 LLM 用台灣慣用 IT 術語（避免大陸用語滲入）
@@ -235,13 +236,25 @@ def _build_prompt(src_text: str, source_lang: str, target_lang: str) -> str:
             "address→位址（IP/記憶體上下文，不是「地址」）、port→連接埠 / 通訊埠（不是「端口」）、"
             "container→容器（OK）、virtualization→虛擬化、virtual machine→虛擬機（OK）。"
         )
+    # v1.5.15: domain hint(選填) — user 在 UI 填的「文件領域」直接放進
+    # prompt,讓 LLM 知道這是法律 / 醫療 / 技術 / 財務等場景,挑對應專業用詞
+    domain_hint = ""
+    d = (domain or "").strip()
+    if d:
+        # 截斷防 prompt-injection,留 80 chars 已足夠描述領域
+        d = d[:80].replace("\n", " ").replace("\r", " ")
+        domain_hint = (
+            f"**文件領域**：{d}。請依此領域的慣用術語、文體與專業用詞翻譯，"
+            "縮寫保持原貌(如 SLA / API / GDPR)，技術名詞不要過度本地化。"
+        )
     return (
         f"請把下面這句從「{src_name}」翻譯為「{tgt_name}」，"
         "翻譯要忠實、通順、符合該語言慣用的書寫風格。"
-        + tw_terminology +
-        "只輸出翻譯結果，不要附上原文、不要加任何標記、不要解釋、"
+        + tw_terminology
+        + domain_hint +
+        "只輸出翻譯結果,不要附上原文、不要加任何標記、不要解釋、"
         "不要 markdown、不要前綴、不要後綴。"
-        "如果原文是專有名詞或無法翻譯，照原樣輸出即可。\n\n"
+        "如果原文是專有名詞或無法翻譯,照原樣輸出即可。\n\n"
         f"原文：{src_text}"
     )
 
@@ -250,7 +263,8 @@ _FILLER_RE = re.compile(r"^[\s_\-=·.•◦▪■◇◆●○※—–…]+$")
 
 
 def _translate_one(client, model: str, src: str,
-                   source_lang: str, target_lang: str) -> dict:
+                   source_lang: str, target_lang: str,
+                   domain: str = "") -> dict:
     """單句翻譯 worker（給並行 executor 用）。
     空字串直接回 empty，不發 LLM call。任何 exception 回 error 字串，
     不 raise — caller 用 list 收集所有結果。"""
@@ -260,7 +274,7 @@ def _translate_one(client, model: str, src: str,
     # 原樣，譯文欄維持空白（前端會顯示「（填寫位）」），保留原文版面對齊。
     if _FILLER_RE.match(src):
         return {"src": src, "translated": "", "error": "", "skipped": "filler"}
-    prompt = _build_prompt(src, source_lang, target_lang)
+    prompt = _build_prompt(src, source_lang, target_lang, domain=domain)
     try:
         resp = client.text_query(
             prompt=prompt, model=model, temperature=0.0, think=False,
@@ -275,6 +289,7 @@ def _translate_one(client, model: str, src: str,
 
 def _translate_sentences(
     sentences: list[str], source_lang: str, target_lang: str,
+    domain: str = "",
 ) -> list[dict]:
     client = llm_settings.make_client()
     if client is None:
@@ -287,7 +302,7 @@ def _translate_sentences(
     concurrency = max(1, min(16, int(conf.get("translate_concurrency", 4))))
     n = len(sentences)
     if n <= 1 or concurrency == 1:
-        return [_translate_one(client, model, src, source_lang, target_lang)
+        return [_translate_one(client, model, src, source_lang, target_lang, domain=domain)
                 for src in sentences]
     # ThreadPoolExecutor.map 保證 output 順序對應 input 順序（重要 — UI
     # 是依索引貼回原文位置）。內部 LLMClient 的 httpx 是同步的，所以用
@@ -295,7 +310,7 @@ def _translate_sentences(
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=concurrency) as ex:
         results = list(ex.map(
-            lambda src: _translate_one(client, model, src, source_lang, target_lang),
+            lambda src: _translate_one(client, model, src, source_lang, target_lang, domain=domain),
             sentences,
         ))
     return results
@@ -355,6 +370,7 @@ async def translate_batch(request: Request):
     sentences = [str(s) for s in sentences]
     source_lang = str(body.get("source_lang") or "auto")
     target_lang = str(body.get("target_lang") or "zh-TW")
+    domain = str(body.get("domain") or "")
     if source_lang == "auto":
         source_lang = _detect_language("\n".join(sentences[:50]))
     # CRITICAL: 不能直接呼叫 _translate_sentences — 它是同步的 (內部
@@ -364,7 +380,7 @@ async def translate_batch(request: Request):
     # executor 跑，async loop 就能繼續處理其他請求。
     import asyncio as _asyncio
     results = await _asyncio.to_thread(
-        _translate_sentences, sentences, source_lang, target_lang)
+        _translate_sentences, sentences, source_lang, target_lang, domain)
     return {
         "source_lang": source_lang,
         "target_lang": target_lang,
@@ -382,11 +398,12 @@ async def translate_one(request: Request):
         raise HTTPException(400, "src is empty")
     source_lang = str(body.get("source_lang") or "auto")
     target_lang = str(body.get("target_lang") or "zh-TW")
+    domain = str(body.get("domain") or "")
     if source_lang == "auto":
         source_lang = _detect_language(src)
     import asyncio as _asyncio
     results = await _asyncio.to_thread(
-        _translate_sentences, [src], source_lang, target_lang)
+        _translate_sentences, [src], source_lang, target_lang, domain)
     return results[0] if results else {"src": src, "translated": "",
                                        "error": "no result"}
 
@@ -426,6 +443,7 @@ async def api_translate_doc(request: Request):
             400, f"too many sentences after split ({len(sentences)} > {MAX_SENTENCES})")
     source_lang = str(body.get("source_lang") or "auto")
     target_lang = str(body.get("target_lang") or "zh-TW")
+    domain = str(body.get("domain") or "")
     if source_lang == "auto":
         source_lang = _detect_language(text)
     # CRITICAL: 不能直接呼叫 _translate_sentences — 它是同步的 (內部
@@ -435,7 +453,7 @@ async def api_translate_doc(request: Request):
     # executor 跑，async loop 就能繼續處理其他請求。
     import asyncio as _asyncio
     results = await _asyncio.to_thread(
-        _translate_sentences, sentences, source_lang, target_lang)
+        _translate_sentences, sentences, source_lang, target_lang, domain)
     return {
         "source_lang": source_lang,
         "target_lang": target_lang,
