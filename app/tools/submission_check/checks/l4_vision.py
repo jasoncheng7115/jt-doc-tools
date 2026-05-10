@@ -68,20 +68,29 @@ def _safe_json_extract(text: str) -> dict:
     return {}
 
 
-def _render_pdf_first_page(pdf_path: Path, dpi: int = 150) -> Optional[bytes]:
+def _render_pdf_pages(pdf_path: Path, dpi: int = 150,
+                      max_pages: int = 10) -> list[tuple[int, bytes]]:
+    """渲染 PDF 多頁為 PNG。回 [(page_no_1based, png_bytes), ...]。
+    超過 max_pages 截斷（vision LLM 每頁一次 call，太多會跑很久）。
+    """
     try:
         import fitz
         doc = fitz.open(str(pdf_path))
-        try:
-            if doc.page_count == 0:
-                return None
-            zoom = dpi / 72
-            mat = fitz.Matrix(zoom, zoom)
-            return doc[0].get_pixmap(matrix=mat).tobytes("png")
-        finally:
-            doc.close()
     except Exception:
-        return None
+        return []
+    out: list[tuple[int, bytes]] = []
+    try:
+        zoom = dpi / 72
+        mat = fitz.Matrix(zoom, zoom)
+        for pno in range(min(doc.page_count, max_pages)):
+            try:
+                png = doc[pno].get_pixmap(matrix=mat).tobytes("png")
+                out.append((pno + 1, png))
+            except Exception:
+                continue
+    finally:
+        doc.close()
+    return out
 
 
 def _read_image(path: Path) -> Optional[bytes]:
@@ -118,16 +127,28 @@ def vision_check_file(file_path: Path, ground_truth_main: str = "",
         pass
     log.info("L6 vision: calling %s for %s (timeout=%ss)", model, file_path.name, timeout)
     suffix = file_path.suffix.lower()
-    png: Optional[bytes] = None
-    page_no: Optional[int] = None
+    # 蒐集要送 vision 的頁面：PDF 一頁一次 call、圖片只一張
+    pages_to_send: list[tuple[Optional[int], bytes]] = []
+    truncated = False
     if suffix == ".pdf":
-        png = _render_pdf_first_page(file_path)
-        page_no = 1
+        pages_data = _render_pdf_pages(file_path, max_pages=10)
+        pages_to_send = [(p, b) for p, b in pages_data]
+        # check truncation
+        try:
+            import fitz
+            doc = fitz.open(str(file_path))
+            if doc.page_count > 10:
+                truncated = True
+            doc.close()
+        except Exception:
+            pass
     elif suffix in (".jpg", ".jpeg", ".png", ".tif", ".tiff"):
-        png = _read_image(file_path)
+        b = _read_image(file_path)
+        if b:
+            pages_to_send = [(None, b)]
     else:
         return []
-    if not png:
+    if not pages_to_send:
         return []
 
     prompt = (
@@ -147,54 +168,65 @@ def vision_check_file(file_path: Path, ground_truth_main: str = "",
         "注意：只回報「疑似」級別，不下「確認偽造」結論。"
         "若視覺看不出明顯問題，回 {\"anomalies\": [], \"overall_concern\": \"none\", \"summary\": \"未發現視覺異常\"}"
     )
-    try:
-        result = client.vision_query(png, prompt=prompt, model=model, temperature=0.0)
-        # vision_query 通常已 parse 過；保險起見再過一次
-        if not isinstance(result, dict) or "anomalies" not in result:
-            if isinstance(result, dict):
-                # try to find inner json string
-                for v in result.values():
-                    if isinstance(v, str):
-                        parsed = _safe_json_extract(v)
-                        if parsed.get("anomalies") is not None:
-                            result = parsed
-                            break
-            if not isinstance(result, dict) or "anomalies" not in result:
-                return []
-    except Exception:
-        return []
-
     findings: list[dict] = []
-    anomalies = result.get("anomalies") or []
-    for a in anomalies:
-        if not isinstance(a, dict):
+    for page_no, png in pages_to_send:
+        try:
+            result = client.vision_query(png, prompt=prompt, model=model, temperature=0.0)
+            if not isinstance(result, dict) or "anomalies" not in result:
+                if isinstance(result, dict):
+                    for v in result.values():
+                        if isinstance(v, str):
+                            parsed = _safe_json_extract(v)
+                            if parsed.get("anomalies") is not None:
+                                result = parsed
+                                break
+                if not isinstance(result, dict) or "anomalies" not in result:
+                    continue
+        except Exception as e:
+            log.warning("L6 vision call failed for %s p.%s: %s", file_path.name, page_no, e)
             continue
-        conf = a.get("confidence", "low")
-        sev = "warn" if conf == "high" else "info"
-        a_type = a.get("type", "?")
-        type_label = {"tamper": "偽造痕跡", "stamp": "章 / 印異常",
-                       "layer": "圖層拼貼", "identity": "身分不一致"}.get(a_type, a_type)
-        findings.append({
-            "layer": "L4",
-            "severity": sev,
-            "category": f"vision-{a_type}",
-            "title": f"視覺疑似{type_label}（信心 {conf}）",
-            "detail": (a.get("description") or "未提供詳細說明") + " — 僅供參考，請人工確認。",
-            "page": page_no,
-            "evidence": {"vision_type": a_type, "confidence": conf,
-                          "raw_description": a.get("description", "")},
-        })
-    # 整體 summary 也加一條 info
-    overall = result.get("overall_concern", "none")
-    summary = result.get("summary", "")
-    if overall in ("high", "med") and summary:
+
+        anomalies = result.get("anomalies") or []
+        for a in anomalies:
+            if not isinstance(a, dict):
+                continue
+            conf = a.get("confidence", "low")
+            sev = "warn" if conf == "high" else "info"
+            a_type = a.get("type", "?")
+            type_label = {"tamper": "偽造痕跡", "stamp": "章 / 印異常",
+                           "layer": "圖層拼貼", "identity": "身分不一致"}.get(a_type, a_type)
+            page_str = f" p.{page_no}" if page_no else ""
+            findings.append({
+                "layer": "L4",
+                "severity": sev,
+                "category": f"vision-{a_type}",
+                "title": f"視覺疑似{type_label}（信心 {conf}）{page_str}",
+                "detail": (a.get("description") or "未提供詳細說明") + " — 僅供參考，請人工確認。",
+                "page": page_no,
+                "evidence": {"vision_type": a_type, "confidence": conf,
+                              "raw_description": a.get("description", ""), "page": page_no},
+            })
+        overall = result.get("overall_concern", "none")
+        summary = result.get("summary", "")
+        if overall in ("high", "med") and summary:
+            findings.append({
+                "layer": "L4",
+                "severity": "info",
+                "category": "vision-summary",
+                "title": f"視覺整體評估（{overall}）" + (f" p.{page_no}" if page_no else ""),
+                "detail": summary,
+                "page": page_no,
+                "evidence": {"overall_concern": overall, "page": page_no},
+            })
+
+    if truncated:
         findings.append({
             "layer": "L4",
             "severity": "info",
-            "category": "vision-summary",
-            "title": f"視覺整體評估（{overall}）",
-            "detail": summary,
-            "page": page_no,
-            "evidence": {"overall_concern": overall},
+            "category": "vision-truncated",
+            "title": "視覺分析只處理前 10 頁",
+            "detail": f"檔案頁數較多，只送前 10 頁給 vision LLM 分析（避免成本爆炸）。",
+            "page": None,
+            "evidence": {"limit": 10},
         })
     return findings

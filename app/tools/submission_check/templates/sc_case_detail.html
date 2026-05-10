@@ -171,8 +171,21 @@
           <div class="scd-override-note">{{ fd._override.verdict }} — {{ fd._override.reason or '無註記' }} (by {{ fd._override.by_user or 'anonymous' }})</div>
           {% endif %}
           <div class="scd-finding-actions">
-            {% if fd.page %}
-            <button class="prev" onclick="previewPage('{{ case.case_id }}', '{{ fd._target_file_id or '' }}', {{ fd.page }})">{{ icon('eye', size=12) }} 預覽 p.{{ fd.page }}</button>
+            {% set _files_in_evidence = (fd.evidence or {}).get('files', []) %}
+            {% set _fid2name = {} %}
+            {% for _f in case.files %}{% set _ = _fid2name.update({_f.file_id: _f.name}) %}{% endfor %}
+            {% if fd.page and _files_in_evidence %}
+              {% for _fid in _files_in_evidence[:5] %}
+              {% set _short = _fid2name.get(_fid, _fid[:8]) %}
+              {% set _short = (_short[:18] + '…') if _short|length > 20 else _short %}
+              <button class="prev" onclick="previewPage('{{ case.case_id }}', '{{ _fid }}', {{ fd.page }})" title="{{ _fid2name.get(_fid, _fid) }} p.{{ fd.page }}">{{ icon('eye', size=12) }} {{ _short }} p.{{ fd.page }}</button>
+              {% endfor %}
+            {% elif _files_in_evidence %}
+              {% for _fid in _files_in_evidence[:5] %}
+              {% set _short = _fid2name.get(_fid, _fid[:8]) %}
+              {% set _short = (_short[:18] + '…') if _short|length > 20 else _short %}
+              <button class="prev" onclick="previewPage('{{ case.case_id }}', '{{ _fid }}', 1)" title="{{ _fid2name.get(_fid, _fid) }} p.1">{{ icon('eye', size=12) }} {{ _short }} p.1</button>
+              {% endfor %}
             {% endif %}
             {% if not fd._override %}
             <button class="ok" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'confirmed_ok')">標已確認 OK</button>
@@ -235,40 +248,42 @@
 {% block scripts %}
 <script>
 async function rerunCheck(caseId) {
-  if (!confirm("建立新版本並重新檢核？")) return;
+  const ok = await window.showConfirm("建立新版本並重新檢核？", { title: "重新檢核", okText: "確認" });
+  if (!ok) return;
   try {
     const r = await fetch("../run/" + caseId, { method: "POST" });
     if (!r.ok) throw new Error(await r.text());
     const j = await r.json();
-    alert("檢核已啟動，job_id=" + j.job_id + " (新版本 " + j.version + ")\n稍後重新整理本頁查看結果");
-    setTimeout(() => location.reload(), 3000);
-  } catch (e) { alert("失敗：" + e.message); }
+    setTimeout(() => location.reload(), 600);
+  } catch (e) { window.showAlert("失敗：" + e.message); }
 }
 
 async function markOverride(caseId, findingKey, verdict) {
-  const reason = prompt("(選填) 註明原因：") || "";
+  const reason = await window.showPrompt("(選填) 註明原因：", { title: "新增標記", okText: "確認" });
+  if (reason === null) return;  // cancelled
   const fd = new FormData();
   fd.append("finding_key", findingKey);
   fd.append("verdict", verdict);
-  fd.append("reason", reason);
+  fd.append("reason", reason || "");
   try {
     const r = await fetch("../override/" + caseId, { method: "POST", body: fd });
     if (!r.ok) throw new Error(await r.text());
     location.reload();
-  } catch (e) { alert("失敗：" + e.message); }
+  } catch (e) { window.showAlert("失敗：" + e.message); }
 }
 
 async function removeOverride(caseId, findingKey) {
-  if (!confirm("移除此標記？")) return;
+  const ok = await window.showConfirm("移除此標記？", { title: "移除標記" });
+  if (!ok) return;
   try {
     const r = await fetch("../override/" + caseId + "/" + encodeURIComponent(findingKey), { method: "DELETE" });
     if (!r.ok) throw new Error(await r.text());
     location.reload();
-  } catch (e) { alert("失敗：" + e.message); }
+  } catch (e) { window.showAlert("失敗：" + e.message); }
 }
 
 function previewPage(caseId, fileId, page) {
-  if (!fileId) { alert("此 finding 未綁定特定檔案，無法預覽"); return; }
+  if (!fileId) { window.showAlert("此 finding 未綁定特定檔案，無法預覽"); return; }
   const modal = document.getElementById("prevModal");
   const img = document.getElementById("prevImg");
   const title = document.getElementById("prevTitle");
