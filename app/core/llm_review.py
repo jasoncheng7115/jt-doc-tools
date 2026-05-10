@@ -534,7 +534,7 @@ def review(
         try:
             # Single image mode: just the filled "after" PNG with red outlines
             # marking our fills. Earlier two-image (before + after) mode
-            # doubled tokens and made qwen3-vl:4b time out at 120s on
+            # doubled tokens and made small vision models time out at 120s on
             # reasoning. Single image matches what works in OpenWebUI.
             after_png = render_overlay_png(
                 pdf_path, result.filled, page_index=page_index)
