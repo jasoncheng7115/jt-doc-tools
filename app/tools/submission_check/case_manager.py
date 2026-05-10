@@ -2,7 +2,7 @@
 
 目錄結構：
   <data>/submission_check/<case_id>/
-    case.json              # 案件元資料 + ground truth + 狀態
+    case.json              # 案件元資料 + 基準資訊 + 狀態
     files/                 # 原始上傳檔
     versions/              # 多版本快照
       v1/
@@ -52,7 +52,7 @@ def _make_blank_case(case_id: str, owner_uid: Optional[int]) -> dict:
         "status": "draft",                      # draft / running / done / archived
         "created_at": time.time(),
         "updated_at": time.time(),
-        # ground truth — user 填或系統推估
+        # 案件基準資訊 — user 填或系統推估
         "ground_truth": {
             "main_entity": None,                # {name, type, identifier, aliases}
             "counterparty": None,

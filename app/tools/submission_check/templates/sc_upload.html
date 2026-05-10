@@ -31,7 +31,7 @@
 </details>
 
 <details class="panel" open>
-  <summary>2. 案件 Ground Truth <span class="muted" style="font-weight:normal; font-size:12px; margin-left:8px;">（選填，但填越多越準）</span></summary>
+  <summary>2. 案件基準資訊 <span class="muted" style="font-weight:normal; font-size:12px; margin-left:8px;">（選填，但填越多越準）</span></summary>
   <div class="sc-fields">
     <div class="sc-field">
       <label>本案主角名稱 <span class="muted">（公司 / 機關 / 學校 / 個人 等）</span></label>
@@ -74,7 +74,6 @@
   const statusEl = $('status');
   const progressBar = $('progressBar');
   const progressInner = progressBar.querySelector('div');
-  const fileInput = document.getElementById('scUp-input');
   let files = [];
 
   function refreshList(){
@@ -101,13 +100,12 @@
     });
   }
 
-  if (fileInput) {
-    fileInput.addEventListener('change', e => {
-      files = files.concat(Array.from(e.target.files || []));
-      refreshList();
-    });
-  }
-  // file_upload.js handles dragdrop into the input above
+  // 用標準 FileUpload class — 支援拖拉 + 點選 + multiple
+  const fu = new FileUpload(document.getElementById('scUp'), (selected) => {
+    const arr = Array.isArray(selected) ? selected : [selected];
+    files = files.concat(arr);
+    refreshList();
+  });
 
   btnRun.addEventListener('click', async () => {
     btnRun.disabled = true;
