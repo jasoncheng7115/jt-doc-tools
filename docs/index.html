@@ -527,8 +527,8 @@
           <div class="llm-tag">text</div>
         </div>
         <h3>逐句翻譯</h3>
-        <p>翻譯時保留段落 / 標題 / 清單結構，可提示專業領域用詞（法律 / 醫療）。</p>
-        <p class="llm-effect"><b>效果</b>：50 頁合約翻譯，半天 → 10 分鐘</p>
+        <p>分句送 LLM 翻譯,左原文右譯文並排對照,每句可單獨重譯。內建台灣繁體 IT 用詞表 + 可選填「文件領域」hint(法律 / 醫療 / 技術)讓專業用詞更準。</p>
+        <p class="llm-effect"><b>效果</b>：合約 / 論文長文,逐句並行翻譯比手動快</p>
       </article>
 
       <article class="llm-card">
@@ -537,8 +537,8 @@
           <div class="llm-tag">text</div>
         </div>
         <h3>擷取文字（段落重排）</h3>
-        <p>把 PDF 雙欄、表格、頁眉頁腳被切散的句子重新接回完整段落。</p>
-        <p class="llm-effect"><b>效果</b>：30 頁論文做摘錄，30 分鐘 → 3 分鐘</p>
+        <p>用 PyMuPDF 抽出後,逐段送 LLM 把被換行切散的句子重新接回自然段落。輸出 TXT / Markdown / DOCX / ODT。</p>
+        <p class="llm-effect"><b>效果</b>：版面被 PDF 切碎的內文,讀起來連貫不卡</p>
       </article>
 
       <article class="llm-card llm-card-vision">
@@ -547,8 +547,8 @@
           <div class="llm-tag">vision</div>
         </div>
         <h3>表單自動填寫（校驗）</h3>
-        <p>填完後 LLM 看渲染後的 PNG，偵測欄位錯位 / 截斷 / checkbox 沒勾對。</p>
-        <p class="llm-effect"><b>效果</b>：批次填 50 份廠商表，人工逐張檢查 → 只看 LLM flag 那幾張</p>
+        <p>填完後 LLM 自動 review 每個欄位的渲染結果（PNG），偵測欄位錯位 / 截斷 / checkbox 沒勾對。</p>
+        <p class="llm-effect"><b>效果</b>：30 欄的廠商表，免逐欄人工校對，只看 LLM flag 那幾欄</p>
       </article>
 
       <article class="llm-card">
@@ -557,8 +557,8 @@
           <div class="llm-tag">text</div>
         </div>
         <h3>文件去識別化（補偵測）</h3>
-        <p>regex 抓固定格式，LLM 補抓「客戶代號 A-2024-0815」「主管 王經理」這類 context-sensitive 案例。</p>
-        <p class="llm-effect"><b>效果</b>：法務 / 合規清舊合約批次，從一份份標 → 跑完只看 review 報告</p>
+        <p>regex 抓固定格式(身分證 / 電話 / 銀行帳號 / 統編),LLM 額外抓「客戶代號 A-2024-0815」「主管 王經理」這類 context-sensitive 案例。</p>
+        <p class="llm-effect"><b>效果</b>：regex 抓不到的非標準格式 / 上下文相關欄位,LLM 補一網</p>
       </article>
 
       <article class="llm-card">
@@ -567,8 +567,8 @@
           <div class="llm-tag">text</div>
         </div>
         <h3>文字去識別化（補偵測）</h3>
-        <p>同上但接受純文字輸入：客服 ticket、Slack 對話備份、log 含使用者識別碼等。</p>
-        <p class="llm-effect"><b>效果</b>：處理「沒結構但有 context」的文字，regex 完全抓不到的可以靠 LLM 補</p>
+        <p>同上但接受純文字輸入,適合客服對話 / log / Email 內容。可貼上或上傳 .txt / .md。</p>
+        <p class="llm-effect"><b>效果</b>：純文字場景也能用同一套 regex + LLM 雙重偵測</p>
       </article>
 
       <article class="llm-card">
@@ -577,8 +577,8 @@
           <div class="llm-tag">text</div>
         </div>
         <h3>字數統計（摘要 / 關鍵字）</h3>
-        <p>計完字數後額外生成 3-5 句摘要 + TOP 10 關鍵概念。</p>
-        <p class="llm-effect"><b>效果</b>：拿到 80 頁報告，30 秒讀完摘要就抓住主軸</p>
+        <p>計完字數後額外請 LLM 生成內容摘要 + 關鍵概念列表(可選功能,預設關閉)。</p>
+        <p class="llm-effect"><b>效果</b>：拿到陌生長文,先看 LLM 摘要抓主軸再決定要不要細讀</p>
       </article>
 
       <article class="llm-card">
@@ -587,8 +587,8 @@
           <div class="llm-tag">text</div>
         </div>
         <h3>註解整理（自動分組）</h3>
-        <p>多筆審閱意見自動分「<b>重大</b> / 一般 / 提問」三類。</p>
-        <p class="llm-effect"><b>效果</b>：30 條註解的合約，排序時間 15 分鐘 → 30 秒，只看重大那幾條</p>
+        <p>抓出 PDF 內所有 annotation,LLM 依「註解內容主題」動態分群(例：需修改文字 / 格式問題 / 詢問疑點 / 已確認 等,LLM 自由判斷)。</p>
+        <p class="llm-effect"><b>效果</b>：多人審閱的長文件,一鍵聚合相同性質的修改建議</p>
       </article>
 
       <article class="llm-card">
@@ -597,8 +597,8 @@
           <div class="llm-tag">text</div>
         </div>
         <h3>文件差異比對（變動摘要）</h3>
-        <p>行 diff 之外多給「<b>主要修改了哪幾條條款 / 段落</b>」自然語言摘要。</p>
-        <p class="llm-effect"><b>效果</b>：100 行 diff 從一行行讀 → 直接看 LLM 出的 3-5 條重點</p>
+        <p>2 份文件做完行 diff 後,LLM 額外用 3-5 句繁中話說明「整體主要改了什麼」(可選,預設關閉)。</p>
+        <p class="llm-effect"><b>效果</b>：合約 / 草案 / 規格修訂後,先看 LLM 摘要再決定要不要逐條細看</p>
       </article>
 
     </div>

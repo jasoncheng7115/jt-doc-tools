@@ -68,6 +68,11 @@
       </label>
     </div>
   </div>
+  <div style="margin-top:14px;">
+    <label class="trd-label" for="domainHint">文件領域 <span class="muted" style="font-weight:400;">（選填，會送進 LLM prompt 提升專業用詞準確度）</span></label>
+    <input type="text" class="field" id="domainHint" maxlength="120" style="width:100%; margin-top:4px;"
+           placeholder="例：法律合約、醫療報告、軟體技術文件、財務報表、學術論文、新聞稿…">
+  </div>
   <textarea class="field" id="srcText" rows="10" style="margin-top:14px; width:100%; resize:vertical; font-family: -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;" placeholder="貼上要翻譯的文字，或上傳檔案到上方欄位…"></textarea>
   <div style="margin-top:8px; display:flex; align-items:center; gap:14px;">
     <button class="btn btn-primary" id="btnTranslate" {% if not llm_enabled %}disabled title="LLM 未啟用"{% endif %}>{{ icon('play', size=14) }} 開始翻譯</button>
@@ -617,7 +622,7 @@ trdGrid.addEventListener('click', async (e) => {
   try {
     const r = await fetch('/tools/translate-doc/translate-one', {
       method: 'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({src, source_lang: srcLang.value, target_lang: tgtLang.value}),
+      body: JSON.stringify({src, source_lang: srcLang.value, target_lang: tgtLang.value, domain: (document.getElementById('domainHint')?.value || '').trim()}),
     });
     if (!r.ok) {
       tgtCell.classList.add('is-error');
@@ -652,6 +657,7 @@ async function _translateOne(idx, src) {
       src: src,
       source_lang: srcLang.value,
       target_lang: tgtLang.value,
+      domain: (document.getElementById('domainHint')?.value || '').trim(),
     }),
   });
   if (!r.ok) {
