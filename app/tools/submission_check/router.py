@@ -56,7 +56,10 @@ async def page_case_list(request: Request, q: str = "", status: str = "") -> HTM
     user = getattr(request.state, "user", None) if hasattr(request, "state") else None
     owner_uid = (user or {}).get("user_id") if isinstance(user, dict) else None
     is_admin = _is_admin(user)
-    cases = _cm.list_cases(owner_uid=owner_uid, admin=is_admin, limit=200)
+    is_auditor = _is_auditor(user)
+    # 稽核員 / admin 可看包含已刪除的案件
+    cases = _cm.list_cases(owner_uid=owner_uid, admin=is_admin, auditor=is_auditor,
+                            include_deleted=(is_admin or is_auditor), limit=200)
     # filter
     q = (q or "").strip().lower()
     if q:
@@ -248,6 +251,30 @@ async def get_result(case_id: str, version: str, request: Request):
     return rep
 
 
+@router.delete("/case/{case_id}")
+async def delete_case(case_id: str, request: Request):
+    """軟刪除案件 — owner 或 admin 可刪。稽核員仍可從清單看到（標已刪除）。"""
+    if not _cm.CASE_ID_RE.match(case_id):
+        raise HTTPException(400, "invalid case_id")
+    case = _cm.load_case(case_id)
+    if not case:
+        raise HTTPException(404, "case 不存在")
+    user = getattr(request.state, "user", None) if hasattr(request, "state") else None
+    is_admin = _is_admin(user)
+    # 稽核員不可刪（read-only）
+    if _is_auditor(user) and not is_admin:
+        raise HTTPException(403, "稽核員為唯讀，無法刪除案件")
+    # 一般 user 只能刪自己的
+    if user and not is_admin:
+        owner_uid = case.get("owner_uid")
+        user_uid = user.get("user_id") if isinstance(user, dict) else None
+        if owner_uid is not None and owner_uid != user_uid:
+            raise HTTPException(403, "您只能刪除自己建立的案件")
+    by_user = (user or {}).get("username") if isinstance(user, dict) else "anonymous"
+    _cm.soft_delete_case(case_id, by_user=by_user)
+    return {"ok": True, "case_id": case_id}
+
+
 @router.post("/override/{case_id}")
 async def post_override(case_id: str, request: Request,
                           finding_key: str = Form(...),
@@ -306,17 +333,30 @@ def _is_admin(user) -> bool:
         return False
     if isinstance(user, dict):
         et = user.get("effective_tools") or []
-        # ALL marker convention：包含 "*" 或角色為 admin
         return "*" in et or user.get("role") == "admin"
     return False
 
 
+def _is_auditor(user) -> bool:
+    """User 是否稽核員 — 走既有 perm.is_auditor()。"""
+    if not user or not isinstance(user, dict):
+        return False
+    uid = user.get("user_id")
+    if not uid:
+        return False
+    try:
+        from app.core import perm as _perm
+        return bool(_perm.is_auditor(int(uid)))
+    except Exception:
+        return False
+
+
 def _check_case_acl(case: dict, request: Request) -> None:
-    """Case 級 ACL — case owner 或 admin 才可存取（auth ON 才生效）。"""
+    """Case 級 ACL — case owner / admin / 稽核員 可讀（稽核員唯讀，不可改 / 刪）。"""
     user = getattr(request.state, "user", None) if hasattr(request, "state") else None
     if not user:
         return  # auth OFF
-    if _is_admin(user):
+    if _is_admin(user) or _is_auditor(user):
         return
     owner_uid = case.get("owner_uid")
     user_uid = user.get("user_id") if isinstance(user, dict) else None

@@ -17,6 +17,11 @@
 .scl-status.done { background:#d1fae5; color:#065f46; }
 .scl-status.error { background:#fee2e2; color:#991b1b; }
 .scl-status.archived { background:#e0e7ff; color:#3730a3; }
+.scl-status.deleted { background:#fee2e2; color:#991b1b; }
+.scl-tbl tr.deleted-row { opacity:0.55; }
+.scl-tbl tr.deleted-row td:first-child::before { content:"🗑 "; }
+.scl-del { background:transparent; border:0; color:#dc2626; cursor:pointer; font-size:14px; padding:2px 6px; }
+.scl-del:hover { color:#991b1b; }
 .scl-empty { text-align:center; padding:48px; color:#94a3b8; }
 .scl-search { display:flex; gap:8px; align-items:center; }
 .scl-search input { flex:1; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:13px; }
@@ -50,20 +55,31 @@
   {% if cases %}
   <table class="scl-tbl">
     <thead><tr>
-      <th>案件 ID</th><th>本案主角</th><th>狀態</th><th>檔案數</th><th>當前版本</th><th>建立時間</th><th>更新時間</th>
+      <th>案件 ID</th><th>本案主角</th><th>狀態</th><th>檔案數</th><th>目前版本</th><th>建立時間</th><th>更新時間</th><th></th>
     </tr></thead>
     <tbody>
     {% for c in cases %}
-      <tr>
-        <td><a href="case/{{ c.case_id }}">{{ c.case_id[:8] }}…</a></td>
+      <tr {% if c.deleted_at %}class="deleted-row"{% endif %}>
+        <td><a href="case/{{ c.case_id }}" title="{{ c.case_id }}">{{ c.case_id[:8] }}</a></td>
         <td>
           {% if c.main_entity %}{{ c.main_entity.name }}{% else %}<span style="color:#94a3b8;">(未設定)</span>{% endif %}
         </td>
-        <td><span class="scl-status {{ c.status }}">{{ c.status }}</span></td>
+        <td>
+          {% if c.deleted_at %}
+            <span class="scl-status deleted" title="於 {{ c.deleted_at|int|string }} 由 {{ c.deleted_by or '?' }} 刪除">已刪除</span>
+          {% else %}
+            <span class="scl-status {{ c.status }}">{{ c.status }}</span>
+          {% endif %}
+        </td>
         <td>{{ c.files_count }}</td>
         <td>{{ c.current_version or "—" }}</td>
         <td><span title="{{ c.created_at }}">{{ c.created_at|int|string }}</span></td>
         <td><span title="{{ c.updated_at }}">{{ c.updated_at|int|string }}</span></td>
+        <td>
+          {% if not c.deleted_at %}
+            <button class="scl-del" title="刪除案件" onclick="deleteCase('{{ c.case_id }}')">🗑</button>
+          {% endif %}
+        </td>
       </tr>
     {% endfor %}
     </tbody>
@@ -75,4 +91,19 @@
   </div>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function deleteCase(caseId) {
+  if (!confirm("確定刪除此案件？\n\n（會保留歷史紀錄供稽核員調閱，但不會出現在您的清單中）")) return;
+  try {
+    const r = await fetch("case/" + caseId, { method: "DELETE" });
+    if (!r.ok) throw new Error(await r.text());
+    location.reload();
+  } catch (e) {
+    alert("刪除失敗：" + e.message);
+  }
+}
+</script>
 {% endblock %}
