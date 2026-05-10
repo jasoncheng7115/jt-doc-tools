@@ -4,6 +4,32 @@
 
 ---
 
+## [1.6.0] - 2026-05-10
+
+### 新增
+
+- **新工具：送件前檢核（`submission-check`）— Sprint 1 + 2** — 一批文件送出去前的最後一關自查。設計三層檢核：L1 規則 / L2 OCR / L3 LLM。本版含 **L1 規則層** + **跨檔身分一致性核心（文字層）**，end-to-end 跑得通：
+  - 案件 (case) 概念：每次檢核以 case 為單位，多檔混格式（PDF / DOCX / JPG / PNG）+ Ground Truth（主角 / 對方 / 案號 / 截止日）+ 多版本 snapshot。
+  - L1 規則檢查：PDF metadata 殘留偵測、JS / OpenAction、嵌入檔、incremental update（修訂歷史）、表單空白欄位、跨檔 SHA-256 重複；DOCX track changes、comments、macro、core.xml 作者洩漏。
+  - 跨檔身分一致性的 ground truth 抽出（公司名 / 統編 8 碼 + 校驗碼）。
+  - 案件儲存於 `<data>/submission_check/<case_id>/`，包含 `case.json` + 原檔 + 多版本 reports。
+  - Endpoints：`/tools/submission-check/`（上傳頁）/ `/cases`（清單）/ `/case/{id}`（詳情）/ `/upload` / `/run/{id}` / `/result/{id}/{ver}` / `/file/{id}/{file_id}`。
+  - 案件 ACL：重用既有 `upload_owner.py`，auth ON 時 case owner / admin 可存取。
+  - 適用場景（規劃支援，目前 L1+ 文字層 L2 範圍）：投標、KYC、HR 到職、報帳、訴狀附件、申請件、工程交付、保險理賠等。
+  - **跨檔身分一致性（Sprint 2）** — 抽公司 / 政府機關 / 學校 / 法人 / 統編 / 案號 / 日期等實體做跨檔比對：
+    - 模式 1（user 填 ground truth）：抓所有「跟主角不符 + 不是對方」的實體出現，標出「疑似漏改範本」
+    - 模式 2（沒 ground truth）：頻率分析，outlier（出現檔案數 ≤ 主流的一半）標警
+    - 統編 8 碼校驗碼錯誤直接 fail
+    - 政府機關預設視為「對方候選」不誤標
+
+### 後續 sprint（暫未上線）
+
+- Sprint 2: 身分一致性核心（公司名 / 統編 / 人名跨檔比對）+ 金額 / 日期 / 附件清單 / 章組合
+- Sprint 3: L2 OCR pipeline（tesseract）
+- Sprint 4: L3 LLM（fuzzy 變體合併、修改範本痕跡推論、vision 偽造偵測）
+- Sprint 5: 跟既有工具 chaining、案件 lifecycle / Re-run、User override 註解
+- Sprint 6: 完整鑑識報告 PDF 輸出、admin 儀表板、多語言、實體字典
+
 ## [1.5.18] - 2026-05-10
 
 ### 變更
