@@ -1,202 +1,160 @@
 {% extends "base.html" %}
+{% from "components/icons.html" import icon %}
 
 {% block title %}送件前檢核 · {{ app_name }}{% endblock %}
 
 {% block head %}
 <style>
-.sc-wrap { max-width: 960px; margin: 0 auto; padding: 16px; }
-.sc-section { background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:16px; margin-bottom:16px; }
-.sc-section h2 { font-size:16px; margin:0 0 12px; color:#1e293b; }
-.sc-drop { border:2px dashed #cbd5e1; border-radius:8px; padding:32px; text-align:center;
-            background:#f8fafc; cursor:pointer; transition: background .15s, border-color .15s; }
-.sc-drop:hover, .sc-drop.is-dragover { background:#eff6ff; border-color:#3b82f6; }
-.sc-drop.has-file { background:#eff6ff; border-color:#3b82f6; }
-.sc-drop b { color:#1e40af; }
-.sc-drop .hint { display:block; color:#94a3b8; font-size:12px; margin-top:6px; }
-.sc-files { margin-top:12px; }
-.sc-files li { padding:4px 8px; font-size:13px; color:#475569; background:#f1f5f9; border-radius:4px; margin-bottom:4px; display:flex; justify-content:space-between; }
 .sc-fields { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-.sc-field label { display:block; font-size:13px; color:#475569; margin-bottom:4px; }
-.sc-field input { width:100%; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:14px; }
-.sc-field .muted { font-weight:400; color:#94a3b8; font-size:11px; }
-.sc-actions { display:flex; gap:8px; align-items:center; margin-top:16px; }
-.sc-actions .btn-primary { background:#3b82f6; color:#fff; border:0; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:500; }
-.sc-actions .btn-primary:disabled { background:#cbd5e1; cursor:not-allowed; }
-.sc-actions .btn-secondary { background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:8px 16px; border-radius:6px; cursor:pointer; }
-.sc-status { font-size:13px; color:#64748b; }
+.sc-field label { display:block; font-size:13px; color:#475569; margin-bottom:4px; font-weight:500; }
+.sc-field label .muted { font-weight:400; color:#94a3b8; font-size:11px; }
+.sc-field input { width:100%; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:14px; box-sizing:border-box; }
+.sc-files { margin-top:12px; padding:0; list-style:none; }
+.sc-files li { padding:6px 10px; font-size:13px; color:#475569; background:#f1f5f9; border-radius:4px; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center; }
+.sc-files .rm { border:0; background:transparent; cursor:pointer; color:#dc2626; padding:0 4px; }
 .sc-progress { margin-top:8px; height:6px; background:#e5e7eb; border-radius:3px; overflow:hidden; }
 .sc-progress > div { height:100%; background:#3b82f6; width:0%; transition: width .3s; }
-.sc-warn { background:#fef3c7; border-left:3px solid #f59e0b; padding:8px 12px; font-size:13px; color:#92400e; margin-top:8px; border-radius:4px; }
+@media (max-width: 700px) {
+  .sc-fields { grid-template-columns: 1fr; }
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="sc-wrap">
-  <h1 style="font-size:22px; margin-bottom:6px;">送件前檢核</h1>
-  <p class="muted" style="font-size:13px; color:#64748b;">
-    一批文件送出去前的最後一關自查 — 三層檢核（規則 / OCR / LLM）找出 metadata 殘留、漏改範本、章 / 簽缺漏、偽造痕跡等問題。
-    <a href="cases" style="color:#3b82f6;">查看歷史案件 →</a>
-  </p>
+<h1>{{ icon('id-card', size=22) }} 送件前檢核</h1>
+<p class="muted">一批文件送出去前的最後一關自查 — 三層檢核（規則 / OCR / LLM）找出 metadata 殘留、漏改範本、章 / 簽缺漏、偽造痕跡等問題。<a href="cases" style="color:#3b82f6;">查看歷史案件 →</a></p>
 
-  <div class="sc-section">
-    <h2>1. 上傳檔案</h2>
-    <div class="sc-drop" id="dropZone">
-      <input type="file" id="fileInput" multiple style="display:none"
-        accept=".pdf,.docx,.doc,.jpg,.jpeg,.png,.tif,.tiff">
-      <b>點此挑選</b> 或拖曳檔案到此區
-      <span class="hint">.pdf / .docx / .jpg / .png，可多檔（上限 50 檔 / 200 MB）</span>
-    </div>
-    <ul class="sc-files" id="fileList"></ul>
-  </div>
+<details class="panel" open>
+  <summary><h2 style="margin-top:0;">1. 上傳檔案</h2></summary>
+  {% with upload_id='scUp', accept='.pdf,.docx,.doc,.jpg,.jpeg,.png,.tif,.tiff', multiple=true, hint='.pdf / .docx / .jpg / .png，可多檔（上限 50 檔 / 200 MB）' %}{% include "components/file_upload.html" %}{% endwith %}
+  <ul class="sc-files" id="fileList"></ul>
+</details>
 
-  <div class="sc-section">
-    <h2>2. 案件 Ground Truth <span class="muted" style="font-weight:400; color:#94a3b8; font-size:12px;">（選填，但填越多越準）</span></h2>
-    <div class="sc-fields">
-      <div class="sc-field">
-        <label>本案主角名稱 <span class="muted">（公司 / 機關 / 學校 / 個人 等）</span></label>
-        <input type="text" id="mainEntityName" placeholder="例：光寶科技股份有限公司 / 經濟部 / 國立臺灣大學">
-      </div>
-      <div class="sc-field">
-        <label>主角識別碼 <span class="muted">（統編 / 機關代碼 / 身分證 等，選填）</span></label>
-        <input type="text" id="mainEntityIdentifier" placeholder="例：12345678">
-      </div>
-      <div class="sc-field">
-        <label>對方 / 收件方</label>
-        <input type="text" id="counterpartyName" placeholder="例：經濟部標準檢驗局">
-      </div>
-      <div class="sc-field">
-        <label>案號</label>
-        <input type="text" id="caseNumber" placeholder="例：ABC-2026-001">
-      </div>
-      <div class="sc-field">
-        <label>截止日</label>
-        <input type="text" id="deadline" placeholder="例：2026-05-30">
-      </div>
+<details class="panel" open>
+  <summary><h2 style="margin-top:0;">2. 案件 Ground Truth <span class="muted" style="font-weight:400; color:#94a3b8; font-size:12px;">（選填，但填越多越準）</span></h2></summary>
+  <div class="sc-fields">
+    <div class="sc-field">
+      <label>本案主角名稱 <span class="muted">（公司 / 機關 / 學校 / 個人 等）</span></label>
+      <input type="text" id="mainEntityName" placeholder="例：鼎立科技股份有限公司 / ○○部 / 國立範例大學">
     </div>
-    <div class="sc-warn" style="display:none;" id="autoDetectHint">
-      ℹ 未填寫時，系統會從上傳檔案內容自動推估。
+    <div class="sc-field">
+      <label>主角識別碼 <span class="muted">（統編 / 機關代碼 / 身分證 等，選填）</span></label>
+      <input type="text" id="mainEntityIdentifier" placeholder="例：12345675">
+    </div>
+    <div class="sc-field">
+      <label>對方 / 收件方</label>
+      <input type="text" id="counterpartyName" placeholder="例：○○局 / 客戶名稱">
+    </div>
+    <div class="sc-field">
+      <label>案號</label>
+      <input type="text" id="caseNumber" placeholder="例：ABC-2026-001">
+    </div>
+    <div class="sc-field">
+      <label>截止日</label>
+      <input type="text" id="deadline" placeholder="例：2026-05-30">
     </div>
   </div>
+</details>
 
-  <div class="sc-actions">
-    <button class="btn-primary" id="btnRun" disabled>開始檢核</button>
-    <span class="sc-status" id="status">請先上傳至少一個檔案</span>
-  </div>
+<div class="panel">
+  <button class="btn btn-primary" id="btnRun" disabled>{{ icon('play', size=14) }} 開始檢核</button>
+  <span id="status" class="muted" style="margin-left:12px; font-size:13px;">請先上傳至少一個檔案</span>
   <div class="sc-progress" style="display:none;" id="progressBar"><div></div></div>
 </div>
 
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/file_upload.js"></script>
 <script>
 (function(){
-  const dropZone = document.getElementById("dropZone");
-  const fileInput = document.getElementById("fileInput");
-  const fileList = document.getElementById("fileList");
-  const btnRun = document.getElementById("btnRun");
-  const statusEl = document.getElementById("status");
-  const progressBar = document.getElementById("progressBar");
-  const progressInner = progressBar.querySelector("div");
-
+  const $ = (id) => document.getElementById(id);
+  const fileList = $('fileList');
+  const btnRun = $('btnRun');
+  const statusEl = $('status');
+  const progressBar = $('progressBar');
+  const progressInner = progressBar.querySelector('div');
+  const fileInput = document.getElementById('scUp-input');
   let files = [];
 
   function refreshList(){
-    fileList.innerHTML = "";
+    fileList.innerHTML = '';
     if (!files.length) {
       btnRun.disabled = true;
-      statusEl.textContent = "請先上傳至少一個檔案";
-      dropZone.classList.remove("has-file");
+      statusEl.textContent = '請先上傳至少一個檔案';
       return;
     }
     btnRun.disabled = false;
-    statusEl.textContent = files.length + " 個檔案，按「開始檢核」上傳並掃描";
-    dropZone.classList.add("has-file");
+    statusEl.textContent = files.length + ' 個檔案，按「開始檢核」上傳並掃描';
     files.forEach((f, i) => {
-      const li = document.createElement("li");
-      const sz = (f.size / 1024).toFixed(1) + " KB";
-      const span1 = document.createElement("span"); span1.textContent = f.name;
-      const span2 = document.createElement("span"); span2.textContent = sz;
-      const rm = document.createElement("button");
-      rm.textContent = "✕";
-      rm.style = "border:0;background:transparent;cursor:pointer;color:#dc2626;margin-left:8px;";
+      const li = document.createElement('li');
+      const sz = (f.size / 1024).toFixed(1) + ' KB';
+      const span1 = document.createElement('span'); span1.textContent = f.name;
+      const wrap = document.createElement('span');
+      const span2 = document.createElement('span'); span2.textContent = sz;
+      const rm = document.createElement('button');
+      rm.textContent = '✕'; rm.className = 'rm';
       rm.onclick = () => { files.splice(i, 1); refreshList(); };
-      span2.appendChild(rm);
-      li.appendChild(span1); li.appendChild(span2);
+      wrap.appendChild(span2); wrap.appendChild(rm);
+      li.appendChild(span1); li.appendChild(wrap);
       fileList.appendChild(li);
     });
   }
 
-  dropZone.addEventListener("click", () => fileInput.click());
-  fileInput.addEventListener("change", e => {
-    files = files.concat(Array.from(e.target.files || []));
-    refreshList();
-  });
-  ["dragenter","dragover"].forEach(ev => {
-    dropZone.addEventListener(ev, e => {
-      e.preventDefault(); dropZone.classList.add("is-dragover");
-    });
-  });
-  ["dragleave","dragend","drop"].forEach(ev => {
-    dropZone.addEventListener(ev, e => {
-      e.preventDefault(); dropZone.classList.remove("is-dragover");
-    });
-  });
-  dropZone.addEventListener("drop", e => {
-    if (e.dataTransfer.files && e.dataTransfer.files.length) {
-      files = files.concat(Array.from(e.dataTransfer.files));
+  if (fileInput) {
+    fileInput.addEventListener('change', e => {
+      files = files.concat(Array.from(e.target.files || []));
       refreshList();
-    }
-  });
+    });
+  }
+  // file_upload.js handles dragdrop into the input above
 
-  btnRun.addEventListener("click", async () => {
+  btnRun.addEventListener('click', async () => {
     btnRun.disabled = true;
-    statusEl.textContent = "上傳中…";
-    progressBar.style.display = "block";
-    progressInner.style.width = "10%";
+    statusEl.textContent = '上傳中…';
+    progressBar.style.display = 'block';
+    progressInner.style.width = '10%';
     const fd = new FormData();
-    files.forEach(f => fd.append("files", f));
-    const tn = (id) => (document.getElementById(id).value || "").trim();
-    if (tn("mainEntityName")) fd.append("main_entity_name", tn("mainEntityName"));
-    if (tn("mainEntityIdentifier")) fd.append("main_entity_identifier", tn("mainEntityIdentifier"));
-    if (tn("counterpartyName")) fd.append("counterparty_name", tn("counterpartyName"));
-    if (tn("caseNumber")) fd.append("case_number", tn("caseNumber"));
-    if (tn("deadline")) fd.append("deadline", tn("deadline"));
+    files.forEach(f => fd.append('files', f));
+    const tn = id => (document.getElementById(id).value || '').trim();
+    if (tn('mainEntityName')) fd.append('main_entity_name', tn('mainEntityName'));
+    if (tn('mainEntityIdentifier')) fd.append('main_entity_identifier', tn('mainEntityIdentifier'));
+    if (tn('counterpartyName')) fd.append('counterparty_name', tn('counterpartyName'));
+    if (tn('caseNumber')) fd.append('case_number', tn('caseNumber'));
+    if (tn('deadline')) fd.append('deadline', tn('deadline'));
     try {
-      const up = await fetch("upload", { method: "POST", body: fd });
-      if (!up.ok) throw new Error("上傳失敗：" + (await up.text()));
+      const up = await fetch('upload', { method: 'POST', body: fd });
+      if (!up.ok) throw new Error('上傳失敗：' + (await up.text()));
       const upJ = await up.json();
       const caseId = upJ.case_id;
-      progressInner.style.width = "30%";
-      statusEl.textContent = "上傳完成，開始檢核…";
-      const run = await fetch("run/" + caseId, { method: "POST" });
-      if (!run.ok) throw new Error("觸發檢核失敗：" + (await run.text()));
+      progressInner.style.width = '30%';
+      statusEl.textContent = '上傳完成，開始檢核…';
+      const run = await fetch('run/' + caseId, { method: 'POST' });
+      if (!run.ok) throw new Error('觸發檢核失敗：' + (await run.text()));
       const runJ = await run.json();
-      progressInner.style.width = "50%";
-      statusEl.textContent = "背景檢核中（可關閉視窗稍後從案件清單回看）…";
-      // poll job
+      progressInner.style.width = '50%';
+      statusEl.textContent = '背景檢核中（可關閉視窗稍後從案件清單回看）…';
       const jobId = runJ.job_id;
       const t0 = Date.now();
-      while (Date.now() - t0 < 600000) { // 10 min ceiling
+      while (Date.now() - t0 < 600000) {
         await new Promise(r => setTimeout(r, 1500));
-        const jr = await fetch("/api/jobs/" + jobId);
+        const jr = await fetch('/api/jobs/' + jobId);
         if (!jr.ok) continue;
         const jj = await jr.json();
-        progressInner.style.width = (50 + jj.progress * 50) + "%";
+        progressInner.style.width = (50 + jj.progress * 50) + '%';
         if (jj.message) statusEl.textContent = jj.message;
-        if (jj.status === "done") {
-          progressInner.style.width = "100%";
-          statusEl.textContent = "完成，跳轉到報告…";
-          setTimeout(() => window.location.href = "case/" + caseId, 600);
+        if (jj.status === 'done') {
+          progressInner.style.width = '100%';
+          statusEl.textContent = '完成，跳轉到報告…';
+          setTimeout(() => window.location.href = 'case/' + caseId, 600);
           return;
         }
-        if (jj.status === "error") {
-          throw new Error("檢核失敗：" + (jj.error || "未知錯誤"));
-        }
+        if (jj.status === 'error') throw new Error('檢核失敗：' + (jj.error || '未知錯誤'));
       }
-      throw new Error("檢核超時");
+      throw new Error('檢核超時');
     } catch (e) {
-      statusEl.textContent = "失敗：" + e.message;
-      progressBar.style.display = "none";
+      statusEl.textContent = '失敗：' + e.message;
+      progressBar.style.display = 'none';
       btnRun.disabled = false;
     }
   });

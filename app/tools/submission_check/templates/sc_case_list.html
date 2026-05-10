@@ -1,12 +1,12 @@
 {% extends "base.html" %}
+{% from "components/icons.html" import icon %}
 
 {% block title %}送件前檢核 — 案件清單 · {{ app_name }}{% endblock %}
 
 {% block head %}
 <style>
-.scl-wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
-.scl-tbl { width:100%; border-collapse: collapse; background:#fff; border:1px solid #e5e7eb; border-radius:6px; overflow:hidden; }
-.scl-tbl th, .scl-tbl td { padding:10px 12px; border-bottom:1px solid #f1f5f9; font-size:13px; text-align:left; }
+.scl-tbl { width:100%; border-collapse: collapse; font-size:13px; }
+.scl-tbl th, .scl-tbl td { padding:8px 10px; border-bottom:1px solid #f1f5f9; text-align:left; }
 .scl-tbl th { background:#f8fafc; color:#475569; font-weight:600; }
 .scl-tbl tr:hover { background:#f9fafb; }
 .scl-tbl a { color:#2563eb; text-decoration:none; }
@@ -18,20 +18,20 @@
 .scl-status.error { background:#fee2e2; color:#991b1b; }
 .scl-status.archived { background:#e0e7ff; color:#3730a3; }
 .scl-empty { text-align:center; padding:48px; color:#94a3b8; }
+.scl-search { display:flex; gap:8px; align-items:center; }
+.scl-search input { flex:1; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:13px; }
+.scl-search select { padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:13px; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="scl-wrap">
-  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px;">
-    <h1 style="font-size:22px;">送件前檢核 — 案件清單</h1>
-    <a href="." style="background:#3b82f6; color:#fff; padding:6px 12px; border-radius:6px; text-decoration:none; font-size:13px;">＋ 新建案件</a>
-  </div>
+<h1>{{ icon('id-card', size=22) }} 送件前檢核 — 案件清單</h1>
+<p class="muted">您可以新建案件、回顧歷次檢核結果，或追蹤已歸檔案件。 <a href="." style="color:#3b82f6;">＋ 新建案件</a></p>
 
-  <form method="get" action="cases" style="background:#fff; border:1px solid #e5e7eb; border-radius:6px; padding:10px; margin-bottom:12px; display:flex; gap:8px; align-items:center;">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="搜尋主角名 / 統編 / case_id"
-           style="flex:1; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:13px;">
-    <select name="status" style="padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:13px;">
+<div class="panel">
+  <form method="get" action="cases" class="scl-search">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="搜尋主角名 / 統編 / case_id">
+    <select name="status">
       <option value="">所有狀態</option>
       <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>draft</option>
       <option value="running" {% if status_filter == 'running' %}selected{% endif %}>running</option>
@@ -39,12 +39,14 @@
       <option value="error" {% if status_filter == 'error' %}selected{% endif %}>error</option>
       <option value="archived" {% if status_filter == 'archived' %}selected{% endif %}>archived</option>
     </select>
-    <button type="submit" style="background:#475569; color:#fff; border:0; padding:6px 14px; border-radius:4px; cursor:pointer; font-size:13px;">搜尋</button>
+    <button type="submit" class="btn">{{ icon('search', size=14) }} 搜尋</button>
     {% if q or status_filter %}
-    <a href="cases" style="color:#64748b; font-size:12px;">清除</a>
+    <a href="cases" class="muted" style="font-size:12px;">清除</a>
     {% endif %}
   </form>
+</div>
 
+<div class="panel" style="padding:0; overflow:hidden;">
   {% if cases %}
   <table class="scl-tbl">
     <thead><tr>
