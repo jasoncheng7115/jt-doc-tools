@@ -92,13 +92,31 @@ def _read_image(path: Path) -> Optional[bytes]:
 
 
 def vision_check_file(file_path: Path, ground_truth_main: str = "",
-                      ground_truth_counterparty: str = "") -> list[dict]:
+                      ground_truth_counterparty: str = "",
+                      timeout: float = 60.0) -> list[dict]:
     """對單一檔案做 vision LLM 分析，回 findings list。
     沒設定 vision LLM 或檔案非 PDF / 圖片 → 回 []。
+    呼叫時用獨立 LLM client（強制本檔案 timeout 上限），避免單一 hung 請求拖
+    整個 job。
     """
+    import logging
+    log = logging.getLogger(__name__)
     client, model = _get_vision_client_and_model()
     if not client or not model:
         return []
+    # 換成自己的短 timeout client，避免吃 default 300s
+    try:
+        from app.core.llm_settings import llm_settings
+        from app.core.llm_client import LLMClient
+        s = llm_settings.get()
+        client = LLMClient(
+            base_url=s["base_url"],
+            api_key=s.get("api_key") or None,
+            timeout=float(timeout),
+        )
+    except Exception:
+        pass
+    log.info("L6 vision: calling %s for %s (timeout=%ss)", model, file_path.name, timeout)
     suffix = file_path.suffix.lower()
     png: Optional[bytes] = None
     page_no: Optional[int] = None

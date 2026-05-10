@@ -62,18 +62,22 @@
   <table class="scl-tbl">
     <thead><tr>
       <th class="sortable" data-sort="text" data-col="0">案件 ID</th>
-      <th class="sortable" data-sort="text" data-col="1">本案主角</th>
-      <th class="sortable" data-sort="text" data-col="2">檔案</th>
-      <th class="sortable" data-sort="text" data-col="3">狀態</th>
-      <th class="sortable" data-sort="text" data-col="4">目前版本</th>
-      <th class="sortable" data-sort="num" data-col="5" data-sort-key="created_at">建立時間</th>
-      <th class="sortable" data-sort="num" data-col="6" data-sort-key="updated_at">更新時間</th>
+      <th class="sortable" data-sort="text" data-col="1">案件名稱</th>
+      <th class="sortable" data-sort="text" data-col="2">本案主角</th>
+      <th class="sortable" data-sort="text" data-col="3">檔案</th>
+      <th class="sortable" data-sort="text" data-col="4">狀態</th>
+      <th class="sortable" data-sort="text" data-col="5">目前版本</th>
+      <th class="sortable" data-sort="num" data-col="6" data-sort-key="created_at">建立時間</th>
+      <th class="sortable" data-sort="num" data-col="7" data-sort-key="updated_at">更新時間</th>
       <th></th>
     </tr></thead>
     <tbody>
     {% for c in cases %}
       <tr {% if c.deleted_at %}class="deleted-row"{% endif %}>
         <td><a href="case/{{ c.case_id }}" title="{{ c.case_id }}">{{ c.case_id[:8] }}</a></td>
+        <td>
+          {% if c.name %}{{ c.name }}{% else %}<span style="color:#94a3b8;">(未命名)</span>{% endif %}
+        </td>
         <td>
           {% if c.main_entity %}{{ c.main_entity.name }}{% else %}<span style="color:#94a3b8;">(未設定)</span>{% endif %}
         </td>

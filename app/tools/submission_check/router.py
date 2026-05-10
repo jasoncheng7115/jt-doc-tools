@@ -134,6 +134,7 @@ async def upload_files(
     request: Request,
     files: list[UploadFile] = File(...),
     case_id: Optional[str] = Form(None),
+    case_name: Optional[str] = Form(None),
     main_entity_name: Optional[str] = Form(None),
     main_entity_identifier: Optional[str] = Form(None),
     counterparty_name: Optional[str] = Form(None),
@@ -163,6 +164,10 @@ async def upload_files(
         case = _cm.create_case(owner_uid=owner_uid)
         # 同時把 case 寫進 upload_owner 為 owner record（讓 /file/ ACL 過得去）
         _uo.record(case["case_id"], request)
+
+    # 案件名稱（top-level）
+    if case_name:
+        case["name"] = case_name.strip()
 
     # 設 ground truth (overwrite)
     gt = case.setdefault("ground_truth", {})
@@ -194,26 +199,43 @@ async def upload_files(
         file_id = uuid.uuid4().hex
         sha256 = hashlib.sha256(raw).hexdigest()
         suffix = Path(up.filename or "").suffix.lower()
-        if suffix not in (".pdf", ".docx", ".doc", ".jpg", ".jpeg", ".png", ".tiff", ".tif"):
+        accepted = (".pdf", ".docx", ".doc",
+                    ".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods", ".odp",
+                    ".jpg", ".jpeg", ".png", ".tiff", ".tif")
+        if suffix not in accepted:
             raise HTTPException(400, f"不支援的檔案類型：{up.filename}")
-        # .doc (Word 97-2003 binary OLE) 不是 zip，後續解析會失敗 → 用 soffice 自動轉成 .docx
         store_suffix = suffix
+        # .doc (Word 97-2003) 不是 zip → 轉 .docx 才能解析
         if suffix == ".doc":
-            tmp_doc = case_files_dir / f"{file_id}.doc"
-            tmp_doc.write_bytes(raw)
-            target_docx = case_files_dir / f"{file_id}.docx"
+            tmp = case_files_dir / f"{file_id}.doc"
+            tmp.write_bytes(raw)
+            target = case_files_dir / f"{file_id}.docx"
             try:
                 from app.core import office_convert as _oc
-                _oc.convert_to_docx(tmp_doc, target_docx, timeout=90.0)
-                tmp_doc.unlink(missing_ok=True)
+                _oc.convert_to_docx(tmp, target, timeout=90.0)
+                tmp.unlink(missing_ok=True)
                 store_suffix = ".docx"
             except Exception as e:
-                tmp_doc.unlink(missing_ok=True)
-                raise HTTPException(
-                    400,
+                tmp.unlink(missing_ok=True)
+                raise HTTPException(400,
                     f"無法處理 .doc 檔（{up.filename}）— {str(e)[:120]}。"
-                    "請在 Word 內另存為 .docx 後再上傳。"
-                )
+                    "請在 Word 內另存為 .docx 後再上傳。")
+        # Excel / PowerPoint / OpenDocument → 一律轉 PDF 處理（簡化 pipeline，
+        # 也讓 L3/L4 OCR + L6 vision 能對 Excel/PPT 內容運作）
+        elif suffix in (".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods", ".odp"):
+            tmp = case_files_dir / f"{file_id}{suffix}"
+            tmp.write_bytes(raw)
+            target = case_files_dir / f"{file_id}.pdf"
+            try:
+                from app.core import office_convert as _oc
+                _oc.convert_to_pdf(tmp, target, timeout=120.0)
+                tmp.unlink(missing_ok=True)
+                store_suffix = ".pdf"
+            except Exception as e:
+                tmp.unlink(missing_ok=True)
+                raise HTTPException(400,
+                    f"無法轉檔 {suffix}（{up.filename}）— {str(e)[:120]}。"
+                    "請確認 LibreOffice / OxOffice 已安裝。")
         else:
             save_path = case_files_dir / f"{file_id}{suffix}"
             save_path.write_bytes(raw)
@@ -621,11 +643,17 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
 
     # L5: LLM 文字 — 變體合併
     l3_used = False
+    _llm_model_name = ""
+    try:
+        from app.core.llm_settings import llm_settings as _ls
+        _llm_model_name = _ls.get_model_for("submission-check")
+    except Exception:
+        pass
     if _l3.llm_available():
         _set_layer_status(job, "L5", "running")
         try:
             job.progress = 0.60
-            job.message = "L5 LLM 文字：變體合併中..."
+            job.message = f"L5 LLM 文字 ({_llm_model_name})：變體合併中..."
             company_values = [e["value"] for e in aggregated.get("company", [])]
             if len(company_values) >= 2:
                 groups = _l3.merge_entity_variants(company_values)
@@ -660,7 +688,7 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
     if _l3.llm_available():
         try:
             job.progress = 0.70
-            job.message = "L5 LLM 文字：範本痕跡推論中..."
+            job.message = f"L5 LLM 文字 ({_llm_model_name})：範本痕跡推論中..."
             file_summaries = []
             for f in files:
                 # 取該檔的文字（PDF 文字層或 OCR）— 若 per_file_entities 有就找對應；否則重抽前 500 字
@@ -718,7 +746,7 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
                 if not fpaths:
                     continue
                 job.progress = 0.78 + (i + 1) / max(n, 1) * 0.18
-                job.message = f"L6 LLM 視覺：分析 {f.get('name', '?')} ({i+1}/{n})..."
+                job.message = f"L6 LLM 視覺 ({_llm_model_name})：分析 {f.get('name', '?')} ({i+1}/{n})..."
                 try:
                     v_findings = _l4.vision_check_file(fpaths[0], gt_main, gt_cp)
                     # 將 layer 從 L4 改成 L6 (與 6 層架構對齊)
