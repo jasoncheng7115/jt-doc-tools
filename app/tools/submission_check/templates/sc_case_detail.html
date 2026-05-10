@@ -42,15 +42,28 @@
 .scd-st { flex:0 0 auto; text-align:center; padding:0 6px; min-width:90px; font-size:13px; color:#475569; }
 .scd-st b { display:block; font-size:14px; color:#1e293b; margin-top:2px; }
 .scd-st .lbl { display:block; font-size:12px; color:#94a3b8; }
-.scd-st .extra { display:block; font-size:11px; color:#64748b; margin-top:2px; }
+.scd-st .extra { display:block; font-size:11px; color:#64748b; margin-top:2px; min-height:14px; }
+.scd-st { display:flex; flex-direction:column; }
 .scd-st .dot { display:block; width:22px; height:22px; border-radius:50%; margin:0 auto 4px; background:#e5e7eb; border:2px solid #cbd5e1; }
 .scd-st-line { flex:1 1 auto; height:3px; background:#e5e7eb; min-width:20px; }
 .scd-st.pending .dot { background:#e5e7eb; border-color:#cbd5e1; }
-.scd-st.running .dot { background:#fbbf24; border-color:#f59e0b; }
+.scd-st.running .dot {
+  background:#fff; border-color:#f59e0b; border-style:solid;
+  border-top-color:transparent; animation: scd-spin 0.8s linear infinite;
+  box-shadow:0 0 0 4px rgba(245,158,11,0.15);
+}
+.scd-st.running { color:#92400e; }
+.scd-st.running b { color:#92400e; }
+.scd-st.running .lbl { color:#b45309; }
+.scd-st.running::after { content:"⏳ 進行中…"; display:block; font-size:10px; color:#b45309; margin-top:2px; font-weight:500; }
 .scd-st.done .dot { background:#10b981; border-color:#059669; }
+.scd-st.done .dot::after { content:"✓"; color:#fff; font-size:14px; line-height:18px; display:block; text-align:center; font-weight:700; }
 .scd-st.skipped .dot { background:#cbd5e1; border-color:#94a3b8; }
 .scd-st.skipped { color:#94a3b8; }
+.scd-st.skipped .dot::after { content:"–"; color:#fff; font-size:14px; line-height:18px; display:block; text-align:center; font-weight:700; }
 .scd-st.error .dot { background:#dc2626; border-color:#991b1b; }
+.scd-st.error .dot::after { content:"✕"; color:#fff; font-size:13px; line-height:18px; display:block; text-align:center; font-weight:700; }
+@keyframes scd-spin { to { transform: rotate(360deg); } }
 .scd-override-note { display:inline-block; font-size:10px; color:#10b981; margin-left:6px; }
 .scd-finding.has-override { opacity:0.6; }
 .scd-finding.has-override .scd-finding-title::before { content:"✓ 已標 — "; color:#10b981; font-weight:400; }
@@ -88,8 +101,29 @@
   </dl>
   <div style="margin-top:12px;">
     <button class="btn btn-primary" onclick="rerunCheck('{{ case.case_id }}')">{{ icon('refresh', size=14) }} 重新檢核（新版本）</button>
+    <button class="btn" onclick="location.reload()" style="margin-left:6px;">{{ icon('refresh', size=14) }} 重新整理</button>
   </div>
 </div>
+
+{# 進行中時顯示 inline 進度 + 6 層燈號，自動 poll #}
+{% if case.status == 'running' and case.current_job_id %}
+<div class="panel" id="runningPanel" data-job-id="{{ case.current_job_id }}" style="background:#fffbeb; border-color:#fcd34d;">
+  <h3 style="margin-top:0; font-size:15px; color:#92400e;">{{ icon('refresh', size=16) }} 正在檢核中…</h3>
+  <div class="muted" id="runningMsg" style="font-size:13px; margin:4px 0;">準備中…</div>
+  <div style="height:8px; background:#fef3c7; border-radius:4px; overflow:hidden; margin:8px 0;">
+    <div id="runningBar" style="height:100%; background:#f59e0b; width:5%; transition:width .3s;"></div>
+  </div>
+  <div class="scd-stations" id="runningStations">
+    {% for L, lbl in [('L1','規則'), ('L2','文字抽取'), ('L3','全頁 OCR'), ('L4','嵌入圖 OCR'), ('L5','LLM 文字'), ('L6','LLM 視覺')] %}
+    <div class="scd-st pending" data-layer="{{ L }}">
+      <span class="dot"></span><b>{{ L }}</b><span class="lbl">{{ lbl }}</span>
+    </div>
+    {% if not loop.last %}<div class="scd-st-line"></div>{% endif %}
+    {% endfor %}
+  </div>
+  <p class="muted" style="font-size:11px; margin:8px 0 0;">完成後本頁會自動更新。</p>
+</div>
+{% endif %}
 
 {% if not versions_with_reports %}
   <div class="panel" style="text-align:center; color:#94a3b8;">
@@ -117,7 +151,7 @@
           <span class="dot"></span>
           <b>{{ L }}</b>
           <span class="lbl">{{ lbl }}</span>
-          {% if extra %}<span class="extra">{{ extra }}</span>{% endif %}
+          <span class="extra">{{ extra or '' }}</span>
         </div>
         {% if not loop.last %}<div class="scd-st-line"></div>{% endif %}
         {% endfor %}
@@ -247,5 +281,45 @@ function closePreview() {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closePreview();
 });
+
+// 進行中時自動 poll，完成自動 reload
+(function autoPoll() {
+  const panel = document.getElementById("runningPanel");
+  if (!panel) return;
+  const jobId = panel.dataset.jobId;
+  if (!jobId) return;
+  const msgEl = document.getElementById("runningMsg");
+  const barEl = document.getElementById("runningBar");
+  const setStations = (layers) => {
+    if (!layers) return;
+    ['L1','L2','L3','L4','L5','L6'].forEach(L => {
+      const el = panel.querySelector('.scd-st[data-layer="' + L + '"]');
+      if (!el) return;
+      el.classList.remove('pending','running','done','skipped','error');
+      const st = layers[L] || 'pending';
+      el.classList.add(st);
+      const extra = layers[L + '_extra'] || '';
+      const extraEl = el.querySelector('.extra');
+      if (extraEl) extraEl.textContent = (st === 'running') ? '' : extra;
+      el.title = st + (extra ? ' — ' + extra : '');
+    });
+  };
+  const poll = async () => {
+    try {
+      const r = await fetch("/api/jobs/" + jobId);
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j.message) msgEl.textContent = j.message;
+      if (typeof j.progress === 'number') barEl.style.width = (j.progress * 100).toFixed(1) + '%';
+      if (j.meta && j.meta.layers) setStations(j.meta.layers);
+      if (j.status === 'done' || j.status === 'error') {
+        setTimeout(() => location.reload(), 800);
+        return;
+      }
+    } catch (e) {}
+    setTimeout(poll, 1500);
+  };
+  poll();
+})();
 </script>
 {% endblock %}

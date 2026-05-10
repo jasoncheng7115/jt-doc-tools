@@ -251,20 +251,29 @@ async def run_check(case_id: str, request: Request):
             cur = _cm.load_case(case_id)
             if cur:
                 cur["status"] = "done"
+                cur["current_job_id"] = None  # 清掉進行中標記
                 _cm.save_case(cur)
             job.message = "完成"
-            job.meta = {"case_id": case_id, "version": version,
-                        "summary": report.get("summary")}
+            # 保留 layers 給前端顯示終結狀態，並補 summary
+            existing = job.meta or {}
+            existing.update({"case_id": case_id, "version": version,
+                              "summary": report.get("summary")})
+            job.meta = existing
         except Exception as e:
             job.error = str(e)
             cur = _cm.load_case(case_id)
             if cur:
                 cur["status"] = "error"
+                cur["current_job_id"] = None
                 _cm.save_case(cur)
             raise
 
     job = _jm.job_manager.submit("submission-check", _run,
                                   meta={"case_id": case_id, "version": version})
+    # 把 job_id 寫進 case 讓詳情頁能 poll 進度
+    case["current_job_id"] = job.id
+    case["current_job_started"] = time.time()
+    _cm.save_case(case)
     return {"job_id": job.id, "case_id": case_id, "version": version}
 
 
@@ -581,7 +590,8 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
         findings_per_file[file_id] = findings
 
     # L1 / L2 / L3 / L4 都跑完
-    _set_layer_status(job, "L1", "done")
+    n_l1_findings = sum(len(fds) for fds in findings_per_file.values())
+    _set_layer_status(job, "L1", "done", f"{len(files)} 檔結構掃完")
     # L2 文字抽取一定跑（從 PDF / DOCX 文字層）
     text_extracted = sum(1 for v in per_file_text.values() if v)
     _set_layer_status(job, "L2", "done", f"{text_extracted} 檔抽出文字")
