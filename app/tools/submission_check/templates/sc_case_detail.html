@@ -10,12 +10,12 @@
 .scd-meta dd { margin:0; color:#1e293b; }
 .scd-summary { display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin:12px 0; }
 .scd-summary .card { background:#f8fafc; padding:12px; border-radius:6px; border:1px solid #e5e7eb; text-align:center; }
-.scd-summary .card .num { font-size:24px; font-weight:600; }
+.scd-summary .card .num { font-size:32px; font-weight:600; line-height:1.1; }
 .scd-summary .card.score .num { color:#3b82f6; }
 .scd-summary .card.fail .num { color:#dc2626; }
 .scd-summary .card.warn .num { color:#f59e0b; }
 .scd-summary .card.info .num { color:#0891b2; }
-.scd-summary .card .lbl { font-size:11px; color:#64748b; margin-top:4px; }
+.scd-summary .card .lbl { font-size:14px; color:#475569; margin-top:6px; font-weight:500; }
 .scd-finding { padding:8px 12px; border-left:4px solid #cbd5e1; background:#f8fafc; margin:6px 0; font-size:13px; border-radius:3px; }
 .scd-finding.fail { border-color:#dc2626; background:#fef2f2; }
 .scd-finding.warn { border-color:#f59e0b; background:#fffbeb; }
@@ -38,13 +38,13 @@
 .scd-modal-close { position:absolute; top:8px; right:12px; background:transparent; border:0; font-size:24px; color:#475569; cursor:pointer; }
 .scd-modal-content img { max-width:100%; height:auto; display:block; }
 .scd-modal-title { font-size:13px; color:#475569; margin-bottom:8px; padding-right:30px; }
-.scd-stations { display:flex; align-items:center; justify-content:center; gap:8px; padding:10px 0; flex-wrap:wrap; }
-.scd-st { text-align:center; min-width:74px; font-size:11px; color:#475569; }
-.scd-st b { display:block; font-size:12px; color:#1e293b; }
-.scd-st .lbl { font-size:11px; color:#94a3b8; }
-.scd-st .extra { display:block; font-size:10px; color:#64748b; margin-top:2px; }
-.scd-st .dot { display:block; width:18px; height:18px; border-radius:50%; margin:0 auto 4px; background:#e5e7eb; border:2px solid #cbd5e1; }
-.scd-st-line { flex:0 0 30px; height:2px; background:#e5e7eb; }
+.scd-stations { display:flex; align-items:center; gap:0; padding:14px 8px; width:100%; }
+.scd-st { flex:0 0 auto; text-align:center; padding:0 6px; min-width:90px; font-size:13px; color:#475569; }
+.scd-st b { display:block; font-size:14px; color:#1e293b; margin-top:2px; }
+.scd-st .lbl { display:block; font-size:12px; color:#94a3b8; }
+.scd-st .extra { display:block; font-size:11px; color:#64748b; margin-top:2px; }
+.scd-st .dot { display:block; width:22px; height:22px; border-radius:50%; margin:0 auto 4px; background:#e5e7eb; border:2px solid #cbd5e1; }
+.scd-st-line { flex:1 1 auto; height:3px; background:#e5e7eb; min-width:20px; }
 .scd-st.pending .dot { background:#e5e7eb; border-color:#cbd5e1; }
 .scd-st.running .dot { background:#fbbf24; border-color:#f59e0b; }
 .scd-st.done .dot { background:#10b981; border-color:#059669; }
@@ -110,7 +110,7 @@
       </div>
       <div class="scd-stations">
         {% set _layers = s.layers or {} %}
-        {% for L, lbl in [('L1','規則'), ('L2','OCR'), ('L3','LLM 文字'), ('L4','LLM 視覺')] %}
+        {% for L, lbl in [('L1','規則'), ('L2','文字抽取'), ('L3','全頁 OCR'), ('L4','嵌入圖 OCR'), ('L5','LLM 文字'), ('L6','LLM 視覺')] %}
         {% set st = _layers.get(L, 'pending') %}
         {% set extra = _layers.get(L + '_extra', '') %}
         <div class="scd-st {{ st }}" title="{{ L }}: {{ st }}{% if extra %} — {{ extra }}{% endif %}">

@@ -14,12 +14,12 @@
 .sc-files .rm { border:0; background:transparent; cursor:pointer; color:#dc2626; padding:0 4px; }
 .sc-progress { margin-top:8px; height:6px; background:#e5e7eb; border-radius:3px; overflow:hidden; }
 .sc-progress > div { height:100%; background:#3b82f6; width:0%; transition: width .3s; }
-.sc-stations { display:flex; align-items:center; justify-content:center; gap:8px; margin-top:14px; padding:8px 0; }
-.sc-st { text-align:center; min-width:64px; font-size:12px; color:#475569; }
-.sc-st b { font-size:13px; color:#1e293b; }
-.sc-st .lbl { font-size:11px; color:#94a3b8; }
-.sc-st .dot { display:block; width:18px; height:18px; border-radius:50%; margin:0 auto 4px; background:#e5e7eb; border:2px solid #cbd5e1; transition:.25s; }
-.sc-st-line { flex:0 0 30px; height:2px; background:#e5e7eb; }
+.sc-stations { display:flex; align-items:center; gap:0; margin-top:14px; padding:12px 8px; width:100%; }
+.sc-st { flex:0 0 auto; text-align:center; padding:0 6px; font-size:13px; color:#475569; min-width:90px; }
+.sc-st b { display:block; font-size:14px; color:#1e293b; margin-top:2px; }
+.sc-st .lbl { display:block; font-size:12px; color:#94a3b8; margin-top:1px; }
+.sc-st .dot { display:block; width:22px; height:22px; border-radius:50%; margin:0 auto 4px; background:#e5e7eb; border:2px solid #cbd5e1; transition:.25s; }
+.sc-st-line { flex:1 1 auto; height:3px; background:#e5e7eb; min-width:20px; }
 .sc-st.pending .dot { background:#e5e7eb; border-color:#cbd5e1; }
 .sc-st.running .dot { background:#fbbf24; border-color:#f59e0b; box-shadow:0 0 0 4px rgba(245,158,11,0.2); animation: scPulse 1s infinite; }
 .sc-st.done .dot { background:#10b981; border-color:#059669; }
@@ -75,13 +75,17 @@
   <span id="status" class="muted" style="margin-left:12px; font-size:13px;">請先上傳至少一個檔案</span>
   <div class="sc-progress" style="display:none;" id="progressBar"><div></div></div>
   <div class="sc-stations" id="stations" style="display:none;">
-    <div class="sc-st" data-layer="L1"><span class="dot"></span><b>L1</b><br><span class="lbl">規則檢查</span></div>
+    <div class="sc-st" data-layer="L1"><span class="dot"></span><b>L1</b><span class="lbl">規則</span></div>
     <div class="sc-st-line"></div>
-    <div class="sc-st" data-layer="L2"><span class="dot"></span><b>L2</b><br><span class="lbl">OCR</span></div>
+    <div class="sc-st" data-layer="L2"><span class="dot"></span><b>L2</b><span class="lbl">文字抽取</span></div>
     <div class="sc-st-line"></div>
-    <div class="sc-st" data-layer="L3"><span class="dot"></span><b>L3</b><br><span class="lbl">LLM 文字</span></div>
+    <div class="sc-st" data-layer="L3"><span class="dot"></span><b>L3</b><span class="lbl">全頁 OCR</span></div>
     <div class="sc-st-line"></div>
-    <div class="sc-st" data-layer="L4"><span class="dot"></span><b>L4</b><br><span class="lbl">LLM 視覺</span></div>
+    <div class="sc-st" data-layer="L4"><span class="dot"></span><b>L4</b><span class="lbl">嵌入圖 OCR</span></div>
+    <div class="sc-st-line"></div>
+    <div class="sc-st" data-layer="L5"><span class="dot"></span><b>L5</b><span class="lbl">LLM 文字</span></div>
+    <div class="sc-st-line"></div>
+    <div class="sc-st" data-layer="L6"><span class="dot"></span><b>L6</b><span class="lbl">LLM 視覺</span></div>
   </div>
 </div>
 
@@ -133,7 +137,7 @@
   function setStations(layers) {
     if (!layers) return;
     document.getElementById('stations').style.display = 'flex';
-    ['L1','L2','L3','L4'].forEach(L => {
+    ['L1','L2','L3','L4','L5','L6'].forEach(L => {
       const el = document.querySelector('.sc-st[data-layer="' + L + '"]');
       if (!el) return;
       el.classList.remove('pending','running','done','skipped','error');
@@ -149,7 +153,7 @@
     statusEl.textContent = '上傳中…';
     progressBar.style.display = 'block';
     progressInner.style.width = '10%';
-    setStations({L1:'pending', L2:'pending', L3:'pending', L4:'pending'});
+    setStations({L1:'pending', L2:'pending', L3:'pending', L4:'pending', L5:'pending', L6:'pending'});
     const fd = new FormData();
     files.forEach(f => fd.append('files', f));
     const tn = id => (document.getElementById(id).value || '').trim();
