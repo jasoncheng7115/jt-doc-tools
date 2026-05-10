@@ -8,8 +8,8 @@
 
 > 截至 v1.5.3，本專案無已知未修補的高 / 中危漏洞：
 > - **依賴 CVE**：python-multipart / Pillow / Starlette 5 個 High CVE 在 v1.5.3 已 bump 修補，Dependabot alerts 全清。
-> - **CodeQL Critical（Partial SSRF）**：v1.5.3 在 `app/core/llm_client.py:_validate_llm_base_url` 加 URL allowlist + 雲端 metadata host 黑名單,並補 27 個 regression test。
-> - **CodeQL High（Path Injection）**：v1.5.3 補 12 個 endpoint 的 `upload_owner.require()` ACL（`pdf_pageno/thumb` / `pdf_pages/thumb` / `pdf_extract_images/page-thumb` 等),並寫 `tests/test_path_traversal_audit.py` AST 結構審計避免回歸。
+> - **CodeQL Critical（Partial SSRF）**：v1.5.3 在 `app/core/llm_client.py:_validate_llm_base_url` 加 URL allowlist + 雲端 metadata host 黑名單，並補 27 個 regression test。
+> - **CodeQL High（Path Injection）**：v1.5.3 補 12 個 endpoint 的 `upload_owner.require()` ACL（`pdf_pageno/thumb` / `pdf_pages/thumb` / `pdf_extract_images/page-thumb` 等)，並寫 `tests/test_path_traversal_audit.py` AST 結構審計避免回歸。
 
 ## 設計原則
 
@@ -42,7 +42,7 @@
 ### A03:2025 Software Supply Chain Failures —— 依賴 / 供應鏈
 
 - 全部依賴在 `pyproject.toml` 標明確版本範圍，`uv.lock` 鎖死可重現安裝
-- GitHub Dependabot 每週一台北 09:00 自動掃 CVE,發 PR 升級版本
+- GitHub Dependabot 每週一台北 09:00 自動掃 CVE，發 PR 升級版本
 - `install.ps1` 對 `WinSW.exe` 做 SHA256 pinning（與 `app/cli.py` 兩處 source code 同步）
 - 一行安裝指令全走 HTTPS（GitHub raw + `cdn.jsdelivr.net`）
 - `install.sh` / `install.ps1` 開頭 preflight 三個 host（`github.com` / `cdn.jsdelivr.net` / `astral.sh`），不通 8 秒內 fail-fast
@@ -51,23 +51,23 @@
 
 - 密碼用 stdlib `scrypt`（`N=2^17, r=8, p=1, 32 byte salt`）
 - Session cookie：`HttpOnly` + `SameSite=Lax` + `Secure`（HTTPS 自動加）
-- session token 在 DB 內存 sha256 hash,外洩也無法倒推原 token
+- session token 在 DB 內存 sha256 hash，外洩也無法倒推原 token
 - `auth_settings.json`（含 LDAP service password）chmod `0o600`
 - TOTP secret 用 `pyotp.random_base32()` 產 32-char base32
 
 ### A05:2025 Injection（含 XSS）—— SQL / 模板 / XSS 注入
 
-- 全部 SQL 走 sqlite3 `?` 參數綁定,zero string concatenation with user input
+- 全部 SQL 走 sqlite3 `?` 參數綁定，zero string concatenation with user input
 - Jinja2 預設 autoescape（FastAPI Jinja2Templates 預設開啟）
 - 動態 JS render 額外跑一次 `escapeHtml()`
-- 唯一兩處 f-string in `execute()` 是組固定欄位的 `WHERE` 子句,user 值仍透過 `params` tuple 綁定
+- 唯一兩處 f-string in `execute()` 是組固定欄位的 `WHERE` 子句，user 值仍透過 `params` tuple 綁定
 - regression test：`test_a03_xss_in_login_username_escaped` 等
 
 ### A06:2025 Insecure Design（含 SSRF）—— 設計缺陷 / SSRF
 
 - 職責分離：admin / auditor 兩個內建帳號權限完全切開
 - 內建 SEED 帳號（`jtdt-admin` / `jtdt-auditor`）權限固定不可改
-- 啟動時 `enforce_auditor_isolation` 自動修正 dirty DB,避免升級殘留錯誤狀態
+- 啟動時 `enforce_auditor_isolation` 自動修正 dirty DB，避免升級殘留錯誤狀態
 - 三平台行為一致（Linux / macOS / Windows）
 - **無任何 endpoint 接收 user 提供的 URL 並向外發 request**（SSRF 防護）
 - 唯一外部呼叫是 admin 自行設定的 LDAP server（預設關閉）+ LLM/Ollama（預設關閉）
@@ -77,10 +77,10 @@
 
 - 密碼 min 8 / max 256 chars 驗證
 - 失敗 5 次自動鎖 15 分鐘（per-user + per-IP 雙計數）
-- TOTP 2FA（RFC 6238,`pyotp`）；稽核員強制啟用,admin 可開「全員強制 2FA」
-- session 失效時間可設（預設 7 天,「remember me」勾選後 30 天）
+- TOTP 2FA（RFC 6238,`pyotp`）；稽核員強制啟用，admin 可開「全員強制 2FA」
+- session 失效時間可設（預設 7 天，「remember me」勾選後 30 天）
 - 改密碼或重置 TOTP 會撤銷該 user 所有現有 session
-- admin 可在 web UI 解鎖個別 user,或一鍵清除所有鎖定
+- admin 可在 web UI 解鎖個別 user，或一鍵清除所有鎖定
 
 ### A08:2025 Software & Data Integrity Failures —— 程式 / 資料完整性
 
@@ -103,11 +103,11 @@
 ### A10:2025 Mishandling of Exceptional Conditions —— 例外處理不當
 
 - 所有外部 I/O（subprocess / 網路 / 檔案）有 timeout 並 catch
-- 錯誤訊息不洩漏 stack trace 給 user（只給友善中文訊息,stack trace 寫 server log）
+- 錯誤訊息不洩漏 stack trace 給 user（只給友善中文訊息，stack trace 寫 server log）
 - FastAPI exception handler 統一 wrap 4xx / 5xx
-- audit log 失敗不阻塞 request（best-effort,避免 logging 故障 DoS 主流程）
+- audit log 失敗不阻塞 request（best-effort，避免 logging 故障 DoS 主流程）
 - `jtdt update` / `install` 任一步失敗自動 rollback + 還原服務
-- 缺 LibreOffice / Tesseract / 字型時有友善提示,不會 crash
+- 缺 LibreOffice / Tesseract / 字型時有友善提示，不會 crash
 
 ## 自動化驗證
 

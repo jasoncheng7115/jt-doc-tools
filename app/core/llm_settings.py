@@ -33,7 +33,7 @@ DEFAULT_SETTINGS: dict = {
     "model": "gemma4:26b",
     # 各工具個別模型 — admin 在 LLM 設定頁可以為支援 LLM 的工具個別指定模型，
     # 沒指定 / 留空就用上面的預設 model。Key 是 tool_id，value 是模型名稱
-    # 字串。範例：{"translate-doc": "gemma3:27b", "pdf-fill": "gemma4:26b"}
+    # 字串。範例：{"translate-doc": "gemma4:26b", "pdf-fill": "gemma4:26b"}
     "model_per_tool": {},
     # 翻譯並行數 — 逐句翻譯每句一個 prompt 序列送 LLM 太慢；並行能 4-8 倍速。
     # 過高會壓垮本機 Ollama 或讓 GPU OOM；admin 自己依 LLM server 體質設。

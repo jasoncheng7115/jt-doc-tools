@@ -4,6 +4,16 @@
 
 ---
 
+## [1.5.18] - 2026-05-10
+
+### 變更
+
+- **網站 / 說明 / 程式註解移除 `gemma3:27b` 引用** — `gemma4:26b` 視覺 + 文字皆可，足夠涵蓋既有部署場景；`LLM.md` 部署選項表、`docs/index.html` LLM 部署選項段、`translate_doc/router.py` 與 `llm_settings.py` 註解內的範例都改成 `gemma4:26b`。
+
+### 修正
+
+- **多個 `.md` 文件半形標點批次清理** — `CLAUDE.md` / `TEST_PLAN.md` / `github/CHANGELOG.md` / `github/README.md` / `github/TEST_PLAN.md` / `github/SECURITY.md` 共 6 檔 ~53 行內中文旁的 `,` `:` `;` 改全形「，：；」（規則：括號可半形、逗號句號分號冒號必為全形）。
+
 ## [1.5.17] - 2026-05-10
 
 ### 修正
@@ -46,14 +56,14 @@
 
 ### 修正
 
-- **「效果」框內「效」「果」字被拆成兩行**(v1.5.13 慘案)— `.llm-effect` 加 `display: flex; align-items: center` 後,`<b>效果</b>` 變成獨立 flex item 被 shrink 到「效 \\n 果」垂直排列。拿掉 flex 改純 padding + min-height。
-- **TEXT / VISION 標籤位置** — 從右上角絕對定位改回跟 icon 同一橫排 flex,中軸對齊,固定 height 22px line-height 1 避免 baseline 飄移。
+- **「效果」框內「效」「果」字被拆成兩行**(v1.5.13 慘案)— `.llm-effect` 加 `display: flex; align-items: center` 後，`<b>效果</b>` 變成獨立 flex item 被 shrink 到「效 \\n 果」垂直排列。拿掉 flex 改純 padding + min-height。
+- **TEXT / VISION 標籤位置** — 從右上角絕對定位改回跟 icon 同一橫排 flex，中軸對齊，固定 height 22px line-height 1 避免 baseline 飄移。
 
 ## [1.5.13] - 2026-05-10
 
 ### 介紹網站微調
 
-- **AI 加值卡片視覺對齊** — 描述段(`.llm-card p`)加 `min-height: 4.95em`(~3 行)、效果框(`.llm-effect`)加 `min-height: 3.2em`(~2 行)+ flex center,所有卡片標題、描述、效果框 y 軸位置統一,不再因內容長短不一而高低錯落
+- **AI 加值卡片視覺對齊** — 描述段(`.llm-card p`)加 `min-height: 4.95em`(~3 行)、效果框(`.llm-effect`)加 `min-height: 3.2em`(~2 行)+ flex center，所有卡片標題、描述、效果框 y 軸位置統一，不再因內容長短不一而高低錯落
 - `.llm-grid` 加 `align-items: stretch` 強制同列等高
 
 ## [1.5.12] - 2026-05-10
@@ -61,7 +71,7 @@
 ### 介紹網站微調
 
 - **AI 加值區段位置調整** — 從 `#features` 後移到 `#screenshots` 後（畫面 → AI 加值 → 企業管理 順序更合理）
-- **TEXT / VISION 標籤改右上角絕對定位** — 之前跟 icon 並排高度差怪怪,改 absolute top-right 視覺乾淨
+- **TEXT / VISION 標籤改右上角絕對定位** — 之前跟 icon 並排高度差怪怪，改 absolute top-right 視覺乾淨
 - icon 從 36px → 40px 提升存在感
 
 ## [1.5.11] - 2026-05-10
@@ -76,7 +86,7 @@
 
 ### 文件 / 介紹網站
 
-- **新增 `LLM.md`** — 列出目前支援 LLM AI 加值的 8 個工具:
+- **新增 `LLM.md`** — 列出目前支援 LLM AI 加值的 8 個工具：
   - 逐句翻譯、擷取文字段落重排、表單自動填寫(視覺校驗)、文件 / 文字去識別化補偵測、字數統計摘要、註解整理自動分組、文件差異比對變動摘要
   - 每個工具寫清楚 LLM 做什麼、可省多少時間、是否需要 vision 模型
   - 部署選項(Ollama / vLLM / DGX Spark)+ 安全 / 隱私說明
@@ -92,37 +102,37 @@
 
 ### 文件
 
-- **README 大瘦身** 470 行 → 144 行 — 留 entry-level 內容(intro / 一行安裝 / 30 工具速覽 / 文件導覽 / 隱私要點)。詳細內容拆到專題文件:
+- **README 大瘦身** 470 行 → 144 行 — 留 entry-level 內容(intro / 一行安裝 / 30 工具速覽 / 文件導覽 / 隱私要點)。詳細內容拆到專題文件：
   - **`INSTALL.md`** — 三平台詳細安裝、必要工具、安裝位置、系統需求、解除安裝
   - **`OPS.md`** — `jtdt` 指令、升級、反向代理(nginx/Caddy)、監聽位置、備份還原、排程清理
   - **`AUTH.md`** — 認證 / RBAC / 內建帳號 / 2FA / 帳號鎖定 / 緊急復原(從 README 完整搬出)
   - 既有的 `API.md` / `SECURITY.md` / `CHANGELOG.md` / `TEST_PLAN.md` 不變
-- 第一次進來的人不再被淹沒,直接看 README 知道要點再點對應文件深入。
+- 第一次進來的人不再被淹沒，直接看 README 知道要點再點對應文件深入。
 
 ## [1.5.8] - 2026-05-09
 
 ### 資安
 
 - **CodeQL alerts 47 → 3 unique（本地實測）**:
-  - 把 `_safe_next` 跟 `_validate_llm_base_url` 從 auth_routes.py / llm_client.py 內 private function 搬到 `app/core/url_safety.py` 模組。同檔 private function CodeQL API graph 不認得,獨立模組才能透過絕對 import 走 barrierModel。
+  - 把 `_safe_next` 跟 `_validate_llm_base_url` 從 auth_routes.py / llm_client.py 內 private function 搬到 `app/core/url_safety.py` 模組。同檔 private function CodeQL API graph 不認得，獨立模組才能透過絕對 import 走 barrierModel。
   - 4 個 `str(exc)` user-facing 錯誤改成 fixed-string mapping（admin_router LLM endpoints、branding_upload、branding_site_name、import_settings、change_password）— 真 stack trace 寫 server log,user 看見的是控制過的訊息。
-  - `pdf_editor/router.py:994` 的 `is_cjk` 包 `bool(...)` 顯式 cast,讓 CodeQL 知道是 bool 不是 user data。
+  - `pdf_editor/router.py:994` 的 `is_cjk` 包 `bool(...)` 顯式 cast，讓 CodeQL 知道是 bool 不是 user data。
   - `modal.js` `if (html)` opt-in 分支用 `DOMParser.parseFromString` 取代 `innerHTML` 直接賦值。
   - `sys_deps_api` 加 try/except 防 stack-trace 漏。
 - **MaD pack 更新對應 sanitizer 路徑** — `Member[core].Member[url_safety].Method[validate_llm_base_url]` / `Method[safe_next]` 取代舊的同檔路徑。
-- **新加 `app/core/log_safe.safe_user_error()`** — helper 把 controlled exception 訊息映射為 user-safe message,內部給其他開發者用。
+- **新加 `app/core/log_safe.safe_user_error()`** — helper 把 controlled exception 訊息映射為 user-safe message，內部給其他開發者用。
 
 ### 重構
 
-- **15 個 router 改絕對 import**（v1.5.6 開始,v1.5.8 完整對齊): `from app.core.X import ...` 取代 `from ...core.X import ...`,讓 CodeQL API graph 認得 sanitizer 呼叫站點。
+- **15 個 router 改絕對 import**（v1.5.6 開始，v1.5.8 完整對齊): `from app.core.X import ...` 取代 `from ...core.X import ...`，讓 CodeQL API graph 認得 sanitizer 呼叫站點。
 - 全 pytest 470/470 通過。
 
 ## [1.5.7] - 2026-05-09
 
 ### 修正
 
-- **CodeQL workflow 失敗 (configuration error)** — v1.5.6 在 `codeql-config.yml` 用 `packs:` 引用 MaD pack `jasoncheng7115/jt-doc-tools-extensions`,但 codeql-action init 把 `packs:` 當 query pack 處理 → 嘗試從 GHCR 下載 → 找不到 → init 步驟 fail → 整個 CodeQL run 變紅。
-  - 修法：① 拿掉 `codeql-config.yml` 內的 `packs:` 引用,② 把 MaD pack 從 `.github/codeql/extensions/qlpack.yml` 搬到 `.github/codeql/extensions/jt-sanitizers/qlpack.yml`(GitHub Actions auto-discover convention)。
+- **CodeQL workflow 失敗 (configuration error)** — v1.5.6 在 `codeql-config.yml` 用 `packs:` 引用 MaD pack `jasoncheng7115/jt-doc-tools-extensions`，但 codeql-action init 把 `packs:` 當 query pack 處理 → 嘗試從 GHCR 下載 → 找不到 → init 步驟 fail → 整個 CodeQL run 變紅。
+  - 修法：① 拿掉 `codeql-config.yml` 內的 `packs:` 引用，② 把 MaD pack 從 `.github/codeql/extensions/qlpack.yml` 搬到 `.github/codeql/extensions/jt-sanitizers/qlpack.yml`(GitHub Actions auto-discover convention)。
 
 ## [1.5.6] - 2026-05-09
 
@@ -135,24 +145,24 @@
   - `app.core.log_safe.safe_log` 標為 `log-injection` barrier
   - 檔案位置：`.github/codeql/extensions/jt-sanitizers.model.yml`（pack name `jasoncheng7115/jt-doc-tools-extensions`）
   - 用 `codeql` CLI 本地驗證 syntax + run 確認 barrier 真有減 alert
-- **15 個 router 改用絕對 import** — `from ...core.safe_paths import X` → `from app.core.safe_paths import X`,讓 CodeQL 的 API graph 正確識別 sanitizer 呼叫站點:
+- **15 個 router 改用絕對 import** — `from ...core.safe_paths import X` → `from app.core.safe_paths import X`，讓 CodeQL 的 API graph 正確識別 sanitizer 呼叫站點：
   - pdf_stamp / pdf_watermark / pdf_extract_text / pdf_attachments / pdf_nup / pdf_metadata / pdf_fill / pdf_pages / pdf_editor / pdf_hidden_scan / pdf_rotate / pdf_to_image / pdf_pageno / pdf_extract_images / doc_deident
-  - 沒這個改動,CodeQL 看不見相對 import 的呼叫,MaD extension 對它們無效
+  - 沒這個改動，CodeQL 看不見相對 import 的呼叫，MaD extension 對它們無效
 - **CodeQL alerts 預期下降**: 47 → ~32（path-injection 17 → ~7）
 
 ## [1.5.5] - 2026-05-09
 
 ### 改善
 
-- **pdf-editor 加 4 個翻頁按鈕** — 在頁碼指示器旁加「第一頁 / 上一頁 / 下一頁 / 最後一頁」工具列按鈕,符合一般 PDF reader 的操作慣例。每個按鈕：
+- **pdf-editor 加 4 個翻頁按鈕** — 在頁碼指示器旁加「第一頁 / 上一頁 / 下一頁 / 最後一頁」工具列按鈕，符合一般 PDF reader 的操作慣例。每個按鈕：
   - 帶 SVG 圖示（雙箭頭 / 單箭頭）
   - 在邊界（已在第 1 頁 / 最後一頁）時自動 disable
   - 鍵盤捷徑：Home / End / PageUp / PageDown(在 input/textarea 內不會攔截)
-- **修 CodeQL `js/xss-through-dom` #52**：`drag_position_editor.js:45` 拿掉「safeImgSrc 不存在時 fallback 用未檢查 url」分支(safe_url.js 在 base.html 一律載入,不需 fallback)
+- **修 CodeQL `js/xss-through-dom` #52**：`drag_position_editor.js:45` 拿掉「safeImgSrc 不存在時 fallback 用未檢查 url」分支(safe_url.js 在 base.html 一律載入，不需 fallback)
 
 ## [1.5.4] - 2026-05-09
 
-### 資安（重大,GitHub native scan 結果一波清理）
+### 資安（重大，GitHub native scan 結果一波清理）
 
 - **Dependabot 22 alerts 全清** — bump 5 個套件到底線：
   - `Pillow>=12.2.0,<13`：6 個 high CVE（FITS GZIP / PSD OOB / PSD Tile Integer / PDF Trailer InfLoop / Font Integer / Nested coords heap）
@@ -169,12 +179,12 @@
 - **CodeQL High `py/polynomial-redos` #13** — `RE_AD_DN` regex 加長度上限 + 去掉重複的 UID alternative + 收進 char class,5 個 ReDoS regression test 通過
 - **CodeQL Medium `py/stack-trace-exposure` 7 個** — `app/main.py:873` 真漏（改 logger.exception + generic 訊息）；`doc_deident` / `text_deident` 兩個 LLM augment fail 同樣處理；`auth_routes.py` 改密碼錯誤訊息加 codeql FP 標記（user-facing 訊息必要）；`admin/router.py` LLM endpoint 兩個 ValueError FP 同樣標記
 - **CodeQL Medium `py/url-redirection` 2 個** — `_safe_next()` 加嚴：urllib.parse 驗 scheme + netloc、reject CRLF / NUL / 反斜線、reject 非 string、27 個 regression test 通過
-- **CodeQL Medium `py/log-injection` 9 個** — 新加 `app/core/log_safe.py:safe_log()` helper（strip CR/LF/NUL,bound 200 char）;在 `pdf_editor` / `pdf_extract_text` / `auth_settings` / `auth_ldap` 9 個 logger 呼叫站點 wrap user-supplied 變數
+- **CodeQL Medium `py/log-injection` 9 個** — 新加 `app/core/log_safe.py:safe_log()` helper（strip CR/LF/NUL,bound 200 char）；在 `pdf_editor` / `pdf_extract_text` / `auth_settings` / `auth_ldap` 9 個 logger 呼叫站點 wrap user-supplied 變數
 
 ### 工具流程
 
 - **新加 `tools/check_version_consistency.py`** — 驗 `app/main.py:VERSION` / `pyproject.toml` / `uv.lock` / `github/README.md` 標題 / `github/CHANGELOG.md` 最新一筆 5 處版號完全一致；不一致直接 exit 1 印 diff 表
-- **`tests/test_version_consistency.py`** — pytest case 包裝上面,wired 進 `TEST_PLAN.md §5` 發版前必跑
+- **`tests/test_version_consistency.py`** — pytest case 包裝上面，wired 進 `TEST_PLAN.md §5` 發版前必跑
 - **`tests/test_redos_ad_dn.py`** + **`tests/test_open_redirect.py`** + **`tests/test_llm_url_ssrf.py`** + **`tests/test_path_traversal_audit.py`** 都列入「每次發版必跑」
 - 全 pytest 從 437 → 470（新加 33 個 OWASP regression）
 
