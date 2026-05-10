@@ -26,6 +26,17 @@
 .scd-layer { display:inline-block; font-size:10px; padding:1px 6px; border-radius:3px; background:#e5e7eb; color:#475569; margin-right:6px; font-weight:500; }
 .scd-finding-title { font-weight:500; color:#1e293b; }
 .scd-finding-detail { color:#64748b; margin-top:2px; font-size:12px; }
+.scd-finding-actions { margin-top:6px; display:flex; gap:8px; flex-wrap:wrap; }
+.scd-finding-actions a, .scd-finding-actions button {
+  font-size:11px; padding:3px 8px; border-radius:4px; border:1px solid #cbd5e1;
+  background:#fff; color:#475569; cursor:pointer; text-decoration:none;
+}
+.scd-finding-actions a.chain { background:#dbeafe; border-color:#93c5fd; color:#1e40af; }
+.scd-finding-actions button.ok { background:#d1fae5; border-color:#86efac; color:#065f46; }
+.scd-finding-actions button.fp { background:#fef3c7; border-color:#fde68a; color:#92400e; }
+.scd-override-note { display:inline-block; font-size:10px; color:#10b981; margin-left:6px; }
+.scd-finding.has-override { opacity:0.6; }
+.scd-finding.has-override .scd-finding-title::before { content:"✓ 已標 — "; color:#10b981; font-weight:400; }
 .scd-actions { display:flex; gap:8px; margin-top:12px; }
 .scd-actions a, .scd-actions button {
   background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; padding:6px 12px; border-radius:6px;
@@ -99,10 +110,24 @@
         <div class="scd-file-section">
           <h4>跨檔發現</h4>
           {% for fd in v.report.cross_findings %}
-            <div class="scd-finding {{ fd.severity }}">
+            <div class="scd-finding {{ fd.severity }}{% if fd._override %} has-override{% endif %}">
               <span class="scd-layer">{{ fd.layer }}</span>
               <span class="scd-finding-title">{{ fd.title }}</span>
               <div class="scd-finding-detail">{{ fd.detail }}</div>
+              {% if fd._override %}
+              <div class="scd-override-note">{{ fd._override.verdict }} — {{ fd._override.reason or '無註記' }} (by {{ fd._override.by_user or 'anonymous' }})</div>
+              {% endif %}
+              <div class="scd-finding-actions">
+                {% if fd.chaining and fd.chaining.tool_url %}
+                <a class="chain" href="{{ fd.chaining.tool_url }}" target="_blank" title="{{ fd.chaining.hint }}">→ {{ fd.chaining.label }}</a>
+                {% endif %}
+                {% if not fd._override %}
+                <button class="ok" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'confirmed_ok')">標已確認 OK</button>
+                <button class="fp" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'false_positive')">標誤報</button>
+                {% else %}
+                <button onclick="removeOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}')">移除標記</button>
+                {% endif %}
+              </div>
             </div>
           {% endfor %}
         </div>
@@ -152,6 +177,28 @@ async function rerunCheck(caseId) {
   } catch (e) {
     alert("失敗：" + e.message);
   }
+}
+
+async function markOverride(caseId, findingKey, verdict) {
+  const reason = prompt("(選填) 註明原因：") || "";
+  const fd = new FormData();
+  fd.append("finding_key", findingKey);
+  fd.append("verdict", verdict);
+  fd.append("reason", reason);
+  try {
+    const r = await fetch("../override/" + caseId, { method: "POST", body: fd });
+    if (!r.ok) throw new Error(await r.text());
+    location.reload();
+  } catch (e) { alert("失敗：" + e.message); }
+}
+
+async function removeOverride(caseId, findingKey) {
+  if (!confirm("移除此標記？")) return;
+  try {
+    const r = await fetch("../override/" + caseId + "/" + encodeURIComponent(findingKey), { method: "DELETE" });
+    if (!r.ok) throw new Error(await r.text());
+    location.reload();
+  } catch (e) { alert("失敗：" + e.message); }
 }
 </script>
 {% endblock %}

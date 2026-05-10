@@ -33,6 +33,7 @@ from .checks import l2_ocr as _l2
 from .checks import l3_llm as _l3
 from .checks import important as _important
 from . import override as _override
+from . import chaining as _chaining
 
 router = APIRouter()
 
@@ -49,16 +50,44 @@ async def page_root(request: Request) -> HTMLResponse:
 
 
 @router.get("/cases", response_class=HTMLResponse)
-async def page_case_list(request: Request) -> HTMLResponse:
-    """案件清單頁。"""
+async def page_case_list(request: Request, q: str = "", status: str = "") -> HTMLResponse:
+    """案件清單頁 — 支援 ?q=主角 / ?status=draft|done|... 篩選。"""
     templates = request.app.state.templates
     user = getattr(request.state, "user", None) if hasattr(request, "state") else None
     owner_uid = (user or {}).get("user_id") if isinstance(user, dict) else None
     is_admin = _is_admin(user)
-    cases = _cm.list_cases(owner_uid=owner_uid, admin=is_admin, limit=100)
+    cases = _cm.list_cases(owner_uid=owner_uid, admin=is_admin, limit=200)
+    # filter
+    q = (q or "").strip().lower()
+    if q:
+        def _matches(c):
+            me = c.get("main_entity") or {}
+            blob = " ".join(filter(None, [
+                c.get("case_id", ""),
+                str(me.get("name", "")),
+                str(me.get("identifier", "")),
+            ])).lower()
+            return q in blob
+        cases = [c for c in cases if _matches(c)]
+    if status:
+        cases = [c for c in cases if c.get("status") == status]
     return templates.TemplateResponse("sc_case_list.html",
                                        {"request": request, "title": "案件清單",
-                                        "cases": cases})
+                                        "cases": cases, "q": q, "status_filter": status})
+
+
+@router.get("/admin-stats", response_class=HTMLResponse)
+async def page_admin_stats(request: Request, days: int = 30) -> HTMLResponse:
+    """Admin 儀表板 — 跨案件 stats（admin 限定）。"""
+    user = getattr(request.state, "user", None) if hasattr(request, "state") else None
+    if not _is_admin(user) and user is not None:
+        raise HTTPException(403, "僅 admin 可看此頁")
+    from . import stats as _stats
+    s = _stats.gather_stats(days=max(1, min(days, 365)))
+    templates = request.app.state.templates
+    return templates.TemplateResponse("sc_admin_stats.html",
+                                       {"request": request, "title": "送件檢核儀表板",
+                                        "stats": s, "days": days})
 
 
 @router.get("/case/{case_id}", response_class=HTMLResponse)
@@ -475,13 +504,18 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
         except Exception:
             pass
 
-    # 套 user override 註解（將被 user 標 OK / 誤報的 finding 降級）
+    # 套 user override 註解 + chaining 提示
     fresh_case = _cm.load_case(case_id) or case
-    findings_per_file = {
-        fid: _override.apply_overrides_to_findings(fresh_case, fds)
-        for fid, fds in findings_per_file.items()
-    }
-    cross_findings = _override.apply_overrides_to_findings(fresh_case, cross_findings)
+
+    def _enrich(fds):
+        fds = _override.apply_overrides_to_findings(fresh_case, fds)
+        for fd in fds:
+            fd["chaining"] = _chaining.chaining_for(fd.get("category", ""))
+            fd["finding_key"] = _override._make_finding_key(fd)
+        return fds
+
+    findings_per_file = {fid: _enrich(fds) for fid, fds in findings_per_file.items()}
+    cross_findings = _enrich(cross_findings)
     n_overrides_applied = sum(
         1 for fds in findings_per_file.values()
         for fd in fds if fd.get("_override")
