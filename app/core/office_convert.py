@@ -197,6 +197,52 @@ def convert_to_pdf(src: Path, dst_pdf: Path, timeout: float = 60.0) -> None:
         shutil.move(str(produced), str(dst_pdf))
 
 
+def convert_to_docx(src: Path, dst_docx: Path, timeout: float = 60.0) -> None:
+    """Run soffice headless to convert ``src`` (e.g. legacy .doc) into modern .docx.
+
+    Same lock / profile / safety pattern as convert_to_pdf — see that function's
+    docstring for rationale on the per-call profile + global lock.
+    """
+    soffice = find_soffice()
+    if not soffice:
+        raise RuntimeError(
+            "找不到 LibreOffice / OxOffice。請先安裝其中一個，或自行在 Word 內另存為 .docx 後上傳。"
+        )
+
+    with tempfile.TemporaryDirectory() as td:
+        profile_path = Path(td) / "profile"
+        soffice_args = [
+            f"-env:UserInstallation={_profile_uri(profile_path)}",
+            "--safe-mode", "--headless", "--norestore", "--nologo",
+            "--nolockcheck", "--nodefault", "--nofirststartwizard",
+            "--convert-to", "docx",
+            "--outdir", td,
+            str(src),
+        ]
+        cmd, popen_kwargs = _build_soffice_cmd(soffice, soffice_args)
+        with _soffice_lock:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                     **popen_kwargs)
+            try:
+                stdout, stderr = proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                try: proc.communicate(timeout=5)
+                except Exception: pass
+                raise RuntimeError(
+                    f"office 轉 .docx 卡住（超過 {int(timeout)} 秒）。檔案可能已損壞或含 LibreOffice 無法解析的內容。"
+                )
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    f"office 轉 .docx 失敗：{stderr.decode('utf-8', 'replace') or stdout.decode('utf-8', 'replace')}"
+                )
+        produced = Path(td) / (src.stem + ".docx")
+        if not produced.exists():
+            raise RuntimeError("轉檔成功但找不到輸出 .docx")
+        dst_docx.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(produced), str(dst_docx))
+
+
 def convert_to_text(src: Path, timeout: float = 60.0) -> str:
     """Run soffice headless to convert ``src`` into UTF-8 plain text.
 

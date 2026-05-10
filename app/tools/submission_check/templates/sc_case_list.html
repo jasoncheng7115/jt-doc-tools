@@ -3,6 +3,7 @@
 
 {% block title %}送件前檢核 — 案件清單 · {{ app_name }}{% endblock %}
 
+
 {% block head %}
 <style>
 .scl-tbl { width:100%; border-collapse: collapse; font-size:13px; }
@@ -19,9 +20,14 @@
 .scl-status.archived { background:#e0e7ff; color:#3730a3; }
 .scl-status.deleted { background:#fee2e2; color:#991b1b; }
 .scl-tbl tr.deleted-row { opacity:0.55; }
-.scl-tbl tr.deleted-row td:first-child::before { content:"🗑 "; }
-.scl-del { background:transparent; border:0; color:#dc2626; cursor:pointer; font-size:14px; padding:2px 6px; }
-.scl-del:hover { color:#991b1b; }
+.scl-tbl tr.deleted-row td:first-child { color:#94a3b8; }
+.scl-del { background:transparent; border:0; color:#dc2626; cursor:pointer; padding:2px 6px; display:inline-flex; align-items:center; }
+.scl-del:hover { color:#991b1b; background:#fee2e2; border-radius:4px; }
+.scl-tbl th.sortable { cursor:pointer; user-select:none; }
+.scl-tbl th.sortable:hover { background:#eef2f7; }
+.scl-tbl th.sortable::after { content:"⇅"; color:#cbd5e1; margin-left:4px; font-size:11px; }
+.scl-tbl th.sort-asc::after { content:"▲"; color:#3b82f6; }
+.scl-tbl th.sort-desc::after { content:"▼"; color:#3b82f6; }
 .scl-empty { text-align:center; padding:48px; color:#94a3b8; }
 .scl-search { display:flex; gap:8px; align-items:center; }
 .scl-search input { flex:1; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:13px; }
@@ -55,7 +61,14 @@
   {% if cases %}
   <table class="scl-tbl">
     <thead><tr>
-      <th>案件 ID</th><th>本案主角</th><th>狀態</th><th>檔案數</th><th>目前版本</th><th>建立時間</th><th>更新時間</th><th></th>
+      <th class="sortable" data-sort="text" data-col="0">案件 ID</th>
+      <th class="sortable" data-sort="text" data-col="1">本案主角</th>
+      <th class="sortable" data-sort="text" data-col="2">檔案</th>
+      <th class="sortable" data-sort="text" data-col="3">狀態</th>
+      <th class="sortable" data-sort="text" data-col="4">目前版本</th>
+      <th class="sortable" data-sort="num" data-col="5" data-sort-key="created_at">建立時間</th>
+      <th class="sortable" data-sort="num" data-col="6" data-sort-key="updated_at">更新時間</th>
+      <th></th>
     </tr></thead>
     <tbody>
     {% for c in cases %}
@@ -64,20 +77,20 @@
         <td>
           {% if c.main_entity %}{{ c.main_entity.name }}{% else %}<span style="color:#94a3b8;">(未設定)</span>{% endif %}
         </td>
+        <td><span style="font-size:12px; color:#475569;">{{ c.files_summary }}</span></td>
         <td>
           {% if c.deleted_at %}
-            <span class="scl-status deleted" title="於 {{ c.deleted_at|int|string }} 由 {{ c.deleted_by or '?' }} 刪除">已刪除</span>
+            <span class="scl-status deleted" title="於 {{ c.deleted_at_str }} 由 {{ c.deleted_by or '?' }} 刪除">已刪除</span>
           {% else %}
             <span class="scl-status {{ c.status }}">{{ c.status }}</span>
           {% endif %}
         </td>
-        <td>{{ c.files_count }}</td>
         <td>{{ c.current_version or "—" }}</td>
-        <td><span title="{{ c.created_at }}">{{ c.created_at|int|string }}</span></td>
-        <td><span title="{{ c.updated_at }}">{{ c.updated_at|int|string }}</span></td>
+        <td data-sort-value="{{ c.created_at|int }}"><span title="epoch {{ c.created_at|int|string }}">{{ c.created_at_str }}</span></td>
+        <td data-sort-value="{{ c.updated_at|int }}"><span title="epoch {{ c.updated_at|int|string }}">{{ c.updated_at_str }}</span></td>
         <td>
           {% if not c.deleted_at %}
-            <button class="scl-del" title="刪除案件" onclick="deleteCase('{{ c.case_id }}')">🗑</button>
+            <button class="scl-del" title="刪除案件" onclick="deleteCase('{{ c.case_id }}')">{{ icon('trash', size=16) }}</button>
           {% endif %}
         </td>
       </tr>
@@ -105,5 +118,39 @@ async function deleteCase(caseId) {
     alert("刪除失敗：" + e.message);
   }
 }
+
+// 簡易表格排序：點 th 切 asc / desc / 取消
+(function() {
+  const table = document.querySelector('.scl-tbl');
+  if (!table) return;
+  const tbody = table.querySelector('tbody');
+  if (!tbody) return;
+  const headers = table.querySelectorAll('th.sortable');
+  let curCol = -1, curDir = '';
+  headers.forEach(th => {
+    th.addEventListener('click', () => {
+      const col = +th.dataset.col;
+      const type = th.dataset.sort || 'text';
+      let dir = 'asc';
+      if (curCol === col) {
+        dir = curDir === 'asc' ? 'desc' : (curDir === 'desc' ? '' : 'asc');
+      }
+      // 清空所有 indicator
+      headers.forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+      curCol = col; curDir = dir;
+      if (!dir) return; // 第三次點：取消排序（保持當前順序）
+      th.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort((a, b) => {
+        const cellA = a.children[col]; const cellB = b.children[col];
+        let va = cellA.dataset.sortValue !== undefined ? cellA.dataset.sortValue : cellA.textContent.trim();
+        let vb = cellB.dataset.sortValue !== undefined ? cellB.dataset.sortValue : cellB.textContent.trim();
+        if (type === 'num') { va = +va || 0; vb = +vb || 0; return dir === 'asc' ? va - vb : vb - va; }
+        return dir === 'asc' ? va.localeCompare(vb, 'zh-Hant') : vb.localeCompare(va, 'zh-Hant');
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    });
+  });
+})();
 </script>
 {% endblock %}

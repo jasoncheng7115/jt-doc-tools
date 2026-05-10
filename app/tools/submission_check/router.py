@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 import uuid
 from pathlib import Path
@@ -31,9 +32,20 @@ from .checks import l1_rules as _l1
 from .checks import consistency as _consistency
 from .checks import l2_ocr as _l2
 from .checks import l3_llm as _l3
+from .checks import l4_vision as _l4
 from .checks import important as _important
 from . import override as _override
 from . import chaining as _chaining
+
+
+def _set_layer_status(job, layer: str, status: str, extra: str = "") -> None:
+    """更新 job.meta.layers 給前端 LED 燈號用。"""
+    layers = (job.meta or {}).setdefault("layers", {
+        "L1": "pending", "L2": "pending", "L3": "pending", "L4": "pending",
+    })
+    layers[layer] = status
+    if extra:
+        layers[layer + "_extra"] = extra
 
 router = APIRouter()
 
@@ -181,17 +193,36 @@ async def upload_files(
             raise HTTPException(400, "本批次累計超過 200 MB 上限")
         file_id = uuid.uuid4().hex
         sha256 = hashlib.sha256(raw).hexdigest()
-        # 用 file_id + 原副檔名儲存（避免中文 / 路徑問題）
         suffix = Path(up.filename or "").suffix.lower()
         if suffix not in (".pdf", ".docx", ".doc", ".jpg", ".jpeg", ".png", ".tiff", ".tif"):
             raise HTTPException(400, f"不支援的檔案類型：{up.filename}")
-        save_path = case_files_dir / f"{file_id}{suffix}"
-        save_path.write_bytes(raw)
+        # .doc (Word 97-2003 binary OLE) 不是 zip，後續解析會失敗 → 用 soffice 自動轉成 .docx
+        store_suffix = suffix
+        if suffix == ".doc":
+            tmp_doc = case_files_dir / f"{file_id}.doc"
+            tmp_doc.write_bytes(raw)
+            target_docx = case_files_dir / f"{file_id}.docx"
+            try:
+                from app.core import office_convert as _oc
+                _oc.convert_to_docx(tmp_doc, target_docx, timeout=90.0)
+                tmp_doc.unlink(missing_ok=True)
+                store_suffix = ".docx"
+            except Exception as e:
+                tmp_doc.unlink(missing_ok=True)
+                raise HTTPException(
+                    400,
+                    f"無法處理 .doc 檔（{up.filename}）— {str(e)[:120]}。"
+                    "請在 Word 內另存為 .docx 後再上傳。"
+                )
+        else:
+            save_path = case_files_dir / f"{file_id}{suffix}"
+            save_path.write_bytes(raw)
         _cm.add_file_to_case(case, file_id,
                              original_name=up.filename or file_id,
                              size=size, sha256=sha256,
                              mime=up.content_type or "")
-        saved.append({"file_id": file_id, "name": up.filename, "size": size})
+        saved.append({"file_id": file_id, "name": up.filename, "size": size,
+                      "auto_converted": (store_suffix != suffix)})
 
     return {"case_id": case["case_id"], "files": saved}
 
@@ -308,6 +339,48 @@ async def delete_override(case_id: str, finding_key: str, request: Request):
     return {"ok": ok}
 
 
+@router.get("/page-preview/{case_id}/{file_id}/{page}")
+async def get_page_preview(case_id: str, file_id: str, page: int, request: Request):
+    """渲染指定 PDF 頁面為 PNG 預覽圖（供 finding 預覽 modal 用）。"""
+    if not _cm.CASE_ID_RE.match(case_id):
+        raise HTTPException(400, "invalid case_id")
+    if not re.match(r"^[a-f0-9]{32}$", file_id):
+        raise HTTPException(400, "invalid file_id")
+    if page < 1 or page > 5000:
+        raise HTTPException(400, "page out of range")
+    case = _cm.load_case(case_id)
+    if not case:
+        raise HTTPException(404, "case 不存在")
+    _check_case_acl(case, request)
+    fdir = _cm.case_dir(case_id) / "files"
+    matches = list(fdir.glob(f"{file_id}.*"))
+    if not matches:
+        raise HTTPException(404, "檔案不存在")
+    path = matches[0]
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".pdf":
+            import fitz
+            doc = fitz.open(str(path))
+            try:
+                if page > doc.page_count:
+                    raise HTTPException(404, f"page {page} 超過 PDF 總頁數 {doc.page_count}")
+                pix = doc[page - 1].get_pixmap(matrix=fitz.Matrix(150 / 72, 150 / 72))
+                png = pix.tobytes("png")
+            finally:
+                doc.close()
+        elif suffix in (".jpg", ".jpeg", ".png", ".tif", ".tiff"):
+            png = path.read_bytes()
+        else:
+            raise HTTPException(400, "此檔案類型不支援頁面預覽")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"渲染失敗：{e}")
+    from fastapi.responses import Response
+    return Response(content=png, media_type="image/png")
+
+
 @router.get("/file/{case_id}/{file_id}")
 async def get_file(case_id: str, file_id: str, request: Request):
     """取個別檔 — for 前端跳頁預覽。"""
@@ -382,10 +455,18 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
     per_file_dates: dict[str, list] = {}
     ocr_total_elapsed = 0.0
     ocr_files_processed = 0
+    vision_calls = 0
+
+    # 初始化 4 層燈號狀態
+    job.meta = job.meta or {}
+    job.meta["layers"] = {"L1": "running", "L2": "pending", "L3": "pending", "L4": "pending"}
 
     for i, f in enumerate(files):
-        job.progress = (i + 0.1) / max(n, 1) * 0.7
-        job.message = f"檢查中：{f.get('name', '?')} ({i+1}/{n})"
+        job.progress = (i + 0.1) / max(n, 1) * 0.5
+        job.message = f"L1+L2 檢查中：{f.get('name', '?')} ({i+1}/{n})"
+        # L2 標 running 一旦進入第一檔的 OCR
+        if i == 0:
+            _set_layer_status(job, "L2", "running")
         file_id = f["file_id"]
         matches = list(fdir.glob(f"{file_id}.*"))
         if not matches:
@@ -456,7 +537,16 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
             pass
         findings_per_file[file_id] = findings
 
-    job.progress = 0.80
+    # L1 / L2 都跑完
+    _set_layer_status(job, "L1", "done")
+    if ocr_files_processed > 0:
+        _set_layer_status(job, "L2", "done", f"{ocr_files_processed} 檔 OCR")
+    elif not _l2.is_tesseract_available():
+        _set_layer_status(job, "L2", "skipped", "tesseract 未安裝")
+    else:
+        _set_layer_status(job, "L2", "skipped", "無影像 / 掃描內容需 OCR")
+
+    job.progress = 0.55
     job.message = "跨檔身分一致性分析中..."
 
     # 跨檔 hash 重複
@@ -468,9 +558,10 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
     # L3: LLM 變體合併（如果 LLM enabled）
     l3_used = False
     if _l3.llm_available():
+        _set_layer_status(job, "L3", "running")
         try:
-            job.progress = 0.85
-            job.message = "L3 LLM：變體合併中..."
+            job.progress = 0.60
+            job.message = "L3 LLM Text：變體合併中..."
             company_values = [e["value"] for e in aggregated.get("company", [])]
             if len(company_values) >= 2:
                 groups = _l3.merge_entity_variants(company_values)
@@ -504,8 +595,8 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
     l3_residue_count = 0
     if _l3.llm_available():
         try:
-            job.progress = 0.92
-            job.message = "L3 LLM：範本痕跡推論中..."
+            job.progress = 0.70
+            job.message = "L3 LLM Text：範本痕跡推論中..."
             file_summaries = []
             for f in files:
                 # 取該檔的文字（PDF 文字層或 OCR）— 若 per_file_entities 有就找對應；否則重抽前 500 字
@@ -543,6 +634,47 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
             l3_used = True
         except Exception:
             pass
+
+    if l3_used:
+        _set_layer_status(job, "L3", "done", "LLM 文字分析完成")
+    else:
+        _set_layer_status(job, "L3", "skipped", "LLM 未設定")
+
+    # L4: Vision LLM — 對每檔渲染後送 vision LLM
+    l4_used = False
+    if _l4.vision_available():
+        _set_layer_status(job, "L4", "running")
+        try:
+            gt_main = ((case.get("ground_truth") or {}).get("main_entity") or {}).get("name") or ""
+            gt_cp = ((case.get("ground_truth") or {}).get("counterparty") or {}).get("name") or ""
+            for i, f in enumerate(files):
+                fid = f["file_id"]
+                fpaths = list(fdir.glob(f"{fid}.*"))
+                if not fpaths:
+                    continue
+                job.progress = 0.78 + (i + 1) / max(n, 1) * 0.18
+                job.message = f"L4 Vision LLM：分析 {f.get('name', '?')} ({i+1}/{n})..."
+                try:
+                    v_findings = _l4.vision_check_file(fpaths[0], gt_main, gt_cp)
+                    if v_findings:
+                        findings_per_file.setdefault(fid, []).extend(v_findings)
+                    vision_calls += 1
+                except Exception:
+                    pass
+            l4_used = True
+            _set_layer_status(job, "L4", "done", f"{vision_calls} 檔 vision 分析")
+        except Exception:
+            _set_layer_status(job, "L4", "error", "vision 階段異常")
+    else:
+        # 區分原因
+        try:
+            from app.core.llm_settings import llm_settings
+            if not llm_settings.is_enabled():
+                _set_layer_status(job, "L4", "skipped", "LLM 未設定")
+            else:
+                _set_layer_status(job, "L4", "skipped", "目前 LLM 模型非 vision")
+        except Exception:
+            _set_layer_status(job, "L4", "skipped", "LLM 未設定")
 
     # 套 user override 註解 + chaining 提示
     fresh_case = _cm.load_case(case_id) or case
@@ -587,12 +719,7 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
             "score": score,
             "fail": n_fail, "warn": n_warn, "info": n_info,
             "overrides_applied": n_overrides_applied,
-            "layers": {
-                "L1": "done",
-                "L2": (f"done ({ocr_files_processed} 檔 OCR, {ocr_total_elapsed:.1f}s)"
-                       if ocr_files_processed > 0 else "skipped (無需 OCR 或 tesseract 未裝)"),
-                "L3": ("done (LLM)" if l3_used else "skipped (LLM 未設定)"),
-            },
+            "layers": (job.meta or {}).get("layers", {}),
         },
         "findings_per_file": findings_per_file,
         "cross_findings": cross_findings,

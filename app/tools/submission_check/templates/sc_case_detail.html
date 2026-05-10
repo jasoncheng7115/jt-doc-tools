@@ -28,9 +28,29 @@
   font-size:11px; padding:3px 8px; border-radius:4px; border:1px solid #cbd5e1;
   background:#fff; color:#475569; cursor:pointer; text-decoration:none;
 }
-.scd-finding-actions a.chain { background:#dbeafe; border-color:#93c5fd; color:#1e40af; }
+.scd-finding-actions button.prev { background:#e0e7ff; border-color:#a5b4fc; color:#3730a3; display:inline-flex; align-items:center; gap:4px; }
 .scd-finding-actions button.ok { background:#d1fae5; border-color:#86efac; color:#065f46; }
 .scd-finding-actions button.fp { background:#fef3c7; border-color:#fde68a; color:#92400e; }
+/* preview modal */
+.scd-modal { position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1000; display:none; align-items:center; justify-content:center; padding:24px; }
+.scd-modal.show { display:flex; }
+.scd-modal-content { background:#fff; border-radius:8px; max-width:90vw; max-height:90vh; overflow:auto; padding:14px; position:relative; }
+.scd-modal-close { position:absolute; top:8px; right:12px; background:transparent; border:0; font-size:24px; color:#475569; cursor:pointer; }
+.scd-modal-content img { max-width:100%; height:auto; display:block; }
+.scd-modal-title { font-size:13px; color:#475569; margin-bottom:8px; padding-right:30px; }
+.scd-stations { display:flex; align-items:center; justify-content:center; gap:8px; padding:10px 0; flex-wrap:wrap; }
+.scd-st { text-align:center; min-width:74px; font-size:11px; color:#475569; }
+.scd-st b { display:block; font-size:12px; color:#1e293b; }
+.scd-st .lbl { font-size:11px; color:#94a3b8; }
+.scd-st .extra { display:block; font-size:10px; color:#64748b; margin-top:2px; }
+.scd-st .dot { display:block; width:18px; height:18px; border-radius:50%; margin:0 auto 4px; background:#e5e7eb; border:2px solid #cbd5e1; }
+.scd-st-line { flex:0 0 30px; height:2px; background:#e5e7eb; }
+.scd-st.pending .dot { background:#e5e7eb; border-color:#cbd5e1; }
+.scd-st.running .dot { background:#fbbf24; border-color:#f59e0b; }
+.scd-st.done .dot { background:#10b981; border-color:#059669; }
+.scd-st.skipped .dot { background:#cbd5e1; border-color:#94a3b8; }
+.scd-st.skipped { color:#94a3b8; }
+.scd-st.error .dot { background:#dc2626; border-color:#991b1b; }
 .scd-override-note { display:inline-block; font-size:10px; color:#10b981; margin-left:6px; }
 .scd-finding.has-override { opacity:0.6; }
 .scd-finding.has-override .scd-finding-title::before { content:"✓ 已標 — "; color:#10b981; font-weight:400; }
@@ -88,10 +108,18 @@
         <div class="card warn"><div class="num">{{ s.warn }}</div><div class="lbl">警告</div></div>
         <div class="card info"><div class="num">{{ s.info }}</div><div class="lbl">資訊</div></div>
       </div>
-      <div class="muted" style="font-size:12px;">
-        層級:
-        {% for layer, st in s.layers.items() %}
-          <span style="margin-right:8px;">{{ layer }}: {{ st }}</span>
+      <div class="scd-stations">
+        {% set _layers = s.layers or {} %}
+        {% for L, lbl in [('L1','規則'), ('L2','OCR'), ('L3','LLM 文字'), ('L4','LLM 視覺')] %}
+        {% set st = _layers.get(L, 'pending') %}
+        {% set extra = _layers.get(L + '_extra', '') %}
+        <div class="scd-st {{ st }}" title="{{ L }}: {{ st }}{% if extra %} — {{ extra }}{% endif %}">
+          <span class="dot"></span>
+          <b>{{ L }}</b>
+          <span class="lbl">{{ lbl }}</span>
+          {% if extra %}<span class="extra">{{ extra }}</span>{% endif %}
+        </div>
+        {% if not loop.last %}<div class="scd-st-line"></div>{% endif %}
         {% endfor %}
       </div>
 
@@ -106,8 +134,8 @@
           <div class="scd-override-note">{{ fd._override.verdict }} — {{ fd._override.reason or '無註記' }} (by {{ fd._override.by_user or 'anonymous' }})</div>
           {% endif %}
           <div class="scd-finding-actions">
-            {% if fd.chaining and fd.chaining.tool_url %}
-            <a class="chain" href="{{ fd.chaining.tool_url }}" target="_blank" title="{{ fd.chaining.hint }}">→ {{ fd.chaining.label }}</a>
+            {% if fd.page %}
+            <button class="prev" onclick="previewPage('{{ case.case_id }}', '{{ fd._target_file_id or '' }}', {{ fd.page }})">{{ icon('eye', size=12) }} 預覽 p.{{ fd.page }}</button>
             {% endif %}
             {% if not fd._override %}
             <button class="ok" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'confirmed_ok')">標已確認 OK</button>
@@ -135,8 +163,8 @@
             <div class="scd-override-note">{{ fd._override.verdict }} — {{ fd._override.reason or '無註記' }} (by {{ fd._override.by_user or 'anonymous' }})</div>
             {% endif %}
             <div class="scd-finding-actions">
-              {% if fd.chaining and fd.chaining.tool_url %}
-              <a class="chain" href="{{ fd.chaining.tool_url }}" target="_blank" title="{{ fd.chaining.hint }}">→ {{ fd.chaining.label }}</a>
+              {% if fd.page %}
+              <button class="prev" onclick="previewPage('{{ case.case_id }}', '{{ f.file_id }}', {{ fd.page }})">{{ icon('eye', size=12) }} 預覽 p.{{ fd.page }}</button>
               {% endif %}
               {% if not fd._override %}
               <button class="ok" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'confirmed_ok')">標已確認 OK</button>
@@ -156,6 +184,14 @@
     {% endif %}
   </details>
 {% endfor %}
+
+<div class="scd-modal" id="prevModal" onclick="if(event.target===this) closePreview()">
+  <div class="scd-modal-content">
+    <button class="scd-modal-close" onclick="closePreview()">×</button>
+    <div class="scd-modal-title" id="prevTitle">預覽中…</div>
+    <img id="prevImg" alt="頁面預覽">
+  </div>
+</div>
 
 {% endblock %}
 
@@ -193,5 +229,23 @@ async function removeOverride(caseId, findingKey) {
     location.reload();
   } catch (e) { alert("失敗：" + e.message); }
 }
+
+function previewPage(caseId, fileId, page) {
+  if (!fileId) { alert("此 finding 未綁定特定檔案，無法預覽"); return; }
+  const modal = document.getElementById("prevModal");
+  const img = document.getElementById("prevImg");
+  const title = document.getElementById("prevTitle");
+  title.textContent = "頁面 " + page + " 預覽（檔案 " + fileId.substring(0,8) + "...）";
+  img.src = "../page-preview/" + caseId + "/" + fileId + "/" + page;
+  modal.classList.add("show");
+}
+function closePreview() {
+  const modal = document.getElementById("prevModal");
+  modal.classList.remove("show");
+  document.getElementById("prevImg").src = "";
+}
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closePreview();
+});
 </script>
 {% endblock %}

@@ -139,17 +139,38 @@ def list_cases(owner_uid: Optional[int] = None,
         is_deleted = bool(case.get("deleted_at"))
         if is_deleted and not include_deleted:
             continue
+        # 人類可讀時間
+        from datetime import datetime
+        def _fmt(ts):
+            if not ts:
+                return "—"
+            try:
+                return datetime.fromtimestamp(float(ts)).strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                return "—"
+        # 檔名摘要：第一檔 + 「等 N 個」
+        files_list = case.get("files", []) or []
+        if not files_list:
+            files_summary = "—"
+        elif len(files_list) == 1:
+            files_summary = files_list[0].get("name", "(未命名)")
+        else:
+            files_summary = f"{files_list[0].get('name', '(未命名)')} 等 {len(files_list)} 個"
         out.append({
             "case_id": case["case_id"],
             "status": case["status"],
             "main_entity": (case.get("ground_truth") or {}).get("main_entity"),
-            "files_count": len(case.get("files", [])),
+            "files_count": len(files_list),
+            "files_summary": files_summary,
             "current_version": case.get("current_version"),
             "created_at": case.get("created_at"),
             "updated_at": case.get("updated_at"),
+            "created_at_str": _fmt(case.get("created_at")),
+            "updated_at_str": _fmt(case.get("updated_at")),
             "owner_uid": case.get("owner_uid"),
             "deleted_at": case.get("deleted_at"),
             "deleted_by": case.get("deleted_by"),
+            "deleted_at_str": _fmt(case.get("deleted_at")),
         })
         if len(out) >= limit:
             break
