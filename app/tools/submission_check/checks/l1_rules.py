@@ -57,11 +57,13 @@ def _scan_pdf(path: Path) -> list[dict]:
             elif re.search(r"(股份有限公司|有限公司|企業社|商號|行號)", v):
                 suspect_meta_fields[k] = v
         if suspect_meta_fields:
+            kv_lines = "\n".join(f"  • {k}: {v}" for k, v in suspect_meta_fields.items())
             findings.append({
                 "layer": "L1", "severity": "warn",
                 "category": "metadata-leak",
                 "title": "PDF metadata 含可疑殘留",
-                "detail": f"以下欄位可能洩漏先前作業者 / 公司資訊：{list(suspect_meta_fields.keys())}",
+                "detail": (f"以下欄位可能洩漏先前作業者 / 公司資訊（共 {len(suspect_meta_fields)} 欄）。\n"
+                           f"{kv_lines}"),
                 "page": None,
                 "evidence": {"metadata": suspect_meta_fields},
             })
@@ -71,20 +73,47 @@ def _scan_pdf(path: Path) -> list[dict]:
             cat = doc.pdf_catalog()
             cat_obj = doc.xref_object(cat, compressed=False) if cat else ""
             if "/JavaScript" in cat_obj or "/JS" in cat_obj:
+                # 抽 JS 實際內容（truncate 避免 evidence 過大）
+                js_snippets = []
+                for xref in range(1, doc.xref_length()):
+                    try:
+                        obj_text = doc.xref_object(xref, compressed=False) or ""
+                        if "/JS" in obj_text or "/JavaScript" in obj_text:
+                            # 抓 stream 內容
+                            stream = doc.xref_stream(xref) or b""
+                            txt = stream.decode("utf-8", errors="replace")[:500] if stream else ""
+                            if not txt:
+                                # JS 字串可能直接寫在 obj 內
+                                import re as _re
+                                m = _re.search(r"/JS\s*\(([^)]{1,500})\)", obj_text)
+                                if m:
+                                    txt = m.group(1)
+                            if txt:
+                                js_snippets.append({"xref": xref, "content": txt[:500]})
+                            if len(js_snippets) >= 5:
+                                break
+                    except Exception:
+                        continue
                 findings.append({
                     "layer": "L1", "severity": "fail",
                     "category": "js",
                     "title": "PDF 含 JavaScript",
-                    "detail": "Catalog 內含 JavaScript 動作，送件前應清除（可一鍵跑 pdf-hidden-scan）。",
-                    "page": None, "evidence": {},
+                    "detail": f"Catalog 內含 JavaScript 動作（找到 {len(js_snippets)} 段 JS 程式碼）— 送件前應清除。",
+                    "page": None,
+                    "evidence": {"js_snippets": js_snippets},
                 })
             if "/OpenAction" in cat_obj:
+                # 抽 OpenAction 實際指向的 action（從 catalog object）
+                import re as _re
+                m = _re.search(r"/OpenAction\s*(<<[^>]*>>|\d+\s+\d+\s+R)", cat_obj)
+                action_raw = m.group(1) if m else "(無法解析)"
                 findings.append({
                     "layer": "L1", "severity": "warn",
                     "category": "open-action",
                     "title": "PDF 含 OpenAction（開檔即執行）",
-                    "detail": "開檔即執行的動作可能讓對方收到時被誤觸。",
-                    "page": None, "evidence": {},
+                    "detail": f"開檔即執行動作 — 內容：{action_raw[:200]}",
+                    "page": None,
+                    "evidence": {"action_raw": action_raw, "catalog_excerpt": cat_obj[:600]},
                 })
         except Exception:
             pass

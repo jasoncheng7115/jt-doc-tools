@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+
+{% block title %}我方資料管理 · {{ app_name }}{% endblock %}
+
+{% block head %}
+<style>
+.se-tbl { width:100%; border-collapse: collapse; font-size:13px; }
+.se-tbl th, .se-tbl td { padding:8px 10px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:top; }
+.se-tbl th { background:#f8fafc; color:#475569; font-weight:600; }
+.se-tbl td.aliases { font-size:12px; color:#64748b; }
+.se-tbl td.actions { white-space:nowrap; }
+.se-tbl td.actions button { font-size:12px; padding:3px 8px; margin-right:4px; }
+.se-empty { text-align:center; padding:40px; color:#94a3b8; font-size:13px; }
+.se-form { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+.se-form .full { grid-column: 1 / -1; }
+.se-form label { display:block; font-size:13px; color:#475569; margin-bottom:4px; font-weight:500; }
+.se-form label .muted { font-weight:400; color:#94a3b8; font-size:11px; }
+.se-form input, .se-form select, .se-form textarea {
+  width:100%; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px;
+  font-size:14px; box-sizing:border-box;
+}
+.se-type { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; background:#e0e7ff; color:#3730a3; }
+</style>
+{% endblock %}
+
+{% block content %}
+<p class="muted" style="font-size:12px; margin-bottom:4px;"><a href="." style="color:#64748b;">← 送件前檢核</a></p>
+<h1>{{ icon('id-card', size=22) }} 我方資料管理</h1>
+<p class="muted">預先登錄自家公司、子公司、客戶等常用實體 — 跨檔檢核時系統自動排除（不再誤標「非預期主體」），同時偵測是否打錯（漏字 / 統編位錯）。<strong>支援多公司</strong>。</p>
+
+<details class="panel" {% if not entities %}open{% endif %}>
+  <summary>新增 / 編輯實體</summary>
+  <form id="seForm" class="se-form" onsubmit="return submitForm(event)">
+    <input type="hidden" id="seId">
+    <div>
+      <label>名稱（必填）<span class="muted">公司全名 / 機關全名</span></label>
+      <input type="text" id="seName" required placeholder="例：某某科技股份有限公司">
+    </div>
+    <div>
+      <label>類型</label>
+      <select id="seType">
+        <option value="company">公司</option>
+        <option value="agency">政府機關</option>
+        <option value="school">學校</option>
+        <option value="legal-person">財團 / 社團法人</option>
+        <option value="medical">醫療機構</option>
+        <option value="other">其他</option>
+      </select>
+    </div>
+    <div>
+      <label>統編 / 識別碼 <span class="muted">8 碼公司統編、機關代碼等</span></label>
+      <input type="text" id="seTaxId" placeholder="例：12345675">
+    </div>
+    <div>
+      <label>地址</label>
+      <input type="text" id="seAddress" placeholder="例：台北市中正區...">
+    </div>
+    <div class="full">
+      <label>別名 / 簡稱 <span class="muted">用半形逗號分隔（例：某某, 某某科技, SOMECO）</span></label>
+      <input type="text" id="seAliases" placeholder="某某, 某某科技, SOMECO">
+    </div>
+    <div class="full">
+      <label>備註</label>
+      <input type="text" id="seNote" placeholder="例：母公司 / 海外子公司 / 常見客戶">
+    </div>
+    <div class="full" style="display:flex; gap:8px;">
+      <button type="submit" class="btn btn-primary">{{ icon('save', size=14) }} <span id="seSubmitLabel">新增</span></button>
+      <button type="button" class="btn" onclick="resetForm()">清除</button>
+    </div>
+  </form>
+</details>
+
+<div class="panel" style="padding:0; overflow:hidden; margin-top:14px;">
+  {% if entities %}
+  <table class="se-tbl">
+    <thead><tr>
+      <th>名稱</th><th>類型</th><th>統編</th><th>別名</th><th>地址 / 備註</th><th></th>
+    </tr></thead>
+    <tbody id="seBody">
+    {% for e in entities %}
+      <tr data-id="{{ e.id }}">
+        <td><b>{{ e.name }}</b></td>
+        <td><span class="se-type">{{ e.type }}</span></td>
+        <td>{{ e.tax_id or "—" }}</td>
+        <td class="aliases">{{ ', '.join(e.aliases) if e.aliases else '—' }}</td>
+        <td>
+          {% if e.address %}{{ e.address }}{% endif %}
+          {% if e.note %}<br><span style="color:#64748b; font-size:11px;">{{ e.note }}</span>{% endif %}
+        </td>
+        <td class="actions">
+          <button class="btn" onclick='editRow({{ e|tojson }})'>編輯</button>
+          <button class="btn" onclick="delRow('{{ e.id }}', '{{ e.name|e }}')" style="color:#dc2626;">刪除</button>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="se-empty">
+    尚未登錄任何實體。在上方表單新增第一筆。
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function editRow(e) {
+  document.getElementById("seId").value = e.id || "";
+  document.getElementById("seName").value = e.name || "";
+  document.getElementById("seType").value = e.type || "company";
+  document.getElementById("seTaxId").value = e.tax_id || "";
+  document.getElementById("seAddress").value = e.address || "";
+  document.getElementById("seAliases").value = (e.aliases || []).join(", ");
+  document.getElementById("seNote").value = e.note || "";
+  document.getElementById("seSubmitLabel").textContent = "更新";
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+function resetForm() {
+  document.getElementById("seId").value = "";
+  document.getElementById("seName").value = "";
+  document.getElementById("seType").value = "company";
+  document.getElementById("seTaxId").value = "";
+  document.getElementById("seAddress").value = "";
+  document.getElementById("seAliases").value = "";
+  document.getElementById("seNote").value = "";
+  document.getElementById("seSubmitLabel").textContent = "新增";
+}
+
+async function submitForm(ev) {
+  ev.preventDefault();
+  const id = document.getElementById("seId").value;
+  const fd = new FormData();
+  fd.append("name", document.getElementById("seName").value);
+  fd.append("tax_id", document.getElementById("seTaxId").value);
+  fd.append("address", document.getElementById("seAddress").value);
+  fd.append("aliases", document.getElementById("seAliases").value);
+  fd.append("type", document.getElementById("seType").value);
+  fd.append("note", document.getElementById("seNote").value);
+  const url = id ? ("api/self-entities/" + id) : "api/self-entities";
+  const method = id ? "PUT" : "POST";
+  try {
+    const r = await fetch(url, { method, body: fd });
+    if (!r.ok) throw new Error(await r.text());
+    location.reload();
+  } catch (e) {
+    window.showAlert("失敗：" + e.message);
+  }
+  return false;
+}
+
+async function delRow(id, name) {
+  const ok = await window.showConfirm("確定刪除「" + name + "」？", { title: "刪除我方實體", kind: "danger", okText: "刪除" });
+  if (!ok) return;
+  try {
+    const r = await fetch("api/self-entities/" + id, { method: "DELETE" });
+    if (!r.ok) throw new Error(await r.text());
+    location.reload();
+  } catch (e) {
+    window.showAlert("失敗：" + e.message);
+  }
+}
+</script>
+{% endblock %}

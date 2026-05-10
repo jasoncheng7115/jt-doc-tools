@@ -247,7 +247,7 @@ def detect_consistency_findings(
                         "severity": "warn",
                         "category": "identity-outlier",
                         "title": f"頻率異常的主體：「{entry['value']}」",
-                        "detail": (f"全 batch 主流主體看起來是「{top['value']}」"
+                        "detail": (f"本案件 主流主體看起來是「{top['value']}」"
                                    f"（{top['total_count']} 次），"
                                    f"但「{entry['value']}」只出現 {entry['total_count']} 次"
                                    f"於 {_names(entry['files'])}，疑似漏改範本。"),
@@ -284,7 +284,7 @@ def detect_consistency_findings(
                 "layer": "L1",
                 "severity": "warn",
                 "category": "tax-id-multiple",
-                "title": f"全 batch 出現 {len(valid_tids)} 個有效統編",
+                "title": f"本案件 出現 {len(valid_tids)} 個有效統編",
                 "detail": ("多個統編並存可能是聯合投標 / 多家代理，"
                            "或是漏改舊統編。請確認預期主角統編。"),
                 "page": None,

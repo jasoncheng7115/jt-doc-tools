@@ -22,7 +22,10 @@
 .scd-finding.info { border-color:#0891b2; background:#ecfeff; }
 .scd-layer { display:inline-block; font-size:10px; padding:1px 6px; border-radius:3px; background:#e5e7eb; color:#475569; margin-right:6px; font-weight:500; }
 .scd-finding-title { font-weight:500; color:#1e293b; }
-.scd-finding-detail { color:#64748b; margin-top:2px; font-size:12px; }
+.scd-finding-detail { color:#64748b; margin-top:2px; font-size:12px; white-space:pre-wrap; }
+.scd-evidence { margin-top:6px; padding:8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#334155; max-height:240px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
+.scd-evidence-toggle { background:#f1f5f9; border:1px solid #cbd5e1; color:#475569; font-size:11px; padding:3px 8px; border-radius:4px; cursor:pointer; }
+.scd-evidence-toggle:hover { background:#e2e8f0; }
 .scd-finding-actions { margin-top:6px; display:flex; gap:8px; flex-wrap:wrap; }
 .scd-finding-actions a, .scd-finding-actions button {
   font-size:11px; padding:3px 8px; border-radius:4px; border:1px solid #cbd5e1;
@@ -70,6 +73,12 @@
 .scd-file-name { font-size:13px; font-weight:500; color:#334155; margin:8px 0 4px; }
 .scd-file-name .sz { color:#94a3b8; font-weight:400; font-size:11px; }
 .scd-no-finding { font-size:12px; color:#10b981; padding:4px 12px; }
+.scd-subsection { background:#fafbfc; border:1px solid #e5e7eb; border-radius:6px; padding:14px 16px; margin-top:14px; }
+.scd-subsection-title { font-size:14px; font-weight:600; color:#1e293b; margin:0 0 10px; padding-bottom:8px; border-bottom:2px solid #cbd5e1; display:flex; align-items:center; gap:8px; }
+.scd-subsection.cross { background:#fff7ed; border-color:#fed7aa; }
+.scd-subsection.cross .scd-subsection-title { color:#9a3412; border-bottom-color:#fb923c; }
+.scd-subsection.per-file { background:#f0f9ff; border-color:#bae6fd; }
+.scd-subsection.per-file .scd-subsection-title { color:#075985; border-bottom-color:#38bdf8; }
 </style>
 {% endblock %}
 
@@ -161,12 +170,17 @@
       </div>
 
       {% if v.report.cross_findings %}
-      <h3 style="margin-top:14px; font-size:13px; color:#475569;">跨檔發現</h3>
+      <div class="scd-subsection cross">
+        <div class="scd-subsection-title">{{ icon('layers', size=14) }} 跨檔發現 <span class="muted" style="font-weight:normal; font-size:12px;">({{ v.report.cross_findings|length }} 項 — 多檔之間的一致性 / 重複 / 衝突)</span></div>
       {% for fd in v.report.cross_findings %}
         <div class="scd-finding {{ fd.severity }}{% if fd._override %} has-override{% endif %}">
           <span class="scd-layer">{{ fd.layer }}</span>
           <span class="scd-finding-title">{{ fd.title }}</span>
           <div class="scd-finding-detail">{{ fd.detail }}</div>
+          {% if fd.evidence and fd.evidence|length > 0 %}
+          <button class="scd-evidence-toggle" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'; this.textContent = this.nextElementSibling.style.display === 'none' ? '▸ 顯示細節' : '▾ 收合細節';">▸ 顯示細節</button>
+          <pre class="scd-evidence" style="display:none;">{{ fd.evidence|tojson(indent=2) }}</pre>
+          {% endif %}
           {% if fd._override %}
           <div class="scd-override-note">{{ fd._override.verdict }} — {{ fd._override.reason or '無註記' }} (by {{ fd._override.by_user or 'anonymous' }})</div>
           {% endif %}
@@ -196,9 +210,11 @@
           </div>
         </div>
       {% endfor %}
+      </div>
       {% endif %}
 
-      <h3 style="margin-top:14px; font-size:13px; color:#475569;">逐檔結果</h3>
+      <div class="scd-subsection per-file">
+        <div class="scd-subsection-title">{{ icon('page', size=14) }} 逐檔結果 <span class="muted" style="font-weight:normal; font-size:12px;">({{ case.files|length }} 個檔案各自的 finding)</span></div>
       {% for f in case.files %}
         {% set fds = v.report.findings_per_file.get(f.file_id, []) %}
         <div class="scd-file-name">{{ f.name }} <span class="sz">({{ (f.size/1024)|round(1) }} KB)</span></div>
@@ -229,6 +245,7 @@
           <div class="scd-no-finding">✓ 無發現</div>
         {% endif %}
       {% endfor %}
+      </div>
     {% else %}
       <div class="muted">報告未產生</div>
     {% endif %}
