@@ -113,13 +113,17 @@
 {% block scripts %}
 <script>
 async function deleteCase(caseId) {
-  if (!confirm("確定刪除此案件？\n\n（會保留歷史紀錄供稽核員調閱，但不會出現在您的清單中）")) return;
+  const ok = await window.showConfirm(
+    "確定刪除此案件？（會保留歷史紀錄供稽核員調閱，但不會出現在您的清單中）",
+    { title: "刪除案件", kind: "danger", okText: "刪除" }
+  );
+  if (!ok) return;
   try {
     const r = await fetch("case/" + caseId, { method: "DELETE" });
     if (!r.ok) throw new Error(await r.text());
     location.reload();
   } catch (e) {
-    alert("刪除失敗：" + e.message);
+    window.showAlert("刪除失敗：" + e.message);
   }
 }
 

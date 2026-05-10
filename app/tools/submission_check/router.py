@@ -115,6 +115,29 @@ async def page_case_detail(case_id: str, request: Request) -> HTMLResponse:
     if not case:
         raise HTTPException(404, "case 不存在")
     _check_case_acl(case, request)
+
+    # 中斷偵測：若 case 標 running 但 job 已不在（service 重啟 / job 丟失）
+    # 自動標為 error 讓 user 可以重新檢核而不卡住
+    if case.get("status") == "running" and case.get("current_job_id"):
+        jid = case["current_job_id"]
+        job = _jm.job_manager.get(jid)
+        if job is None:
+            # job 完全不存在 → 服務重啟導致 in-memory job 丟失
+            case["status"] = "error"
+            case["current_job_id"] = None
+            case["error_reason"] = "背景工作中斷（可能因服務重啟）— 請按「重新檢核」重跑"
+            _cm.save_case(case)
+        elif job.status == "error":
+            case["status"] = "error"
+            case["current_job_id"] = None
+            case["error_reason"] = job.error or "未知錯誤"
+            _cm.save_case(case)
+        elif job.status == "done":
+            # job 完成但 case status 沒更新（race）→ 同步
+            case["status"] = "done"
+            case["current_job_id"] = None
+            _cm.save_case(case)
+        # else status='running' or 'pending' → 繼續顯示進行中
     versions_with_reports = []
     for v in case.get("versions", []):
         rep = _cm.load_version_report(case_id, v)

@@ -4,6 +4,30 @@
 
 ---
 
+## [1.6.1] - 2026-05-10
+
+### 新增
+
+- **submission-check 升 6 層架構** — L1 規則 / L2 文字抽取 / L3 全頁 OCR / L4 嵌入圖 OCR / L5 LLM 文字 / L6 LLM 視覺
+- **L4 嵌入圖 OCR** — PDF 內每張嵌入圖抽出來逐張 OCR（章 / 印 / 截圖型證書）
+- **L6 LLM 視覺改一頁一次 call**（前 10 頁），加 60s timeout 防 hang
+- **階段燈號 LED**（6 站）滿版顯示 + spinner + 細化 skip 原因
+- **案件名稱欄位** — top-level，UI / 清單 / 詳情都顯示
+- **案件詳情頁進行中自動 poll** + inline 進度燈號 + 中斷偵測（job 不見 → 標 error）
+- **案件刪除 / 標記 / 重新檢核改用 showConfirm/showAlert/showPrompt**（不再用瀏覽器原生 prompt）
+- **案件清單**：加檔名欄、人類可讀時間、表頭可排序、刪除 icon 化（owner 軟刪除、admin/auditor 仍可看歷史）
+- **跨檔發現預覽按鈕** — 從 evidence.files 顯示檔名 + 跳對應頁預覽
+- **L5 / L6 訊息含 model 名**（user 知道用哪個模型）
+- **加 .xls / .xlsx / .ppt / .pptx / .odt / .ods / .odp 自動轉 PDF 處理**（同 .doc 自動轉 .docx）
+- **incremental update 偵測改用 EOF marker 計數**（不再因 xref 多誤判）
+
+### 修正
+
+- 「Ground Truth」改「案件基準資訊」、「當前」改「目前」（台灣繁中用語）
+- panel summary 內嵌 h2 致標題高度不一致 → 改成標題直接放 summary
+- 各 layer 高度對齊（L1 補 extra 文字 + min-height reserved）
+- 各 layer 用標準 spinner 動畫 + done 顯示勾勾、skipped 橫線、error 叉
+
 ## [1.6.0] - 2026-05-10
 
 ### 新增
