@@ -47,10 +47,12 @@
 
 {% block content %}
 <h1>{{ icon('id-card', size=22) }} 送件前檢核</h1>
-<p class="muted">一批文件送出去前的最後一關自查 — 6 層檢核（規則 / 文字抽取 / 全頁 OCR / 嵌入圖 OCR / LLM 文字 / LLM 視覺）找出 metadata 殘留、漏改範本、章 / 簽缺漏、偽造痕跡等問題。
-  <a href="cases" style="color:#3b82f6;">查看歷史案件 →</a>
-  <a href="self-entities" style="color:#3b82f6;">　管理我方資料 →</a>
-</p>
+<p class="muted">一批文件送出去前的最後一關自查 — 6 層檢核（規則 / 文字抽取 / 全頁 OCR / 嵌入圖 OCR / LLM 文字 / LLM 視覺）找出 metadata 殘留、漏改範本、章 / 簽缺漏、偽造痕跡等問題。</p>
+
+<div style="display:flex; gap:8px; margin:12px 0 16px;">
+  <a class="btn" href="cases" style="display:inline-flex; align-items:center; gap:6px;">{{ icon('archive', size=14) }} 查看歷史案件</a>
+  <a class="btn" href="self-entities" style="display:inline-flex; align-items:center; gap:6px;">{{ icon('id-card', size=14) }} 管理我方資料</a>
+</div>
 
 <details class="panel" open>
   <summary>1. 上傳檔案</summary>

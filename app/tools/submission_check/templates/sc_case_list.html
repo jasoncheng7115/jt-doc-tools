@@ -37,10 +37,12 @@
 
 {% block content %}
 <h1>{{ icon('id-card', size=22) }} 送件前檢核 — 案件清單</h1>
-<p class="muted">您可以新建案件、回顧歷次檢核結果，或追蹤已歸檔案件。
-  <a href="." style="color:#3b82f6;">＋ 新建案件</a>
-  <a href="self-entities" style="color:#3b82f6; margin-left:12px;">⚙ 管理我方資料</a>
-</p>
+<p class="muted">您可以新建案件、回顧歷次檢核結果，或追蹤已歸檔案件。</p>
+
+<div style="display:flex; gap:8px; margin:12px 0 16px;">
+  <a class="btn btn-primary" href="." style="display:inline-flex; align-items:center; gap:6px;">{{ icon('plus', size=14) }} 新建案件</a>
+  <a class="btn" href="self-entities" style="display:inline-flex; align-items:center; gap:6px;">{{ icon('id-card', size=14) }} 管理我方資料</a>
+</div>
 
 <div class="panel">
   <form method="get" action="cases" class="scl-search">
