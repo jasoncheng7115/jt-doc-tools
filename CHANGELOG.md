@@ -4,6 +4,12 @@
 
 ---
 
+## [1.6.2] - 2026-05-11
+
+### 修正
+
+- **pdf-editor 字型變更後文字殘留 / 重疊 ghost** — 用戶換字型 / 字級後 save，舊文字位置在 redact 範圍外有部分殘留，視覺上看到雙重疊文字。Pass 1 redact 範圍改用 `union(original_bbox, current x/y/w/h) + 2pt 邊距`，新舊位置都覆蓋 + 吃 anti-aliased 邊緣。
+
 ## [1.6.1] - 2026-05-10
 
 ### 新增
