@@ -131,16 +131,11 @@ def _ocr_bbox(page: "fitz.Page", bbox, lang: str = "chi_tra+eng") -> str:
     GIDs as Unicode garbage). Renders the region at high DPI and asks
     tesseract to read it.
 
-    Returns empty string when tesseract / pytesseract is unavailable, OCR
-    crashes, or the result is obviously empty / noise.
+    v1.7.2+: 走 ocr_engine 抽象層（admin 預設 EasyOCR，失敗 fallback tesseract）。
     """
     try:
-        import pytesseract
-        from PIL import Image
-        # 防 user 把 tesseract 裝在預設位置但沒加 PATH（Win11 客戶常見，issue #4）
-        from ...core.sys_deps import configure_pytesseract
-        configure_pytesseract()
-    except ImportError:
+        from ...core import ocr_engine as _oe
+    except Exception:
         return ""
     try:
         x0, y0, x1, y1 = [float(v) for v in bbox]
@@ -166,23 +161,8 @@ def _ocr_bbox(page: "fitz.Page", bbox, lang: str = "chi_tra+eng") -> str:
         dpi = 400 if bh < 40 else 300
         matrix = fitz.Matrix(dpi / 72, dpi / 72)
         pix = page.get_pixmap(matrix=matrix, clip=rect, alpha=False)
-        img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-        # OCR for short CJK is finicky; right PSM varies by content. Try
-        # several modes and pick the longest sane result. PSM 7=single text
-        # line, 6=uniform block, 8=single word, 11=sparse text.
-        aspect = bh / bw
-        psms = ["7", "6", "8", "11"] if aspect <= 0.5 else ["6", "7", "11"]
-        text = ""
-        for psm in psms:
-            try:
-                cand = pytesseract.image_to_string(
-                    img, lang=lang, config=f"--psm {psm}",
-                )
-            except Exception:
-                continue
-            cand = (cand or "").strip()
-            if len(cand) > len(text):
-                text = cand
+        png = pix.tobytes("png")
+        text, _used = _oe.recognize_text(png, langs=lang, preprocess=True)
         # Strip OCR-flavored line noise: stray standalone punctuation, NBSP,
         # zero-width chars, control chars.
         text = "".join(

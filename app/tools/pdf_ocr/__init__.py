@@ -14,8 +14,8 @@ from .router import router
 
 metadata = ToolMetadata(
     id="pdf-ocr",
-    name="PDF 文字層補建",
-    description="對掃描 PDF 補上透明可選取的文字層 — 圖檔 PDF 變可搜尋、可複製文字。可選 LLM 校正 typo / 還原段落。",
+    name="OCR 文字辨識",
+    description="掃描進來的 PDF 或圖片跑 OCR 後，文字變成可搜尋、可滑鼠選取複製。",
     icon="text",
     category="內容處理",
     version="0.1.0",

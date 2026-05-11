@@ -4,6 +4,72 @@
 
 ---
 
+## [1.7.5] - 2026-05-11
+
+### 改進
+
+- **`pdf-ocr` 語言 picker 統計列改放「中日韓 CJK」標題行右側**：原本「已選 N 種、列出 18 種」獨佔一整列且左側留白浪費；改成與 CJK 群組標題同列（標題靠左、統計靠右），整體更緊湊。
+
+---
+
+## [1.7.4] - 2026-05-11
+
+### 修正
+
+- **`pdf-ocr` 語言群組摺起邏輯**：預設摺起的群組（西方語言、東南亞 / 其他）若群組內有預設勾選的語言（例如「英文」預設勾選屬於西方語言群組）則自動展開，避免使用者看不到已勾選但被藏起來的項目。
+
+---
+
+## [1.7.3] - 2026-05-11
+
+### 改進
+
+- **`pdf-ocr` 語言挑選 UI**：不常用語言群組「西方語言」（英 / 德 / 法 / 西 / 義 / 葡 / 荷 / 俄）與「東南亞 / 其他」（越 / 泰 / 印尼 / 阿拉伯 / 希伯來 / 印地）預設摺起，使用者要勾選時點開即可；常用的「中日韓 CJK」群組保留展開。減少視覺雜訊，常用語言一眼到位。
+
+---
+
+## [1.7.2] - 2026-05-11
+
+### 新增
+
+- **新 admin 頁：`/admin/ocr-langs`（OCR 訓練檔管理）** — admin 可從 web UI 安裝 / 移除 tesseract 語言訓練檔。
+  - 內建 18 種常用語言（繁中 / 簡中 / 日 / 韓 + 英 / 德 / 法 / 西 / 義 / 葡 / 荷 / 俄 + 越 / 泰 / 印尼 / 阿拉伯 / 希伯來 / 印地）以及自動偵測「其他已安裝訓練檔」
+  - 安裝來源：[`tesseract-ocr/tessdata_fast`](https://github.com/tesseract-ocr/tessdata_fast) GitHub repo（Apache 2.0）
+  - 自動偵測 tessdata 目錄（跨 Linux apt / macOS brew / Windows UB-Mannheim 三平台），跑 `tesseract --list-langs` 解析它印的路徑最可靠
+  - **權限預檢**：service 帳號無寫入權限時（典型 Linux apt 場景），UI 上方紅字告知，按下「安裝」會跳出**該平台的具體 sudo 指令**（apt / curl / Invoke-WebRequest）讓 admin 直接複製執行；不會等下載跑完才失敗
+  - eng / chi_tra 列為「核心語言」不可移除（避免被誤刪後 OCR 整組壞）
+  - 安裝 / 移除走 atomic rename（`.part` tmp file 先寫完才 rename），避免半成品污染 tessdata
+  - **upgrade-safe**：不需 DB migration，既有客戶 `jtdt update` 後自動有新頁；既有 chi_tra 自動下載機制（cli.py）共用同一 catalog，行為不變
+- **`pdf-ocr` 語言 picker** 加 hint 連結「需要其他語言請至 OCR 訓練檔管理 安裝」
+- **共用 catalog**：`app/core/tessdata_manager.py` 集中 18 種語言定義 + 安裝 / 偵測 helper，pdf-ocr router + admin/ocr-langs + cli.py chi_tra 三處共用
+
+### 安全
+
+- `tessdata_manager.is_valid_lang_code()` 嚴格白名單 + regex `^[a-z]{2,4}(_[a-z]{2,4})?$` — 擋住 path traversal（`../etc/passwd` 等）
+- 寫檔目標路徑用 `Path / f'{code}.traineddata'`，code 已經白名單檢過
+
+## [1.7.1] - 2026-05-11
+
+### 變更
+
+- **`pdf-ocr` 中文名改短**：「PDF 文字層補建」→「**OCR 文字辨識**」。原本太長 sidebar 顯示換行，h1 / sidebar / 下載按鈕「下載文字辨識後 PDF」全英→中。
+- **加入「驗證是本工具 OCR 的」三招**：解決客戶測試時「macOS 預覽程式自動 OCR 過了，怎麼確認下載的 PDF 是本工具產生的而不是被預覽程式偷做的？」場景。
+  - PDF metadata Producer 蓋章：`jt-doc-tools pdf-ocr v<版本>`，Acrobat / Preview「檔案 → 內容/簡介」可看到
+  - PDF metadata Keywords 加 `OCR:tesseract-<版本> langs:<語言>`
+  - 每處理過的頁左下角埋一個 `jtdt-pdf-ocr` 透明 marker word，Cmd+F 就能搜到
+  - 完成畫面會列出三招驗證方式說明，user 直接照做
+- **`pdf-ocr` 支援圖檔上傳**：新增接受 `.jpg / .jpeg / .png / .tif / .tiff / .bmp / .webp`，上傳後自動包成單頁 PDF 再走 OCR pipeline。
+  - 解決使用者場景：macOS 掃完 PDF 後預覽程式自動 OCR，使用者拿不到「真的沒文字層的 PDF」沒辦法測；改成可直接丟掃描圖檔進來。
+  - UI hint 加註「圖片會自動包成單頁 PDF」；上傳完成提示「已從 .png 自動轉成 PDF」。
+  - 上限沿用 200 MB；圖片 → PDF 用 PyMuPDF 同尺寸頁包圖（一張圖一頁）。
+- **`pdf-ocr` 語言選擇器全面美化**：
+  - 原本 checkbox 太陽春、只列已安裝的少數語言碼。改成 chip / 標籤式設計：圓角、hover 抬升、選中藍底白字 checkmark
+  - 內建 18 種常用語言（**繁中 / 簡中 / 日 / 韓** + 英 / 德 / 法 / 西 / 義 / 葡 / 荷 / 俄 + 越 / 泰 / 印尼 / 阿拉伯 / 希伯來 / 印地）分三群（CJK / 西方 / 其他）顯示，每個 chip 同時秀「中文名 + 語言碼 + hover tooltip 用途」
+  - 未安裝的語言以虛線框 + 淡灰色 + 「(未安裝)」紅字標示，hover 提示如何安裝
+  - 加 **快速套用按鈕**：「繁中 + 英文」/「繁中 + 簡中 + 英文」/「全部取消」
+  - 即時摘要：「將使用 N 種語言：繁體中文 chi_tra、英文 eng」
+  - 已安裝但不在 catalog 的訓練檔（如 osd 以外的冷門檔）也會列出，不丟掉
+
 ## [1.7.0] - 2026-05-11
 
 ### 新增
@@ -2316,7 +2382,7 @@
 
 ### 變更（pdf-annotations-flatten 改名 + 預覽 + spinner）
 
-- **「註解固定化」改名為「註解平面化」**：與 Adobe Acrobat 繁中正式翻譯一致（「平面化圖層 / 平面化透明度」）。`固定化` 太像直譯日文/中文不夠在地.route id `pdf-annotations-flatten` 不變。
+- **「註解固定化」改名為「註解平面化」**：與 Adobe Acrobat 繁中正式翻譯一致（「平面化圖層 / 平面化透明度」）。`固定化` 太像直譯日文/中文不夠在地。route id `pdf-annotations-flatten` 不變。
 - **平面化結果預覽**：`/flatten` 不再立刻回傳 PDF，而是回 `{baked_uid, page_count, baked_count}`；UI 顯示每頁縮圖（lazy-load via `/baked-preview/{uid}/{page}`），點縮圖開 lightbox 看大圖；確認後才按下「下載平面化後的 PDF」呼叫 `/baked-download/{uid}`。
 - **按鈕處理中 disable + spinner**：「執行平面化」「下載」按鈕在處理時變成 disabled、顯示旋轉的 spinner、文字改成「處理中… / 下載中…」；完成後還原。
 - **API endpoint 維持原行為**：`POST /api/pdf-annotations-flatten` 公開 API 仍直接回 PDF（不走預覽流程），對外接口不破壞。
@@ -2435,7 +2501,7 @@
 
 ### 修正
 
-- **擷取圖片卡片左上勾選 / 右上下載按鈕看不清楚**：之前白底淺紫邊在綠色 picked halo 上太淡，幾乎隱形。改成深底高對比 — 勾選預設白底深灰邊，picked 後變實心綠 + 白勾；下載按鈕改深色 （#0f172a） 背景 + 白色 icon，hover 變紫色.z-index:2 確保穩定在最上層。
+- **擷取圖片卡片左上勾選 / 右上下載按鈕看不清楚**：之前白底淺紫邊在綠色 picked halo 上太淡，幾乎隱形。改成深底高對比 — 勾選預設白底深灰邊，picked 後變實心綠 + 白勾；下載按鈕改深色 （#0f172a） 背景 + 白色 icon，hover 變紫色。z-index:2 確保穩定在最上層。
 
 ---
 
@@ -2723,7 +2789,7 @@
 
 ### 修正
 
-- **編輯使用者 modal picker 名稱仍被 `…` 截掉**：把 `.picker-name` 從 `nowrap + ellipsis` 改成 `word-break:break-word`，名字長就 wrap 到第二行（每筆稍高一點）但保證看得完整；checkbox 用 `align-items:flex-start` 對齊頂部.modal max-width 從 520px 拉到 600px 給更多橫向空間。
+- **編輯使用者 modal picker 名稱仍被 `…` 截掉**：把 `.picker-name` 從 `nowrap + ellipsis` 改成 `word-break:break-word`，名字長就 wrap 到第二行（每筆稍高一點）但保證看得完整；checkbox 用 `align-items:flex-start` 對齊頂部。modal max-width 從 520px 拉到 600px 給更多橫向空間。
 
 ---
 

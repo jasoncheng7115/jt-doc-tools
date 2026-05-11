@@ -5,8 +5,23 @@
 <h1>{{ icon('gear', size=22) }} 相依套件檢查</h1>
 <p class="muted">
   本工具列出所有需要的系統套件、Python 相依套件與字型，並顯示在這台機器上是否安裝、版本、以及缺漏時的安裝指令。
-  選用相依（標 <span class="dep-soft">optional</span>）缺失時相關功能會 graceful 退化，本體仍可運作；必要相依缺失則影響核心功能。
+  選用相依（標 <span class="dep-soft">optional</span>）缺失時相關功能會自動跳過，本體仍可運作；必要相依缺失則影響核心功能。
 </p>
+
+<div class="panel ver-panel" id="versionPanel">
+  <div class="ver-grid">
+    <div class="ver-card">
+      <div class="ver-label">本機版本</div>
+      <div class="ver-num" id="curVer">v{{ app_version }}</div>
+    </div>
+    <div class="ver-card" id="latestVerBox">
+      <div class="ver-label">GitHub 最新版本</div>
+      <div class="ver-num ver-num-pending" id="latestVer">尚未檢查</div>
+      <div class="ver-hint" id="latestVerHint">點右側按鈕主動偵測（不會自動連網）</div>
+    </div>
+  </div>
+  <button class="btn ver-btn" type="button" id="btnCheckLatest">{{ icon('refresh', size=14) }} 檢查 GitHub 最新版本</button>
+</div>
 
 <div class="panel">
   {% set total = deps | length %}
@@ -133,7 +148,67 @@
   .dep-table tr.row-bad:hover { background: rgba(239, 68, 68, 0.07); }
   .dep-table tr.row-warn:hover { background: rgba(245, 158, 11, 0.08); }
 
-  .cell-status { white-space: nowrap; width: 110px; }
+  .cell-status { white-space: nowrap; width: 80px; padding-left:10px !important; padding-right:8px !important; }
+  .dep-table th:first-child { width: 80px; padding-left:10px !important; padding-right:8px !important; }
+
+  /* ---- 版本資訊 panel ---- */
+  .ver-panel {
+    display:flex; align-items:center; gap:24px; flex-wrap:wrap;
+    padding:18px 22px;
+  }
+  .ver-grid {
+    display:grid;
+    grid-template-columns: minmax(160px, auto) 1fr;
+    gap:32px;
+    flex:1; min-width:0;
+    align-items:center;
+  }
+  .ver-card {
+    display:flex; flex-direction:column; gap:6px;
+    min-width:0;
+  }
+  .ver-label {
+    font-size:11px; color:#94a3b8;
+    font-weight:600; letter-spacing:.5px; text-transform:uppercase;
+    line-height:1;
+  }
+  .ver-num {
+    font-size:22px; font-weight:700; color:#0f172a;
+    font-family:'SF Mono', Menlo, Consolas, monospace;
+    line-height:1.1;
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  }
+  .ver-num a {
+    font-size:12px; font-family:inherit; font-weight:500;
+    color:#3b82f6; text-decoration:none;
+  }
+  .ver-num a:hover { text-decoration:underline; }
+  .ver-num-pending { color:#94a3b8; font-weight:500; font-size:16px; font-family:inherit; }
+  .ver-hint {
+    font-size:12px; color:#64748b; line-height:1.5;
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  }
+  .ver-hint code {
+    background:#f1f5f9; padding:1px 6px; border-radius:3px;
+    font-size:11px; color:#0f172a;
+  }
+  .ver-card.is-outdated .ver-num { color:#dc2626; }
+  .ver-card.is-current  .ver-num { color:#10b981; }
+  .ver-card.is-newer    .ver-num { color:#3b82f6; }
+  .ver-status-pill {
+    display:inline-flex; align-items:center;
+    padding:2px 8px; border-radius:10px;
+    font-size:11px; font-weight:600;
+    line-height:1.4;
+  }
+  .ver-status-pill.ver-out { background:#fee2e2; color:#991b1b; }
+  .ver-status-pill.ver-cur { background:#dcfce7; color:#166534; }
+  .ver-status-pill.ver-dev { background:#dbeafe; color:#1e40af; }
+  .ver-btn { flex-shrink:0; align-self:center; }
+  @media (max-width: 720px) {
+    .ver-grid { grid-template-columns: 1fr; gap:14px; }
+    .ver-btn { width:100%; }
+  }
   .dep-pill {
     display:inline-flex; align-items:center; justify-content:center;
     padding:4px 10px; border-radius:12px;
@@ -194,12 +269,64 @@
     try {
       const r = await fetch('/admin/api/sys-deps');
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      // Easiest: just reload the page so server-side template re-renders.
       location.reload();
     } catch (e) {
       btn.innerHTML = orig;
       btn.disabled = false;
       alert('檢查失敗：' + e.message);
+    }
+  });
+
+  // GitHub 最新版本 — admin 主動點才連網
+  document.getElementById('btnCheckLatest').addEventListener('click', async () => {
+    const btn = document.getElementById('btnCheckLatest');
+    const verBox = document.getElementById('latestVerBox');
+    const verEl = document.getElementById('latestVer');
+    const hintEl = document.getElementById('latestVerHint');
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '查詢中…';
+    verEl.textContent = '查詢中…';
+    verEl.className = 'ver-num ver-num-pending';
+    if (hintEl) hintEl.textContent = '正在連線到 api.github.com，最多 8 秒…';
+    try {
+      const r = await fetch('/admin/api/check-latest-version', {method: 'POST'});
+      const j = await r.json();
+      if (!j.ok) {
+        verEl.textContent = '查詢失敗';
+        verEl.className = 'ver-num ver-num-pending';
+        if (hintEl) hintEl.innerHTML = '<span style="color:#ef4444;">' + (j.error || '未知錯誤') + '</span>';
+        verBox.classList.remove('is-current', 'is-outdated', 'is-newer');
+      } else {
+        verEl.className = 'ver-num';  // reset pending style → bold mono
+        let pillHtml = '';
+        verBox.classList.remove('is-current', 'is-outdated', 'is-newer');
+        let hintHtml = '';
+        if (j.is_outdated) {
+          verBox.classList.add('is-outdated');
+          pillHtml = '<span class="ver-status-pill ver-out">有更新可用</span>';
+          hintHtml = '請以管理員身分跑 <code>sudo jtdt update</code>（Linux/macOS）或 <code>jtdt update</code>（Windows）';
+        } else if (j.current === j.latest) {
+          verBox.classList.add('is-current');
+          pillHtml = '<span class="ver-status-pill ver-cur">已是最新</span>';
+          hintHtml = '本機與 GitHub main 同版號';
+        } else {
+          verBox.classList.add('is-newer');
+          pillHtml = '<span class="ver-status-pill ver-dev">dev build</span>';
+          hintHtml = '本機版本比 GitHub 新（開發中或已 commit 但尚未推送）';
+        }
+        const linkHtml = j.html_url
+          ? ' <a href="' + j.html_url + '" target="_blank" rel="noopener">CHANGELOG</a>'
+          : '';
+        verEl.innerHTML = 'v' + j.latest + pillHtml + linkHtml;
+        if (hintEl) hintEl.innerHTML = hintHtml;
+      }
+    } catch (e) {
+      verEl.textContent = '查詢失敗';
+      if (hintEl) hintEl.innerHTML = '<span style="color:#ef4444;">' + e.message + '</span>';
+    } finally {
+      btn.innerHTML = orig;
+      btn.disabled = false;
     }
   });
 </script>

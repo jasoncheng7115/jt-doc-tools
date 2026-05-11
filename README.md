@@ -1,6 +1,6 @@
-# Jason Tools 文件工具箱 v1.7.0
+# Jason Tools 文件工具箱 v1.7.5
 
-> 整合式 PDF / Office 文件處理平台，30 個工具一站式解決：**填單用印**、**浮水印**、**多頁合併 / 拆分 / 旋轉 / 整理**、**轉檔**、**去識別化**、**字數統計**、**註解整理**、**差異比對**、**逐句翻譯**、**頁面編輯器**、**加密 / 解密**...
+> 整合式 PDF / Office 文件處理平台，32 個工具一站式解決：**填單用印**、**浮水印**、**多頁合併 / 拆分 / 旋轉 / 整理**、**轉檔**、**去識別化**、**字數統計**、**註解整理**、**差異比對**、**逐句翻譯**、**頁面編輯器**、**加密 / 解密**...
 >
 > 企業功能：**本機 / LDAP / AD 多領域認證**、**RBAC 角色權限**、**稽核記錄**、**SIEM 轉送**(syslog / CEF / GELF)、**字型管理**、**REST API**。
 >
@@ -20,6 +20,21 @@
 
 ## 一行安裝
 
+### 系統需求
+
+| 項目 | 最低 | 建議 |
+|---|---|---|
+| 作業系統 | Ubuntu 20.04+ / Debian 11+ / macOS 12+ / Windows 10 1809+ | 任一最新版 |
+| 磁碟空間 | **3 GB** 可用（程式 + Python deps + 模型檔）| 5 GB |
+| 記憶體 RAM | 2 GB 可用 | 4 GB+ |
+| CPU | x86_64 / arm64（Apple Silicon、Win11 ARM 都可）| 4 核心+ |
+| 網路 | 安裝時可連 GitHub / PyPI（之後純內網運作）| — |
+| Python | 3.10+（安裝腳本會自動處理 uv-managed Python） | — |
+
+> **磁碟用量大解析**：Python 環境 ~1.5 GB（含 PyTorch / EasyOCR 主 OCR 引擎）+ tesseract trained data ~80 MB（chi_tra fast+best 雙變體 + eng）+ OxOffice/LibreOffice ~1 GB（Linux 自動裝 / macOS Win 提示安裝）。EasyOCR 模型首次 OCR 時下載 ~150 MB 到使用者目錄。
+
+### 一行指令
+
 **Linux / macOS**:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.sh | sudo bash
@@ -32,11 +47,13 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 
 裝完開瀏覽器到 **<http://127.0.0.1:8765/>** 即可使用。
 
+> 安裝時長約 5-15 分鐘（依網速 — PyTorch 700MB 是大頭）。網速慢的環境建議先 `screen` / `tmux` 開背景再跑，避免斷線。
+
 詳細安裝說明見 **[INSTALL.md](INSTALL.md)**(含必要工具、平台差異、解除安裝)。
 
 ---
 
-## 30 個工具速覽
+## 32 個工具速覽
 
 ### 填單用印
 - **表單自動填寫** — 自動偵測欄位 + 模板填值
@@ -52,6 +69,8 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 - **擷取文字 / 圖片 / 附件** — 含 LLM 段落重排選項
 - **字數統計** — 表格 + 圖表 + LLM 摘要
 - **註解整理 / 清除 / 平面化**
+- **OCR 文字辨識** — 掃描 PDF / 圖片跑 OCR 後變可搜尋、可滑鼠選取複製（同 macOS 預覽程式 Live Text 概念）；雙引擎（**EasyOCR** 預設，CJK 強；**Tesseract** 備援），可選 LLM 校正 typo
+- **送件前檢核** — 批次驗收：頁面尺寸、字型嵌入、欄位完整、敏感資料殘留、隱藏內容
 
 ### 格式轉換 [需 OxOffice/LibreOffice]
 - **文書轉 PDF / 圖片** — Word / Excel / PowerPoint / ODF
@@ -66,13 +85,13 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 - **逐句翻譯**
 - **壓縮**
 
-> 標 [需 OxOffice/LibreOffice] 的工具會用到 OxOffice / LibreOffice(OxOffice 優先，OSSII 維護的台灣本地化 fork,CJK 支援更好)。其他 23 個工具只處理 PDF / 純文字 / 圖片，不需要 Office 引擎。安裝腳本會自動處理。
+> 標 [需 OxOffice/LibreOffice] 的工具會用到 OxOffice / LibreOffice（OxOffice 優先，OSSII 維護的台灣本地化 fork，CJK 支援更好）。其他 25 個工具只處理 PDF / 純文字 / 圖片，不需要 Office 引擎。安裝腳本會自動處理。
 
 ---
 
 ## LLM AI 加值（選用，預設關閉）
 
-接 OpenAI-compatible 後端（本機 Ollama / vLLM / LM Studio / DGX Spark）後，**8 個工具**自動多出聰明選項：
+接 OpenAI-compatible 後端（本機 Ollama / vLLM / LM Studio / DGX Spark）後，**9 個工具**自動多出聰明選項：
 
 | 工具 | LLM 做什麼 | 模式 |
 |---|---|---|

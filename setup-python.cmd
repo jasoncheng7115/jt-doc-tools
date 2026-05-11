@@ -58,5 +58,14 @@ set IMP_RC=!ERRORLEVEL!
 echo [debug] import smoke test exit=!IMP_RC!
 if not !IMP_RC! equ 0 exit /b 4
 
+REM EasyOCR 是 v1.7.2 主 OCR 引擎；deps 重（PyTorch ~700MB）— 失敗 warn 不 die
+"%VENV_PY%" -c "import easyocr; print('easyocr OK')" 2>nul
+if !ERRORLEVEL! equ 0 (
+    echo [OK] EasyOCR available
+) else (
+    echo [WARN] EasyOCR not installed - OCR will fall back to tesseract (lower CJK accuracy)
+    echo [WARN]   Manual install: "%UV_EXE%" sync   or  "%VENV_PY%" -m pip install easyocr
+)
+
 echo [OK] Python environment ready: %INSTALL_DIR%\.venv
 exit /b 0

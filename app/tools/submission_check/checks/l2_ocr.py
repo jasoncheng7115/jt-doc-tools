@@ -81,17 +81,15 @@ def _has_text_layer(pdf_path: Path) -> bool:
 
 
 def _ocr_image_bytes(img_bytes: bytes, langs: str = DEFAULT_LANGS) -> str:
-    """對圖片 bytes 跑 OCR。"""
+    """對圖片 bytes 跑 OCR。
+    v1.7.2+: 走 ocr_engine 抽象層（admin 預設 EasyOCR，失敗 fallback tesseract）。"""
     try:
-        from app.core.sys_deps import configure_pytesseract
-        configure_pytesseract()
+        from app.core import ocr_engine as _oe
     except Exception:
-        pass
+        return ""
     try:
-        import pytesseract
-        from PIL import Image
-        img = Image.open(io.BytesIO(img_bytes))
-        return pytesseract.image_to_string(img, lang=langs) or ""
+        text, _used = _oe.recognize_text(img_bytes, langs=langs, preprocess=True)
+        return text or ""
     except Exception:
         return ""
 

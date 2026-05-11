@@ -248,6 +248,64 @@ function Install-Tesseract {
 }
 
 # uv
+function Ensure-VCRedist {
+    # PyTorch 2.x（EasyOCR 主依賴）需要 Visual C++ Redistributable 2015-2022
+    # (14.40+)。沒裝會 c10.dll load failure (WinError 1114)，EasyOCR 完全
+    # 載不起來，OCR 會 silent fallback 到 tesseract。
+    #
+    # 即使 vc_redist installer 回 exit 3010 (suggests reboot)，PyTorch 仍可
+    # 在「之後新 spawn 的 process」載入 — 我們不 prompt user 重啟，後續
+    # uv sync + service restart 都是新 process，會抓到新 DLL。
+    Log "Checking Visual C++ Redistributable (PyTorch dep) ..."
+    $key  = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
+    $key2 = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
+    $current = ""
+    foreach ($k in @($key, $key2)) {
+        if (Test-Path $k) {
+            try { $v = (Get-ItemProperty $k).Version; if ($v) { $current = $v; break } } catch {}
+        }
+    }
+    # 解析版本：v14.40+ 才符合現代 PyTorch；之前的（如 v14.0.23026 = 2015 RTM）不行
+    $needsInstall = $true
+    if ($current -match '^v?(\d+)\.(\d+)') {
+        $major = [int]$Matches[1]
+        $minor = [int]$Matches[2]
+        if ($major -gt 14 -or ($major -eq 14 -and $minor -ge 40)) {
+            $needsInstall = $false
+            Ok "Visual C++ Redistributable already current ($current)"
+        } else {
+            Log "Visual C++ Redistributable is old ($current) — upgrading to latest"
+        }
+    } else {
+        Log "Visual C++ Redistributable not found — installing latest"
+    }
+    if (-not $needsInstall) { return }
+
+    $vc = Join-Path $env:TEMP "jtdt-vc_redist.x64.exe"
+    if (Test-Path $vc) { Remove-Item $vc -Force -ErrorAction SilentlyContinue }
+    try {
+        Log "Downloading Microsoft Visual C++ Redistributable (~25 MB) ..."
+        Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" `
+            -OutFile $vc -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+        Log "Installing (silent, no reboot) ..."
+        $proc = Start-Process -FilePath $vc -ArgumentList "/install","/quiet","/norestart" `
+            -Wait -PassThru -ErrorAction Stop
+        if ($proc.ExitCode -eq 0) {
+            Ok "Visual C++ Redistributable installed"
+        } elseif ($proc.ExitCode -eq 3010) {
+            # 3010 = success but reboot recommended.PyTorch 仍可在新 process load
+            Ok "Visual C++ Redistributable installed (exit 3010 — 新 process 可正常 load，不需重啟)"
+        } else {
+            Warn "vc_redist exit $($proc.ExitCode) — EasyOCR 可能載不起，OCR 會 fallback tesseract"
+        }
+    } catch {
+        Warn "vc_redist 下載 / 安裝失敗：$_"
+        Warn "  EasyOCR 將無法載入；OCR 會自動 fallback tesseract（CJK 識別率較弱）"
+        Warn "  手動補裝：開啟 https://aka.ms/vs/17/release/vc_redist.x64.exe 安裝"
+    }
+}
+
+
 function Install-Uv {
     if (Test-Path $UvExe) { Ok "uv already present"; return }
     Log "Downloading uv ..."
@@ -623,6 +681,10 @@ Fetch-Code
 # 內 (github/packaging/windows/winsw.exe)，所以 git clone 完才有 binary 可用。
 # 不再依賴 nssm.cc 之類不穩定的下載源；fallback 也走 GitHub Release。
 Install-Winsw
+# v1.7.2: PyTorch (EasyOCR 主依賴) 需要新版 Visual C++ Redistributable，
+# 必須在 Setup-Python (uv sync) 之前裝好，不然 uv 雖會把 torch wheel 下載
+# 安裝，但執行時 c10.dll 會 fail to load。
+Ensure-VCRedist
 Setup-Python
 Prepare-Data
 Install-Service

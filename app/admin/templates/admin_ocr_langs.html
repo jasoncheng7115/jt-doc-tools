@@ -1,0 +1,616 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}OCR 訓練檔管理 · {{ app_name }}{% endblock %}
+
+{% block head %}
+<style>
+.ol-summary { display:flex; gap:16px; flex-wrap:wrap; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:14px; }
+.ol-stat { font-size:13px; color:#475569; }
+.ol-stat b { color:#0f172a; font-size:15px; }
+.ol-path { font-family:'SF Mono', Menlo, Consolas, monospace; font-size:12px; color:#64748b; word-break:break-all; }
+.ol-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:10px; margin-top:10px; }
+.ol-card {
+  position:relative;
+  display:flex; flex-direction:column; gap:6px;
+  padding:12px 14px;
+  border:1px solid #e2e8f0; border-radius:8px; background:#fff;
+  transition:all .15s;
+}
+.ol-card:hover { border-color:#cbd5e1; box-shadow:0 2px 6px rgba(0,0,0,.04); }
+.ol-card.is-installed { border-color:#86efac; background:#f0fdf4; }
+.ol-card-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.ol-card-name { font-weight:600; color:#0f172a; font-size:14px; }
+.ol-card-code { font-family:'SF Mono', Menlo, Consolas, monospace; font-size:11px; color:#64748b; background:#f1f5f9; padding:2px 7px; border-radius:3px; }
+.ol-card-hint { font-size:12px; color:#64748b; }
+.ol-card-meta { display:flex; align-items:center; gap:10px; font-size:12px; color:#64748b; margin-top:2px; }
+.ol-card-meta .ol-size { background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:3px; font-size:11px; }
+.ol-card.is-installed .ol-card-meta .ol-size { background:#dcfce7; color:#166534; }
+.ol-card-actions { display:flex; gap:6px; margin-top:8px; }
+.ol-card-actions .btn { font-size:12px; padding:5px 10px; flex:1; }
+.ol-card-busy { opacity:.6; pointer-events:none; }
+.ol-installed-badge {
+  position:absolute; top:-7px; right:-4px;
+  background:#10b981; color:#fff;
+  font-size:10px; font-weight:600;
+  padding:2px 7px; border-radius:8px;
+  display:inline-flex; align-items:center; gap:3px;
+}
+.ol-toast { position:fixed; bottom:20px; right:20px; padding:10px 16px; border-radius:6px; color:#fff; font-size:13px; box-shadow:0 4px 12px rgba(0,0,0,.15); z-index:9999; opacity:0; transition:opacity .25s; }
+.ol-toast.show { opacity:1; }
+.ol-toast.ok { background:#10b981; }
+.ol-toast.err { background:#ef4444; }
+.ol-warn { background:#fef3c7; border-left:3px solid #f59e0b; padding:10px 14px; font-size:13px; color:#92400e; border-radius:4px; margin-bottom:14px; }
+.ol-group { margin-bottom:18px; }
+.ol-group-label { font-size:13px; font-weight:700; color:#475569; margin-bottom:6px; padding-left:2px; }
+
+/* OCR section collapsibles — 用 details/summary 內建展開折疊行為
+   不刻意 hide 原生 marker（Safari / Chrome / FF 各家 hide 寫法不一致，
+   我之前自繪 ▶ + 原生 ▼ 有時會同時顯示）— 直接用瀏覽器原生 ▼/▶ 一個就好 */
+.ocr-section > summary {
+  cursor: pointer;
+  padding: 8px 12px;
+  outline: none;
+  user-select: none;
+}
+.ocr-section > summary > h2 {
+  display: inline;
+  margin: 0;
+  font-size: 17px;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+/* 安裝指引 modal */
+.ol-modal-bg {
+  position:fixed; inset:0; background:rgba(15,23,42,.55);
+  display:none; align-items:center; justify-content:center; z-index:9998;
+  padding:20px; box-sizing:border-box;
+}
+.ol-modal-bg.show { display:flex; }
+.ol-modal {
+  background:#fff; border-radius:12px;
+  max-width:720px; width:100%; max-height:90vh; overflow-y:auto;
+  box-shadow:0 20px 60px rgba(0,0,0,.3);
+}
+.ol-modal-head {
+  padding:18px 22px 14px; border-bottom:1px solid #e2e8f0;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.ol-modal-title { font-size:16px; font-weight:600; color:#0f172a; margin:0; }
+.ol-modal-close {
+  background:none; border:none; cursor:pointer; font-size:22px; color:#94a3b8; line-height:1; padding:0 4px;
+}
+.ol-modal-close:hover { color:#475569; }
+.ol-modal-body { padding:18px 22px; }
+.ol-modal-msg { font-size:14px; color:#334155; margin-bottom:18px; line-height:1.6; }
+.ol-method { margin-bottom:18px; padding:14px 16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; }
+.ol-method:last-child { margin-bottom:0; }
+.ol-method-name { font-weight:600; color:#0f172a; font-size:14px; margin-bottom:6px; }
+.ol-method-note { font-size:12px; color:#64748b; margin-bottom:10px; }
+.ol-cmd-row { display:flex; align-items:stretch; gap:0; border:1px solid #cbd5e1; border-radius:6px; overflow:hidden; background:#fff; }
+.ol-cmd {
+  flex:1; padding:10px 12px;
+  font-family:'SF Mono', Menlo, Consolas, monospace; font-size:12.5px;
+  color:#0f172a; background:#fff;
+  word-break:break-all; white-space:pre-wrap;
+  line-height:1.5; user-select:all;
+}
+.ol-cmd-copy {
+  background:#3b82f6; color:#fff; border:none;
+  padding:0 14px; cursor:pointer; font-size:12px; font-weight:500;
+  display:flex; align-items:center; gap:5px;
+  transition:background .15s;
+  flex-shrink:0; min-width:70px;
+  justify-content:center;
+}
+.ol-cmd-copy:hover { background:#2563eb; }
+.ol-cmd-copy.copied { background:#10b981; }
+.ol-modal-foot {
+  padding:14px 22px 18px; border-top:1px solid #e2e8f0;
+  display:flex; justify-content:space-between; align-items:center; gap:10px;
+}
+.ol-modal-foot .ol-tip { font-size:12px; color:#64748b; flex:1; }
+.ol-modal-foot .btn { font-size:13px; padding:7px 16px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>{{ icon('text', size=22) }} OCR 引擎與訓練檔管理</h1>
+<p class="muted">雙 OCR 引擎並存。<b>EasyOCR</b>（主，預設）對 CJK 識別率明顯較高；<b>Tesseract</b>（備）輕量、per-char bbox 精準。可隨時切換。</p>
+
+<!-- Engine Selector -->
+<div class="panel" style="display:flex; align-items:center; gap:0; flex-wrap:wrap; padding:0; margin-bottom:16px; overflow:hidden;">
+  <div style="flex:1; min-width:240px; padding:18px 22px; background:#f8fafc; border-right:1px solid #e2e8f0; align-self:stretch; display:flex; flex-direction:column; justify-content:center;">
+    <div style="font-size:16px; color:#0f172a; font-weight:700; display:flex; align-items:center; gap:8px;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M1 12h6m10 0h6M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"/></svg>
+      OCR 引擎
+    </div>
+    <div style="font-size:12px; color:#64748b; margin-top:6px; line-height:1.5;">所有 OCR 工具預設用此引擎；失敗會自動降回另一個</div>
+  </div>
+  <div style="padding:18px 22px; display:flex; align-items:center;">
+    <div style="display:flex; gap:0; border:1.5px solid #e2e8f0; border-radius:6px; overflow:hidden; background:#fff;">
+    <label style="cursor:pointer; padding:8px 16px; font-size:13px; {% if default_engine == 'easyocr' %}background:#3b82f6; color:#fff; font-weight:600;{% else %}background:#fff; color:#475569;{% endif %} border-right:1px solid #e2e8f0; display:inline-flex; align-items:center; gap:8px;">
+      <input type="radio" name="enginePref" value="easyocr" {% if default_engine == 'easyocr' %}checked{% endif %} style="display:none;">
+      <span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border:1.5px solid currentColor; border-radius:50%; font-size:11px; font-weight:bold;">{% if default_engine == 'easyocr' %}✓{% endif %}</span>
+      EasyOCR <span style="opacity:.8; font-size:11px;">— 主引擎、CJK 強</span>
+    </label>
+    <label style="cursor:pointer; padding:8px 16px; font-size:13px; {% if default_engine == 'tesseract' %}background:#3b82f6; color:#fff; font-weight:600;{% else %}background:#fff; color:#475569;{% endif %} display:inline-flex; align-items:center; gap:8px;">
+      <input type="radio" name="enginePref" value="tesseract" {% if default_engine == 'tesseract' %}checked{% endif %} style="display:none;">
+      <span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border:1.5px solid currentColor; border-radius:50%; font-size:11px; font-weight:bold;">{% if default_engine == 'tesseract' %}✓{% endif %}</span>
+      Tesseract <span style="opacity:.8; font-size:11px;">— 備用、輕量</span>
+    </label>
+    </div>
+  </div>
+  <div id="engineMsg" style="display:none; font-size:13px; flex-basis:100%; padding:8px 12px; border-radius:6px; border-left:3px solid #10b981; background:#f0fdf4; color:#166534; margin:0 18px 18px;"></div>
+</div>
+
+<!-- ============== EasyOCR Section (主引擎) ============== -->
+<details class="panel ocr-section" id="easyocrSection" style="margin-bottom:16px; border-left:4px solid #3b82f6;" {% if default_engine == 'easyocr' %}open{% endif %}>
+  <summary>
+    <h2>EasyOCR <span class="muted" style="font-size:13px; font-weight:normal;">— 主 OCR 引擎（v1.7.2 起預設）</span></h2>
+  </summary>
+  <div>
+  <p class="muted" style="font-size:13px;">JaidedAI（泰國公司）開源，Apache-2.0。基於 LSTM/CRNN，CJK 識別率明顯優於 tesseract。<b>不需手動管理訓練檔</b> — 首次使用某語言時自動下載 ~150MB 模型到 <code>~/.EasyOCR/model/</code>。</p>
+  <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:10px;">
+    <div style="padding:10px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; min-width:200px;">
+      <div style="font-size:11px; color:#94a3b8; font-weight:600; letter-spacing:.4px; text-transform:uppercase;">引擎狀態</div>
+      <div style="margin-top:4px; font-size:14px;">
+        {% if easyocr_available %}
+          <span style="color:#10b981; font-weight:600;">✓ 已安裝</span>
+        {% else %}
+          <span style="color:#ef4444; font-weight:600;">✗ 未安裝</span>
+          <a href="/admin/sys-deps" style="margin-left:6px; font-size:12px;">看相依套件 →</a>
+        {% endif %}
+      </div>
+    </div>
+    <div style="padding:10px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; min-width:200px;">
+      <div style="font-size:11px; color:#94a3b8; font-weight:600; letter-spacing:.4px; text-transform:uppercase;">內建支援語言</div>
+      <div style="margin-top:4px; font-size:13px; color:#475569;">
+        繁中 / 簡中 / 英 / 日 / 韓 / 越 / 泰 / 阿拉伯 / 80+ 種語言<br>
+        <span class="muted" style="font-size:11px;">首次使用時自動下載對應 model</span>
+      </div>
+    </div>
+    <div style="padding:10px 14px; background:#fef3c7; border:1px solid #fde68a; border-radius:6px; min-width:200px;">
+      <div style="font-size:11px; color:#92400e; font-weight:600; letter-spacing:.4px; text-transform:uppercase;">注意</div>
+      <div style="margin-top:4px; font-size:13px; color:#92400e;">
+        首次 OCR 較慢（model download ~30-60s）；之後同 lang 重複使用快很多。CPU 跑可用，GPU 更快。
+      </div>
+    </div>
+  </div>
+  </div> {# /padding-top wrap #}
+</details>
+
+<!-- ============== Tesseract Section (備用) ============== -->
+<details class="panel ocr-section" id="tesseractSection" style="border-left:4px solid #94a3b8;" {% if default_engine == 'tesseract' %}open{% endif %}>
+<summary>
+  <h2>Tesseract <span class="muted" style="font-size:13px; font-weight:normal;">— 備用 OCR 引擎</span></h2>
+</summary>
+<div>
+<p class="muted">管理 tesseract 的語言訓練檔（<code>.traineddata</code>）。EasyOCR 不可用時，OCR 工具會自動降回此引擎。安裝會同時下載兩個變體：<b>fast</b>（檔小、速度快）+ <b>best</b>（檔大、識別更準），可在下方「OCR 識別品質」切換。
+訓練檔來源：<a href="https://github.com/tesseract-ocr/tessdata_fast" target="_blank" rel="noopener">tessdata_fast</a> + <a href="https://github.com/tesseract-ocr/tessdata_best" target="_blank" rel="noopener">tessdata_best</a>（兩者皆 Apache 2.0）。</p>
+
+{% if not tessdata_dir %}
+<div class="ol-warn">{{ icon('warn', size=14) }} 找不到 tessdata 目錄 — 系統可能未安裝 tesseract。請先依 <a href="/admin/sys-deps">相依套件檢查</a> 安裝 tesseract。</div>
+{% else %}
+<div class="ol-summary">
+  <span class="ol-stat">已安裝 <b>{{ installed_count }}</b> / {{ total_count }} 種</span>
+  <span class="ol-stat">合計 <b>{{ total_size_mb }}</b> MB（含 fast + best 變體）</span>
+  <span class="ol-stat" style="flex:1; min-width:200px;">tessdata 目錄：<span class="ol-path">{{ tessdata_dir }}</span>{% if tessdata_writable %} <span style="color:#10b981; font-size:11px;">（可寫入）</span>{% else %} <span style="color:#ef4444; font-size:11px;">（無寫入權限）</span>{% endif %}</span>
+  <button class="btn" type="button" id="btnRescan" title="重新跑 tesseract --list-langs，更新已安裝清單" style="font-size:12px; padding:5px 12px; flex-shrink:0;">{{ icon('refresh', size=13) }} 重新偵測</button>
+</div>
+
+<div class="panel" style="display:flex; align-items:center; gap:0; flex-wrap:wrap; padding:0; margin-bottom:16px; overflow:hidden;">
+  <div style="flex:1; min-width:240px; padding:18px 22px; background:#f8fafc; border-right:1px solid #e2e8f0; align-self:stretch; display:flex; flex-direction:column; justify-content:center;">
+    <div style="font-size:16px; color:#0f172a; font-weight:700;">OCR 識別品質</div>
+    <div style="font-size:12px; color:#64748b; margin-top:6px; line-height:1.5;">影響 OCR 跑出的字準度，所有「兩變體都已安裝」的語言會自動套用</div>
+  </div>
+  <div style="padding:18px 22px; display:flex; align-items:center;">
+    <div style="display:flex; gap:0; border:1.5px solid #e2e8f0; border-radius:6px; overflow:hidden; background:#fff;">
+    <label style="cursor:pointer; padding:8px 16px; font-size:13px; {% if default_quality == 'best' %}background:#3b82f6; color:#fff; font-weight:600;{% else %}background:#fff; color:#475569;{% endif %} border-right:1px solid #e2e8f0; display:inline-flex; align-items:center; gap:8px;">
+      <input type="radio" name="qualPref" value="best" {% if default_quality == 'best' %}checked{% endif %} style="display:none;">
+      <span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border:1.5px solid currentColor; border-radius:50%; font-size:11px; font-weight:bold;">{% if default_quality == 'best' %}✓{% endif %}</span>
+      精準 (best) <span style="opacity:.8; font-size:11px;">— 準確度高、慢 1.5-2x、檔大 ~3-4x</span>
+    </label>
+    <label style="cursor:pointer; padding:8px 16px; font-size:13px; {% if default_quality == 'fast' %}background:#3b82f6; color:#fff; font-weight:600;{% else %}background:#fff; color:#475569;{% endif %} display:inline-flex; align-items:center; gap:8px;">
+      <input type="radio" name="qualPref" value="fast" {% if default_quality == 'fast' %}checked{% endif %} style="display:none;">
+      <span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border:1.5px solid currentColor; border-radius:50%; font-size:11px; font-weight:bold;">{% if default_quality == 'fast' %}✓{% endif %}</span>
+      快速 (fast) <span style="opacity:.8; font-size:11px;">— 速度快、檔小</span>
+    </label>
+    </div>
+  </div>
+  <div id="qualMsg" style="display:none; font-size:13px; color:#10b981; flex-basis:100%; padding:8px 12px; background:#f0fdf4; border-radius:6px; border-left:3px solid #10b981; margin:0 18px 18px;"></div>
+</div>
+{% if not tessdata_writable %}
+<div class="ol-warn">{{ icon('warn', size=14) }} <b>service 帳號對 tessdata 目錄無寫入權限</b> — 點「安裝」會跳出對應的 root / Administrator 手動指令；下載完手動放進去即可。Linux 通常用 <code>sudo apt install tesseract-ocr-&lt;lang&gt;</code> 或 <code>sudo curl ... -o &lt;tessdata&gt;/&lt;lang&gt;.traineddata</code>。</div>
+{% endif %}
+{% endif %}
+
+{% for g in groups %}
+<div class="panel ol-group">
+  <h2 style="margin-top:0; font-size:16px;">{{ g.title }} <span class="muted" style="font-size:12px; font-weight:normal;">({{ g['items']|length }} 種)</span></h2>
+  <div class="ol-grid">
+    {% for item in g['items'] %}
+    <div class="ol-card {% if item.installed %}is-installed{% endif %}" data-code="{{ item.code }}">
+      {% if item.installed %}<span class="ol-installed-badge">{% if item.active_variant == 'best' %}best 啟用{% elif item.active_variant == 'fast' %}fast 啟用{% else %}已安裝{% endif %}</span>{% endif %}
+      <div class="ol-card-head">
+        <span class="ol-card-name">{{ item.name }}</span>
+        <span class="ol-card-code">{{ item.code }}</span>
+      </div>
+      <div class="ol-card-meta" style="flex-direction:column; align-items:flex-start; gap:3px;">
+        {% if item.fast_installed or item.best_installed %}
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            {% if item.fast_installed %}<span class="ol-size" style="background:#e0e7ff; color:#3730a3;">fast {{ item.fast_size_mb }} MB ✓</span>{% else %}<span class="ol-size" style="opacity:.5;">fast 未下</span>{% endif %}
+            {% if item.best_installed %}<span class="ol-size" style="background:#dcfce7; color:#166534;">best {{ item.best_size_mb }} MB ✓</span>{% else %}<span class="ol-size" style="opacity:.5;">best 未下（~{{ item.est_best_size_mb|int }} MB）</span>{% endif %}
+          </div>
+        {% else %}
+          <span class="ol-size">~{{ item.size_mb }} MB（fast）+ ~{{ item.est_best_size_mb|int }} MB（best）</span>
+        {% endif %}
+      </div>
+      <div class="ol-card-actions">
+        {% if item.installed %}
+          {% if not (item.fast_installed and item.best_installed) %}
+          <button class="btn btn-primary ol-install" type="button" data-code="{{ item.code }}" title="補下缺的變體">{{ icon('download', size=11) }} 補齊變體</button>
+          {% endif %}
+          {% if item.code in ['eng', 'chi_tra'] %}
+          <button class="btn" type="button" disabled title="核心語言不可移除">{{ icon('lock', size=11) }} 核心語言</button>
+          {% else %}
+          <button class="btn ol-uninstall" type="button" data-code="{{ item.code }}">{{ icon('trash', size=11) }} 移除</button>
+          {% endif %}
+        {% else %}
+        <button class="btn btn-primary ol-install" type="button" data-code="{{ item.code }}" title="同時下載 fast + best">{{ icon('download', size=11) }} 安裝（fast+best）</button>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+
+{% if extra_installed %}
+<div class="panel ol-group">
+  <h2 style="margin-top:0; font-size:16px;">其他已安裝訓練檔 <span class="muted" style="font-size:12px; font-weight:normal;">({{ extra_installed|length }} 種，不在內建 catalog)</span></h2>
+  <div class="ol-grid">
+    {% for code in extra_installed %}
+    <div class="ol-card is-installed">
+      <span class="ol-installed-badge">已安裝</span>
+      <div class="ol-card-head">
+        <span class="ol-card-name">{{ code }}</span>
+        <span class="ol-card-code">{{ code }}</span>
+      </div>
+      <div class="ol-card-hint">系統偵測到，不在管理 catalog 內</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+</div> {# /padding-top wrap #}
+</details>  {# /tesseract section #}
+
+<div id="olToast" class="ol-toast"></div>
+
+<!-- 通用確認對話框 -->
+<div id="olConfirmModal" class="ol-modal-bg" role="dialog" aria-modal="true">
+  <div class="ol-modal" style="max-width:440px;">
+    <div class="ol-modal-head">
+      <h3 class="ol-modal-title" id="olConfirmTitle">確認</h3>
+      <button class="ol-modal-close" type="button" aria-label="關閉" data-confirm-action="cancel">{{ icon('close', size=20) }}</button>
+    </div>
+    <div class="ol-modal-body">
+      <p class="ol-modal-msg" id="olConfirmMsg" style="white-space:pre-line;"></p>
+    </div>
+    <div class="ol-modal-foot">
+      <span style="flex:1;"></span>
+      <button class="btn" type="button" data-confirm-action="cancel">{{ icon('close', size=14) }} 取消</button>
+      <button class="btn btn-primary" type="button" data-confirm-action="ok" id="olConfirmOk">{{ icon('check', size=14) }} 確定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 安裝指引 modal — 權限不足時顯示 -->
+<div id="olHintModal" class="ol-modal-bg" role="dialog" aria-modal="true">
+  <div class="ol-modal">
+    <div class="ol-modal-head">
+      <h3 class="ol-modal-title" id="olHintTitle">需要管理員權限安裝</h3>
+      <button class="ol-modal-close" type="button" aria-label="關閉" data-action="close">{{ icon('close', size=20) }}</button>
+    </div>
+    <div class="ol-modal-body">
+      <p class="ol-modal-msg" id="olHintMsg"></p>
+      <div id="olHintMethods"></div>
+    </div>
+    <div class="ol-modal-foot">
+      <span class="ol-tip">執行完上面任一指令後，按「重新偵測」即可看到新安裝的語言。</span>
+      <button class="btn" type="button" data-action="close">{{ icon('close', size=14) }} 關閉</button>
+      <button class="btn btn-primary" type="button" data-action="reload">{{ icon('refresh', size=14) }} 重新偵測</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  function showToast(msg, kind){
+    const t = document.getElementById('olToast');
+    if (!t) return;
+    t.textContent = msg;
+    t.className = 'ol-toast show ' + (kind === 'err' ? 'err' : 'ok');
+    setTimeout(() => { t.className = 'ol-toast'; }, 3000);
+  }
+
+  async function callApi(url, code){
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({code: code}),
+    });
+    return r.json();
+  }
+
+  // -------- 安裝指引 modal --------
+  const modalBg = document.getElementById('olHintModal');
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+  function showHintModal(code, hint){
+    const title = document.getElementById('olHintTitle');
+    const msg = document.getElementById('olHintMsg');
+    const methodsBox = document.getElementById('olHintMethods');
+    title.textContent = '安裝 ' + code + ' 需要管理員權限';
+    msg.textContent = hint.message || '';
+    methodsBox.innerHTML = '';
+    (hint.methods || []).forEach((m, i) => {
+      const row = document.createElement('div');
+      row.className = 'ol-method';
+      row.innerHTML =
+        '<div class="ol-method-name">' + escapeHtml(m.name) + '</div>' +
+        (m.note ? '<div class="ol-method-note">' + escapeHtml(m.note) + '</div>' : '') +
+        '<div class="ol-cmd-row">' +
+        '<div class="ol-cmd" id="olCmd' + i + '">' + escapeHtml(m.command) + '</div>' +
+        '<button type="button" class="ol-cmd-copy" data-cmd-idx="' + i + '">' +
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>' +
+        '<span>複製</span>' +
+        '</button>' +
+        '</div>';
+      methodsBox.appendChild(row);
+    });
+    // wire copy buttons
+    methodsBox.querySelectorAll('.ol-cmd-copy').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const idx = btn.dataset.cmdIdx;
+        const cmd = document.getElementById('olCmd' + idx).textContent;
+        try {
+          await navigator.clipboard.writeText(cmd);
+          const orig = btn.innerHTML;
+          btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg><span>已複製</span>';
+          btn.classList.add('copied');
+          setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 1500);
+        } catch (e) {
+          // fallback: select text
+          const el = document.getElementById('olCmd' + idx);
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          window.getSelection().removeAllRanges();
+          window.getSelection().addRange(range);
+          alert('已選取指令，請按 Cmd/Ctrl+C 複製');
+        }
+      });
+    });
+    modalBg.classList.add('show');
+  }
+  function closeModal(){ modalBg.classList.remove('show'); }
+  modalBg.querySelectorAll('[data-action="close"]').forEach(b => b.addEventListener('click', closeModal));
+  modalBg.querySelectorAll('[data-action="reload"]').forEach(b => b.addEventListener('click', () => location.reload()));
+
+  // 右上角「重新偵測」按鈕
+  const rescanBtn = document.getElementById('btnRescan');
+  if (rescanBtn) {
+    rescanBtn.addEventListener('click', () => {
+      const orig = rescanBtn.innerHTML;
+      rescanBtn.disabled = true;
+      rescanBtn.innerHTML = '偵測中…';
+      location.reload();
+    });
+  }
+
+  // OCR Engine toggle (easyocr / tesseract)
+  const engineMsg = document.getElementById('engineMsg');
+  document.querySelectorAll('input[name="enginePref"]').forEach(radio => {
+    radio.addEventListener('change', async () => {
+      if (!radio.checked) return;
+      engineMsg.style.display = 'block';
+      engineMsg.textContent = '套用中…';
+      engineMsg.style.color = '#64748b';
+      engineMsg.style.background = '#f8fafc';
+      engineMsg.style.borderLeftColor = '#cbd5e1';
+      try {
+        const r = await fetch('/admin/api/ocr-langs/set-engine', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({engine: radio.value}),
+        });
+        const j = await r.json();
+        if (j.ok) {
+          engineMsg.textContent = '✓ 已切到 ' + radio.value + '（下次 OCR 立即生效）';
+          engineMsg.style.color = '#166534';
+          engineMsg.style.background = '#f0fdf4';
+          engineMsg.style.borderLeftColor = '#10b981';
+          setTimeout(() => location.reload(), 1000);
+        } else {
+          engineMsg.textContent = '套用失敗';
+          engineMsg.style.color = '#991b1b';
+          engineMsg.style.background = '#fef2f2';
+          engineMsg.style.borderLeftColor = '#ef4444';
+        }
+      } catch (e) {
+        engineMsg.textContent = '套用失敗：' + e.message;
+        engineMsg.style.color = '#991b1b';
+        engineMsg.style.background = '#fef2f2';
+        engineMsg.style.borderLeftColor = '#ef4444';
+      }
+    });
+  });
+
+  // OCR 識別品質 fast/best toggle
+  const qualMsg = document.getElementById('qualMsg');
+  document.querySelectorAll('input[name="qualPref"]').forEach(radio => {
+    radio.addEventListener('change', async () => {
+      if (!radio.checked) return;
+      qualMsg.style.display = 'block';
+      qualMsg.textContent = '套用中…';
+      qualMsg.style.color = '#64748b';
+      qualMsg.style.background = '#f8fafc';
+      qualMsg.style.borderLeftColor = '#cbd5e1';
+      try {
+        const r = await fetch('/admin/api/ocr-langs/set-quality', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({quality: radio.value}),
+        });
+        const j = await r.json();
+        if (j.ok) {
+          qualMsg.textContent = '✓ 已套用 — 兩變體都已下載的語言已自動切到 ' + radio.value;
+          qualMsg.style.color = '#166534';
+          qualMsg.style.background = '#f0fdf4';
+          qualMsg.style.borderLeftColor = '#10b981';
+          setTimeout(() => location.reload(), 1200);
+        } else {
+          qualMsg.textContent = '套用失敗';
+          qualMsg.style.color = '#991b1b';
+          qualMsg.style.background = '#fef2f2';
+          qualMsg.style.borderLeftColor = '#ef4444';
+        }
+      } catch (e) {
+        qualMsg.textContent = '套用失敗：' + e.message;
+        qualMsg.style.color = '#991b1b';
+        qualMsg.style.background = '#fef2f2';
+        qualMsg.style.borderLeftColor = '#ef4444';
+      }
+    });
+  });
+
+  // 單一語言 fast/best switch
+  document.querySelectorAll('.ol-switch').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const code = btn.dataset.code;
+      const quality = btn.dataset.quality;
+      const orig = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '切換中…';
+      try {
+        const r = await fetch('/admin/api/ocr-langs/switch-active', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({code: code, quality: quality}),
+        });
+        const j = await r.json();
+        if (j.ok) {
+          showToast('已切到 ' + quality + '：' + code, 'ok');
+          setTimeout(() => location.reload(), 700);
+        } else {
+          showToast('切換失敗：' + (j.error || ''), 'err');
+          btn.innerHTML = orig;
+          btn.disabled = false;
+        }
+      } catch (e) {
+        showToast('切換失敗：' + e.message, 'err');
+        btn.innerHTML = orig;
+        btn.disabled = false;
+      }
+    });
+  });
+  modalBg.addEventListener('click', e => { if (e.target === modalBg) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && modalBg.classList.contains('show')) closeModal(); });
+
+  document.querySelectorAll('.ol-install').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const code = btn.dataset.code;
+      const card = btn.closest('.ol-card');
+      const orig = btn.innerHTML;
+      btn.innerHTML = '安裝中…';
+      card.classList.add('ol-card-busy');
+      try {
+        const j = await callApi('/admin/ocr-langs/install', code);
+        if (j.ok) {
+          showToast('已安裝 ' + code + '（' + j.size_mb + ' MB）', 'ok');
+          setTimeout(() => location.reload(), 700);
+        } else if (j.hint && j.hint.methods && j.hint.methods.length) {
+          // 權限不足 — 跳出可複製的指令對話框
+          showHintModal(code, j.hint);
+          btn.innerHTML = orig;
+          card.classList.remove('ol-card-busy');
+        } else {
+          // 其他錯誤（網路斷線等）— 短訊息用 toast
+          showToast('安裝失敗：' + (j.error || '未知錯誤'), 'err');
+          btn.innerHTML = orig;
+          card.classList.remove('ol-card-busy');
+        }
+      } catch (e) {
+        alert('安裝 ' + code + ' 失敗：' + e.message);
+        btn.innerHTML = orig;
+        card.classList.remove('ol-card-busy');
+      }
+    });
+  });
+
+  // 通用確認對話框 helper
+  const confirmModal = document.getElementById('olConfirmModal');
+  const confirmTitle = document.getElementById('olConfirmTitle');
+  const confirmMsg = document.getElementById('olConfirmMsg');
+  function showConfirm(opts) {
+    return new Promise(resolve => {
+      confirmTitle.textContent = opts.title || '確認';
+      confirmMsg.textContent = opts.message || '';
+      confirmModal.classList.add('show');
+      function done(val) {
+        confirmModal.classList.remove('show');
+        confirmModal.querySelectorAll('[data-confirm-action]').forEach(b => {
+          b.removeEventListener('click', handler);
+        });
+        resolve(val);
+      }
+      function handler(e) { done(e.currentTarget.dataset.confirmAction === 'ok'); }
+      confirmModal.querySelectorAll('[data-confirm-action]').forEach(b => {
+        b.addEventListener('click', handler);
+      });
+    });
+  }
+
+  document.querySelectorAll('.ol-uninstall').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const code = btn.dataset.code;
+      const ok = await showConfirm({
+        title: '移除訓練檔',
+        message: '確定要移除 ' + code + ' 的訓練檔？\n（fast 與 best 兩個變體都會刪除，之後可隨時重新安裝）',
+      });
+      if (!ok) return;
+      const card = btn.closest('.ol-card');
+      const orig = btn.innerHTML;
+      btn.innerHTML = '移除中…';
+      card.classList.add('ol-card-busy');
+      try {
+        const j = await callApi('/admin/ocr-langs/uninstall', code);
+        if (j.ok) {
+          showToast('已移除 ' + code, 'ok');
+          setTimeout(() => location.reload(), 700);
+        } else if (j.hint && j.hint.methods && j.hint.methods.length) {
+          // 權限不足 — 跳出可複製的指令對話框（同 install 流程）
+          showHintModal(code, j.hint);
+          btn.innerHTML = orig;
+          card.classList.remove('ol-card-busy');
+        } else {
+          showToast('移除失敗：' + (j.error || '未知錯誤'), 'err');
+          btn.innerHTML = orig;
+          card.classList.remove('ol-card-busy');
+        }
+      } catch (e) {
+        showToast('移除失敗：' + e.message, 'err');
+        btn.innerHTML = orig;
+        card.classList.remove('ol-card-busy');
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

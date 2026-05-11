@@ -646,6 +646,13 @@ def build_router(templates) -> APIRouter:
                     "Base URL 格式錯誤"
                 )
                 return JSONResponse({"ok": False, "error": user_msg}, status_code=400)
+        # admin 改了 LLM 設定（base_url / model / 其他）— 把 model profile cache
+        # 全部清掉，下次 LLM call 會重抓 capabilities
+        try:
+            from ..core import llm_model_profile as _lmp
+            _lmp.invalidate(None)
+        except Exception:
+            pass
         return llm_settings.update(body)
 
     @router.post("/api/llm/test-connection")
@@ -898,10 +905,15 @@ def build_router(templates) -> APIRouter:
     @router.get("/sys-deps", response_class=HTMLResponse)
     async def sys_deps_page(request: Request):
         from ..core.sys_deps import collect_sys_deps
+        from ..main import VERSION as _app_version
         deps = collect_sys_deps()
         return templates.TemplateResponse(
             "sys_deps.html",
-            {"request": request, "deps": deps},
+            {
+                "request": request,
+                "deps": deps,
+                "app_version": _app_version,
+            },
         )
 
     @router.get("/api/sys-deps")
@@ -915,6 +927,60 @@ def build_router(templates) -> APIRouter:
             import logging as _lg
             _lg.getLogger("app.admin").exception("collect_sys_deps failed")
             return {"deps": [], "error": "系統相依套件收集失敗,請查 server log"}
+
+    @router.post("/api/check-latest-version")
+    async def check_latest_version():
+        """Admin 主動點按時才呼叫，從 GitHub raw 抓 main branch 的
+        pyproject.toml 解析 version。比 Releases API 可靠（repo 沒打 release
+        tag 時 /releases/latest 會 404）。timeout 8 秒避免卡住。"""
+        from ..main import VERSION as _app_version
+        import urllib.request
+        import urllib.error
+        import re as _re
+        import logging as _lg
+        url = "https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/pyproject.toml"
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": f"jt-doc-tools/{_app_version} (sys-deps version check)"},
+            )
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                content = resp.read().decode("utf-8", errors="replace")
+            # 解析 [project] version = "x.y.z"
+            m = _re.search(r'^\s*version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"', content, _re.M)
+            if not m:
+                return {"ok": False, "error": "解析 pyproject.toml 失敗（找不到 version 欄位）",
+                        "current": _app_version}
+            tag = m.group(1).strip()
+
+            def _parse(v: str):
+                try:
+                    return tuple(int(x) for x in v.split(".")[:3])
+                except Exception:
+                    return ()
+            cur_t = _parse(_app_version)
+            latest_t = _parse(tag)
+            if cur_t and latest_t:
+                if latest_t > cur_t:    is_outdated = True; status = "outdated"
+                elif latest_t < cur_t:  is_outdated = False; status = "newer"  # dev build
+                else:                    is_outdated = False; status = "current"
+            else:
+                is_outdated = False
+                status = "unknown"
+            return {
+                "ok": True,
+                "current": _app_version,
+                "latest": tag,
+                "html_url": "https://github.com/jasoncheng7115/jt-doc-tools/blob/main/CHANGELOG.md",
+                "published_at": "",
+                "is_outdated": is_outdated,
+                "status": status,
+            }
+        except urllib.error.HTTPError as e:
+            return {"ok": False, "error": f"GitHub raw HTTP {e.code}", "current": _app_version}
+        except Exception:
+            _lg.getLogger("app.admin").exception("check_latest_version failed")
+            return {"ok": False, "error": "無法連到 GitHub（網路 / DNS 問題）", "current": _app_version}
 
     # ---- 企業 logo / 識別 -----------------------------------------------------
     def _br_default_app_name() -> str:
@@ -1045,5 +1111,110 @@ def build_router(templates) -> APIRouter:
     async def settings_export_summary_api():
         from ..core import settings_export
         return settings_export.collect_summary()
+
+    # ---------- OCR 訓練檔（tesseract trained data） ----------
+    @router.get("/ocr-langs", response_class=HTMLResponse)
+    async def ocr_langs_page(request: Request):
+        from ..core import tessdata_manager as _tm
+        from ..core import ocr_engine as _oe
+        catalog = _tm.catalog_with_status()
+        tessdata_dir = _tm.get_tessdata_dir()
+        groups: dict[str, list] = {}
+        for item in catalog:
+            groups.setdefault(item["group"], []).append(item)
+        group_titles = [
+            ("cjk",     "中日韓 CJK"),
+            ("western", "西方語言"),
+            ("other",   "東南亞 / 其他"),
+        ]
+        ordered = [{"key": k, "title": t, "items": groups.get(k, [])} for k, t in group_titles]
+        installed_count = sum(1 for c in catalog if c["installed"])
+        # 加總含 fast + best 變體的實際 disk 用量
+        total_size_mb = round(
+            sum(c.get("fast_size_mb", 0) + c.get("best_size_mb", 0) for c in catalog),
+            1,
+        )
+        catalog_codes = {c["code"] for c in catalog}
+        extra_installed = sorted([c for c in _tm.get_installed_langs() if c not in catalog_codes])
+        return templates.TemplateResponse(
+            "admin_ocr_langs.html",
+            {
+                "request": request,
+                "groups": ordered,
+                "tessdata_dir": str(tessdata_dir) if tessdata_dir else "",
+                "tessdata_writable": _tm.can_write_tessdata(),
+                "installed_count": installed_count,
+                "total_count": len(catalog),
+                "total_size_mb": total_size_mb,
+                "extra_installed": extra_installed,
+                "default_quality": _tm.get_default_quality(),
+                "default_engine": _oe.get_default_engine(),
+                "easyocr_available": _oe.is_easyocr_available(),
+                "tesseract_available": _oe.is_tesseract_available(),
+            },
+        )
+
+    @router.post("/api/ocr-langs/set-engine")
+    async def ocr_langs_set_engine(request: Request):
+        from ..core import ocr_engine as _oe
+        body = await request.json()
+        e = str(body.get("engine") or "").strip().lower()
+        if e not in ("easyocr", "tesseract"):
+            raise HTTPException(400, "engine must be 'easyocr' or 'tesseract'")
+        ok = _oe.set_default_engine(e)
+        return {"ok": ok, "engine": e}
+
+    @router.post("/api/ocr-langs/set-quality")
+    async def ocr_langs_set_quality(request: Request):
+        """切換 OCR 預設 quality（fast / best）。對所有已下載兩變體的 lang
+        自動 swap active variant。回 ok / 不行的 lang 清單。"""
+        from ..core import tessdata_manager as _tm
+        body = await request.json()
+        q = str(body.get("quality") or "").strip().lower()
+        if q not in ("fast", "best"):
+            raise HTTPException(400, "quality must be 'fast' or 'best'")
+        ok = _tm.set_default_quality(q)
+        return {"ok": ok, "quality": q}
+
+    @router.post("/api/ocr-langs/switch-active")
+    async def ocr_langs_switch_active(request: Request):
+        """單一 lang 切 active variant。"""
+        from ..core import tessdata_manager as _tm
+        body = await request.json()
+        code = str(body.get("code") or "").strip()
+        quality = str(body.get("quality") or "").strip().lower()
+        if not _tm.is_valid_lang_code(code):
+            raise HTTPException(400, "invalid lang code")
+        if quality not in ("fast", "best"):
+            raise HTTPException(400, "quality must be 'fast' or 'best'")
+        result = _tm.switch_active_quality(code, quality)
+        return {"ok": result.ok, "code": result.code, "error": result.error}
+
+    @router.post("/ocr-langs/install")
+    async def ocr_langs_install(request: Request):
+        from ..core import tessdata_manager as _tm
+        body = await request.json()
+        code = str(body.get("code") or "").strip()
+        if not _tm.is_valid_lang_code(code):
+            raise HTTPException(400, "invalid lang code")
+        result = _tm.install_lang(code)
+        return {
+            "ok": result.ok,
+            "code": result.code,
+            "size_mb": round(result.bytes_written / 1024 / 1024, 1) if result.bytes_written else 0,
+            "error": result.error,
+            "hint": result.hint,
+        }
+
+    @router.post("/ocr-langs/uninstall")
+    async def ocr_langs_uninstall(request: Request):
+        from ..core import tessdata_manager as _tm
+        body = await request.json()
+        code = str(body.get("code") or "").strip()
+        if not _tm.is_valid_lang_code(code):
+            raise HTTPException(400, "invalid lang code")
+        result = _tm.uninstall_lang(code)
+        return {"ok": result.ok, "code": result.code,
+                "error": result.error, "hint": result.hint}
 
     return router

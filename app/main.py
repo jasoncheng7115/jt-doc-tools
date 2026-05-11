@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.7.0"
+VERSION = "1.7.5"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -194,7 +194,7 @@ templates.env.globals["nav_tool_groups"] = [
     {"title": title, "tools": tools_in} for title, tools_in in _grouped.items()
 ]
 templates.env.globals["nav_settings"] = [
-    {"icon": "gear", "name": "相依套件檢查", "description": "tesseract / Office / 字型 等系統套件狀態",
+    {"icon": "gear", "name": "相依套件檢查", "description": "OCR 引擎 / Office / 字型 等系統套件狀態",
      "url": "/admin/sys-deps",
      "keywords": "system dependency dependencies check status tesseract ocr office libreoffice oxoffice 系統 依賴 相依 套件 檢查 狀態"},
     {"icon": "eye", "name": "系統狀態", "description": "CPU / RAM / 磁碟 / 網路 / 各使用者檔案用量",
@@ -230,6 +230,9 @@ templates.env.globals["nav_settings"] = [
     {"icon": "text", "name": "字型管理", "description": "PDF 編輯器可用字型（系統 + 開源 CJK + 內建）",
      "url": "/admin/fonts",
      "keywords": "font fonts cjk chinese 字型 字體 中文字型 台灣字型 noto"},
+    {"icon": "text", "name": "OCR 引擎", "description": "EasyOCR (主) + Tesseract (備) 雙 OCR 引擎切換與訓練檔管理",
+     "url": "/admin/ocr-langs",
+     "keywords": "ocr engine easyocr tesseract traineddata trained data lang language chi_tra chi_sim jpn kor 引擎 訓練檔 語言 安裝 中文 日文 韓文 繁中 簡中"},
     # ---- v1.1.0 auth / perm / audit pages ----
     # 認證設定 always visible — that's where admin enables auth in the first place.
     {"icon": "lock", "name": "認證設定", "description": "啟用本機 / LDAP / AD 認證",
