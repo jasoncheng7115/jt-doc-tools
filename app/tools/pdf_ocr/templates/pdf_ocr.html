@@ -788,13 +788,15 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
             + '<a class="btn btn-primary" href="' + url + '" download>下載文字辨識後 PDF</a>'
             + '</div>'
             + renderStageDetails(stats.stage_results || [])
-            + '<details class="po-info-details" style="margin-top:10px;">'
-            + '<summary style="cursor:pointer;font-size:12px;color:#64748b;padding:6px 8px;background:#f1f5f9;border-radius:4px;user-select:none;">怎麼確認是這個工具 OCR 的（不是 macOS 預覽程式自動 OCR）？</summary>'
-            + '<div class="po-info" style="margin-top:6px;">'
+            + '<details class="po-stages">'
+            + '<summary>怎麼確認是這個工具 OCR 的（不是 macOS 預覽程式自動 OCR）？</summary>'
+            + '<div class="po-stages-body">'
+            + '<div style="padding-top:6px;font-size:13px;color:#475569;line-height:1.7;">'
             + '下載後用 Adobe Acrobat / Apple 預覽程式開啟，三個方法擇一：<br>'
             + '①「<b>檔案 → 簡介</b>」（Preview）或「<b>檔案 → 內容</b>」（Acrobat）— Producer 欄位顯示「<code>' + producer + '</code>」+ tesseract 版本「<code>' + tessV + '</code>」<br>'
             + '② Cmd+F 搜尋「<code>' + marker + '</code>」— 每頁右下角有此透明標記，能搜到代表是本工具產生的文字層<br>'
             + '③ 比對檔名：本工具輸出檔名以「<code>_searchable.pdf</code>」結尾'
+            + '</div>'
             + '</div>'
             + '</details>'
             + renderViewer(uploadId);
