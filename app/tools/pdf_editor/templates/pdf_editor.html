@@ -1255,6 +1255,13 @@ async function pickExistingObject(fc, p) {
         setTool('select');
         return;
       }
+      // Filler span (leader dots / 純空白等排版填充) — 直接抽出 redact 後
+      // 視覺上會「點點消失」反效果，這多半不是 user 想編的東西。
+      if (data.is_filler) {
+        setStatus('此位置是 TOC / 表格排版的填充字元（leader dots / 空白等），不是可編輯的內容。請改點該行的標題文字。');
+        setTimeout(() => setStatus(''), 4000);
+        return;
+      }
       const obj = new fabric.IText(data.text || '', {
         left: bb[0] * PT2PX, top: bb[1] * PT2PX,
         fontSize: Math.max(6, (data.font_size || 11) * PT2PX),

@@ -404,8 +404,10 @@ async def list_objects(request: Request):
         if page_idx < 0 or page_idx >= doc.page_count:
             raise HTTPException(400, "page out of range")
         page = doc[page_idx]
-        # text spans
+        # text spans (skip filler spans — leader dots / 純空白)
         try:
+            import re as _re
+            FILLER_RE = _re.compile(r"[.·•‧⋯…\-_=~\s]+")
             td = page.get_text("dict")
             for block in td.get("blocks", []):
                 if block.get("type") != 0:
@@ -415,6 +417,9 @@ async def list_objects(request: Request):
                         bb = list(span.get("bbox", (0, 0, 0, 0)))
                         if bb[2] - bb[0] < 1 or bb[3] - bb[1] < 1:
                             continue
+                        text = (span.get("text") or "").strip()
+                        if not text or FILLER_RE.fullmatch(text):
+                            continue  # skip leader dots / 排版填充
                         objects.append({"kind": "text", "bbox": bb})
         except Exception:
             pass
@@ -510,6 +515,15 @@ async def detect_objects(request: Request):
                             final_text = ""
                         else:
                             final_text = span_text
+                        # 偵測 leader dots / fill chars / 純空白 — 這類 span
+                        # 多半是 TOC / 表格排版填充，不是真正可編輯的文字內容；
+                        # 直接 redact 後使用者看到「點點消失」的反效果（v1.6.6 客戶踩到）
+                        import re as _re
+                        stripped = (final_text or "").strip()
+                        is_filler = (
+                            not stripped
+                            or _re.fullmatch(r"[.·•‧⋯…\-_=~\s]+", stripped) is not None
+                        )
                         return {
                             "kind": "text",
                             "bbox": [bx0, by0, bx1, by1],
@@ -519,6 +533,7 @@ async def detect_objects(request: Request):
                             "font": span_font,
                             "extracted_text_unreliable": unreliable and not ocr_used,
                             "ocr_used": ocr_used,
+                            "is_filler": is_filler,
                         }
 
         # 2) Images — get_image_info returns bboxes
