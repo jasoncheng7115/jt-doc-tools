@@ -91,13 +91,15 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 
 ## LLM AI 加值（選用，預設關閉）
 
-接 OpenAI-compatible 後端（本機 Ollama / vLLM / LM Studio / DGX Spark）後，**9 個工具**自動多出聰明選項：
+接 OpenAI-compatible 後端（本機 Ollama / vLLM / LM Studio / DGX Spark）後，**10 個工具**自動多出聰明選項：
 
 | 工具 | LLM 做什麼 | 模式 |
 |---|---|---|
 | 逐句翻譯 | 翻譯時保留排版 + 領域專業用詞 | text |
 | 擷取文字 | 把 PDF 雙欄切斷的句子重新接回 | text |
+| OCR 文字辨識 | 校正 OCR typo（同 word count 才套用，避免幻覺改字） | text |
 | 表單自動填寫 | 填完後 LLM 看 PNG 校驗欄位錯位 / 截斷 | **vision** |
+| 送件前檢核 | 內容語意檢查 + PNG 視覺驗收（補充 regex / 結構檢查抓不到的問題） | text + **vision** |
 | 文件去識別化 | regex 抓不到的客戶代號 / 主管姓名 / 內部編號 | text |
 | 文字去識別化 | 同上，純文字輸入版 | text |
 | 字數統計 | 額外生成 3-5 句摘要 + TOP 10 關鍵字 | text |
@@ -116,7 +118,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 | **[OPS.md](OPS.md)** | 日常運維：`jtdt` 指令、升級、反向代理(nginx/Caddy)、監聽位置、備份還原、排程清理 |
 | **[AUTH.md](AUTH.md)** | 認證 / RBAC / 內建帳號(jtdt-admin / jtdt-auditor)/ 2FA / 帳號鎖定 / 緊急復原 |
 | **[API.md](API.md)** | REST API:Bearer token、endpoint 一覽、上傳格式、回傳格式、錯誤碼、curl / Python 範例、Job 流程 |
-| **[LLM.md](LLM.md)** | LLM AI 加值功能(預設關閉):8 個工具如何用 LLM、效果範例、部署選項(Ollama / vLLM / DGX Spark) |
+| **[LLM.md](LLM.md)** | LLM AI 加值功能（預設關閉）：10 個工具如何用 LLM、效果範例、部署選項（Ollama / vLLM / DGX Spark） |
 | **[SECURITY.md](SECURITY.md)** | 資安政策、OWASP Top 10 (2025) 對照、漏洞回報管道、GitHub native scan 整合 |
 | **[CHANGELOG.md](CHANGELOG.md)** | 完整更新記錄 |
 | **[TEST_PLAN.md](TEST_PLAN.md)** | 測試清單、發版前檢查 |
@@ -176,8 +178,8 @@ Apache License 2.0 — 詳見 [LICENSE](LICENSE)。第三方套件授權見 [THI
 
 ## 連結 / 作者
 
-- **介紹網站**:<https://jasoncheng7115.github.io/jt-doc-tools/>
-- **GitHub Repo**:<https://github.com/jasoncheng7115/jt-doc-tools>
-- **回報問題**:<https://github.com/jasoncheng7115/jt-doc-tools/issues>
+- **介紹網站**：<https://jasoncheng7115.github.io/jt-doc-tools/>
+- **原始碼庫**：<https://github.com/jasoncheng7115/jt-doc-tools>
+- **回報問題**：<https://github.com/jasoncheng7115/jt-doc-tools/issues>
 
 **Jason Cheng** (Jason Tools) — jason@jason.tools

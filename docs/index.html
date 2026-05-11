@@ -521,10 +521,10 @@
 <section id="llm" class="section section-light">
   <div class="container">
     <div class="section-eyebrow">AI 加值（選用）</div>
-    <h2 class="section-title">8 個工具支援 LLM AI，效率與品質再升一級</h2>
+    <h2 class="section-title">10 個工具支援 LLM AI，效率與品質再升一級</h2>
     <p class="section-lede">
       接你自己的 LLM（本機 Ollama / vLLM / LM Studio / DGX Spark 都可），
-      即可在這 8 個工具開啟智慧選項。<b>核心工具完全不依賴 LLM</b>，沒設定也照樣 100% 可用。
+      即可在這 10 個工具開啟智慧選項。<b>核心工具完全不依賴 LLM</b>，沒設定也照樣 100% 可用。
     </p>
 
     <div class="llm-grid">
@@ -607,6 +607,26 @@
         <h3>文件差異比對（變動摘要）</h3>
         <p>2 份文件做完行 diff 後，LLM 額外用 3-5 句繁中話說明「整體主要改了什麼」（可選，預設關閉）。</p>
         <p class="llm-effect"><b>效果</b>：合約 / 草案 / 規格修訂後，先看 LLM 摘要再決定要不要逐條細看</p>
+      </article>
+
+      <article class="llm-card">
+        <div class="llm-card-head">
+          <span class="llm-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h13l5 5v11a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M16 4v5h5"/><path d="m7 14 3 3 5-5"/></svg></span>
+          <div class="llm-tag">text</div>
+        </div>
+        <h3>OCR 文字辨識（typo 校正）</h3>
+        <p>EasyOCR / Tesseract 跑完後，LLM 比對前後文校正常見 OCR 錯字（如「己」誤辨為「巳」）。內建幻覺防護：僅在前後 word count 完全相同時套用，避免 LLM 自由發揮改字。</p>
+        <p class="llm-effect"><b>效果</b>：掃描檔 OCR 結果更乾淨，可直接用於後續搜尋 / 編輯</p>
+      </article>
+
+      <article class="llm-card llm-card-vision">
+        <div class="llm-card-head">
+          <span class="llm-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+          <div class="llm-tag">text + vision</div>
+        </div>
+        <h3>送件前檢核（語意 + 視覺驗收）</h3>
+        <p>結構檢查（頁面尺寸 / 字型嵌入）跑完後，LLM 對內容做語意檢查（必填欄是否真有填、敘述是否前後矛盾），並用 vision 模型對 PNG 做視覺驗收（蓋章是否壓字、頁面排版是否破損）。</p>
+        <p class="llm-effect"><b>效果</b>：補上 regex / 結構檢查抓不到的「字面對但意思錯」、「視覺有問題」案例</p>
       </article>
 
     </div>
@@ -892,7 +912,7 @@
     </div>
     <div class="footer-col">
       <div class="footer-h">連結</div>
-      <a href="https://github.com/jasoncheng7115/jt-doc-tools" target="_blank" rel="noopener">GitHub Repo</a>
+      <a href="https://github.com/jasoncheng7115/jt-doc-tools" target="_blank" rel="noopener">原始碼庫</a>
       <a href="https://github.com/jasoncheng7115/jt-doc-tools/blob/main/github/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
       <a href="https://github.com/jasoncheng7115/jt-doc-tools/issues" target="_blank" rel="noopener">回報問題</a>
     </div>

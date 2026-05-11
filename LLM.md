@@ -4,7 +4,7 @@
 
 > **預設關閉。** 安裝後不接任何 LLM 服務，所有核心工具（掃描、轉檔、編輯、簽章、加密、合併、分拆、去識別化…）照樣 100% 可用。
 >
-> 啟用方式：`/admin/llm-settings` 頁面填 OpenAI-compatible API base URL（如本機 Ollama / vLLM / LM Studio / DGX Spark）+ 選預設模型，即可在 8 個工具看到「啟用 LLM」選項。
+> 啟用方式：`/admin/llm-settings` 頁面填 OpenAI-compatible API base URL（如本機 Ollama / vLLM / LM Studio / DGX Spark）+ 選預設模型，即可在 10 個工具看到「啟用 LLM」選項。
 
 ## 為什麼要支援 LLM
 
@@ -15,7 +15,7 @@
 | 看 100 頁的合約找改了什麼 | 行 diff 一條條看 | 直接告訴你「第 3.2 條保固期改 12→24 個月，第 5.1 條付款改月結 30→60」 |
 | 註解 30 條意見要分類 | 手動按嚴重度排序 | 自動分「重大 / 一般 / 提問」三類 |
 
-## 支援的工具（共 8 個）
+## 支援的工具（共 10 個）
 
 > 模式分兩種：
 > - **text** — 純文字 chat，任何 OpenAI-compatible 文字模型都能跑（Gemma / Llama / Mistral 等）
@@ -102,6 +102,25 @@
 - 預設關閉
 - 摘要是「整體 high-level 變動」，不會逐條列出所有改動（細節在 diff 表）
 - 適合搭配 diff 表一起看：LLM 摘要先抓主軸，diff 表看細節
+
+### 9. OCR 文字辨識 — LLM typo 校正 (`pdf-ocr`) — text
+
+**LLM 做什麼**：EasyOCR / Tesseract 跑完後，逐段送 LLM 比對前後文校正常見 OCR 錯字（如「己」誤辨為「巳」、「未」誤辨為「末」等）。
+
+**已實作**:
+- 預設關閉，user 勾「LLM 校正」才送
+- **內建幻覺防護**：僅在 LLM 回傳的 word count 與原 OCR 結果完全相同時才套用，避免 LLM 自由發揮改字、加字、刪字
+- UI 上顯著紅字警告：LLM 校正僅修錯字、不改文意；EasyOCR 中文辨識能力已經夠強，不一定需要 LLM
+
+### 10. 送件前檢核 — LLM 語意 + 視覺驗收 (`submission-check`) — text + vision
+
+**LLM 做什麼**：
+- **L3 LLM**（text）：對內容做語意檢查 — 必填欄位是否真有實質內容、敘述是否前後矛盾、有沒有遺漏的常見必填項
+- **L4 Vision**（vision）：對每頁 PNG 做視覺驗收 — 蓋章是否壓字、頁面排版是否破損、簽名是否清晰
+
+**已實作**:
+- 預設關閉；L3 / L4 各自獨立開關
+- 與 L1 結構檢查 / L2 OCR-based 檢查並列，產出 PASS / WARN / FAIL 三級分類報告
 
 ## 部署選項
 
