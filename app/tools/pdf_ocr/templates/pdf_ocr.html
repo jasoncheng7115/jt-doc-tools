@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+
+{% block title %}PDF 文字層補建 · {{ app_name }}{% endblock %}
+
+{% block head %}
+<style>
+.po-fields { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+.po-field label { display:block; font-size:13px; color:#475569; margin-bottom:4px; font-weight:500; }
+.po-field label .muted { font-weight:400; color:#94a3b8; font-size:11px; }
+.po-field input[type=text], .po-field input[type=number], .po-field select {
+  width:100%; padding:6px 8px; border:1px solid #cbd5e1; border-radius:4px; font-size:14px; box-sizing:border-box;
+}
+.po-checkrow { display:flex; align-items:center; gap:8px; padding:6px 0; font-size:13px; }
+.po-checkrow input[type=checkbox] { width:16px; height:16px; }
+.po-progress { margin-top:8px; height:6px; background:#e5e7eb; border-radius:3px; overflow:hidden; }
+.po-progress > div { height:100%; background:#3b82f6; width:0%; transition: width .3s; }
+.po-warn { background:#fef3c7; border-left:3px solid #f59e0b; padding:8px 12px; font-size:12px; color:#92400e; border-radius:4px; margin-top:8px; }
+.po-info { background:#dbeafe; border-left:3px solid #3b82f6; padding:8px 12px; font-size:12px; color:#1e40af; border-radius:4px; margin-top:8px; }
+.po-result { background:#d1fae5; border-left:3px solid #10b981; padding:10px 14px; font-size:13px; color:#065f46; border-radius:4px; margin-top:8px; }
+.po-result a.btn { margin-top:6px; }
+@media (max-width: 700px) { .po-fields { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>{{ icon('text', size=22) }} PDF 文字層補建</h1>
+<p class="muted">對掃描 PDF 補上透明可選取的文字層。視覺看起來跟原檔一樣，但變成可搜尋（Cmd+F）、可滑鼠選取複製、可送進其他文字抽取工具的「searchable PDF」— 跟 macOS Preview 的 Live Text 同樣概念。</p>
+
+{% if not tesseract_ok %}
+<div class="po-warn">{{ icon('warn', size=14) }} 此主機未安裝 tesseract，OCR 無法執行。請先安裝 tesseract（含 chi_tra 繁中訓練檔）。</div>
+{% endif %}
+
+<details class="panel" open>
+  <summary>1. 上傳 PDF</summary>
+  {% with upload_id='poUp', accept='application/pdf', hint='只支援 .pdf；上限 200 MB' %}{% include "components/file_upload.html" %}{% endwith %}
+  <div id="uploadInfo" style="margin-top:8px; font-size:13px; color:#475569;"></div>
+</details>
+
+<details class="panel" open>
+  <summary>2. 設定</summary>
+  <div class="po-fields">
+    <div class="po-field">
+      <label>OCR 語言 <span class="muted">（{{ ocr_langs or '尚未偵測' }}）</span></label>
+      <input type="text" id="poLangs" placeholder="chi_tra+chi_sim+eng" value="{{ ocr_langs }}">
+    </div>
+    <div class="po-field">
+      <label>渲染 DPI <span class="muted">（200-400 較佳；越大越準但越慢）</span></label>
+      <input type="number" id="poDpi" min="72" max="600" value="300">
+    </div>
+  </div>
+  <div class="po-checkrow">
+    <input type="checkbox" id="poSkipText" checked>
+    <label for="poSkipText">跳過已有文字層的頁（避免重複 OCR；多數 PDF 是混合的）</label>
+  </div>
+  <div class="po-checkrow">
+    <input type="checkbox" id="poUseLlm" {% if not llm_ok %}disabled{% endif %}>
+    <label for="poUseLlm">
+      LLM 後處理 — 校正 OCR typo / 字符混淆
+      {% if llm_ok %}<span class="muted">（將使用 {{ llm_model }}）</span>
+      {% else %}<span class="muted">（LLM 未設定，請至 /admin/llm-settings 啟用）</span>{% endif %}
+    </label>
+  </div>
+</details>
+
+<div class="panel">
+  <button class="btn btn-primary" id="btnRun" disabled>{{ icon('play', size=14) }} 開始 OCR</button>
+  <span id="status" class="muted" style="margin-left:12px; font-size:13px;">請先上傳 PDF</span>
+  <div class="po-progress" style="display:none;" id="progressBar"><div></div></div>
+  <div id="resultBox"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/file_upload.js"></script>
+<script>
+(function(){
+  const $ = (id) => document.getElementById(id);
+  let uploadId = null;
+  const btnRun = $('btnRun');
+  const statusEl = $('status');
+  const progressBar = $('progressBar');
+  const progressInner = progressBar.querySelector('div');
+  const uploadInfo = $('uploadInfo');
+  const resultBox = $('resultBox');
+
+  const fu = new FileUpload(document.getElementById('poUp'), async (file) => {
+    if (!file) return;
+    statusEl.textContent = '上傳中…';
+    btnRun.disabled = true;
+    resultBox.innerHTML = '';
+    const fd = new FormData(); fd.append('file', file);
+    try {
+      const r = await fetch('upload', { method:'POST', body: fd });
+      if (!r.ok) throw new Error(await r.text());
+      const j = await r.json();
+      uploadId = j.upload_id;
+      uploadInfo.textContent = `已上傳 ${j.filename}（${(j.size/1024).toFixed(1)} KB）`;
+      statusEl.textContent = '可以開始 OCR';
+      btnRun.disabled = false;
+    } catch (e) {
+      statusEl.textContent = '上傳失敗：' + e.message;
+    }
+  });
+
+  btnRun.addEventListener('click', async () => {
+    if (!uploadId) return;
+    btnRun.disabled = true;
+    progressBar.style.display = 'block';
+    progressInner.style.width = '5%';
+    resultBox.innerHTML = '';
+    statusEl.textContent = '排隊中…';
+    const fd = new FormData();
+    fd.append('langs', $('poLangs').value);
+    fd.append('dpi', $('poDpi').value);
+    fd.append('skip_pages_with_text', $('poSkipText').checked ? 'true' : 'false');
+    fd.append('use_llm', $('poUseLlm').checked ? 'true' : 'false');
+    try {
+      const r = await fetch('run/' + uploadId, { method:'POST', body: fd });
+      if (!r.ok) throw new Error(await r.text());
+      const j = await r.json();
+      const jobId = j.job_id;
+      const t0 = Date.now();
+      while (Date.now() - t0 < 1800000) {  // 30 min ceiling
+        await new Promise(r => setTimeout(r, 1500));
+        const jr = await fetch('/api/jobs/' + jobId);
+        if (!jr.ok) continue;
+        const jj = await jr.json();
+        progressInner.style.width = (jj.progress * 100).toFixed(1) + '%';
+        if (jj.message) statusEl.textContent = jj.message;
+        if (jj.status === 'done') {
+          progressInner.style.width = '100%';
+          const stats = (jj.meta || {}).stats || {};
+          const url = (jj.meta || {}).download_url || ('download/' + uploadId);
+          resultBox.innerHTML =
+            '<div class="po-result">'
+            + '<b>完成！</b><br>'
+            + '處理 ' + (stats.pages_ocrd || 0) + ' / ' + (stats.pages_total || 0) + ' 頁'
+            + '（跳過 ' + (stats.pages_skipped || 0) + ' 頁已有文字層）<br>'
+            + '插入文字 ' + (stats.words_inserted || 0) + ' 字'
+            + (stats.llm_used ? '（含 LLM 後處理）' : '')
+            + '<br><br>'
+            + '<a class="btn btn-primary" href="' + url + '" download>下載 searchable PDF</a>'
+            + '</div>';
+          btnRun.disabled = false;
+          return;
+        }
+        if (jj.status === 'error') {
+          throw new Error(jj.error || 'OCR 失敗');
+        }
+      }
+      throw new Error('OCR 超時');
+    } catch (e) {
+      statusEl.textContent = '失敗：' + e.message;
+      progressBar.style.display = 'none';
+      btnRun.disabled = false;
+    }
+  });
+})();
+</script>
+{% endblock %}
