@@ -1224,10 +1224,25 @@ async def save(request: Request):
                         "(original_bbox=%s) — would leave blank area", safe_log(orig))
                     continue
                 ox0, oy0, ox1, oy1 = [float(v) for v in orig]
-                page.add_redact_annot(
-                    fitz.Rect(ox0, oy0, ox1, oy1),
-                    fill=(1, 1, 1),
-                )
+                # 字型 / 字級變更會讓新 bbox 跟 original_bbox 不一致；
+                # 若新 bbox 更大，舊 redact 沒蓋到的舊文字會殘留 (#21 客戶踩到)
+                # 修法：redact 範圍取 union(original_bbox, 當前 obj 的 x/y/w/h)
+                # 並加 2pt 安全邊距吃 anti-aliased 邊緣 / glyph 突出
+                if obj.get("type") == "text":
+                    cx0 = float(obj.get("x", ox0))
+                    cy0 = float(obj.get("y", oy0))
+                    cx1 = cx0 + float(obj.get("w", ox1 - ox0) or (ox1 - ox0))
+                    cy1 = cy0 + float(obj.get("h", oy1 - oy0) or (oy1 - oy0))
+                    ux0 = min(ox0, cx0) - 2
+                    uy0 = min(oy0, cy0) - 2
+                    ux1 = max(ox1, cx1) + 2
+                    uy1 = max(oy1, cy1) + 2
+                    page.add_redact_annot(fitz.Rect(ux0, uy0, ux1, uy1), fill=(1, 1, 1))
+                else:
+                    page.add_redact_annot(
+                        fitz.Rect(ox0, oy0, ox1, oy1),
+                        fill=(1, 1, 1),
+                    )
                 has_redact = True
             # Explicit "deleted existing" entries (no new content, just redact)
             for dbb in pg.get("deleted_originals", []) or []:
