@@ -4,6 +4,13 @@
 
 ---
 
+## [1.6.10] - 2026-05-11
+
+### 修正
+
+- **pdf-editor S 模式 filler 偵測過頭（誤擋 Q&A...... 等混合 span）** — v1.6.9 用 70% filler 占比判定，但「常見問題  Q&A........」這類 TOC 行整段 1 個 span，dots 占比也 > 70% 結果誤標 filler 點不了。改回保守規則：只有完全空白才視為 filler。其他內容（純 dots / dots+頁碼 / 文字+dots 混合）一律當可選文字，user 可選來編 / 刪 / 移；hover 浮現選取框也跟著恢復。
+- **filler span 點下後改用 redact-only marker（紅虛線框）而非 IText overlay** — IText 重建會「點點消失」是因 sans-serif 沒 leader-fill 排版能力。改用 marker：點下標「將刪除」，可拖移位 / Delete 取消，儲存時 redact。User 想換內容請手動加文字框。
+
 ## [1.6.9] - 2026-05-11
 
 ### 修正

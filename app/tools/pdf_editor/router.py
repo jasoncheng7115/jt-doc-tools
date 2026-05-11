@@ -404,11 +404,10 @@ async def list_objects(request: Request):
         if page_idx < 0 or page_idx >= doc.page_count:
             raise HTTPException(400, "page out of range")
         page = doc[page_idx]
-        # text spans (skip filler spans — leader dots / 純空白 / 主要為 dots+頁碼)
+        # text spans — 含 filler spans (leader dots / 純空白)，user 仍可選來
+        # 刪除 / 移動，但 detect-objects 會把它們標 is_filler，FE 改用
+        # redact-only marker 而非 IText overlay 重建（避免「點點消失」反效果）
         try:
-            import re as _re
-            FILLER_FULL = _re.compile(r"[.·•‧⋯…\-_=~\s]+")
-            FILLER_CHARS = _re.compile(r"[.·•‧⋯…\-_=~\s]")
             td = page.get_text("dict")
             for block in td.get("blocks", []):
                 if block.get("type") != 0:
@@ -418,14 +417,8 @@ async def list_objects(request: Request):
                         bb = list(span.get("bbox", (0, 0, 0, 0)))
                         if bb[2] - bb[0] < 1 or bb[3] - bb[1] < 1:
                             continue
-                        text = (span.get("text") or "").strip()
-                        if not text:
-                            continue
-                        if FILLER_FULL.fullmatch(text):
-                            continue
-                        # 混合：filler 字元 ≥ 5 且占比 > 70% → 視為填充（含尾頁碼的 dots）
-                        n_f = len(FILLER_CHARS.findall(text))
-                        if n_f >= 5 and n_f / len(text) > 0.7:
+                        text = (span.get("text") or "")
+                        if not text.strip():
                             continue
                         objects.append({"kind": "text", "bbox": bb})
         except Exception:
@@ -522,25 +515,11 @@ async def detect_objects(request: Request):
                             final_text = ""
                         else:
                             final_text = span_text
-                        # 偵測 leader dots / fill chars / 純空白 — 這類 span
-                        # 多半是 TOC / 表格排版填充（v1.6.6 / v1.6.7 客戶踩到）
-                        # - 純 filler 字元 → filler
-                        # - 含少量字母數字（如 leader dots 後接頁碼「.....2」）
-                        #   filler 字元 ≥ 5 個且占比 > 70% → 也算 filler，避免
-                        #   user 點 dots 區域誤選到「.....2」這種混合 span
-                        import re as _re
-                        FILLER_CHARS_RE = _re.compile(r"[.·•‧⋯…\-_=~\s]")
-                        stripped = (final_text or "").strip()
-                        is_filler = False
-                        if not stripped:
-                            is_filler = True
-                        elif _re.fullmatch(r"[.·•‧⋯…\-_=~\s]+", stripped):
-                            is_filler = True
-                        else:
-                            n_filler = len(FILLER_CHARS_RE.findall(stripped))
-                            n_total = len(stripped)
-                            if n_filler >= 5 and n_filler / n_total > 0.7:
-                                is_filler = True
+                        # 只把純空白當 filler；其他內容（含純 dots / dots+頁碼 /
+                        # 文字+dots 混合）一律當可選文字，由 FE 用 IText 重建供
+                        # user 編輯 / 刪除 / 移動。可能視覺對不上 PDF 原本 leader
+                        # 排版，但 user 至少有控制權（v1.6.10 客戶要求）。
+                        is_filler = not (final_text or "").strip()
                         return {
                             "kind": "text",
                             "bbox": [bx0, by0, bx1, by1],
