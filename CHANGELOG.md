@@ -4,6 +4,18 @@
 
 ---
 
+## [1.6.4] - 2026-05-11
+
+### 修正
+
+- **pdf-editor 文字框 CJK + ASCII 混合內容字疊在一起 ghost** — 真正根因：`_insert_mixed_text` 用 `fitz.get_text_length(fontname=<custom>)` 算寬度推進 x 座標，但 `get_text_length` 不認 `page.insert_font` 註冊的自訂 NotoSansCJK / 微軟正黑體 → 默默 fallback 用 Helvetica 算寬度 → CJK 字寬被當成窄 ASCII → x 推進不夠 → 下一個 ASCII run（例「111」）疊在前一個 CJK run（例「請輸入文字」）上面。修：自訂字型走估算（CJK = font_size、ASCII = font_size×0.55），不再被錯誤的 Helvetica 寬度誤導。
+
+## [1.6.3] - 2026-05-11
+
+### 偵錯
+
+- **pdf-editor /save 加 text obj 詳細 log** — 列出每次 save 收到的所有 text 物件 (id / 位置 / 字型 / 字級 / original_bbox / 文字)，方便排查字型變更後 ghost 殘留的根因（v1.6.2 修法不夠）。
+
 ## [1.6.2] - 2026-05-11
 
 ### 修正
