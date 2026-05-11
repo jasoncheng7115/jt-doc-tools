@@ -994,23 +994,24 @@ def _insert_mixed_text(page, x: float, y: float, text: str, *,
                 safe_log(run[:20]), bool(is_cjk), safe_log(fallbacks), safe_log(last_err))
             ok_font = fn  # for length calculation
         # Advance x by measured width of that run.
-        # 注意：fitz.get_text_length 只認 PyMuPDF 內建 font name（helv / china-* /
-        # tiro / cour），對 page.insert_font 註冊的自訂字型（uc*/uf* 前綴）會
-        # 默默 fallback 到 Helvetica 算寬度 → CJK 字會被當成 narrow ASCII，
-        # 算出來的寬度遠小於實際渲染 → 下一個 run（例 ASCII 數字）x 推進不夠
-        # → 直接疊在前一個 CJK run 上面（v1.6.2 客戶踩到）。
-        # 對自訂字型走自己的估算：CJK 字 ~ font_size 寬、ASCII 字 ~ font_size×0.55
+        # fitz.get_text_length 對自訂註冊字型 (uc/uf) 與內建 china-* 都會回錯
+        # —— 全部 fallback 用 Helvetica metrics 算 → CJK 字被當窄 ASCII →
+        # 下一個 run x 推進不夠 → 重疊（v1.6.2 客戶踩到 / v1.6.4 部份修）。
+        #
+        # 規則：
+        #   • CJK run（不論什麼 font）→ 一律 font_size × len（CJK 大致正方）
+        #   • ASCII run + 自訂 font (uc/uf) → font_size × len × 0.55
+        #   • ASCII run + 內建 font (helv/cour/tiro/...) → get_text_length OK
         is_custom_font = isinstance(ok_font, str) and (ok_font.startswith("uc") or ok_font.startswith("uf"))
-        if is_custom_font:
-            if is_cjk:
-                cx += font_size * len(run)         # CJK 大致正方
-            else:
-                cx += font_size * len(run) * 0.55  # ASCII 比例
+        if is_cjk:
+            cx += font_size * len(run)
+        elif is_custom_font:
+            cx += font_size * len(run) * 0.55
         else:
             try:
                 cx += fitz.get_text_length(run, fontname=ok_font, fontsize=font_size)
             except Exception:
-                cx += font_size * len(run) * 0.6  # rough fallback
+                cx += font_size * len(run) * 0.6
     return cx
 
 

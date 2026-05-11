@@ -4,6 +4,12 @@
 
 ---
 
+## [1.6.5] - 2026-05-11
+
+### 修正
+
+- **pdf-editor 文字框 ghost 真正完整修** — v1.6.4 只修自訂字型，但「自動 (china-t)」「Courier」等內建字型 `fitz.get_text_length` 對 CJK 也算錯（fallback Helvetica 寬度）。改規則：**任何 CJK run 一律 `font_size × len` 估算**，不再呼叫 `get_text_length`；ASCII run 內建字型才用 `get_text_length`、自訂字型用 `× 0.55` 估算。
+
 ## [1.6.4] - 2026-05-11
 
 ### 修正
