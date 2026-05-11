@@ -993,11 +993,24 @@ def _insert_mixed_text(page, x: float, y: float, text: str, *,
                 "insert_text all fallbacks failed for run %s (cjk=%s, tried=%s): %s",
                 safe_log(run[:20]), bool(is_cjk), safe_log(fallbacks), safe_log(last_err))
             ok_font = fn  # for length calculation
-        # Advance x by measured width of that run
-        try:
-            cx += fitz.get_text_length(run, fontname=ok_font, fontsize=font_size)
-        except Exception:
-            cx += font_size * len(run) * 0.6  # rough fallback
+        # Advance x by measured width of that run.
+        # 注意：fitz.get_text_length 只認 PyMuPDF 內建 font name（helv / china-* /
+        # tiro / cour），對 page.insert_font 註冊的自訂字型（uc*/uf* 前綴）會
+        # 默默 fallback 到 Helvetica 算寬度 → CJK 字會被當成 narrow ASCII，
+        # 算出來的寬度遠小於實際渲染 → 下一個 run（例 ASCII 數字）x 推進不夠
+        # → 直接疊在前一個 CJK run 上面（v1.6.2 客戶踩到）。
+        # 對自訂字型走自己的估算：CJK 字 ~ font_size 寬、ASCII 字 ~ font_size×0.55
+        is_custom_font = isinstance(ok_font, str) and (ok_font.startswith("uc") or ok_font.startswith("uf"))
+        if is_custom_font:
+            if is_cjk:
+                cx += font_size * len(run)         # CJK 大致正方
+            else:
+                cx += font_size * len(run) * 0.55  # ASCII 比例
+        else:
+            try:
+                cx += fitz.get_text_length(run, fontname=ok_font, fontsize=font_size)
+            except Exception:
+                cx += font_size * len(run) * 0.6  # rough fallback
     return cx
 
 
@@ -1192,6 +1205,26 @@ async def save(request: Request):
     # each save, and we replay them from scratch. This keeps redactions
     # idempotent and avoids content duplication when users move an
     # extracted object multiple times.
+
+    # 偵錯：印出本次收到的所有 text 物件，方便排查重複 / 字型切換 ghost
+    try:
+        import logging as _lg
+        _log = _lg.getLogger(__name__)
+        for pg in pages:
+            text_objs = [o for o in pg.get("objects", []) if o.get("type") == "text"]
+            if text_objs:
+                _log.info("pdf-editor /save page=%s text_objs_count=%d",
+                          pg.get("page"), len(text_objs))
+                for to in text_objs:
+                    _log.info("  text_obj id=%s x=%s y=%s w=%s h=%s font=%s size=%s "
+                              "orig_bbox=%s text=%r",
+                              to.get("id"), to.get("x"), to.get("y"),
+                              to.get("w"), to.get("h"),
+                              to.get("font"), to.get("font_size"),
+                              to.get("original_bbox"), (to.get("text") or "")[:30])
+    except Exception:
+        pass
+
     doc = fitz.open(str(src))
     # Per-page cache of system fonts already registered this save
     # {(page_index, font_path, idx): buffername}
