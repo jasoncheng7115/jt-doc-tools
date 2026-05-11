@@ -4,6 +4,12 @@
 
 ---
 
+## [1.6.9] - 2026-05-11
+
+### 修正
+
+- **pdf-editor S 模式選 leader dots + 頁碼混合 span 仍誤選** — 「.................2」這種混合 span 因含「2」未通過 v1.6.7 的純 filler regex；改邏輯：純 filler **或**（filler 字元 ≥ 5 且占比 > 70%）都視為填充，hover 不亮、點下去顯示提示不 redact。同步套到 `/list-objects` 與 `/detect-objects`。
+
 ## [1.6.8] - 2026-05-11
 
 ### 修正
