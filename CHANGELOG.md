@@ -4,6 +4,14 @@
 
 ---
 
+## [1.6.7] - 2026-05-11
+
+### 修正
+
+- **pdf-editor S 模式選 leader dots 後文字消失** — TOC 排版的 leader dots（「............」+ 頁碼）是獨立 span，user 無意中點到 → 被 redact + 重建 fabric 文字框時 dots 顯示失敗 → 視覺上「點點消失」。修：
+  - `/list-objects` (hover frame source) 過濾掉純 dots / 純空白 / 純底線等 filler span，hover 不浮現
+  - `/detect-objects` 加 `is_filler` flag；FE 偵測到改顯示提示「此位置是 TOC / 表格排版的填充字元，請改點該行的標題文字」，不執行 redact
+
 ## [1.6.6] - 2026-05-11
 
 ### 新增
