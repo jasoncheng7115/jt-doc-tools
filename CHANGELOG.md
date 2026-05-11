@@ -4,6 +4,16 @@
 
 ---
 
+## [1.6.6] - 2026-05-11
+
+### 新增
+
+- **pdf-editor 選取 / 選既有物件 模式 hover 浮現選取框** — 進入 V (選取) 或 S (選既有 PDF 物件) 工具時，游標 hover 在可選物件上方浮現虛線框：
+  - V 模式：cyan 框（Fabric overlay 物件）
+  - S 模式：text=藍 / image=綠 / widget=紫 / drawing=橘 — 顏色區分物件類型
+  - 進入 S 模式自動 prefetch 該頁所有可選物件 bbox（新 endpoint `/list-objects`）
+  - mouse:out 自動清除 hover frame
+
 ## [1.6.5] - 2026-05-11
 
 ### 修正

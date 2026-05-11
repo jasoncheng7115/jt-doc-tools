@@ -381,6 +381,65 @@ async def list_fonts():
     return {"groups": ordered, "total": len(fonts)}
 
 
+@router.post("/list-objects")
+async def list_objects(request: Request):
+    """列出指定頁面上所有可選取的 existing PDF 物件 bbox（給 FE 在 select/pick
+    模式做 hover 浮現選取框用）。比 detect-objects 輕量，不做 OCR / 細節抽取。
+    """
+    body = await request.json()
+    upload_id = (body.get("upload_id") or "").strip()
+    page_idx = int(body.get("page", 0))
+    if not upload_id:
+        raise HTTPException(400, "upload_id required")
+    from app.core.safe_paths import require_uuid_hex
+    from ...core import upload_owner as _uo
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
+    src = _work_dir() / f"pe_{upload_id}_src.pdf"
+    if not src.exists():
+        raise HTTPException(404, "upload expired")
+
+    objects: list[dict] = []
+    with fitz.open(str(src)) as doc:
+        if page_idx < 0 or page_idx >= doc.page_count:
+            raise HTTPException(400, "page out of range")
+        page = doc[page_idx]
+        # text spans
+        try:
+            td = page.get_text("dict")
+            for block in td.get("blocks", []):
+                if block.get("type") != 0:
+                    continue
+                for line in block.get("lines", []):
+                    for span in line.get("spans", []):
+                        bb = list(span.get("bbox", (0, 0, 0, 0)))
+                        if bb[2] - bb[0] < 1 or bb[3] - bb[1] < 1:
+                            continue
+                        objects.append({"kind": "text", "bbox": bb})
+        except Exception:
+            pass
+        # images
+        try:
+            for img in (page.get_images(full=True) or []):
+                xref = img[0]
+                rects = page.get_image_rects(xref) or []
+                for r in rects:
+                    objects.append({"kind": "image",
+                                     "bbox": [r.x0, r.y0, r.x1, r.y1]})
+        except Exception:
+            pass
+        # widgets
+        try:
+            for w in (page.widgets() or []):
+                r = w.rect
+                if r:
+                    objects.append({"kind": "widget",
+                                     "bbox": [r.x0, r.y0, r.x1, r.y1]})
+        except Exception:
+            pass
+    return {"objects": objects, "page": page_idx}
+
+
 @router.post("/detect-objects")
 async def detect_objects(request: Request):
     """Click-hit test on an existing PDF page. Given (upload_id, page, x, y)
