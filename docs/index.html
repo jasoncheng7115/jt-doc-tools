@@ -449,6 +449,24 @@
       <figure class="ss-row reverse">
         <div class="ss-text">
           <div class="ss-num">08</div>
+          <h3>OCR 文字辨識（掃描檔變可選取）</h3>
+          <p>把<b>掃描 PDF / 圖片變成可以選取、可搜尋的文字 PDF</b> — 跟 macOS 預覽程式 Live Text 同概念，但跑在你自己機房。雙引擎（<b>EasyOCR</b> 預設 / <b>Tesseract</b> 備援），CJK 識別率強；OCR 完直接在頁內預覽並用滑鼠拖選驗證；最終 PDF 可直接下載拿去 Adobe Reader / Preview / 任何 PDF 工具裡選字 / 複製 / 全文搜尋。</p>
+          <div class="ss-tags">
+            <span class="tag">掃描檔變可選取</span>
+            <span class="tag">EasyOCR + Tesseract 雙引擎</span>
+            <span class="tag">CJK 強</span>
+            <span class="tag">頁內 PDF 預覽</span>
+            <span class="tag">可選 LLM 校正</span>
+          </div>
+        </div>
+        <div class="ss-img">
+          <img src="screenshots/pdf-ocr.png" alt="OCR 文字辨識 — 掃描 PDF / 圖片變可選取文字，頁內直接 PDF.js 預覽" loading="lazy">
+        </div>
+      </figure>
+
+      <figure class="ss-row">
+        <div class="ss-text">
+          <div class="ss-num">09</div>
           <h3>多領域帳號並存</h3>
           <p>同名帳號可在不同認證來源並存 — 例如 <code>jason@local</code>（救援用）+ <code>jason@ldap</code>（日常登入），各自獨立的角色與權限。<b>來源 badge 顏色區分</b>（local 灰、ldap 藍、ad 紫），管理員一眼分辨。表格欄位可排序，搜尋、來源篩選一應俱全。</p>
           <div class="ss-tags">
@@ -462,9 +480,9 @@
         </div>
       </figure>
 
-      <figure class="ss-row">
+      <figure class="ss-row reverse">
         <div class="ss-text">
-          <div class="ss-num">09</div>
+          <div class="ss-num">10</div>
           <h3>權限矩陣 （RBAC）</h3>
           <p>左側 subject 列表（搜尋 + 全部 / 使用者 / 群組 tab），右側即時編輯角色與工具權限。6 個內建角色（管理員 / 一般使用者 / 文管 / 財務 / 業務 / 法務資安）+ 自訂角色，支援指派到使用者 / 群組 / OU。</p>
           <div class="ss-tags">
@@ -478,9 +496,9 @@
         </div>
       </figure>
 
-      <figure class="ss-row reverse">
+      <figure class="ss-row">
         <div class="ss-text">
-          <div class="ss-num">10</div>
+          <div class="ss-num">11</div>
           <h3>字型管理</h3>
           <p>三層字型來源一站管理：<b>標準 14 字型</b>（PDF 通用相容）+ <b>內建 CJK 字型</b>（思源黑體 / 宋體繁中）+ <b>系統字型</b>（runtime 掃描）+ <b>自訂上傳</b>（公司專用 .ttf / .otf）。預設字型可分別指定給 PDF 編輯器 / 表單填寫 / 浮水印各工具使用。</p>
           <div class="ss-tags">
@@ -495,9 +513,9 @@
         </div>
       </figure>
 
-      <figure class="ss-row">
+      <figure class="ss-row reverse">
         <div class="ss-text">
-          <div class="ss-num">11</div>
+          <div class="ss-num">12</div>
           <h3>逐句翻譯（接地端 LLM）</h3>
           <p>把長段文字 / PDF / DOCX / TXT 分句後送進公司內網架的 LLM Server（Ollama / vLLM / LM Studio…），左原文右譯文並排對照、每句可單獨重譯。<b>不上雲、文件內容絕不外傳</b>，符合個資法、營業秘密、客戶 NDA 要求。並行翻譯（預設 4 並發）讓批次處理快 4-8 倍；每格小複製按鈕、整列 hover 高亮、表頭顯示來源 / 目標語言 + 字數。</p>
           <div class="ss-tags">
