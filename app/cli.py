@@ -504,6 +504,16 @@ def svc_update() -> int:
             _restore_ownership(root, owner)
             svc_start()
             return rc
+        # easyocr 軟性檢查 — 沒裝會 fallback tesseract，warn 不 die
+        eo_rc = subprocess.call([str(venv_py), "-c", "import easyocr"],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if eo_rc == 0:
+            print("  OK: EasyOCR available (主 OCR 引擎)")
+        else:
+            print("  WARNING: EasyOCR 未裝（OCR 會自動 fallback tesseract，CJK 識別率較弱）",
+                  file=sys.stderr)
+            print("    手動補裝：sudo jtdt update  或  <venv>/bin/pip install easyocr",
+                  file=sys.stderr)
 
     # 5. Restore ownership so the service user can read the new files
     _restore_ownership(root, owner)
@@ -765,12 +775,117 @@ def _ensure_system_deps_for_update() -> None:
             _migrate_nssm_to_winsw()
         except Exception as e:
             print(f"  warning: NSSM→WinSW migration errored: {e}", file=sys.stderr)
+        # v1.7.2: vc_redist for PyTorch (EasyOCR dep)
+        try:
+            _ensure_vc_redist_windows()
+        except Exception as e:
+            print(f"  warning: vc_redist install errored: {e}", file=sys.stderr)
+
+
+def _ensure_vc_redist_windows() -> None:
+    """Windows only — 確保 Microsoft Visual C++ Redistributable 14.40+ 已安裝。
+    PyTorch (EasyOCR 主依賴) 需要它，沒有會 c10.dll load failure。
+    符合條件就跳過；舊版或缺則靜默安裝（不需 reboot — 新 process 即可載 DLL）。"""
+    if not _is_windows():
+        return
+    import winreg
+    needs_install = True
+    for hive_path in (
+        r"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64",
+        r"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\X64",
+    ):
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, hive_path) as k:
+                ver, _ = winreg.QueryValueEx(k, "Version")
+                # ver looks like "v14.40.33810.00" or "v14.0.23026.00"
+                import re as _re
+                m = _re.match(r"^v?(\d+)\.(\d+)", str(ver))
+                if m:
+                    major = int(m.group(1))
+                    minor = int(m.group(2))
+                    if major > 14 or (major == 14 and minor >= 40):
+                        print(f"  OK: VC++ Redistributable already current ({ver})")
+                        return
+                    print(f"  VC++ Redistributable too old ({ver}) — upgrading")
+                    break
+        except FileNotFoundError:
+            continue
+        except Exception:
+            continue
+    print("  Installing Microsoft Visual C++ Redistributable (PyTorch dep, ~25MB)...")
+    import urllib.request
+    import tempfile
+    import subprocess as _sp
+    tmp = Path(tempfile.gettempdir()) / "jtdt-vc_redist.x64.exe"
+    try:
+        urllib.request.urlretrieve(
+            "https://aka.ms/vs/17/release/vc_redist.x64.exe", str(tmp),
+        )
+        rc = _sp.call([str(tmp), "/install", "/quiet", "/norestart"])
+        if rc in (0, 3010):
+            print(f"  OK: VC++ Redistributable installed (exit {rc} — 新 process 可正常載入，不需重啟)")
+        else:
+            print(f"  WARNING: vc_redist exit {rc} — EasyOCR 可能載不起，OCR 會 fallback tesseract",
+                  file=sys.stderr)
+    except Exception as e:
+        print(f"  WARNING: vc_redist 下載 / 安裝失敗：{e}", file=sys.stderr)
+        print("    手動補裝：開 https://aka.ms/vs/17/release/vc_redist.x64.exe", file=sys.stderr)
 
 
 def _ensure_tesseract_chi_tra(binary: str) -> bool:
-    """Make sure chi_tra.traineddata is present. UB-Mannheim winget silent
-    install 預設不含；直接從 tessdata GitHub 下載 ~12MB 補進 tessdata 目錄。
-    Returns True if chi_tra is present (already-or-now)."""
+    """Backward-compat wrapper — 真正工作交給 _ensure_tesseract_core_langs。"""
+    return _ensure_tesseract_core_langs(binary)
+
+
+def _ensure_tesseract_core_langs(binary: str) -> bool:
+    """確保 chi_tra + eng 兩個語言都有 fast + best 雙變體。
+
+    新行為（v1.7.2+）：對每個核心語言（chi_tra / eng）下載 fast + best
+    兩個變體，並把 best 設為 active 主檔。預設品質 = best。
+    用 tessdata_manager.install_lang() 統一邏輯，避免重複實作。
+
+    向後相容：若既有 tessdata 已有 single `<code>.traineddata` 但沒
+    `.fast` / `.best` 變體，install_lang 內的 _download_variant 會偵測
+    既有同 size 變體（不存在）→ 重新下載兩個。完成後 active 切到 best。
+
+    Returns True if BOTH chi_tra + eng 都有可用 active variant 了。
+    """
+    try:
+        # 用 sys.path-based import — cli.py 是 jt-doc-tools 的一部分，可以
+        # 直接 import app modules
+        from app.core import tessdata_manager as tm
+    except Exception as e:
+        print(f"  WARNING: tessdata_manager import failed: {e} — fall back to legacy fast-only download", file=sys.stderr)
+        return _legacy_download_chi_tra_fast_only(binary)
+
+    overall_ok = True
+    for code in ("chi_tra", "eng"):
+        try:
+            print(f"  Ensuring {code} (fast + best variants)...")
+            result = tm.install_lang(code, download_both=True)
+            if result.ok:
+                size_mb = result.bytes_written / 1024 / 1024
+                if size_mb > 0.1:
+                    print(f"    OK: {code} variants installed ({size_mb:.1f} MB total)")
+                else:
+                    print(f"    OK: {code} already present")
+                if result.error:
+                    print(f"    note: {result.error}")
+            else:
+                print(f"    WARNING: {code} install failed: {result.error}", file=sys.stderr)
+                # eng 在 chi_tra 之外通常已是 tesseract 自帶 — 失敗不要 abort
+                if code == "chi_tra":
+                    overall_ok = False
+        except Exception as e:
+            print(f"    WARNING: {code} install errored: {e}", file=sys.stderr)
+            if code == "chi_tra":
+                overall_ok = False
+    return overall_ok
+
+
+def _legacy_download_chi_tra_fast_only(binary: str) -> bool:
+    """Pre-v1.7.2 行為：只下 chi_tra fast 一個檔。當 tessdata_manager 不可
+    import 時的 last-ditch fallback（極少觸發 — cli.py 跟 app 同一 process）。"""
     try:
         out = subprocess.run(
             [binary, "--list-langs"], capture_output=True, text=True, timeout=5,
@@ -779,11 +894,9 @@ def _ensure_tesseract_chi_tra(binary: str) -> bool:
             return True
     except Exception:
         return False
-    # Find tessdata dir — usually <install_dir>/tessdata
     tessdata = Path(binary).parent / "tessdata"
     if not tessdata.exists():
-        print(f"  WARNING: tessdata dir not found: {tessdata} — skipping chi_tra download",
-              file=sys.stderr)
+        print(f"  WARNING: tessdata dir not found: {tessdata}", file=sys.stderr)
         return False
     url = "https://github.com/tesseract-ocr/tessdata_fast/raw/main/chi_tra.traineddata"
     dst = tessdata / "chi_tra.traineddata"
@@ -794,10 +907,9 @@ def _ensure_tesseract_chi_tra(binary: str) -> bool:
         if dst.exists() and dst.stat().st_size > 1_000_000:
             print(f"  OK: chi_tra.traineddata installed ({dst.stat().st_size / 1024 / 1024:.1f} MB)")
             return True
-        else:
-            dst.unlink(missing_ok=True)
-            print("  WARNING: chi_tra download incomplete, removed", file=sys.stderr)
-            return False
+        dst.unlink(missing_ok=True)
+        print("  WARNING: chi_tra download incomplete, removed", file=sys.stderr)
+        return False
     except Exception as e:
         print(f"  WARNING: chi_tra download failed: {e}", file=sys.stderr)
         return False
@@ -1868,6 +1980,100 @@ def svc_auth_set_local() -> int:
     )
 
 
+def svc_ocr_lang_list() -> int:
+    """印 OCR 訓練檔狀態表 — 給 admin 在 console 看安裝情況。"""
+    from app.core import tessdata_manager as tm
+    catalog = tm.catalog_with_status()
+    default_q = tm.get_default_quality()
+    td = tm.get_tessdata_dir()
+    print(f"tessdata dir: {td or '(not found)'}")
+    print(f"default quality: {default_q}")
+    print()
+    print(f"{'code':<10}{'name':<14}{'fast':<10}{'best':<10}{'active':<10}")
+    print("-" * 56)
+    for c in catalog:
+        fast = f"{c['fast_size_mb']:.0f}MB" if c['fast_installed'] else "-"
+        best = f"{c['best_size_mb']:.0f}MB" if c['best_installed'] else "-"
+        active = c['active_variant'] if c['installed'] else "-"
+        # 將中文名 padding 對齊（中文字算 2 個 cell width）
+        name = c['name']
+        cjk_pad = 14 - sum(2 if ord(ch) > 127 else 1 for ch in name)
+        print(f"{c['code']:<10}{name}{' ' * max(0, cjk_pad)}{fast:<10}{best:<10}{active:<10}")
+    return 0
+
+
+def svc_ocr_lang_install(code: str, only: Optional[str] = None) -> int:
+    """安裝 OCR 訓練檔，預設下 fast + best 兩變體。only='fast'/'best' 限單變體。"""
+    from app.core import tessdata_manager as tm
+    if only and only not in ("fast", "best"):
+        print(f"ERROR: --only must be 'fast' or 'best' (got {only!r})", file=sys.stderr)
+        return 2
+    if not tm.is_valid_lang_code(code):
+        print(f"ERROR: invalid lang code {code!r}; supported: "
+              f"{', '.join(i['code'] for i in tm.LANG_CATALOG)}", file=sys.stderr)
+        return 2
+    if not tm.can_write_tessdata():
+        h = tm.platform_install_hint(code)
+        print(f"ERROR: {h['message']}", file=sys.stderr)
+        for m in h.get("methods", []):
+            print(f"  {m['name']}: {m['command']}", file=sys.stderr)
+        return 1
+    print(f"Installing {code} ({'both fast+best' if not only else only})...")
+    result = tm.install_lang(code, variant=only, download_both=(only is None))
+    if result.ok:
+        size_mb = result.bytes_written / 1024 / 1024
+        print(f"OK: {code} installed ({size_mb:.1f}MB) → {result.path}")
+        if result.error:
+            print(f"  note: {result.error}")
+        return 0
+    print(f"FAIL: {result.error}", file=sys.stderr)
+    return 1
+
+
+def svc_ocr_lang_remove(code: str) -> int:
+    from app.core import tessdata_manager as tm
+    if not tm.is_valid_lang_code(code):
+        print(f"ERROR: invalid lang code {code!r}", file=sys.stderr)
+        return 2
+    result = tm.uninstall_lang(code)
+    if result.ok:
+        print(f"OK: {code} removed")
+        return 0
+    print(f"FAIL: {result.error}", file=sys.stderr)
+    return 1
+
+
+def svc_ocr_lang_switch(code: str, quality: str) -> int:
+    """切換單一語言的 active 變體（fast / best）。"""
+    from app.core import tessdata_manager as tm
+    if quality not in ("fast", "best"):
+        print(f"ERROR: quality must be 'fast' or 'best' (got {quality!r})", file=sys.stderr)
+        return 2
+    if not tm.is_valid_lang_code(code):
+        print(f"ERROR: invalid lang code {code!r}", file=sys.stderr)
+        return 2
+    result = tm.switch_active_quality(code, quality)
+    if result.ok:
+        print(f"OK: {code} active → {quality}")
+        return 0
+    print(f"FAIL: {result.error}", file=sys.stderr)
+    return 1
+
+
+def svc_ocr_lang_quality(quality: str) -> int:
+    """設 OCR 全域預設 quality（fast / best）。同時把所有兩變體都齊的 lang 改 active。"""
+    from app.core import tessdata_manager as tm
+    if quality not in ("fast", "best"):
+        print(f"ERROR: quality must be 'fast' or 'best' (got {quality!r})", file=sys.stderr)
+        return 2
+    if tm.set_default_quality(quality):
+        print(f"OK: default quality → {quality}")
+        print("    （所有兩變體都已下載的 lang 已自動切到 {})".format(quality))
+        return 0
+    print("FAIL: could not save setting", file=sys.stderr)
+    return 1
+
+
 # --------------------------------------------------------------------- argparse
 
 def _print_friendly_help() -> None:
@@ -1961,6 +2167,22 @@ def main(argv: list[str] | None = None) -> int:
     p_au_create.add_argument("--display-name", default=None,
                               help="顯示名稱（沒給就用 username）")
 
+    # OCR 訓練檔管理（fleet/headless 場景的 admin/ocr-langs CLI 替代）
+    p_ocr = sub.add_parser("ocr-lang", help="OCR 訓練檔管理（同 admin/ocr-langs 的 CLI 版）")
+    ocr_sub = p_ocr.add_subparsers(dest="ocr_cmd", required=True)
+    ocr_sub.add_parser("list", help="列所有支援語言 + 安裝狀態")
+    p_ol_inst = ocr_sub.add_parser("install", help="安裝語言（預設下 fast + best 兩變體）")
+    p_ol_inst.add_argument("code", help="語言碼（如 chi_sim、jpn）")
+    p_ol_inst.add_argument("--only", choices=["fast", "best"], default=None,
+                            help="只下單一變體（預設 fast + best 都下）")
+    p_ol_rm = ocr_sub.add_parser("remove", help="移除語言（fast + best 兩變體都刪）")
+    p_ol_rm.add_argument("code", help="語言碼")
+    p_ol_sw = ocr_sub.add_parser("switch", help="切換單一語言的 active 變體")
+    p_ol_sw.add_argument("code", help="語言碼")
+    p_ol_sw.add_argument("quality", choices=["fast", "best"], help="切到 fast 或 best")
+    p_ol_q = ocr_sub.add_parser("quality", help="設 OCR 全域預設品質（fast / best）")
+    p_ol_q.add_argument("quality", choices=["fast", "best"], help="預設品質")
+
     args = p.parse_args(argv)
     table = {
         "start": svc_start,
@@ -1993,6 +2215,18 @@ def main(argv: list[str] | None = None) -> int:
             return svc_audit_user_create(
                 args.username, args.password, args.display_name,
             )
+        return 1
+    if args.cmd == "ocr-lang":
+        if args.ocr_cmd == "list":
+            return svc_ocr_lang_list()
+        if args.ocr_cmd == "install":
+            return svc_ocr_lang_install(args.code, only=args.only)
+        if args.ocr_cmd == "remove":
+            return svc_ocr_lang_remove(args.code)
+        if args.ocr_cmd == "switch":
+            return svc_ocr_lang_switch(args.code, args.quality)
+        if args.ocr_cmd == "quality":
+            return svc_ocr_lang_quality(args.quality)
         return 1
     return table[args.cmd]()
 

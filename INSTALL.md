@@ -103,10 +103,24 @@ jtdt status
 
 | 項目 | 最低 | 建議 |
 |------|------|------|
-| OS   | Ubuntu 22.04 / macOS 12 / Windows 10 21H2 | 較新版本 |
-| RAM  | 2 GB | 4 GB+ |
-| 硬碟 | 2 GB（含 OxOffice + Python 環境） | 10 GB+（含使用者資料） |
+| OS   | Ubuntu 20.04+ / Debian 11+ / macOS 12+ / Windows 10 1809+ | 較新版本 |
+| CPU  | x86_64 / arm64（Apple Silicon、Win11 ARM 都支援） | 4 核心+ |
+| RAM  | 2 GB（OCR 跑時建議 4 GB+） | 8 GB+ |
+| 硬碟 | **3 GB**（含 PyTorch 1.5 GB + OxOffice 1 GB + tesseract 訓練檔 80 MB） | 10 GB+（含使用者資料） |
 | Python | 不需預裝（uv 會自動下載獨立 Python 3.12） | — |
+| 網路 | 安裝時可連 GitHub / PyPI；之後純內網運作 | — |
+
+### 磁碟用量明細
+
+| 項目 | 大小 | 說明 |
+|---|---|---|
+| Python 環境（含 PyTorch + EasyOCR） | ~1.5 GB | EasyOCR 是主 OCR 引擎，依賴 PyTorch |
+| OxOffice / LibreOffice | ~1 GB | Linux 自動裝；macOS / Windows 提示安裝 |
+| tesseract 訓練檔（chi_tra + eng） | ~80 MB | fast + best 雙變體都裝（admin 可切換） |
+| EasyOCR 模型（首次 OCR 下載） | ~150 MB | 存 `~/.EasyOCR/model/`，內建中英 |
+| 使用者資料（隨用增長） | 起始 < 10 MB | `data/` 含 history、auth db 等 |
+
+> 安裝時長 5-15 分鐘（PyTorch 700 MB 下載是大頭，依網速）。安裝過程可開 `screen` / `tmux` 跑背景避免 ssh 斷線。
 
 ## 解除安裝
 

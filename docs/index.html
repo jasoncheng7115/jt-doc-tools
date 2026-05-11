@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台.30 個工具一站處理：表單填寫、用印簽名、浮水印、敏感資料去識別化、PDF 加密、隱藏內容掃描、差異比對、逐句翻譯等。可選 LDAP / AD 認證、角色權限、稽核、記錄轉送。不上雲，資料留在自己手中。">
+<meta name="description" content="Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台。32 個工具一站處理：表單填寫、用印簽名、浮水印、OCR 文字辨識、送件前檢核、敏感資料去識別化、PDF 加密、隱藏內容掃描、差異比對、逐句翻譯等。可選 LDAP / AD 認證、角色權限、稽核、記錄轉送。不上雲，資料留在自己手中。">
 <title>Jason Tools 文件工具箱 — PDF / Office 整合式文件處理平台</title>
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
@@ -50,7 +50,7 @@
     <div class="hero-eyebrow">開源 · 不上雲 · 跑在自己機房</div>
     <h1 class="hero-title">
       別再把公司文件丟到線上 PDF 工具<br>
-      <span class="hero-title-accent">這有 30 工具，自架、開源、可控</span>
+      <span class="hero-title-accent">這有 32 工具，自架、開源、可控</span>
     </h1>
     <p class="hero-lead">
       表單自動填寫、用印與簽名、浮水印、敏感資料去識別化、PDF 加密、中繼資料清除、隱藏內容掃描、差異比對、頁面編輯…
@@ -67,7 +67,7 @@
       </a>
     </div>
     <div class="hero-shot">
-      <img src="screenshots/index.png" alt="Jason Tools 文件工具箱主介面 — 30 個工具一覽" loading="lazy">
+      <img src="screenshots/index.png" alt="Jason Tools 文件工具箱主介面 — 32 個工具一覽" loading="lazy">
     </div>
   </div>
 </section>
@@ -120,14 +120,14 @@
 <section id="features" class="section section-light">
   <div class="container">
     <div class="section-eyebrow">核心功能</div>
-    <h2 class="section-title">30 個工具，分 6 大類</h2>
+    <h2 class="section-title">32 個工具，分 6 大類</h2>
     <p class="section-lead">每個工具都有獨立頁面，左側 sidebar 一鍵切換。所有處理結果可下載 PDF 或圖片。</p>
     <div class="ofc-callout">
       <span class="ofc-callout-ic">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       </span>
       <div class="ofc-callout-body">
-        <b>需 Office 引擎的工具</b>會以扳手圖示標示。這些工具在處理 <b>Word / Excel / PowerPoint / ODF</b> 時要用到 <b>OxOffice</b> 或 <b>LibreOffice</b>（OxOffice 優先，OSSII 維護的台灣本地化 fork，CJK 支援更好）。其餘 21 個工具只處理 PDF，<b>不需</b> Office 引擎。安裝腳本會自動偵測 / 補裝 OxOffice。
+        <b>需 Office 引擎的工具</b>會以扳手圖示標示。這些工具在處理 <b>Word / Excel / PowerPoint / ODF</b> 時要用到 <b>OxOffice</b> 或 <b>LibreOffice</b>（OxOffice 優先，OSSII 維護的台灣本地化 fork，CJK 支援更好）。其餘 25 個工具只處理 PDF，<b>不需</b> Office 引擎。安裝腳本會自動偵測 / 補裝 OxOffice。
       </div>
     </div>
 
@@ -215,6 +215,14 @@
           <li>
             <span class="fl-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a14 14 0 0 1 0 18a14 14 0 0 1 0-18"/></svg></span>
             <div class="fl-text"><span class="fn">逐句翻譯</span><span class="fd">接地端 LLM 逐句翻譯，左原文右譯文並排對照；可貼文字或上傳 PDF / DOCX / TXT；目標語言預設繁中可選</span></div>
+          </li>
+          <li>
+            <span class="fl-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h13l5 5v11a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M16 4v5h5"/><path d="m7 14 3 3 5-5"/></svg></span>
+            <div class="fl-text"><span class="fn">OCR 文字辨識</span><span class="fd">掃描 PDF / 圖片變可選取文字，雙引擎（EasyOCR 預設、Tesseract 備援），CJK 強，可選 LLM 校正 typo</span></div>
+          </li>
+          <li>
+            <span class="fl-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+            <div class="fl-text"><span class="fn">送件前檢核<span class="ofc-mark" title="需 OxOffice / LibreOffice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span></span><span class="fd">送件前自動檢核：頁面尺寸、字型嵌入、欄位完整、敏感資料殘留、隱藏內容（Office 輸入時需引擎）</span></div>
           </li>
         </ul>
       </article>
@@ -458,7 +466,7 @@
         <div class="ss-text">
           <div class="ss-num">09</div>
           <h3>權限矩陣 （RBAC）</h3>
-          <p>左側 subject 列表（搜尋 + 全部 / 使用者 / 群組 tab），右側即時編輯角色與工具權限.6 個內建角色（管理員 / 一般使用者 / 文管 / 財務 / 業務 / 法務資安）+ 自訂角色，支援指派到使用者 / 群組 / OU。</p>
+          <p>左側 subject 列表（搜尋 + 全部 / 使用者 / 群組 tab），右側即時編輯角色與工具權限。6 個內建角色（管理員 / 一般使用者 / 文管 / 財務 / 業務 / 法務資安）+ 自訂角色，支援指派到使用者 / 群組 / OU。</p>
           <div class="ss-tags">
             <span class="tag">RBAC</span>
             <span class="tag">6 內建角色</span>
@@ -641,7 +649,7 @@
       <div class="ent-card">
         <div class="ent-num">C</div>
         <h3>稽核記錄</h3>
-        <p>登入 / 登出 / 失敗鎖定 / 權限變更 / 設定變更 / <b>工具呼叫含上傳檔名</b>，全部記下.async 寫入 SQLite （WAL） 不影響服務效能。可篩選 / 匯出 CSV，預設保留 90 天自動清理。</p>
+        <p>登入 / 登出 / 失敗鎖定 / 權限變更 / 設定變更 / <b>工具呼叫含上傳檔名</b>，全部記下。async 寫入 SQLite （WAL） 不影響服務效能。可篩選 / 匯出 CSV，預設保留 90 天自動清理。</p>
       </div>
 
       <div class="ent-card">
@@ -828,8 +836,12 @@
     <div class="install-meta">
       <div>
         <strong>系統需求</strong>
-        最低 Ubuntu 22.04 / macOS 12 / Windows 10 21H2，2 GB RAM，2 GB 硬碟。
+        Ubuntu 20.04+ / Debian 11+ / macOS 12+ / Windows 10 1809+ /
+        <b>磁碟 3 GB</b> 可用（含 PyTorch + EasyOCR ~1.5 GB、Office 引擎 ~1 GB、tesseract 訓練檔 ~80 MB）/
+        <b>RAM 2 GB</b>（建議 4 GB+）/
+        x86_64 或 arm64（Apple Silicon、Win11 ARM 都支援）。
         <b>不需預裝 Python</b>（uv 自動下載獨立 3.12）。
+        安裝時長 5-15 分鐘（PyTorch 700 MB 是大頭，依網速）。
       </div>
       <div>
         <strong>升級 / 移除</strong>

@@ -581,6 +581,12 @@ setup_python() {
     "$INSTALL_DIR/.venv/bin/python" -c \
         "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx, psutil, pyotp, qrcode" \
         || die "依賴 import 失敗 — 安裝不完整，請查看上方錯誤"
+    # easyocr 是 v1.7.2 新加的主 OCR 引擎；deps 重（PyTorch ~700MB），import
+    # 失敗不致命（會自動 fallback tesseract）— warn 不 die
+    if ! "$INSTALL_DIR/.venv/bin/python" -c "import easyocr" 2>/dev/null; then
+        warn "EasyOCR 未裝成（OCR 會自動 fallback tesseract，識別率較弱）"
+        warn "  可手動補裝: $INSTALL_DIR/bin/uv sync  或  $INSTALL_DIR/.venv/bin/pip install easyocr"
+    fi
     ok "Python 環境就緒：$INSTALL_DIR/.venv"
 }
 

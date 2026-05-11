@@ -302,7 +302,14 @@ class LLMClient:
         prompt: str,
         model: str,
         temperature: float = 0.0,
-    ) -> dict:
+        max_tokens: Optional[int] = None,
+        parse_json: bool = True,
+        think: bool = False,
+    ):
+        """parse_json=True (預設，向後相容): 回 dict（會強行 JSON parse，
+        失敗會 raise LLMError）。
+        parse_json=False: 回 raw str 純文字，由 caller 自行處理。
+        """
         """Send one-or-more images + a text prompt, expect JSON response.
 
         ``png_bytes`` may be a single ``bytes`` blob or a ``list[bytes]``;
@@ -323,7 +330,18 @@ class LLMClient:
                 "type": "image_url",
                 "image_url": {"url": f"data:image/png;base64,{b64}"},
             })
-        content.append({"type": "text", "text": prompt})
+
+        # Model profile：依 model family 套用 thinking 抑制方式
+        from .llm_model_profile import get_profile as _get_profile
+        profile = _get_profile(model, self.base_url)
+        # think=False AND model 真的是 thinking model → 才套用抑制
+        # （非 thinking model 加 /no_think marker 是無害但無意義噪音）
+        suppress_thinking = (not think) and profile.is_thinking
+
+        text_prompt = prompt
+        if suppress_thinking and profile.no_think_marker:
+            text_prompt = profile.no_think_marker + "\n\n" + prompt
+        content.append({"type": "text", "text": text_prompt})
 
         # IMPORTANT design notes:
         # 1. We DON'T set response_format=json_object. For many vision models
@@ -333,12 +351,32 @@ class LLMClient:
         #    SSE events. Non-streaming requests hold the socket silent for
         #    the entire generation, which trips httpx's read_timeout on
         #    anything longer than ~120s (vision reasoning often is).
+        # 對 thinking model 加 system 指令再次強調不要 reasoning trace
+        messages: list[dict] = []
+        if suppress_thinking:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "Respond with ONLY the requested output. No reasoning "
+                    "traces, no <think> tags, no prefaces, no explanations. "
+                    "Output the final answer directly."
+                ),
+            })
+        messages.append({"role": "user", "content": content})
         payload = {
             "model": model,
             "temperature": temperature,
             "stream": True,
-            "messages": [{"role": "user", "content": content}],
+            "messages": messages,
         }
+        if max_tokens is not None and max_tokens > 0:
+            payload["max_tokens"] = int(max_tokens)
+        # Ollama-specific knobs to disable thinking — 只對 thinking model 套用
+        if suppress_thinking:
+            payload["think"] = False
+            payload.setdefault("options", {})["think"] = False
+            if profile.use_chat_template_kwargs:
+                payload["chat_template_kwargs"] = {"enable_thinking": False}
         parts: list[str] = []
         try:
             with httpx.stream(
@@ -368,6 +406,104 @@ class LLMClient:
         except httpx.HTTPStatusError:
             raise
         full_content = "".join(parts)
+        # Diagnostic log: how many SSE chunks did we get? Helps catch
+        # cases where Ollama opens the stream but never sends any deltas
+        # (model crashed / refused content / vision encoding hung).
+        import logging as _lg
+        _llog = _lg.getLogger("app.llm.client")
+        _llog.info(
+            "vision_query: model=%s stream chunks=%d chars=%d",
+            model, len(parts), len(full_content),
+        )
+
+        # === Fallback A：streaming 0 chunks → 改用 non-streaming OpenAI-compat 重試 ===
         if not full_content.strip():
-            raise LLMError("LLM returned empty response")
+            _llog.warning("vision_query stream returned empty, retrying non-stream OpenAI-compat...")
+            payload_ns = dict(payload)
+            payload_ns["stream"] = False
+            try:
+                with httpx.Client(timeout=self.timeout) as cli:
+                    r2 = cli.post(
+                        f"{self.base_url}/chat/completions",
+                        headers=self._headers(),
+                        json=payload_ns,
+                    )
+                    r2.raise_for_status()
+                    data = r2.json()
+                    full_content = (
+                        data.get("choices", [{}])[0]
+                            .get("message", {})
+                            .get("content", "")
+                    ) or ""
+                    _llog.info("vision_query: non-stream fallback chars=%d", len(full_content))
+            except Exception as e:
+                _llog.warning("vision_query non-stream fallback failed: %s", e)
+
+        # === Fallback B：OpenAI-compat 都拿不到 → 改用 Ollama 原生 /api/chat ===
+        # Ollama OpenAI-compat 的 /v1/chat/completions 對 vision input 有時不傳
+        # delta（GPU 確實有跑、但 SSE 內容為空）。原生 /api/chat 用 messages[].images
+        # 欄位處理影像，多數 vision 模型在這條路上正常。
+        if not full_content.strip() and "/v1" in self.base_url:
+            ollama_base = self.base_url.rsplit("/v1", 1)[0]
+            _llog.warning("vision_query OpenAI-compat empty, trying Ollama native /api/chat at %s", ollama_base)
+            try:
+                # 把第一張 png 轉 base64（Ollama 接 list[str]）
+                first_png = imgs[0] if isinstance(imgs, list) else imgs
+                img_b64 = base64.b64encode(first_png).decode("ascii")
+                native_msgs: list[dict] = []
+                if suppress_thinking:
+                    native_msgs.append({
+                        "role": "system",
+                        "content": ("Respond with ONLY the requested output. "
+                                    "No reasoning traces, no <think> tags."),
+                    })
+                native_user_prompt = (
+                    profile.no_think_marker + "\n\n" + prompt
+                    if suppress_thinking and profile.no_think_marker
+                    else prompt
+                )
+                native_msgs.append({
+                    "role": "user",
+                    "content": native_user_prompt,
+                    "images": [img_b64],
+                })
+                native_payload = {
+                    "model": model,
+                    "messages": native_msgs,
+                    "stream": False,
+                    "options": {"temperature": float(temperature)},
+                }
+                if suppress_thinking:
+                    native_payload["think"] = False
+                    native_payload["options"]["think"] = False
+                if max_tokens is not None and max_tokens > 0:
+                    native_payload["options"]["num_predict"] = int(max_tokens)
+                with httpx.Client(timeout=self.timeout) as cli:
+                    r3 = cli.post(f"{ollama_base}/api/chat",
+                                  headers={"Content-Type": "application/json"},
+                                  json=native_payload)
+                    r3.raise_for_status()
+                    raw_body = r3.text
+                    _llog.info(
+                        "vision_query Ollama native: HTTP %d body_bytes=%d body_repr=%r",
+                        r3.status_code, len(raw_body), raw_body[:500],
+                    )
+                    data3 = r3.json()
+                    msg = data3.get("message", {})
+                    full_content = msg.get("content", "") or ""
+                    _llog.info(
+                        "vision_query: Ollama native /api/chat content_chars=%d msg_keys=%s done_reason=%s",
+                        len(full_content), list(msg.keys()), data3.get("done_reason", "?"),
+                    )
+            except Exception as e:
+                _llog.warning("vision_query Ollama native /api/chat also failed: %s", e)
+
+        if not full_content.strip():
+            raise LLMError(
+                f"Model '{model}' 對影像 input 沒有回傳任何內容（OpenAI-compat 與 Ollama 原生 /api/chat 都拿不到）。"
+                f"請確認該模型真的支援 vision — 跑 `ollama show {model}` 看 capability 欄位。"
+                f"若無 vision 能力請改用其他 model（qwen2.5vl:7b、minicpm-v、llava 等）。"
+            )
+        if not parse_json:
+            return full_content
         return _extract_json_from_response(full_content)

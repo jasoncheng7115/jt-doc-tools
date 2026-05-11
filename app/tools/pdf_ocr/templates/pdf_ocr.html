@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
 
-{% block title %}PDF 文字層補建 · {{ app_name }}{% endblock %}
+{% block title %}OCR 文字辨識 · {{ app_name }}{% endblock %}
 
 {% block head %}
 <style>
@@ -13,6 +13,248 @@
 }
 .po-checkrow { display:flex; align-items:center; gap:8px; padding:6px 0; font-size:13px; }
 .po-checkrow input[type=checkbox] { width:16px; height:16px; }
+/* 語言 chip 選擇器 — grid 版（齊頭整齊） */
+.po-langs-wrap { border:1px solid #e2e8f0; border-radius:8px; background:#fafbfc; padding:12px 14px; }
+.po-langs-toolbar { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; font-size:12px; }
+.po-langs-toolbar .po-quick { background:#fff; border:1px solid #cbd5e1; border-radius:14px; padding:3px 12px; font-size:12px; cursor:pointer; color:#475569; transition:all .15s; }
+.po-langs-toolbar .po-quick:hover { background:#3b82f6; border-color:#3b82f6; color:#fff; }
+.po-langs-toolbar .po-count { margin-left:auto; color:#64748b; font-size:12px; }
+.po-langs-toolbar .po-count b { color:#0f172a; }
+.po-langs-group { margin-bottom:14px; }
+.po-langs-group:last-child { margin-bottom:0; }
+.po-langs-group-label { display:block; font-size:11px; color:#94a3b8; font-weight:600; letter-spacing:.5px; text-transform:uppercase; margin-bottom:8px; padding-left:2px; }
+.po-langs-grouphdr { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:8px; padding-left:2px; }
+.po-langs-grouphdr .po-langs-group-label { margin-bottom:0; padding-left:0; }
+.po-langs-grouphdr .po-count { color:#64748b; font-size:12px; }
+.po-langs-grouphdr .po-count b { color:#0f172a; }
+/* details 版的群組 - 不常用語言預設摺起 */
+details.po-langs-group { margin-bottom:14px; }
+details.po-langs-group > summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: #f8fafc;
+  border-radius: 4px;
+  user-select: none;
+}
+details.po-langs-group[open] > summary { color:#475569; background:#f1f5f9; margin-bottom:8px; }
+details.po-langs-group > summary:hover { background:#e2e8f0; }
+details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal; margin-left:8px; }
+.po-langs-grid {
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap:6px;
+}
+.po-chip {
+  position:relative;
+  display:flex; align-items:center; gap:8px;
+  padding:8px 10px 8px 12px;
+  border:1.5px solid #e2e8f0; border-radius:8px; background:#fff;
+  cursor:pointer; font-size:13px; color:#334155;
+  transition:all .15s ease; user-select:none; line-height:1.2;
+  min-height:38px; box-sizing:border-box;
+}
+.po-chip:hover:not(.po-chip-disabled) {
+  border-color:#3b82f6; background:#eff6ff;
+  box-shadow:0 2px 6px rgba(59,130,246,.12);
+}
+.po-chip.is-active {
+  border-color:#3b82f6; background:#3b82f6; color:#fff;
+  box-shadow:0 2px 8px rgba(59,130,246,.35);
+}
+.po-chip.is-active:hover { background:#2563eb; border-color:#2563eb; }
+.po-chip.is-active .po-chip-code { color:rgba(255,255,255,.78); }
+.po-chip-name { font-weight:500; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.po-chip-code {
+  font-size:10px; color:#94a3b8;
+  font-family:'SF Mono', Menlo, Consolas, monospace;
+  background:#f1f5f9; padding:1px 5px; border-radius:3px;
+  flex-shrink:0;
+}
+.po-chip.is-active .po-chip-code { background:rgba(255,255,255,.18); }
+.po-chip-check {
+  width:16px; height:16px; border-radius:4px;
+  border:1.5px solid #cbd5e1; background:#fff;
+  display:inline-flex; align-items:center; justify-content:center;
+  flex-shrink:0; transition:all .15s;
+}
+.po-chip.is-active .po-chip-check { border-color:#fff; background:#fff; }
+.po-chip.is-active .po-chip-check::after {
+  content:''; width:8px; height:5px;
+  border-left:2px solid #3b82f6; border-bottom:2px solid #3b82f6;
+  transform:rotate(-45deg) translate(1px, -1px);
+}
+.po-chip-disabled {
+  opacity:.6; cursor:not-allowed; background:#f8fafc;
+  border-style:dashed; border-color:#e2e8f0;
+}
+.po-chip-disabled:hover { box-shadow:none; }
+.po-chip-disabled .po-chip-check { background:#f1f5f9; border-color:#cbd5e1; }
+.po-chip-disabled .po-chip-name { color:#94a3b8; }
+.po-chip-lock {
+  position:absolute; top:-6px; right:-4px;
+  background:#fef3c7; color:#92400e;
+  font-size:9px; font-weight:600;
+  padding:1px 6px; border-radius:8px;
+  border:1px solid #fde68a;
+  letter-spacing:.3px;
+}
+.po-langs-summary {
+  font-size:13px; color:#1e40af; margin-top:12px;
+  padding:10px 12px; background:#eff6ff;
+  border-radius:6px; border-left:3px solid #3b82f6;
+  line-height:1.6;
+}
+.po-langs-summary code {
+  background:#fff; padding:1px 6px; border-radius:3px;
+  color:#1e40af; font-size:11px;
+  border:1px solid #dbeafe; margin:0 1px;
+}
+.po-langs-summary.is-empty {
+  border-left-color:#ef4444; color:#991b1b; background:#fef2f2;
+}
+.po-langs-empty { font-size:13px; color:#94a3b8; padding:14px; text-align:center; background:#f8fafc; border-radius:6px; }
+
+/* DPI 選擇器 — preset 卡片 */
+.po-dpi-wrap { border:1px solid #e2e8f0; border-radius:8px; background:#fafbfc; padding:12px 14px; }
+.po-dpi-grid {
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(95px, 1fr));
+  gap:8px;
+}
+.po-dpi-card {
+  position:relative;
+  display:flex; flex-direction:column; align-items:center;
+  padding:10px 8px;
+  border:1.5px solid #e2e8f0; border-radius:8px;
+  background:#fff; cursor:pointer; transition:all .15s;
+  user-select:none; line-height:1.2;
+}
+.po-dpi-card:hover { border-color:#3b82f6; background:#eff6ff; box-shadow:0 2px 6px rgba(59,130,246,.12); }
+.po-dpi-card.is-active { border-color:#3b82f6; background:#3b82f6; color:#fff; box-shadow:0 2px 8px rgba(59,130,246,.35); }
+.po-dpi-card.is-active .po-dpi-label { color:rgba(255,255,255,.85); }
+.po-dpi-card.is-active .po-dpi-recommend { background:rgba(255,255,255,.22); color:#fff; }
+.po-dpi-num { font-size:20px; font-weight:700; color:#0f172a; }
+.po-dpi-card.is-active .po-dpi-num { color:#fff; }
+.po-dpi-unit { font-size:11px; color:#64748b; font-weight:500; margin-top:-2px; }
+.po-dpi-card.is-active .po-dpi-unit { color:rgba(255,255,255,.78); }
+.po-dpi-label { font-size:12px; color:#475569; margin-top:4px; }
+.po-dpi-recommend {
+  position:absolute; top:4px; right:4px;
+  background:#10b981; color:#fff;
+  font-size:10px; font-weight:600;
+  padding:2px 6px; border-radius:6px;
+  letter-spacing:.3px;
+  line-height:1;
+}
+.po-dpi-custom-row { display:flex; align-items:center; gap:10px; margin-top:10px; padding-top:10px; border-top:1px dashed #e2e8f0; font-size:12px; color:#64748b; }
+.po-dpi-custom-row label { font-weight:500; }
+.po-dpi-custom-row input[type=number] {
+  width:80px; padding:5px 8px; font-size:13px;
+  border:1px solid #cbd5e1; border-radius:4px;
+}
+.po-dpi-custom-row .po-dpi-est { margin-left:auto; color:#94a3b8; font-size:11px; }
+
+/* Toggle card — OCR 範圍 / LLM 後處理 */
+.po-toggle {
+  display:flex; align-items:flex-start; gap:12px;
+  padding:12px 14px;
+  border:1.5px solid #e2e8f0; border-radius:8px;
+  background:#fafbfc; cursor:pointer;
+  transition:all .15s;
+}
+.po-toggle:hover:not(.po-toggle-disabled) { border-color:#cbd5e1; background:#fff; }
+.po-toggle:has(input:checked):not(.po-toggle-disabled) {
+  border-color:#3b82f6; background:#eff6ff;
+}
+.po-toggle input[type=checkbox] { width:18px; height:18px; margin-top:1px; flex-shrink:0; cursor:pointer; }
+.po-toggle label { display:flex; flex-direction:column; gap:4px; cursor:pointer; flex:1; min-width:0; margin:0; font-weight:400; }
+.po-toggle-name { font-size:14px; font-weight:600; color:#0f172a; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.po-toggle-hint { font-size:12px; color:#64748b; line-height:1.5; }
+.po-toggle-badge {
+  display:inline-flex; align-items:center;
+  background:#dbeafe; color:#1e40af;
+  font-size:11px; font-weight:500;
+  padding:2px 8px; border-radius:4px;
+  font-family:'SF Mono', Menlo, Consolas, monospace;
+}
+.po-toggle-disabled { opacity:.55; cursor:not-allowed; background:#f1f5f9; border-style:dashed; }
+.po-toggle-disabled label { cursor:not-allowed; }
+.po-toggle-disabled input { cursor:not-allowed; }
+.po-toggle-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:8px; }
+.po-toggle-tag {
+  display:inline-flex; align-items:center;
+  font-size:10px; font-weight:600;
+  padding:2px 7px; border-radius:4px;
+  letter-spacing:.3px; line-height:1;
+}
+.po-toggle-tag-vision { background:#fef3c7; color:#92400e; }
+.po-toggle-tag-text   { background:#dbeafe; color:#1e40af; }
+
+/* 處理中 spinner（按鈕內） */
+@keyframes po-spin { to { transform: rotate(360deg); } }
+.po-spinner {
+  display:inline-block; width:14px; height:14px;
+  border:2px solid currentColor; border-right-color:transparent;
+  border-radius:50%; animation: po-spin .7s linear infinite;
+  vertical-align:-3px; margin-right:6px;
+}
+.btn:disabled, .btn[disabled] { opacity:.6; cursor:not-allowed; pointer-events:none; }
+
+/* 各階段詳細結果 collapsible */
+.po-stages { margin-top:12px; border:1px solid #e2e8f0; border-radius:8px; background:#fafbfc; }
+.po-stages > summary {
+  list-style:none; cursor:pointer; padding:10px 14px;
+  font-size:13px; color:#334155; font-weight:600;
+  display:flex; align-items:center; gap:8px;
+  user-select:none;
+}
+.po-stages > summary::-webkit-details-marker { display:none; }
+.po-stages > summary::before {
+  content:'▶'; font-size:10px; color:#94a3b8; transition:transform .15s;
+}
+.po-stages[open] > summary::before { transform:rotate(90deg); }
+.po-stages > summary:hover { background:#f1f5f9; border-radius:8px; }
+.po-stages-body { padding:0 14px 14px; }
+.po-stage-page { margin-top:10px; padding:10px 12px; background:#fff; border:1px solid #e2e8f0; border-radius:6px; }
+.po-stage-page-head { font-size:12px; font-weight:600; color:#475569; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #f1f5f9; }
+.po-stage-row { margin-bottom:8px; }
+.po-stage-row:last-child { margin-bottom:0; }
+.po-stage-label {
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:12px; font-weight:600; margin-bottom:4px;
+}
+.po-stage-tag {
+  display:inline-flex; padding:2px 7px; border-radius:4px;
+  font-size:10px; font-weight:600; letter-spacing:.3px;
+}
+.po-stage-tag-ocr    { background:#e0e7ff; color:#3730a3; }
+.po-stage-tag-vision { background:#fef3c7; color:#92400e; }
+.po-stage-tag-text   { background:#dbeafe; color:#1e40af; }
+.po-stage-tag-final  { background:#dcfce7; color:#166534; }
+.po-stage-status {
+  display:inline-flex; padding:2px 7px; border-radius:4px;
+  font-size:10px; font-weight:500;
+}
+.po-stage-status-ok    { background:#dcfce7; color:#166534; }
+.po-stage-status-warn  { background:#fef3c7; color:#92400e; }
+.po-stage-status-skip  { background:#f1f5f9; color:#64748b; }
+.po-stage-note { font-size:11px; color:#64748b; margin-bottom:4px; }
+.po-stage-text {
+  font-family:'SF Mono', Menlo, Consolas, monospace;
+  font-size:12px; color:#0f172a;
+  background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px;
+  padding:8px 10px;
+  max-height:200px; overflow-y:auto;
+  white-space:pre-wrap; word-break:break-all;
+  line-height:1.5;
+}
+.po-stage-text.is-empty { color:#94a3b8; font-style:italic; }
 .po-progress { margin-top:8px; height:6px; background:#e5e7eb; border-radius:3px; overflow:hidden; }
 .po-progress > div { height:100%; background:#3b82f6; width:0%; transition: width .3s; }
 .po-warn { background:#fef3c7; border-left:3px solid #f59e0b; padding:8px 12px; font-size:12px; color:#92400e; border-radius:4px; margin-top:8px; }
@@ -24,48 +266,202 @@
 {% endblock %}
 
 {% block content %}
-<h1>{{ icon('text', size=22) }} PDF 文字層補建</h1>
-<p class="muted">對掃描 PDF 補上透明可選取的文字層。視覺看起來跟原檔一樣，但變成可搜尋（Cmd+F）、可滑鼠選取複製、可送進其他文字抽取工具的「searchable PDF」— 跟 macOS Preview 的 Live Text 同樣概念。</p>
+<h1>{{ icon('text', size=22) }} OCR 文字辨識</h1>
+<p class="muted">把掃描 PDF 或圖片（jpg / png / tiff / bmp / webp）跑 OCR 後變成「可搜尋、可滑鼠選取複製文字」的 PDF，圖檔上傳後自動包成 PDF 再 OCR。</p>
 
 {% if not tesseract_ok %}
 <div class="po-warn">{{ icon('warn', size=14) }} 此主機未安裝 tesseract，OCR 無法執行。請先安裝 tesseract（含 chi_tra 繁中訓練檔）。</div>
 {% endif %}
 
 <details class="panel" open>
-  <summary>1. 上傳 PDF</summary>
-  {% with upload_id='poUp', accept='application/pdf', hint='只支援 .pdf；上限 200 MB' %}{% include "components/file_upload.html" %}{% endwith %}
+  <summary>1. 上傳 PDF 或圖片</summary>
+  {% with upload_id='poUp', accept='.pdf,.jpg,.jpeg,.png,.tif,.tiff,.bmp,.webp,application/pdf,image/*', hint='支援 .pdf / .jpg / .png / .tiff / .bmp / .webp；上限 200 MB；圖片會自動包成單頁 PDF' %}{% include "components/file_upload.html" %}{% endwith %}
   <div id="uploadInfo" style="margin-top:8px; font-size:13px; color:#475569;"></div>
 </details>
 
 <details class="panel" open>
   <summary>2. 設定</summary>
   <div class="po-fields">
-    <div class="po-field">
-      <label>OCR 語言 <span class="muted">（{{ ocr_langs or '尚未偵測' }}）</span></label>
-      <input type="text" id="poLangs" placeholder="chi_tra+chi_sim+eng" value="{{ ocr_langs }}">
+    <div class="po-field" style="grid-column: 1 / -1;">
+      <label>OCR 語言
+        <span class="muted">（點選要辨識的語言；多選會增加處理時間。{% if current_engine == 'easyocr' %}<b>目前引擎：EasyOCR</b>，首次使用某語言會自動下載 ~150MB 模型{% else %}<b>目前引擎：Tesseract</b>{% endif %}，引擎切換在 <a href="/admin/ocr-langs">OCR 引擎管理</a>）</span>
+      </label>
+      {% if installed_langs %}
+      <div class="po-langs-wrap" id="poLangsBox">
+        {# CJK 群 — 標題列同時放統計 #}
+        <div class="po-langs-group">
+          <div class="po-langs-grouphdr">
+            <span class="po-langs-group-label">中日韓 CJK</span>
+            <span class="po-count">已選 <b id="poLangsCount">0</b> 種，{% if current_engine == 'easyocr' %}EasyOCR 內建 80+ 種、本頁列出常用 <b>{{ installed_langs|length }}</b> 種{% else %}共 <b>{{ installed_langs|length }}</b> 種已安裝{% endif %}</span>
+          </div>
+          <div class="po-langs-grid">
+            {% for lang in lang_catalog if lang.group == 'cjk' %}
+            <div class="po-chip {% if lang.installed and lang.code in default_langs %}is-active{% endif %} {% if not lang.installed %}po-chip-disabled{% endif %}"
+                 data-lang="{{ lang.code }}" data-installed="{{ '1' if lang.installed else '0' }}"
+                 data-variant="{{ lang.active_variant or '' }}"
+                 title="{{ lang.hint }}{% if not lang.installed %} — 未安裝（請至 admin/settings 安裝 tesseract 訓練檔）{% endif %}">
+              <span class="po-chip-check"></span>
+              <span class="po-chip-name">{{ lang.name }}</span>
+              <span class="po-chip-code">{{ lang.display_code or lang.code }}</span>
+              {% if not lang.installed %}<span class="po-chip-lock">未安裝</span>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        {# 西方語言 — 預設摺起，但若群組內有預設勾選（如 eng）則自動展開 #}
+        {% set western_has_default = lang_catalog | selectattr('group', 'equalto', 'western') | selectattr('installed') | map(attribute='code') | select('in', default_langs) | list | length > 0 %}
+        <details class="po-langs-group"{% if western_has_default %} open{% endif %}>
+          <summary>西方語言 <span class="more-hint">(8 種：英、德、法、西、義、葡、荷、俄)</span></summary>
+          <div class="po-langs-grid">
+            {% for lang in lang_catalog if lang.group == 'western' %}
+            <div class="po-chip {% if lang.installed and lang.code in default_langs %}is-active{% endif %} {% if not lang.installed %}po-chip-disabled{% endif %}"
+                 data-lang="{{ lang.code }}" data-installed="{{ '1' if lang.installed else '0' }}"
+                 data-variant="{{ lang.active_variant or '' }}"
+                 title="{{ lang.hint }}{% if not lang.installed %} — 未安裝{% endif %}">
+              <span class="po-chip-check"></span>
+              <span class="po-chip-name">{{ lang.name }}</span>
+              <span class="po-chip-code">{{ lang.display_code or lang.code }}</span>
+              {% if not lang.installed %}<span class="po-chip-lock">未安裝</span>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </details>
+
+        {# 東南亞 / 其他 — 預設摺起，群組內有預設勾選則自動展開 #}
+        {% set other_has_default = lang_catalog | selectattr('group', 'equalto', 'other') | selectattr('installed') | map(attribute='code') | select('in', default_langs) | list | length > 0 %}
+        <details class="po-langs-group"{% if other_has_default %} open{% endif %}>
+          <summary>東南亞 / 其他 <span class="more-hint">(6 種：越、泰、印尼、阿拉伯、希伯來、印地)</span></summary>
+          <div class="po-langs-grid">
+            {% for lang in lang_catalog if lang.group == 'other' %}
+            <div class="po-chip {% if lang.installed and lang.code in default_langs %}is-active{% endif %} {% if not lang.installed %}po-chip-disabled{% endif %}"
+                 data-lang="{{ lang.code }}" data-installed="{{ '1' if lang.installed else '0' }}"
+                 data-variant="{{ lang.active_variant or '' }}"
+                 title="{{ lang.hint }}{% if not lang.installed %} — 未安裝{% endif %}">
+              <span class="po-chip-check"></span>
+              <span class="po-chip-name">{{ lang.name }}</span>
+              <span class="po-chip-code">{{ lang.display_code or lang.code }}</span>
+              {% if not lang.installed %}<span class="po-chip-lock">未安裝</span>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </details>
+
+        {% if extra_installed %}
+        <div class="po-langs-group">
+          <span class="po-langs-group-label">其他已安裝訓練檔</span>
+          <div class="po-langs-grid">
+            {% for code in extra_installed %}
+            <div class="po-chip" data-lang="{{ code }}" data-installed="1" title="{{ code }}">
+              <span class="po-chip-check"></span>
+              <span class="po-chip-name">{{ code }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="po-langs-summary" id="poLangsSummary"></div>
+      </div>
+      {% else %}
+      <div class="po-langs-empty">未偵測到已安裝的語言（tesseract 不可用？請確認系統已安裝 tesseract 與訓練檔）</div>
+      {% endif %}
     </div>
-    <div class="po-field">
-      <label>渲染 DPI <span class="muted">（200-400 較佳；越大越準但越慢）</span></label>
-      <input type="number" id="poDpi" min="72" max="600" value="300">
+    <div class="po-field" style="grid-column: 1 / -1;">
+      <label>渲染 DPI <span class="muted">（影像解析度，越高文字辨識越準但越慢；300 是平衡點）</span></label>
+      <div class="po-dpi-wrap">
+        <div class="po-dpi-grid">
+          <div class="po-dpi-card" data-dpi="150">
+            <span class="po-dpi-num">150</span>
+            <span class="po-dpi-unit">DPI</span>
+            <span class="po-dpi-label">草稿 · 最快</span>
+          </div>
+          <div class="po-dpi-card" data-dpi="200">
+            <span class="po-dpi-num">200</span>
+            <span class="po-dpi-unit">DPI</span>
+            <span class="po-dpi-label">省時</span>
+          </div>
+          <div class="po-dpi-card is-active" data-dpi="300">
+            <span class="po-dpi-recommend">推薦</span>
+            <span class="po-dpi-num">300</span>
+            <span class="po-dpi-unit">DPI</span>
+            <span class="po-dpi-label">標準</span>
+          </div>
+          <div class="po-dpi-card" data-dpi="400">
+            <span class="po-dpi-num">400</span>
+            <span class="po-dpi-unit">DPI</span>
+            <span class="po-dpi-label">精準</span>
+          </div>
+          <div class="po-dpi-card" data-dpi="600">
+            <span class="po-dpi-num">600</span>
+            <span class="po-dpi-unit">DPI</span>
+            <span class="po-dpi-label">最高</span>
+          </div>
+        </div>
+        <div class="po-dpi-custom-row">
+          <label for="poDpi">自訂值：</label>
+          <input type="number" id="poDpi" min="72" max="600" value="300">
+          <span style="color:#94a3b8;">DPI（72-600）</span>
+          <span class="po-dpi-est" id="poDpiEst"></span>
+        </div>
+      </div>
     </div>
   </div>
-  <div class="po-checkrow">
-    <input type="checkbox" id="poSkipText" checked>
-    <label for="poSkipText">跳過已有文字層的頁（避免重複 OCR；多數 PDF 是混合的）</label>
-  </div>
-  <div class="po-checkrow">
-    <input type="checkbox" id="poUseLlm" {% if not llm_ok %}disabled{% endif %}>
-    <label for="poUseLlm">
-      LLM 後處理 — 校正 OCR typo / 字符混淆
-      {% if llm_ok %}<span class="muted">（將使用 {{ llm_model }}）</span>
-      {% else %}<span class="muted">（LLM 未設定，請至 /admin/llm-settings 啟用）</span>{% endif %}
-    </label>
+  <div class="po-fields" style="margin-top:12px;">
+    <div class="po-field" style="grid-column: 1 / -1;">
+      <label>OCR 範圍 <span class="muted">（避免對已有文字層的 PDF 頁重複 OCR；多數混合 PDF 適用）</span></label>
+      <div class="po-toggle">
+        <input type="checkbox" id="poSkipText" checked>
+        <label for="poSkipText">
+          <span class="po-toggle-name">略過已有文字層的頁</span>
+          <span class="po-toggle-hint">譬如雙語 PDF 已有英文文字層，只需 OCR 中文掃描頁；勾選後可省一半時間。若 PDF 全是掃描檔可關掉。</span>
+        </label>
+      </div>
+    </div>
+    <div class="po-field" style="grid-column: 1 / -1;">
+      <label>LLM 後處理 <span class="muted">（選用 — 兩道獨立校正可單選 / 雙開；模型能力不足會自動略過該道）</span></label>
+      <div style="background:#fef2f2; border-left:3px solid #ef4444; padding:8px 12px; margin-bottom:8px; font-size:12px; color:#991b1b; border-radius:4px; line-height:1.6;">
+        <b>⚠ EasyOCR 中文辨識已夠強，多數場合不需 LLM</b>。若仍要用，LLM 可能會把看不清楚的字猜成「最像的常見詞」（如「節省工具箱」→「鼎盛工具箱」）— 公司名 / 人名 / 編號請對照原 PDF 複核，下方「各階段詳細結果」可比對。
+      </div>
+      <div class="po-toggle-grid">
+        <div class="po-toggle {% if not llm_vision_ok %}po-toggle-disabled{% endif %}">
+          <input type="checkbox" id="poUseLlmVision" {% if not llm_vision_ok %}disabled{% endif %}>
+          <label for="poUseLlmVision">
+            <span class="po-toggle-name">
+              LLM 視覺校對
+              <span class="po-toggle-tag po-toggle-tag-vision">視覺</span>
+              {% if llm_vision_ok %}<span class="po-toggle-badge">{{ llm_vision_model }}</span>{% endif %}
+            </span>
+            {% if llm_vision_ok %}
+            <span class="po-toggle-hint">直接看頁面影像對照 OCR 結果，能修純文字看不出來的字元錯誤、缺漏。<b>需 vision 模型</b>（gemma4:26b、qwen3-vl 等）。較慢但對掃描品質差的 PDF 最有效。</span>
+            {% else %}
+            <span class="po-toggle-hint" style="color:#ef4444;">未指定 vision 模型 — 請至 <a href="/admin/llm-settings">LLM 設定</a> 為「OCR 文字辨識（LLM 視覺校對）」指派 vision 模型</span>
+            {% endif %}
+          </label>
+        </div>
+        <div class="po-toggle {% if not llm_ok %}po-toggle-disabled{% endif %}">
+          <input type="checkbox" id="poUseLlm" {% if not llm_ok %}disabled{% endif %}>
+          <label for="poUseLlm">
+            <span class="po-toggle-name">
+              LLM 文字校正
+              <span class="po-toggle-tag po-toggle-tag-text">文字</span>
+              {% if llm_ok %}<span class="po-toggle-badge">{{ llm_model }}</span>{% endif %}
+            </span>
+            {% if llm_ok %}
+            <span class="po-toggle-hint">純文字校正：抓 typo / 字元誤判（0/O、1/l、CJK 偏旁誤判）。任何 text 模型都可用，較省 VRAM 也較快。</span>
+            {% else %}
+            <span class="po-toggle-hint" style="color:#ef4444;">LLM 未設定 — 請先至 <a href="/admin/llm-settings">LLM 設定</a> 啟用</span>
+            {% endif %}
+          </label>
+        </div>
+      </div>
+    </div>
   </div>
 </details>
 
 <div class="panel">
   <button class="btn btn-primary" id="btnRun" disabled>{{ icon('play', size=14) }} 開始 OCR</button>
-  <span id="status" class="muted" style="margin-left:12px; font-size:13px;">請先上傳 PDF</span>
+  <span id="status" class="muted" style="margin-left:12px; font-size:13px;">請先上傳 PDF 或圖片</span>
   <div class="po-progress" style="display:none;" id="progressBar"><div></div></div>
   <div id="resultBox"></div>
 </div>
@@ -78,6 +474,98 @@
 (function(){
   const $ = (id) => document.getElementById(id);
   let uploadId = null;
+
+  function getSelectedLangs(){
+    const chips = document.querySelectorAll('.po-chip.is-active');
+    return Array.from(chips).map(c => c.dataset.lang).join('+');
+  }
+  function getSelectedChips(){
+    return document.querySelectorAll('.po-chip.is-active');
+  }
+  function refreshLangSummary(){
+    const chips = getSelectedChips();
+    const items = Array.from(chips).map(c => {
+      const codeEl = c.querySelector('.po-chip-code');
+      return {
+        code: c.dataset.lang,                                  // backend (tesseract code)
+        displayCode: codeEl ? codeEl.textContent.trim() : c.dataset.lang,  // UI (engine-aware)
+        name: c.querySelector('.po-chip-name').textContent.trim(),
+        variant: c.dataset.variant || '',
+      };
+    });
+    const summaryEl = $('poLangsSummary');
+    const countEl = $('poLangsCount');
+    if (countEl) countEl.textContent = items.length;
+    if (!summaryEl) return;
+    if (items.length === 0) {
+      summaryEl.className = 'po-langs-summary is-empty';
+      summaryEl.innerHTML = '尚未選擇任何語言（至少要選一種才能 OCR）';
+    } else {
+      summaryEl.className = 'po-langs-summary';
+      const list = items.map(it => {
+        let badge = '';
+        if (it.variant === 'best') {
+          badge = ' <span style="background:#dcfce7; color:#166534; padding:1px 6px; border-radius:3px; font-size:11px;">best</span>';
+        } else if (it.variant === 'fast') {
+          badge = ' <span style="background:#e0e7ff; color:#3730a3; padding:1px 6px; border-radius:3px; font-size:11px;">fast</span>';
+        }
+        return it.name + ' <code>' + it.displayCode + '</code>' + badge;
+      }).join('、');
+      summaryEl.innerHTML = '將使用 <b>' + items.length + '</b> 種語言：' + list;
+    }
+  }
+  // Chip 點擊切換
+  document.querySelectorAll('.po-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      if (chip.classList.contains('po-chip-disabled')) return;
+      chip.classList.toggle('is-active');
+      refreshLangSummary();
+    });
+  });
+  // Quick-action 按鈕
+  function setActiveByCodes(codes){
+    document.querySelectorAll('.po-chip').forEach(c => {
+      const should = codes.includes(c.dataset.lang) && c.dataset.installed === '1';
+      c.classList.toggle('is-active', should);
+    });
+    refreshLangSummary();
+  }
+  document.querySelectorAll('.po-quick').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const act = btn.dataset.action;
+      if (act === 'cjk') setActiveByCodes(['chi_tra', 'eng']);
+      else if (act === 'cjk-all') setActiveByCodes(['chi_tra', 'chi_sim', 'eng']);
+      else if (act === 'clear') setActiveByCodes([]);
+    });
+  });
+  refreshLangSummary();
+
+  // -------- DPI preset --------
+  const dpiInput = $('poDpi');
+  const dpiEst = $('poDpiEst');
+  function syncDpiCards(){
+    const v = parseInt(dpiInput.value || '300', 10);
+    document.querySelectorAll('.po-dpi-card').forEach(c => {
+      c.classList.toggle('is-active', parseInt(c.dataset.dpi, 10) === v);
+    });
+    if (dpiEst) {
+      let hint = '';
+      if (v < 150)       hint = '極快，但小字易誤判';
+      else if (v < 250)  hint = '較快';
+      else if (v <= 350) hint = '平衡';
+      else if (v < 500)  hint = '精準（較慢）';
+      else               hint = '最精準（最慢）';
+      dpiEst.textContent = hint;
+    }
+  }
+  document.querySelectorAll('.po-dpi-card').forEach(c => {
+    c.addEventListener('click', () => {
+      dpiInput.value = c.dataset.dpi;
+      syncDpiCards();
+    });
+  });
+  dpiInput.addEventListener('input', syncDpiCards);
+  syncDpiCards();
   const btnRun = $('btnRun');
   const statusEl = $('status');
   const progressBar = $('progressBar');
@@ -96,7 +584,9 @@
       if (!r.ok) throw new Error(await r.text());
       const j = await r.json();
       uploadId = j.upload_id;
-      uploadInfo.textContent = `已上傳 ${j.filename}（${(j.size/1024).toFixed(1)} KB）`;
+      let info = `已上傳 ${j.filename}（${(j.size/1024).toFixed(1)} KB）`;
+      if (j.converted_from) info += `；已從 ${j.converted_from} 自動轉成 PDF`;
+      uploadInfo.textContent = info;
       statusEl.textContent = '可以開始 OCR';
       btnRun.disabled = false;
     } catch (e) {
@@ -104,46 +594,151 @@
     }
   });
 
+  function escapeHtml(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+  function renderStageRow(tagText, tagClass, statusHtml, noteText, bodyText){
+    const empty = !bodyText || !bodyText.trim();
+    return '<div class="po-stage-row">'
+      + '<div class="po-stage-label">'
+      + '<span class="po-stage-tag ' + tagClass + '">' + escapeHtml(tagText) + '</span>'
+      + (statusHtml || '')
+      + '</div>'
+      + (noteText ? '<div class="po-stage-note">' + escapeHtml(noteText) + '</div>' : '')
+      + '<div class="po-stage-text' + (empty ? ' is-empty' : '') + '">'
+      + (empty ? '（無內容）' : escapeHtml(bodyText))
+      + '</div>'
+      + '</div>';
+  }
+  function renderStageDetails(stageResults){
+    if (!stageResults || !stageResults.length) return '';
+    let body = '';
+    stageResults.forEach(p => {
+      let pageHtml = '<div class="po-stage-page">'
+        + '<div class="po-stage-page-head">頁 ' + p.page + '</div>';
+      // ① OCR raw
+      if (p.ocr_raw) {
+        const status = '<span class="po-stage-status po-stage-status-ok">'
+                     + p.ocr_raw.word_count + ' 字</span>';
+        pageHtml += renderStageRow('① OCR raw', 'po-stage-tag-ocr', status,
+                                    p.ocr_raw.note || '', p.ocr_raw.text);
+      }
+      // ② vision
+      if (p.llm_vision) {
+        const v = p.llm_vision;
+        const cls = v.used ? 'po-stage-status-ok' : 'po-stage-status-warn';
+        const lbl = v.used ? '已套用' : '未套用';
+        const status = '<span class="po-stage-status ' + cls + '">' + lbl + '</span>';
+        pageHtml += renderStageRow('② LLM 視覺校對', 'po-stage-tag-vision', status,
+                                    v.note || '', v.text);
+      }
+      // ③ text
+      if (p.llm_text) {
+        const t = p.llm_text;
+        const cls = t.used ? 'po-stage-status-ok' : 'po-stage-status-warn';
+        const lbl = t.used ? '已套用' : '未套用';
+        const status = '<span class="po-stage-status ' + cls + '">' + lbl + '</span>';
+        pageHtml += renderStageRow('③ LLM 文字校正', 'po-stage-tag-text', status,
+                                    t.note || '', t.text);
+      }
+      // ④ final
+      if (p.final_text != null) {
+        pageHtml += renderStageRow('④ 最終寫入文字層', 'po-stage-tag-final', '', '', p.final_text);
+      }
+      pageHtml += '</div>';
+      body += pageHtml;
+    });
+    return '<details class="po-stages">'
+      + '<summary>各階段詳細結果（' + stageResults.length + ' 頁，點開比對每段成效）</summary>'
+      + '<div class="po-stages-body">' + body + '</div>'
+      + '</details>';
+  }
+
+  function setBtnBusy(busy, label) {
+    if (busy) {
+      if (!btnRun.dataset.origHtml) btnRun.dataset.origHtml = btnRun.innerHTML;
+      btnRun.disabled = true;
+      btnRun.innerHTML = `<span class="po-spinner"></span>${label || '處理中…'}`;
+    } else {
+      btnRun.disabled = false;
+      if (btnRun.dataset.origHtml) {
+        btnRun.innerHTML = btnRun.dataset.origHtml;
+        delete btnRun.dataset.origHtml;
+      }
+    }
+  }
+
   btnRun.addEventListener('click', async () => {
     if (!uploadId) return;
-    btnRun.disabled = true;
+    const langsSel = getSelectedLangs();
+    if (!langsSel) { statusEl.textContent = '請至少勾選一種 OCR 語言'; return; }
+    setBtnBusy(true, '處理中…');
     progressBar.style.display = 'block';
     progressInner.style.width = '5%';
     resultBox.innerHTML = '';
     statusEl.textContent = '排隊中…';
     const fd = new FormData();
-    fd.append('langs', $('poLangs').value);
+    fd.append('langs', getSelectedLangs());
     fd.append('dpi', $('poDpi').value);
     fd.append('skip_pages_with_text', $('poSkipText').checked ? 'true' : 'false');
     fd.append('use_llm', $('poUseLlm').checked ? 'true' : 'false');
+    fd.append('use_llm_vision', $('poUseLlmVision').checked ? 'true' : 'false');
     try {
       const r = await fetch('run/' + uploadId, { method:'POST', body: fd });
       if (!r.ok) throw new Error(await r.text());
       const j = await r.json();
       const jobId = j.job_id;
       const t0 = Date.now();
+      let lastMsg = '';
+      let lastMsgTime = Date.now();
       while (Date.now() - t0 < 1800000) {  // 30 min ceiling
         await new Promise(r => setTimeout(r, 1500));
         const jr = await fetch('/api/jobs/' + jobId);
         if (!jr.ok) continue;
         const jj = await jr.json();
         progressInner.style.width = (jj.progress * 100).toFixed(1) + '%';
-        if (jj.message) statusEl.textContent = jj.message;
+        if (jj.message) {
+          if (jj.message !== lastMsg) {
+            lastMsg = jj.message;
+            lastMsgTime = Date.now();
+          }
+          // 訊息靜止 > 5 秒就追加 elapsed 計時，讓 user 知道沒當掉
+          const stalled = Math.round((Date.now() - lastMsgTime) / 1000);
+          statusEl.textContent = stalled >= 5
+            ? `${jj.message}（已等 ${stalled}s）`
+            : jj.message;
+        }
         if (jj.status === 'done') {
           progressInner.style.width = '100%';
           const stats = (jj.meta || {}).stats || {};
           const url = (jj.meta || {}).download_url || ('download/' + uploadId);
+          const producer = stats.producer || 'jt-doc-tools pdf-ocr';
+          const tessV = stats.tesseract_version || '';
+          const marker = stats.marker || 'jtdt-pdf-ocr';
           resultBox.innerHTML =
             '<div class="po-result">'
             + '<b>完成！</b><br>'
             + '處理 ' + (stats.pages_ocrd || 0) + ' / ' + (stats.pages_total || 0) + ' 頁'
-            + '（跳過 ' + (stats.pages_skipped || 0) + ' 頁已有文字層）<br>'
+            + '（略過 ' + (stats.pages_skipped || 0) + ' 頁已有文字層）<br>'
             + '插入文字 ' + (stats.words_inserted || 0) + ' 字'
-            + (stats.llm_used ? '（含 LLM 後處理）' : '')
+            + (stats.llm_vision_used || stats.llm_used
+               ? '（含 ' + [stats.llm_vision_used ? 'LLM 視覺校對' : null,
+                           stats.llm_used ? 'LLM 文字校正' : null].filter(Boolean).join(' + ') + '）'
+               : '')
             + '<br><br>'
-            + '<a class="btn btn-primary" href="' + url + '" download>下載 searchable PDF</a>'
+            + '<a class="btn btn-primary" href="' + url + '" download>下載文字辨識後 PDF</a>'
+            + '</div>'
+            + renderStageDetails(stats.stage_results || [])
+            + '<div class="po-info" style="margin-top:10px;">'
+            + '<b>怎麼確認是這個工具 OCR 的（不是 macOS 預覽程式自動 OCR）？</b><br>'
+            + '下載後用 Adobe Acrobat / Apple 預覽程式開啟，三個方法擇一：<br>'
+            + '①「<b>檔案 → 簡介</b>」（Preview）或「<b>檔案 → 內容</b>」（Acrobat）— Producer 欄位顯示「<code>' + producer + '</code>」+ tesseract 版本「<code>' + tessV + '</code>」<br>'
+            + '② Cmd+F 搜尋「<code>' + marker + '</code>」— 每頁右下角有此透明標記，能搜到代表是本工具產生的文字層<br>'
+            + '③ 比對檔名：本工具輸出檔名以「<code>_searchable.pdf</code>」結尾'
             + '</div>';
-          btnRun.disabled = false;
+          setBtnBusy(false);
           return;
         }
         if (jj.status === 'error') {
@@ -154,7 +749,7 @@
     } catch (e) {
       statusEl.textContent = '失敗：' + e.message;
       progressBar.style.display = 'none';
-      btnRun.disabled = false;
+      setBtnBusy(false);
     }
   });
 })();
