@@ -618,6 +618,15 @@ async def detect_objects(request: Request):
                     pw, ph = page.rect.width, page.rect.height
                     if (bx1 - bx0) >= pw * 0.9 and (by1 - by0) >= ph * 0.9:
                         continue
+                    # 跳過薄線條 (TOC 的 tab leader / 表格邊框 / 段落底線等)
+                    # — 寬高比 > 30 且高度 < 3pt 視為裝飾線；user 多半不是要選它
+                    # (v1.6.7 客戶踩到：點 leader dots 區域被選成 wide drawing
+                    # bbox 覆蓋整行，redact 後標題 + 頁碼一起糊掉)
+                    w_ = bx1 - bx0; h_ = by1 - by0
+                    if h_ < 3 and w_ > h_ * 30:
+                        continue   # 薄橫線，跳過讓 hit-test 落空
+                    if w_ < 3 and h_ > w_ * 30:
+                        continue   # 薄直線
                     return {
                         "kind": "drawing",
                         "bbox": [bx0, by0, bx1, by1],
