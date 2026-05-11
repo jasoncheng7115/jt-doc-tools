@@ -117,6 +117,8 @@ class LLMSettingsManager:
          "use": "比對行差異後，告訴使用者主要修改了哪幾條條款 / 段落", "kind": "text"},
         {"id": "submission-check", "name": "送件前檢核（LLM 變體合併 / 範本痕跡）",
          "use": "公司命名變體合併（光寶 ↔ LITE-ON）+ 漏改範本進階推論", "kind": "text"},
+        {"id": "pdf-ocr", "name": "PDF 文字層補建（LLM OCR 後處理）",
+         "use": "校正 tesseract OCR typo / 字符混淆，提升 searchable PDF 文字品質", "kind": "text"},
     ]
 
     def get_model_for(self, tool_id: str) -> str:

@@ -4,6 +4,19 @@
 
 ---
 
+## [1.7.0] - 2026-05-11
+
+### 新增
+
+- **新工具：PDF 文字層補建（`pdf-ocr`）** — 對掃描 PDF / 影像 PDF 補上透明可選取的文字層。視覺跟原檔一樣，但變成可搜尋（Cmd+F）、可滑鼠選取複製、可送進其他文字抽取工具的「searchable PDF」— 同 macOS Preview Live Text 概念。
+  - tesseract 多語（chi_tra+chi_sim+eng 自動偵測已裝的）+ word-level bbox 對齊
+  - PyMuPDF `render_mode=3` 透明文字層
+  - 可選跳過已有文字層的頁（避免重複 OCR）
+  - DPI 可調（72-600，預設 300）
+  - 背景 job + SSE 進度
+- **LLM 加值（選填）**：tesseract 結果送 LLM 校正 typo / 字符混淆，再寫進文字層。`submission-check` 同款 opt-in 模式，未設 LLM 自動跳過。加進 `KNOWN_LLM_TOOLS` 清單，admin 可在 `/admin/llm-settings` 為此工具獨立指定 model。
+- **default-user 角色預設可用**（同其他多數工具）
+
 ## [1.6.10] - 2026-05-11
 
 ### 修正
