@@ -4,6 +4,12 @@
 
 ---
 
+## [1.6.8] - 2026-05-11
+
+### 修正
+
+- **pdf-editor S 模式選 leader dots 變超寬 drawing** — TOC 的 dots 實際是 PDF 內的「薄橫線 vector drawing」(tab leader)，detect-objects 抓到後給 wide drawing bbox（覆蓋整行），redact 後變超長糊掉。修：detect-objects 加薄線過濾 — 寬高比 > 30 且高 < 3pt 的 drawing 跳過不選（同樣對直線）。
+
 ## [1.6.7] - 2026-05-11
 
 ### 修正
