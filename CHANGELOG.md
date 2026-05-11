@@ -4,6 +4,35 @@
 
 ---
 
+## [1.7.7] - 2026-05-11
+
+### 修正
+
+- **`pdf-ocr` viewer iframe 載入 0 頁**：PDF.js 的 `?file=` 解析相對於 `viewer.html` 自身路徑（`/static/vendor/pdfjs/web/`），不是 parent 頁面路徑。改傳絕對路徑 `/tools/pdf-ocr/preview/<uid>.pdf` 修正。
+- **「怎麼確認是這個工具 OCR 的」說明預設摺起**：用 `<details>` 包起來，點開才展開；OCR 結果頁更清爽。
+
+### 測試
+
+- 新增 `tests/test_pdf_ocr_preview_acl.py`（7 案）端到端驗證 `/preview/{uid}.pdf` ACL：owner / 跨 user / 缺 record / admin override / 格式錯 / 檔案缺 / auth OFF 全部覆蓋。
+- pytest 由 472 → 479 passed。
+
+---
+
+## [1.7.6] - 2026-05-11
+
+### 新增
+
+- **`pdf-ocr` 完成後直接在頁內預覽**：OCR 結果區下方新增「📄 預覽結果（直接拖選文字試試看）」嵌入式 PDF viewer，不用先下載再開啟。
+  - 內建 [PDF.js](https://github.com/mozilla/pdf.js) v5.7.284（Apache-2.0），完整 vendored 在 `static/vendor/pdfjs/`（~9 MB），**不走 CDN、純地端運作**
+  - 自動高度（80vh，min 520 px），「在新分頁開啟」按鈕保留
+  - 隱藏 PDF.js 不必要的工具列項目（編輯器、開啟其他檔、列印、書籤），保留 sidebar 切換 / 縮放 / 搜尋 / 旋轉 / 下載；客製 CSS 從 parent 注入，不修改 vendor 內 `viewer.html`，方便日後升級
+  - 新後端 endpoint `GET /tools/pdf-ocr/preview/{upload_id}.pdf`（與 `/download/` 並列），inline 串流給 iframe 用；走既有 `upload_owner.require()` ACL，跨 user 隔離不破
+  - CJK cmaps + standard fonts 都附帶，中文 PDF 顯示無方框
+- **admin/sys-deps 新增「PDF Viewer (PDF.js)」條目**：顯示 vendor 版本、必要檔完整性、CJK cmaps 與標準字型狀態
+- **`install.sh` / `install.ps1` / `jtdt update` 自動驗證 vendor 完整性**：缺檔時 warn（pdf-ocr viewer 會壞但下載仍可），通常表 git clone 中斷，re-clone 即修
+
+---
+
 ## [1.7.5] - 2026-05-11
 
 ### 改進

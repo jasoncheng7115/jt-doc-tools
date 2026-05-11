@@ -338,3 +338,16 @@ async def download(upload_id: str, request: Request):
     from app.core.http_utils import content_disposition
     return FileResponse(out, media_type="application/pdf",
                           headers={"Content-Disposition": content_disposition(name)})
+
+
+@router.get("/preview/{upload_id}.pdf")
+async def preview(upload_id: str, request: Request):
+    """Inline PDF stream for PDF.js viewer iframe (no attachment disposition)."""
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
+    out = _work_dir() / f"po_{upload_id}_out.pdf"
+    if not out.exists():
+        raise HTTPException(404, "尚未產生輸出")
+    return FileResponse(out, media_type="application/pdf",
+                          headers={"Content-Disposition": "inline",
+                                   "Cache-Control": "private, max-age=0"})

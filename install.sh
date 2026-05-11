@@ -587,6 +587,16 @@ setup_python() {
         warn "EasyOCR 未裝成（OCR 會自動 fallback tesseract，識別率較弱）"
         warn "  可手動補裝: $INSTALL_DIR/bin/uv sync  或  $INSTALL_DIR/.venv/bin/pip install easyocr"
     fi
+    # PDF.js vendor 完整性（pdf-ocr 內嵌 viewer 用）— 隨 git 來，缺檔 = git clone 異常
+    pdfjs_missing=""
+    for f in build/pdf.mjs build/pdf.worker.mjs web/viewer.html web/viewer.mjs; do
+        [ -f "$INSTALL_DIR/static/vendor/pdfjs/$f" ] || pdfjs_missing="$pdfjs_missing $f"
+    done
+    if [ -n "$pdfjs_missing" ]; then
+        warn "PDF.js vendor 不完整 (pdf-ocr 內嵌 viewer 會載不到，下載仍可)"
+        warn "  缺檔:$pdfjs_missing"
+        warn "  通常是 git clone 中斷；re-clone 即可"
+    fi
     ok "Python 環境就緒：$INSTALL_DIR/.venv"
 }
 

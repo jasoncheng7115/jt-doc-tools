@@ -192,6 +192,58 @@ def _probe_python_pkg(import_name: str) -> dict:
         return {"installed": False, "version": "", "extra": str(e), "ok": False}
 
 
+def _probe_pdfjs_vendor() -> dict:
+    """Check static/vendor/pdfjs/ has the files we need for the embedded viewer.
+
+    The vendor blob is part of the git repo, so the only failure modes are
+    accidental deletion or someone shrinking it in a future cleanup.
+    """
+    from pathlib import Path
+    try:
+        from .config import settings  # type: ignore
+        root = Path(settings.base_dir if hasattr(settings, "base_dir") else ".")
+    except Exception:
+        # Fallback — sys_deps is called pre-config in some CLI paths
+        root = Path(__file__).resolve().parent.parent.parent
+    base = root / "static" / "vendor" / "pdfjs"
+    required = [
+        base / "build" / "pdf.mjs",
+        base / "build" / "pdf.worker.mjs",
+        base / "web" / "viewer.html",
+        base / "web" / "viewer.mjs",
+    ]
+    optional_cjk = base / "web" / "cmaps"
+    optional_fonts = base / "web" / "standard_fonts"
+    missing = [p.name for p in required if not p.exists()]
+    if missing:
+        return {"installed": False, "version": "", "ok": False,
+                "extra": "缺檔：" + ", ".join(missing)}
+    # Try to read version hint from pdf.mjs banner (PDF.js writes "// pdf.js v5.x.x")
+    version = ""
+    try:
+        # PDF.js writes its version into pdf.mjs as `const version = "X.Y.Z"`.
+        # The assignment can be deep in the bundle (~line 23k for 5.x), so read
+        # whole file. Only invoked on admin/sys-deps view — not hot path.
+        head = (base / "build" / "pdf.mjs").read_text(encoding="utf-8", errors="ignore")
+        import re as _re
+        m = _re.search(r"const\s+version\s*=\s*['\"](\d+\.\d+\.\d+)['\"]", head)
+        if m:
+            version = m.group(1)
+    except Exception:
+        pass
+    extras = []
+    if optional_cjk.exists() and any(optional_cjk.iterdir()):
+        extras.append("CJK cmaps OK")
+    else:
+        extras.append("缺 cmaps（中文 PDF 顯示異常）")
+    if optional_fonts.exists() and any(optional_fonts.iterdir()):
+        extras.append("標準字型 OK")
+    else:
+        extras.append("缺 standard_fonts")
+    return {"installed": True, "version": version, "ok": True,
+            "extra": "；".join(extras)}
+
+
 # OxOffice / LibreOffice oosplash + cairo + GTK 啟動時 dlopen 的全套 lib。
 # 每加一個都是因為某客戶踩到「.so.X: cannot open shared object file」死掉。
 # 一次裝齊比客戶踩一個補一個好 — Debian / Ubuntu minimal / server 鏡像
@@ -453,6 +505,20 @@ _DEPS = [
             "linux": "uv sync  (normally auto-installed)",
             "macos": "uv sync",
             "windows": "uv sync",
+        },
+    },
+    {
+        "key": "pdfjs",
+        "label": "PDF.js Viewer (vendored)",
+        "category": "前端資源",
+        "impact": "pdf-ocr 完成後內嵌 PDF viewer 預覽結果（可直接拖選文字驗證）。隨原始碼附帶，不需另外安裝；缺則 viewer iframe 載不到（OCR 結果仍可下載）。",
+        "impact_en": "Embedded PDF viewer used by pdf-ocr to preview results (text selection verification). Bundled with source; missing = viewer iframe broken (download still works).",
+        "soft": True,
+        "probe": _probe_pdfjs_vendor,
+        "install_cmd": {
+            "linux": "git pull (vendored under static/vendor/pdfjs/)",
+            "macos": "git pull (vendored under static/vendor/pdfjs/)",
+            "windows": "git pull (vendored under static/vendor/pdfjs/)",
         },
     },
 ]
