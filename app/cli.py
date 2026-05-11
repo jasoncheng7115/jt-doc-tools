@@ -515,6 +515,23 @@ def svc_update() -> int:
             print("    手動補裝：sudo jtdt update  或  <venv>/bin/pip install easyocr",
                   file=sys.stderr)
 
+    # 4a. PDF.js vendor 完整性檢查 — 隨 git 來，這裡只驗有沒漏掉檔
+    pdfjs_dir = root / "static" / "vendor" / "pdfjs"
+    pdfjs_required = [
+        pdfjs_dir / "build" / "pdf.mjs",
+        pdfjs_dir / "build" / "pdf.worker.mjs",
+        pdfjs_dir / "web" / "viewer.html",
+        pdfjs_dir / "web" / "viewer.mjs",
+    ]
+    pdfjs_missing = [str(p.relative_to(root)) for p in pdfjs_required if not p.exists()]
+    if pdfjs_missing:
+        print("  WARNING: PDF.js vendor 不完整（pdf-ocr 內嵌 viewer 會載不到，下載仍可）：",
+              file=sys.stderr)
+        for m in pdfjs_missing:
+            print(f"    缺：{m}", file=sys.stderr)
+    else:
+        print("  OK: PDF.js vendor 完整（pdf-ocr 內嵌 viewer）")
+
     # 5. Restore ownership so the service user can read the new files
     _restore_ownership(root, owner)
 

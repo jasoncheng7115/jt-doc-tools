@@ -1,0 +1,61 @@
+/*
+ * pdfjs-embed.css — hides PDF.js viewer chrome irrelevant to "preview only" mode.
+ * Loaded by parent page after iframe load (avoids modifying vendored viewer.html).
+ *
+ * Hidden:
+ *   - openFile (avoid letting user reopen a different file)
+ *   - editor toolbar (FreeText / Ink / Stamp / Highlight / Signature) — preview, not edit
+ *   - bookmark current view, secondary toolbar items related to editing
+ *   - print (already have download; preview rarely printed)
+ *
+ * Kept:
+ *   - sidebar toggle (page thumbs / outline / attachments)
+ *   - find / search
+ *   - zoom controls + page nav
+ *   - rotate, scroll mode (in secondary toolbar)
+ *   - download
+ */
+
+/* Toolbar — left side */
+#openFile,
+#secondaryOpenFile {
+  display: none !important;
+}
+
+/* Toolbar — print */
+#printButton,
+#secondaryPrint {
+  display: none !important;
+}
+
+/* Editor tools (FreeText / Ink / Stamp / Highlight / Signature) — entire group */
+#editorModeButtons,
+#editorModeSeparator,
+#editorFreeText,
+#editorInk,
+#editorStamp,
+#editorHighlight,
+#editorSignature,
+#editorFreeTextParamsToolbar,
+#editorInkParamsToolbar,
+#editorStampParamsToolbar,
+#editorHighlightParamsToolbar,
+#editorSignatureParamsToolbar {
+  display: none !important;
+}
+
+/* Bookmark current view (rarely useful for one-off OCR preview) */
+#viewBookmark,
+#viewBookmarkSeparator {
+  display: none !important;
+}
+
+/* Secondary toolbar items related to print / open */
+#documentProperties {
+  /* keep — useful info, comment in if want hidden */
+}
+
+/* Tweak: tighten toolbar so kept buttons aren't lost in empty space */
+.toolbarHorizontalGroup > .toolbarButtonSpacer:empty {
+  width: 0;
+}

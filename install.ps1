@@ -530,6 +530,21 @@ function Setup-Python {
         }
     }
     Ok "Python environment ready: $myInstallDir\.venv"
+
+    # PDF.js vendor completeness (pdf-ocr embedded viewer) — shipped via git;
+    # missing here implies git clone glitch
+    $pdfjsMissing = @()
+    foreach ($f in @('build\pdf.mjs','build\pdf.worker.mjs','web\viewer.html','web\viewer.mjs')) {
+        $p = Join-Path $myInstallDir "static\vendor\pdfjs\$f"
+        if (-not (Test-Path $p)) { $pdfjsMissing += $f }
+    }
+    if ($pdfjsMissing.Count -gt 0) {
+        Warn "PDF.js vendor incomplete (pdf-ocr embedded viewer wont load; download still works)"
+        foreach ($m in $pdfjsMissing) { Warn "  missing: $m" }
+        Warn "  Usually a git clone glitch; re-clone fixes it"
+    } else {
+        Ok "PDF.js vendor OK (pdf-ocr embedded viewer)"
+    }
 }
 
 # Data

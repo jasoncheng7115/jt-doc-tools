@@ -261,6 +261,15 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
 .po-info { background:#dbeafe; border-left:3px solid #3b82f6; padding:8px 12px; font-size:12px; color:#1e40af; border-radius:4px; margin-top:8px; }
 .po-result { background:#d1fae5; border-left:3px solid #10b981; padding:10px 14px; font-size:13px; color:#065f46; border-radius:4px; margin-top:8px; }
 .po-result a.btn { margin-top:6px; }
+/* OCR 完成後的 PDF.js viewer 區塊 */
+.po-viewer-wrap { margin-top:14px; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; background:#fff; }
+.po-viewer-head { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#f8fafc; border-bottom:1px solid #e2e8f0; font-size:13px; color:#334155; }
+.po-viewer-head .title { font-weight:600; display:flex; align-items:center; gap:6px; }
+.po-viewer-head .actions { display:flex; gap:8px; }
+.po-viewer-head a { color:#3b82f6; text-decoration:none; font-size:12px; }
+.po-viewer-head a:hover { text-decoration:underline; }
+.po-viewer-frame { width:100%; height:80vh; min-height:520px; border:0; display:block; background:#525659; }
+.po-viewer-loading { padding:60px; text-align:center; color:#64748b; font-size:13px; }
 @media (max-width: 700px) { .po-fields { grid-template-columns: 1fr; } }
 </style>
 {% endblock %}
@@ -419,7 +428,11 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
       </div>
     </div>
     <div class="po-field" style="grid-column: 1 / -1;">
-      <label>LLM 後處理 <span class="muted">（選用 — 兩道獨立校正可單選 / 雙開；模型能力不足會自動略過該道）</span></label>
+      <details class="po-llm-details">
+        <summary style="cursor:pointer;font-size:13px;color:#475569;padding:8px 12px;background:#f1f5f9;border-radius:6px;user-select:none;font-weight:600;">
+          LLM 後處理 <span class="muted" style="font-weight:normal;">（選用 — 預設關閉；EasyOCR 中文已夠強，需要時點開）</span>
+        </summary>
+        <div style="margin-top:10px;">
       <div style="background:#fef2f2; border-left:3px solid #ef4444; padding:8px 12px; margin-bottom:8px; font-size:12px; color:#991b1b; border-radius:4px; line-height:1.6;">
         <b>⚠ EasyOCR 中文辨識已夠強，多數場合不需 LLM</b>。若仍要用，LLM 可能會把看不清楚的字猜成「最像的常見詞」（如「節省工具箱」→「鼎盛工具箱」）— 公司名 / 人名 / 編號請對照原 PDF 複核，下方「各階段詳細結果」可比對。
       </div>
@@ -455,6 +468,8 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
           </label>
         </div>
       </div>
+        </div>
+      </details>
     </div>
   </div>
 </details>
@@ -474,6 +489,48 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
 (function(){
   const $ = (id) => document.getElementById(id);
   let uploadId = null;
+
+  // PDF.js viewer 區塊：OCR 完成後直接在頁內預覽（可選取文字）
+  function renderViewer(uid) {
+    // PDF.js 的 ?file= 解析相對於 viewer.html 自身路徑，所以必須給絕對路徑
+    const previewUrl = encodeURIComponent('/tools/pdf-ocr/preview/' + uid + '.pdf');
+    // #pagemode=none 隱藏 sidebar，#zoom=auto 自動縮放
+    const viewerSrc = '/static/vendor/pdfjs/web/viewer.html?file=' + previewUrl + '#pagemode=none&zoom=auto';
+    return ''
+      + '<div class="po-viewer-wrap" id="poViewerWrap">'
+      + '  <div class="po-viewer-head">'
+      + '    <span class="title">📄 預覽結果（直接拖選文字試試看）</span>'
+      + '    <span class="actions">'
+      + '      <a href="' + viewerSrc + '" target="_blank" rel="noopener">在新分頁開啟 ↗</a>'
+      + '    </span>'
+      + '  </div>'
+      + '  <iframe class="po-viewer-frame" id="poViewerFrame" src="' + viewerSrc + '"'
+      + '          sandbox="allow-same-origin allow-scripts allow-downloads allow-popups allow-forms allow-modals"></iframe>'
+      + '</div>';
+  }
+
+  // iframe 載完後注入 pdfjs-embed.css 隱藏不需要的工具列項目
+  function mountViewerEmbedCss() {
+    const tryMount = () => {
+      const fr = document.getElementById('poViewerFrame');
+      if (!fr || !fr.contentDocument || !fr.contentDocument.head) return false;
+      if (fr.contentDocument.getElementById('jtdtPdfjsEmbedCss')) return true;
+      const link = fr.contentDocument.createElement('link');
+      link.id = 'jtdtPdfjsEmbedCss';
+      link.rel = 'stylesheet';
+      link.href = '/static/css/pdfjs-embed.css';
+      fr.contentDocument.head.appendChild(link);
+      return true;
+    };
+    const fr = document.getElementById('poViewerFrame');
+    if (!fr) return;
+    fr.addEventListener('load', () => {
+      // viewer 內部還會 lazy-load 元素，多試幾次保險
+      tryMount();
+      setTimeout(tryMount, 300);
+      setTimeout(tryMount, 1000);
+    });
+  }
 
   function getSelectedLangs(){
     const chips = document.querySelectorAll('.po-chip.is-active');
@@ -731,14 +788,18 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
             + '<a class="btn btn-primary" href="' + url + '" download>下載文字辨識後 PDF</a>'
             + '</div>'
             + renderStageDetails(stats.stage_results || [])
-            + '<div class="po-info" style="margin-top:10px;">'
-            + '<b>怎麼確認是這個工具 OCR 的（不是 macOS 預覽程式自動 OCR）？</b><br>'
+            + '<details class="po-info-details" style="margin-top:10px;">'
+            + '<summary style="cursor:pointer;font-size:12px;color:#64748b;padding:6px 8px;background:#f1f5f9;border-radius:4px;user-select:none;">怎麼確認是這個工具 OCR 的（不是 macOS 預覽程式自動 OCR）？</summary>'
+            + '<div class="po-info" style="margin-top:6px;">'
             + '下載後用 Adobe Acrobat / Apple 預覽程式開啟，三個方法擇一：<br>'
             + '①「<b>檔案 → 簡介</b>」（Preview）或「<b>檔案 → 內容</b>」（Acrobat）— Producer 欄位顯示「<code>' + producer + '</code>」+ tesseract 版本「<code>' + tessV + '</code>」<br>'
             + '② Cmd+F 搜尋「<code>' + marker + '</code>」— 每頁右下角有此透明標記，能搜到代表是本工具產生的文字層<br>'
             + '③ 比對檔名：本工具輸出檔名以「<code>_searchable.pdf</code>」結尾'
-            + '</div>';
+            + '</div>'
+            + '</details>'
+            + renderViewer(uploadId);
           setBtnBusy(false);
+          mountViewerEmbedCss();
           return;
         }
         if (jj.status === 'error') {
