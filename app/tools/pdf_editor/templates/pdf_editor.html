@@ -600,6 +600,75 @@ function setTool(name) {
   });
   // Wrapper 也設一份，避免 canvas 邊界外露的部分游標不對
   $('canvasWrap').style.cursor = cur;
+  // Hover frame：select / pick 模式啟用，其他模式 disable + 清掉
+  if (name === 'pick') {
+    pageCanvases.forEach(c => prefetchPickableObjects(c));
+  }
+  pageCanvases.forEach(c => {
+    if (c._hoverFrame) { c.remove(c._hoverFrame); c._hoverFrame = null; c.requestRenderAll(); }
+  });
+}
+
+// === Hover frame for select / pick ===
+async function prefetchPickableObjects(fc) {
+  if (!uploadId || fc._pickablesPage === fc._pageIndex) return;
+  try {
+    const r = await fetch('/tools/pdf-editor/list-objects', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({upload_id: uploadId, page: fc._pageIndex}),
+    });
+    if (!r.ok) return;
+    const data = await r.json();
+    fc._pickables = data.objects || [];
+    fc._pickablesPage = fc._pageIndex;
+  } catch (e) {}
+}
+
+function _findPickableUnder(fc, xPx, yPx) {
+  if (!fc._pickables) return null;
+  const xPt = xPx / PT2PX, yPt = yPx / PT2PX;
+  // Reverse iterate so topmost (last drawn) wins
+  for (let i = fc._pickables.length - 1; i >= 0; i--) {
+    const o = fc._pickables[i];
+    const bb = o.bbox;
+    if (bb[0] <= xPt && xPt <= bb[2] && bb[1] <= yPt && yPt <= bb[3]) {
+      return o;
+    }
+  }
+  return null;
+}
+
+function showHoverFrame(fc, bb /* PDF pt */, kind) {
+  const colors = {
+    text: '#3b82f6', image: '#10b981',
+    widget: '#8b5cf6', drawing: '#f59e0b',
+    overlay: '#06b6d4',  // select mode (Fabric overlay 物件)
+  };
+  const stroke = colors[kind] || '#3b82f6';
+  if (!fc._hoverFrame) {
+    fc._hoverFrame = new fabric.Rect({
+      fill: 'rgba(59,130,246,0.06)', stroke, strokeWidth: 1.5, strokeDashArray:[4,3],
+      strokeUniform: true, selectable: false, evented: false,
+      hoverCursor: 'pointer',
+    });
+    fc._hoverFrame._peMarker = true;
+    fc.add(fc._hoverFrame);
+  }
+  fc._hoverFrame.set({
+    left: bb[0] * PT2PX, top: bb[1] * PT2PX,
+    width: (bb[2]-bb[0]) * PT2PX, height: (bb[3]-bb[1]) * PT2PX,
+    stroke, fill: stroke + '14',  // 14 hex ≈ 8% alpha
+    visible: true,
+  });
+  fc.bringToFront(fc._hoverFrame);
+  fc.requestRenderAll();
+}
+
+function hideHoverFrame(fc) {
+  if (fc._hoverFrame) {
+    fc._hoverFrame.set({ visible: false });
+    fc.requestRenderAll();
+  }
 }
 
 const TOOL_KEYS = {
@@ -764,6 +833,32 @@ function applyZoom() {
 
 // ============ Object creation ============
 function attachPageHandlers(fc) {
+  // Hover frame：select 模式 hover 在 Fabric overlay 物件上 / pick 模式
+  // hover 在 PDF 既有物件上 → 浮現選取框
+  fc.on('mouse:move', (opt) => {
+    if (currentTool === 'pick') {
+      const p = fc.getPointer(opt.e);
+      const obj = _findPickableUnder(fc, p.x, p.y);
+      if (obj) showHoverFrame(fc, obj.bbox, obj.kind);
+      else hideHoverFrame(fc);
+    } else if (currentTool === 'select') {
+      // Fabric 自己 hit-test 的目標
+      const t = opt.target;
+      if (t && !t._peMarker && t !== fc._hoverFrame) {
+        // 用物件當前 bounding rect (canvas px) 換 PDF pt 給 hover frame
+        const r = t.getBoundingRect(true, true);
+        const bbPt = [r.left/PT2PX, r.top/PT2PX,
+                       (r.left+r.width)/PT2PX, (r.top+r.height)/PT2PX];
+        showHoverFrame(fc, bbPt, 'overlay');
+      } else {
+        hideHoverFrame(fc);
+      }
+    }
+  });
+  fc.on('mouse:out', () => {
+    if (currentTool === 'select' || currentTool === 'pick') hideHoverFrame(fc);
+  });
+
   fc.on('mouse:down', (opt) => {
     if (currentTool === 'select' || currentTool === 'pencil') return;
     if (opt.target) return;
