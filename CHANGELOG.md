@@ -4,16 +4,21 @@
 
 ---
 
+## [1.7.9] - 2026-05-12
+
+### 修正
+
+- **Windows `jtdt bind 0.0.0.0` 失敗 `name 're' is not defined`**（GitHub issue #16）：`app/cli.py:svc_bind` Windows 分支用 `re.search` 解析 WinSW XML 但 `re` 模組未匯入。改在分支內 `import re` 修正。感謝 @nullkings 回報並提供精準診斷。
+- **`pdf-editor` 改字型瞬間視覺重疊**（新舊字並存，要點空白才刷新）：autoSave 把新字 bake 進 PDF 後，背景 PNG 還沒載入完，前景 IText 已經顯示新字 → 舊 PNG（舊字）+ 新 IText（新字）兩層疊加。現等 BG `<img>` 真的 load 完才把 active object 淡掉（保留選取與屬性面板，仍可繼續調整其他屬性）。
+
+---
+
 ## [1.7.8] - 2026-05-11
 
 ### 改進
 
 - **`pdf-ocr` 結果頁兩個摺疊區塊統一風格**：「各階段詳細結果」與「怎麼確認是這個工具 OCR 的」改用同一個 `.po-stages` style，視覺一致。
 - **介紹網站新增 OCR 文字辨識展示**（#08）：強調「掃描 PDF / 圖片變可選取文字」，配上實際 OCR 完成 + PDF.js 內嵌預覽的截圖。後續 #09-#12 順序調整。
-
-### 內部
-
-- CLAUDE.md 補上 PDF.js vendored 升級 SOP — 發版 / 月度體檢時檢查 `mozilla/pdf.js` 上游新版（特別是 CVE）並執行升級流程。
 
 ---
 

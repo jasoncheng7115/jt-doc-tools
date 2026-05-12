@@ -2394,8 +2394,19 @@ async function savePdf(isAuto, opts) {
     if (!r.ok) { setStatus('儲存失敗：' + await r.text(), 'error'); return; }
     const data = await r.json();
     pages = data.pages;
+    // 換背景圖時拿一個 promise 等載入完成 — 後面 includeActive 路徑要在
+    // 新 BG 真的載入後才把 active object 淡掉，避免「換字型瞬間 IText 還在
+    // 畫舊字 + 舊 BG 還沒換 → 視覺重疊」(font-overlap bug v1.7.9)
+    const bgLoadedPromises = [];
     document.querySelectorAll('.pe-page img.bg').forEach((img, i) => {
-      if (data.pages[i]) img.src = data.pages[i].preview_url + '?t=' + Date.now();
+      if (data.pages[i]) {
+        bgLoadedPromises.push(new Promise((resolve) => {
+          const done = () => { img.removeEventListener('load', done); img.removeEventListener('error', done); resolve(); };
+          img.addEventListener('load', done);
+          img.addEventListener('error', done);
+          img.src = data.pages[i].preview_url + '?t=' + Date.now();
+        }));
+      }
     });
     const dl = $('btnDownload');
     // 直接記住 url，給 click handler 用（不靠 anchor href + download attr，
@@ -2454,6 +2465,22 @@ async function savePdf(isAuto, opts) {
     // Remember if we skipped the active object, so selection:cleared
     // can trigger a follow-up save to finally bake it in.
     needBakeOnDeselect = anySkipped;
+    // includeActive 模式：active 物件已被 bake 進新 BG。等 BG 真的載入後
+    // 把 active 也淡掉（保留選取 / 控制把手 / 屬性面板，但避免兩層重疊）。
+    // 此時 user 看到的就是新 BG 的 baked 版本；要繼續編輯文字內容點兩下
+    // 會 trigger text:editing:entered 自動 set opacity=1 還原。
+    if (opts.includeActive && bgLoadedPromises.length) {
+      Promise.all(bgLoadedPromises).then(() => {
+        pageCanvases.forEach(fc => {
+          const a = fc.getActiveObject();
+          if (a && !a._peMarker) {
+            a._peSaved = true;
+            a.set('opacity', 0.01);
+          }
+          fc.requestRenderAll();
+        });
+      });
+    }
     setStatus(isAuto ? '已自動儲存。' : '已儲存。預覽已更新，點「下載 PDF」取回。', 'saved');
   } catch (e) { setStatus('儲存錯誤：' + e.message, 'error'); }
   finally { if (!isAuto) hideLoading(); }
