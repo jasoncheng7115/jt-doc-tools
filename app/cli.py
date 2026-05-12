@@ -1626,6 +1626,9 @@ def svc_bind(addr: str) -> int:
     if _is_windows():
         # v1.4.44+: re-write the WinSW XML and restart. Fall back to manual
         # instructions if the XML/binary aren't where we expect.
+        # NB: cli.py never imports `re` at module scope; import locally so
+        # the Windows branch doesn't NameError (issue #16, v1.7.8).
+        import re
         xml_path = _winsw_xml_path()
         winsw = _winsw_exe_path()
         if xml_path.exists() and winsw.exists():
