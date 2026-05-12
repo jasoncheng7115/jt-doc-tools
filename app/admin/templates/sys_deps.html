@@ -24,23 +24,19 @@
 </div>
 
 <div class="panel">
-  {% set total = deps | length %}
-  {% set ok_count = deps | selectattr('ok') | list | length %}
-  {% set missing_hard = deps | rejectattr('ok') | rejectattr('soft') | list | length %}
-  {% set missing_soft = deps | rejectattr('ok') | selectattr('soft') | list | length %}
   <div class="dep-summary-bar">
     <h2 style="margin:0;">總覽</h2>
-    <div class="dep-stat-cards">
+    <div class="dep-stat-cards" id="depStatCards">
       <div class="dep-stat dep-stat-ok">
-        <div class="dep-stat-num">{{ ok_count }}<span class="dep-stat-of">/ {{ total }}</span></div>
+        <div class="dep-stat-num" id="statOk">—<span class="dep-stat-of" id="statTotal"></span></div>
         <div class="dep-stat-label">就緒</div>
       </div>
-      <div class="dep-stat dep-stat-bad {% if not missing_hard %}is-zero{% endif %}">
-        <div class="dep-stat-num">{{ missing_hard }}</div>
+      <div class="dep-stat dep-stat-bad" id="statBadCard">
+        <div class="dep-stat-num" id="statBad">—</div>
         <div class="dep-stat-label">必要相依缺</div>
       </div>
-      <div class="dep-stat dep-stat-warn {% if not missing_soft %}is-zero{% endif %}">
-        <div class="dep-stat-num">{{ missing_soft }}</div>
+      <div class="dep-stat dep-stat-warn" id="statWarnCard">
+        <div class="dep-stat-num" id="statWarn">—</div>
         <div class="dep-stat-label">選用相依缺</div>
       </div>
     </div>
@@ -60,42 +56,12 @@
       </tr>
     </thead>
     <tbody id="dep-tbody">
-    {% for d in deps %}
-      <tr class="{% if d.ok %}row-ok{% elif d.soft %}row-warn{% else %}row-bad{% endif %}">
-        <td class="cell-status">
-          {% if d.ok %}
-            <span class="dep-pill dep-ok">✓ 就緒</span>
-          {% elif d.soft %}
-            <span class="dep-pill dep-warn">⚠ 缺</span>
-          {% else %}
-            <span class="dep-pill dep-bad">✗ 缺</span>
-          {% endif %}
+      <tr id="depLoadingRow">
+        <td colspan="5" style="padding:40px; text-align:center; color:#64748b;">
+          <span class="dep-spinner" aria-hidden="true"></span>
+          <span style="margin-left:10px; font-size:13px;">正在檢查系統相依套件…</span>
         </td>
-        <td>
-          <div class="dep-name">
-            <span><b>{{ d.label }}</b></span>
-            {% if d.soft %}<span class="dep-soft">optional</span>{% endif %}
-          </div>
-          {% if d.binary %}
-            <div class="dep-binary">{{ d.binary }}</div>
-          {% endif %}
-        </td>
-        <td><span class="dep-cat">{{ d.category }}</span></td>
-        <td>
-          {% if d.version %}<span class="dep-version">{{ d.version }}</span>{% endif %}
-          {% if d.extra %}
-            <div class="muted" style="font-size:12px; margin-top:6px;">{{ d.extra }}</div>
-          {% endif %}
-          {% if not d.ok and d.install_cmd %}
-            <div class="dep-cmd-block">
-              <div class="dep-cmd-label">手動安裝（{{ d.platform }}）</div>
-              <code class="dep-cmd">{{ d.install_cmd }}</code>
-            </div>
-          {% endif %}
-        </td>
-        <td class="dep-impact">{{ d.impact }}</td>
       </tr>
-    {% endfor %}
     </tbody>
   </table>
 </div>
@@ -213,7 +179,7 @@
     display:inline-flex; align-items:center; justify-content:center;
     padding:4px 10px; border-radius:12px;
     font-size:12px; font-weight:600;
-    width:90px;  /* equal width status pills line up nicely */
+    width:60px;  /* equal width status pills line up nicely (shorter labels) */
     box-sizing:border-box;
   }
   .dep-pill.dep-ok   { background:#dcfce7; color:#166534; }
@@ -224,6 +190,24 @@
     display:flex; align-items:center; gap:8px; flex-wrap:wrap;
     font-size:14px;
   }
+  /* 套件名稱有括號說明時，第二行 muted 小字直接顯示（不重複「（）」），
+     與主名稱「靠近」（margin-top:2px）；下方 binary 路徑與此小字之間
+     至少留一個空行（has-paren-gap → margin-top:14px） */
+  .dep-name-paren {
+    display:block; width:100%;
+    font-size:12px; color:#64748b; font-weight:normal;
+    margin-top:2px;
+  }
+  .dep-binary.has-paren-gap { margin-top:14px; }
+  /* Loading spinner shown while AJAX fetch in flight */
+  .dep-spinner {
+    display:inline-block; width:18px; height:18px; vertical-align:middle;
+    border:2.5px solid #cbd5e1; border-top-color:#3b82f6;
+    border-radius:50%; animation:dep-spin 0.8s linear infinite;
+  }
+  @keyframes dep-spin { to { transform: rotate(360deg); } }
+  .dep-stat-num.is-loading { color:#cbd5e1; }
+  .dep-stat.is-zero { opacity:.55; }
   .dep-soft {
     display:inline-block; padding:1px 7px; white-space:nowrap;
     background:#e0e7ff; color:#3730a3; border-radius:8px;
@@ -261,21 +245,117 @@
 </style>
 
 <script>
+  // ---- Async fetch + render ------------------------------------------
+  // Page renders empty + spinner first; deps probe runs server-side via
+  // /admin/api/sys-deps and only blocks the table area, not first paint.
+  // 平台環境不同 collect_sys_deps() 可能慢（subprocess 探 binary、import
+  // pytesseract 等），不該阻塞首屏。
+  const escapeHtml = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  // 把「Label (extra) 之類括號描述」拆成 main + paren 兩段。半形 / 全形括號
+  // 都接受；只認最後一個括號（避免吃到 label 內可能的巢狀）。
+  function splitLabelParen(label) {
+    const m = String(label || '').match(/^(.*?)\s*[（(]([^（）()]*)[）)]\s*$/);
+    if (!m) return { main: label || '', paren: '' };
+    return { main: m[1].trim(), paren: m[2].trim() };
+  }
+
+  function renderRows(deps) {
+    const tbody = document.getElementById('dep-tbody');
+    if (!deps || !deps.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:30px; text-align:center; color:#94a3b8;">無資料</td></tr>';
+      return;
+    }
+    let html = '';
+    for (const d of deps) {
+      const { main, paren } = splitLabelParen(d.label);
+      const rowCls = d.ok ? 'row-ok' : (d.soft ? 'row-warn' : 'row-bad');
+      const pill = d.ok
+        ? '<span class="dep-pill dep-ok">✓</span>'
+        : (d.soft ? '<span class="dep-pill dep-warn">⚠</span>'
+                  : '<span class="dep-pill dep-bad">✗</span>');
+      const softTag = d.soft ? ' <span class="dep-soft">optional</span>' : '';
+      // 括號描述換行；不重複括號符號（已視覺分離了）；與套件名靠近、與下方
+      // binary 路徑保持一個空行的距離
+      const parenLine = paren
+        ? `<span class="dep-name-paren">${escapeHtml(paren)}</span>` : '';
+      const binaryLine = d.binary
+        ? `<div class="dep-binary${paren ? ' has-paren-gap' : ''}">${escapeHtml(d.binary)}</div>` : '';
+      const versionPart = d.version
+        ? `<span class="dep-version">${escapeHtml(d.version)}</span>` : '';
+      const extraPart = d.extra
+        ? `<div class="muted" style="font-size:12px; margin-top:6px;">${escapeHtml(d.extra)}</div>` : '';
+      let cmdPart = '';
+      if (!d.ok && d.install_cmd) {
+        cmdPart = `<div class="dep-cmd-block">
+          <div class="dep-cmd-label">手動安裝（${escapeHtml(d.platform || '')}）</div>
+          <code class="dep-cmd">${escapeHtml(d.install_cmd)}</code>
+        </div>`;
+      }
+      html += `<tr class="${rowCls}">
+        <td class="cell-status">${pill}</td>
+        <td>
+          <div class="dep-name">
+            <span><b>${escapeHtml(main)}</b></span>${softTag}
+            ${parenLine}
+          </div>
+          ${binaryLine}
+        </td>
+        <td><span class="dep-cat">${escapeHtml(d.category || '')}</span></td>
+        <td>${versionPart}${extraPart}${cmdPart}</td>
+        <td class="dep-impact">${escapeHtml(d.impact || '')}</td>
+      </tr>`;
+    }
+    tbody.innerHTML = html;
+  }
+
+  function renderSummary(deps) {
+    const total = deps.length;
+    const okN = deps.filter(d => d.ok).length;
+    const badN = deps.filter(d => !d.ok && !d.soft).length;
+    const warnN = deps.filter(d => !d.ok && d.soft).length;
+    const $ = (id) => document.getElementById(id);
+    $('statOk').innerHTML = okN + '<span class="dep-stat-of">/ ' + total + '</span>';
+    $('statBad').textContent = badN;
+    $('statWarn').textContent = warnN;
+    $('statBadCard').classList.toggle('is-zero', badN === 0);
+    $('statWarnCard').classList.toggle('is-zero', warnN === 0);
+  }
+
+  async function loadDeps() {
+    const tbody = document.getElementById('dep-tbody');
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:40px; text-align:center; color:#64748b;">' +
+      '<span class="dep-spinner" aria-hidden="true"></span>' +
+      '<span style="margin-left:10px; font-size:13px;">正在檢查系統相依套件…</span></td></tr>';
+    try {
+      const r = await fetch('/admin/api/sys-deps');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      const deps = j.deps || [];
+      renderRows(deps);
+      renderSummary(deps);
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:30px; text-align:center; color:#ef4444;">檢查失敗：' + escapeHtml(e.message) + '</td></tr>';
+    }
+  }
+
   document.getElementById('btnRefresh').addEventListener('click', async () => {
     const btn = document.getElementById('btnRefresh');
     btn.disabled = true;
     const orig = btn.innerHTML;
     btn.innerHTML = '檢查中…';
     try {
-      const r = await fetch('/admin/api/sys-deps');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      location.reload();
-    } catch (e) {
+      await loadDeps();
+    } finally {
       btn.innerHTML = orig;
       btn.disabled = false;
-      alert('檢查失敗：' + e.message);
     }
   });
+
+  // Kick off initial load — non-blocking; user sees page chrome immediately
+  loadDeps();
 
   // GitHub 最新版本 — admin 主動點才連網
   document.getElementById('btnCheckLatest').addEventListener('click', async () => {

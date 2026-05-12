@@ -132,7 +132,7 @@
     <label style="cursor:pointer; padding:8px 16px; font-size:13px; {% if default_engine == 'easyocr' %}background:#3b82f6; color:#fff; font-weight:600;{% else %}background:#fff; color:#475569;{% endif %} border-right:1px solid #e2e8f0; display:inline-flex; align-items:center; gap:8px;">
       <input type="radio" name="enginePref" value="easyocr" {% if default_engine == 'easyocr' %}checked{% endif %} style="display:none;">
       <span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border:1.5px solid currentColor; border-radius:50%; font-size:11px; font-weight:bold;">{% if default_engine == 'easyocr' %}✓{% endif %}</span>
-      EasyOCR <span style="opacity:.8; font-size:11px;">— 主引擎、CJK 強</span>
+      EasyOCR <span style="opacity:.8; font-size:11px;">— 主引擎、中日韓辨識準確度高</span>
     </label>
     <label style="cursor:pointer; padding:8px 16px; font-size:13px; {% if default_engine == 'tesseract' %}background:#3b82f6; color:#fff; font-weight:600;{% else %}background:#fff; color:#475569;{% endif %} display:inline-flex; align-items:center; gap:8px;">
       <input type="radio" name="enginePref" value="tesseract" {% if default_engine == 'tesseract' %}checked{% endif %} style="display:none;">
@@ -150,7 +150,7 @@
     <h2>EasyOCR <span class="muted" style="font-size:13px; font-weight:normal;">— 主 OCR 引擎（v1.7.2 起預設）</span></h2>
   </summary>
   <div>
-  <p class="muted" style="font-size:13px;">JaidedAI（泰國公司）開源，Apache-2.0。基於 LSTM/CRNN，CJK 識別率明顯優於 tesseract。<b>不需手動管理訓練檔</b> — 首次使用某語言時自動下載 ~150MB 模型到 <code>~/.EasyOCR/model/</code>。</p>
+  <p class="muted" style="font-size:13px;">JaidedAI（泰國公司）開源，Apache-2.0。基於 LSTM/CRNN，中日韓辨識準確度明顯優於 tesseract。<b>不需手動管理訓練檔</b> — 首次使用某語言時自動下載 ~150MB 模型到 <code>~/.EasyOCR/model/</code>。</p>
   <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:10px;">
     <div style="padding:10px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; min-width:200px;">
       <div style="font-size:11px; color:#94a3b8; font-weight:600; letter-spacing:.4px; text-transform:uppercase;">引擎狀態</div>

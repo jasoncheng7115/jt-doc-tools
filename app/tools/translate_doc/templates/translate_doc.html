@@ -13,42 +13,44 @@
 {# 主介面：LLM 沒啟用就藏起來，不讓使用者貼字按按鈕才發現失敗 #}
 {% if llm_enabled %}
 
-<div class="panel">
-  <h2 style="margin-top:0;">1. 來源文字</h2>
+<details class="panel" open>
+  <summary>1. 來源文字</summary>
   <div class="trd-form-grid">
     <div class="trd-form-cell">
-      <label class="trd-label" for="srcLang">原文語言</label>
-      <select class="field" id="srcLang">
-        <option value="auto">自動偵測</option>
-        <option value="en">英文 (English)</option>
-        <option value="zh">中文 (簡 / 繁混合)</option>
-        <option value="zh-TW">繁體中文</option>
-        <option value="zh-CN">簡體中文</option>
-        <option value="ja">日文</option>
-        <option value="ko">韓文</option>
-        <option value="fr">法文</option>
-        <option value="de">德文</option>
-        <option value="es">西班牙文</option>
-        <option value="vi">越南文</option>
-        <option value="th">泰文</option>
-        <option value="id">印尼文</option>
-        <option value="ru">俄文</option>
-      </select>
+      <label class="trd-label">原文語言</label>
+      <div class="jt-select" id="srcLangSel"
+           data-options='[
+             {"v":"auto","l":"自動偵測"},
+             {"v":"en","l":"英文"},
+             {"v":"zh","l":"中文（簡 / 繁混合）"},
+             {"v":"zh-TW","l":"繁體中文"},
+             {"v":"zh-CN","l":"簡體中文"},
+             {"v":"ja","l":"日文"},
+             {"v":"ko","l":"韓文"},
+             {"v":"fr","l":"法文"},
+             {"v":"de","l":"德文"},
+             {"v":"es","l":"西班牙文"},
+             {"v":"vi","l":"越南文"},
+             {"v":"th","l":"泰文"},
+             {"v":"id","l":"印尼文"},
+             {"v":"ru","l":"俄文"}
+           ]' data-value="auto"></div>
     </div>
     <div class="trd-form-cell">
-      <label class="trd-label" for="tgtLang">目標語言</label>
-      <select class="field" id="tgtLang">
-        <option value="zh-TW" selected>繁體中文</option>
-        <option value="zh-CN">簡體中文</option>
-        <option value="en">英文</option>
-        <option value="ja">日文</option>
-        <option value="ko">韓文</option>
-        <option value="fr">法文</option>
-        <option value="de">德文</option>
-        <option value="es">西班牙文</option>
-        <option value="vi">越南文</option>
-        <option value="th">泰文</option>
-      </select>
+      <label class="trd-label">目標語言</label>
+      <div class="jt-select" id="tgtLangSel"
+           data-options='[
+             {"v":"zh-TW","l":"繁體中文"},
+             {"v":"zh-CN","l":"簡體中文"},
+             {"v":"en","l":"英文"},
+             {"v":"ja","l":"日文"},
+             {"v":"ko","l":"韓文"},
+             {"v":"fr","l":"法文"},
+             {"v":"de","l":"德文"},
+             {"v":"es","l":"西班牙文"},
+             {"v":"vi","l":"越南文"},
+             {"v":"th","l":"泰文"}
+           ]' data-value="zh-TW"></div>
     </div>
     <div class="trd-form-cell trd-form-cell-wide">
       <label class="trd-label">或上傳檔案</label>
@@ -69,9 +71,20 @@
     </div>
   </div>
   <div style="margin-top:14px;">
-    <label class="trd-label" for="domainHint">文件領域 <span class="muted" style="font-weight:400;">（選填，會送進 LLM prompt 提升專業用詞準確度）</span></label>
-    <input type="text" class="field" id="domainHint" maxlength="120" style="width:100%; margin-top:4px;"
-           placeholder="例：法律合約、醫療報告、軟體技術文件、財務報表、學術論文、新聞稿…">
+    <label class="trd-label" for="domainHint">文件領域 <span class="muted" style="font-weight:400;">（選填，會送進 LLM prompt 提升專業用詞準確度；點下方常用領域可複選，下方輸入框可加上其他自填領域）</span></label>
+    <div class="trd-domain-chips" id="domainChips" style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;">
+      <button type="button" class="trd-chip" data-domain="法律合約">法律合約</button>
+      <button type="button" class="trd-chip" data-domain="醫療報告">醫療報告</button>
+      <button type="button" class="trd-chip" data-domain="軟體技術文件">軟體技術文件</button>
+      <button type="button" class="trd-chip" data-domain="財務報表">財務報表</button>
+      <button type="button" class="trd-chip" data-domain="學術論文">學術論文</button>
+      <button type="button" class="trd-chip" data-domain="新聞稿">新聞稿</button>
+      <button type="button" class="trd-chip" data-domain="商業合約">商業合約</button>
+      <button type="button" class="trd-chip" data-domain="網路 / IT 維運文件">網路 / IT 維運文件</button>
+    </div>
+    <input type="text" class="field" id="domainHint" maxlength="200"
+           style="width:100%; margin-top:8px; box-sizing:border-box;"
+           placeholder="自填其他領域…（選填，會與上方點選的領域一起送進 prompt）">
   </div>
   <textarea class="field" id="srcText" rows="10" style="margin-top:14px; width:100%; resize:vertical; font-family: -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;" placeholder="貼上要翻譯的文字，或上傳檔案到上方欄位…"></textarea>
   <div style="margin-top:8px; display:flex; align-items:center; gap:14px;">
@@ -80,16 +93,16 @@
     <button class="btn" type="button" id="btnClear">{{ icon('reset', size=14) }} 清空</button>
     <span class="muted" style="font-size:12px;" id="charCounter">0 字 / 0 句</span>
   </div>
-</div>
+</details>
 
-<div class="panel" id="resultPanel" hidden>
-  <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
-    <h2 style="margin:0;">2. 並排對照</h2>
-    <span class="muted" id="resultMeta" style="font-size:12px;"></span>
+<details class="panel" id="resultPanel" hidden open>
+  <summary>
+    <span>2. 並排對照</span>
+    <span class="muted" id="resultMeta" style="font-size:12px; font-weight:normal;"></span>
     <span style="flex:1;"></span>
     <button class="btn btn-small" type="button" id="btnCopyTgt">{{ icon('paperclip', size=12) }} 複製譯文</button>
     <button class="btn btn-small" type="button" id="btnCopySxs">{{ icon('paperclip', size=12) }} 複製對照</button>
-  </div>
+  </summary>
   <div class="trd-progress-wrap" id="trdProgressWrap" hidden>
     <div class="trd-progress-bar" id="trdProgressBar"></div>
   </div>
@@ -98,9 +111,53 @@
   <div style="margin-top:10px; font-size:11.5px; color:#94a3b8;">
     每一列對應一句。點 <b>↻</b> 可重新請 LLM 翻譯該句。空白列代表原文是空行。
   </div>
-</div>
+</details>
 
 <style>
+  /* === 自製下拉（取代瀏覽器原生 select，視覺一致）=== */
+  .jt-select { position: relative; width: 100%; }
+  .jt-select-trigger {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; box-sizing: border-box;
+    padding: 8px 12px; background: #fff;
+    border: 1px solid #d1d5db; border-radius: 6px;
+    font-size: 14px; color: #1f2937; cursor: pointer;
+    transition: border-color .15s, box-shadow .15s;
+    text-align: left;
+  }
+  .jt-select-trigger:hover { border-color: #94a3b8; }
+  .jt-select-trigger:focus { outline: 0; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.18); }
+  .jt-select-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jt-select-chevron { width: 14px; height: 14px; flex-shrink: 0; color: #94a3b8; transition: transform .15s; }
+  .jt-select.is-open .jt-select-chevron { transform: rotate(180deg); }
+  .jt-select-pop {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
+    background: #fff; border: 1px solid #d1d5db; border-radius: 6px;
+    box-shadow: 0 6px 24px rgba(15,23,42,.10), 0 2px 6px rgba(15,23,42,.06);
+    max-height: 280px; overflow-y: auto; padding: 4px;
+    display: none;
+  }
+  .jt-select.is-open .jt-select-pop { display: block; }
+  .jt-select-opt {
+    padding: 8px 10px; border-radius: 4px; cursor: pointer;
+    font-size: 14px; color: #1f2937;
+  }
+  .jt-select-opt:hover { background: #eff6ff; }
+  .jt-select-opt.is-active { background: #3b82f6; color: #fff; font-weight: 500; }
+
+  /* === 文件領域 chips（一鍵點亮常用領域）=== */
+  .trd-chip {
+    padding: 5px 12px; border: 1px solid #d1d5db; border-radius: 14px;
+    background: #fff; color: #475569; font-size: 12.5px; cursor: pointer;
+    transition: all .12s; user-select: none;
+  }
+  .trd-chip:hover { border-color: #3b82f6; color: #3b82f6; }
+  .trd-chip.is-active { background: #3b82f6; border-color: #3b82f6; color: #fff; font-weight: 500; }
+
+  /* trd-panel 改 inherit platform.css 的 details.panel > summary 樣式，
+     不再 override（之前自訂 ▶ 和高度跟其他工具不一致）。複製 / 對照
+     按鈕用 click stopPropagation 防觸發 details toggle（在 JS 處理）。 */
+
   /* === 來源文字三欄 grid（語言 / 語言 / 檔案上傳）=== */
   .trd-form-grid {
     display: grid;
@@ -332,6 +389,109 @@
 {% block scripts %}
 {% if llm_enabled %}
 <script>
+// ----------------------------------------------------------------------
+// JtSelect — 自製下拉，取代瀏覽器原生 <select>。每個 .jt-select 元素
+// 透過 data-options 帶選項清單（JSON）+ data-value 帶當前值。提供 .value
+// 與 .addEventListener('change',...) 兩個介面 (跟 select 一致) 給上層呼叫。
+// 鍵盤：Up/Down 切換、Enter/Space 開啟、Esc 收起。
+// ----------------------------------------------------------------------
+function mountJtSelect(el) {
+  if (!el || el._jtMounted) return el;
+  let opts = [];
+  try { opts = JSON.parse(el.getAttribute('data-options') || '[]'); }
+  catch (_) { opts = []; }
+  let value = el.getAttribute('data-value') || (opts[0] && opts[0].v) || '';
+  const findLabel = (v) => {
+    const o = opts.find(x => x.v === v);
+    return o ? o.l : v;
+  };
+  const _esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  el.innerHTML = `
+    <button type="button" class="jt-select-trigger" tabindex="0">
+      <span class="jt-select-label">${_esc(findLabel(value))}</span>
+      <svg class="jt-select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="jt-select-pop" role="listbox"></div>
+  `;
+  const trigger = el.querySelector('.jt-select-trigger');
+  const labelEl = el.querySelector('.jt-select-label');
+  const pop = el.querySelector('.jt-select-pop');
+  const renderOpts = () => {
+    pop.innerHTML = opts.map(o =>
+      `<div class="jt-select-opt${o.v === value ? ' is-active' : ''}" data-v="${_esc(o.v)}" role="option">${_esc(o.l)}</div>`
+    ).join('');
+  };
+  renderOpts();
+  const open = () => { el.classList.add('is-open'); renderOpts(); };
+  const close = () => { el.classList.remove('is-open'); };
+  const setValue = (v, fire = true) => {
+    if (v === value) return;
+    value = v;
+    el.setAttribute('data-value', v);
+    labelEl.textContent = findLabel(v);
+    renderOpts();
+    if (fire) el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (el.classList.contains('is-open')) close(); else open();
+  });
+  pop.addEventListener('click', (e) => {
+    const opt = e.target.closest('.jt-select-opt');
+    if (!opt) return;
+    setValue(opt.getAttribute('data-v'));
+    close();
+  });
+  document.addEventListener('click', (e) => {
+    if (!el.contains(e.target)) close();
+  });
+  trigger.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    else if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const idx = opts.findIndex(o => o.v === value);
+      const next = e.key === 'ArrowDown'
+        ? Math.min(opts.length - 1, idx + 1)
+        : Math.max(0, idx - 1);
+      setValue(opts[next].v);
+    }
+  });
+  // 與 <select> 介面相容：value getter/setter
+  Object.defineProperty(el, 'value', {
+    get: () => value,
+    set: (v) => setValue(v, false),
+    configurable: true,
+  });
+  el._jtMounted = true;
+  return el;
+}
+
+document.querySelectorAll('.jt-select').forEach(mountJtSelect);
+
+// ---- 文件領域 chips：複選；自填 input 與選取 chips 並存（送 prompt 時用「、」串起）
+// getDomainHint() 給 fetch 用，回完整領域字串（chips selected + 自填）
+function getDomainHint() {
+  const wrap = document.getElementById('domainChips');
+  const input = document.getElementById('domainHint');
+  const parts = [];
+  if (wrap) {
+    wrap.querySelectorAll('.trd-chip.is-active').forEach(c => {
+      parts.push(c.getAttribute('data-domain') || '');
+    });
+  }
+  const free = (input?.value || '').trim();
+  if (free) parts.push(free);
+  return parts.filter(Boolean).join('、');
+}
+(function setupDomainChips() {
+  const wrap = document.getElementById('domainChips');
+  if (!wrap) return;
+  wrap.querySelectorAll('.trd-chip').forEach(c => {
+    c.addEventListener('click', () => c.classList.toggle('is-active'));
+  });
+})();
+
 const LLM_MODEL = {{ llm_model|tojson }};
 const OFFICE_ENGINE = {{ office_engine|tojson }};
 // 哪些副檔名需要 soffice (DOCX/DOC/ODT/ODS/ODP/RTF) → 顯示「OxOffice 解析中…」
@@ -346,8 +506,8 @@ function _engineLabelFor(filename) {
 }
 const $ = (id) => document.getElementById(id);
 const srcText = $('srcText');
-const srcLang = $('srcLang');
-const tgtLang = $('tgtLang');
+const srcLang = $('srcLangSel');  // jt-select 元素，提供與 <select> 相容的 .value
+const tgtLang = $('tgtLangSel');
 const fileInput = $('fileInput');
 const btnTranslate = $('btnTranslate');
 const btnClear = $('btnClear');
@@ -622,7 +782,7 @@ trdGrid.addEventListener('click', async (e) => {
   try {
     const r = await fetch('/tools/translate-doc/translate-one', {
       method: 'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({src, source_lang: srcLang.value, target_lang: tgtLang.value, domain: (document.getElementById('domainHint')?.value || '').trim()}),
+      body: JSON.stringify({src, source_lang: srcLang.value, target_lang: tgtLang.value, domain: getDomainHint()}),
     });
     if (!r.ok) {
       tgtCell.classList.add('is-error');
@@ -657,7 +817,7 @@ async function _translateOne(idx, src) {
       src: src,
       source_lang: srcLang.value,
       target_lang: tgtLang.value,
-      domain: (document.getElementById('domainHint')?.value || '').trim(),
+      domain: getDomainHint(),
     }),
   });
   if (!r.ok) {
@@ -828,7 +988,8 @@ btnTranslate.addEventListener('click', async () => {
   }
 });
 
-$('btnCopyTgt').addEventListener('click', () => {
+$('btnCopyTgt').addEventListener('click', (e) => {
+  e.stopPropagation();   // 別讓父層 <summary> 接到 → 觸發摺疊
   const lines = [];
   trdGrid.querySelectorAll('.trd-row').forEach(row => {
     const tgt = row.querySelector('.tgt');
@@ -839,7 +1000,8 @@ $('btnCopyTgt').addEventListener('click', () => {
   navigator.clipboard.writeText(lines.join('\n'));
   showToast?.('已複製譯文', 'ok');
 });
-$('btnCopySxs').addEventListener('click', () => {
+$('btnCopySxs').addEventListener('click', (e) => {
+  e.stopPropagation();
   const lines = [];
   trdGrid.querySelectorAll('.trd-row').forEach(row => {
     const src = row.querySelector('.src').textContent;

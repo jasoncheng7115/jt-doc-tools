@@ -157,8 +157,15 @@ def _ocr_bbox(page: "fitz.Page", bbox, lang: str = "chi_tra+eng") -> str:
             min(page_rect.x1, x1 + pad_x),
             min(page_rect.y1, y1 + pad_y),
         )
-        # 400 DPI for short titles (more pixels per glyph helps); 300 otherwise.
-        dpi = 400 if bh < 40 else 300
+        # DPI 視文字高度分級：小文字需要高 DPI 才有夠多 pixel/glyph；大標題
+        # 200 DPI 已足夠 OCR 辨識且速度快 2x。客戶反應大標題 OCR 跑超久，
+        # 200 DPI 對 60pt+ 的標題仍能保持 95%+ 辨識率。
+        if bh < 24:
+            dpi = 400
+        elif bh < 60:
+            dpi = 300
+        else:
+            dpi = 200
         matrix = fitz.Matrix(dpi / 72, dpi / 72)
         pix = page.get_pixmap(matrix=matrix, clip=rect, alpha=False)
         png = pix.tobytes("png")
@@ -299,12 +306,13 @@ def _looks_garbled(text: str) -> bool:
         return True
     if suspicious / max(cjk_count + suspicious, 1) >= 0.25:
         return True
-    # Signal b) 大量 CJK 但完全沒 common chars → garbled
-    # 門檻 8 — 真 Identity-H garbage 通常 10+ 字長；短的合法詞（測試驗證、
-    # 文字測試、工程驗收 ...）4-7 個不含 common particle 也常見，門檻 2 太
-    # 容易誤判把它們丟去 OCR（OCR 又常常多吐 iia 之類雜訊更糟）。v1.4.92 修。
-    if cjk_count >= 8 and common_hits == 0:
-        return True
+    # Signal b) 撤回（v1.7.34 慘案）：
+    # 原本「cjk_count >= 8 且 common_hits == 0 → garbled」對長標題誤判頻繁
+    # （「○○○○○○○○」「○○發展歷程」「○○○○○○○○」
+    # 這類 8+ 字標題沒任何 common particle 的/是/在/了/一 → 誤判 garbled
+    # → 觸發 OCR → 高解析 PDF 一張要 5-15 秒，使用者體驗差且 OCR 結果常
+    # 不如原 PyMuPDF 抽出的字準）。改為靠 signal a/c/d（suspicious 符號 /
+    # 長重複 / 短週期）即可，這幾條都是貨真價實的 garbage pattern。
     # Signal c) — long run of identical letters/digits (8+) is essentially
     # never real text. 客戶踩過：TOC 的 leader dots「........」用 Identity-H
     # subset font，glyph index 0x65 對應「.」glyph 但 ToUnicode 把它 map 回
@@ -731,9 +739,15 @@ def _replace_all_fonts_sync(src, upload_id: str, font_id: str):
                 # 顏色矩形原樣保留。v1.4.78 修。
                 page.add_redact_annot(fitz.Rect(*sp["bbox"]), fill=None)
             try:
-                page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
-            except Exception:
-                page.apply_redactions()
+                page.apply_redactions(
+                    images=fitz.PDF_REDACT_IMAGE_NONE,
+                    graphics=fitz.PDF_REDACT_LINE_ART_NONE,
+                )
+            except (AttributeError, TypeError):
+                try:
+                    page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+                except Exception:
+                    page.apply_redactions()
             # Re-insert with chosen font, preserving size + color + bold/italic
             for sp in spans:
                 bx0, by0, bx1, by1 = sp["bbox"]
@@ -1252,514 +1266,574 @@ async def save(request: Request):
         raise HTTPException(400, "upload_id required")
     from app.core.safe_paths import require_uuid_hex
     from ...core import upload_owner as _uo
+    from ...core.save_queue import save_queue as _sq
     require_uuid_hex(upload_id, "upload_id")
     _uo.require(upload_id, request)
     pages = body.get("pages") or []
+    # dirty_pages: 只重新渲染這些 page 的 preview PNG（多頁 PDF 大幅加速；
+    # v1.7.18 加）。前端不送 / 送空陣列 → 維持舊行為（重新渲染全部）。
+    dirty_pages_in = body.get("dirty_pages")
+    dirty_pages: set[int] | None
+    if isinstance(dirty_pages_in, list) and dirty_pages_in:
+        try:
+            dirty_pages = {int(p) for p in dirty_pages_in if isinstance(p, (int, float))}
+        except (TypeError, ValueError):
+            dirty_pages = None  # malformed → safe fallback to render all
+    else:
+        dirty_pages = None
+    # v1.7.37：autosave 跟 manual save 用不同的 PDF 序列化 / 壓縮等級。
+    # autosave 高頻觸發（拖完放、打完字），用 garbage=1 + 不 deflate 大幅
+    # 加速（~2-3x），代價是檔案會暫時較大、有未引用物件殘留。manual save
+    # （使用者按「儲存並預覽」/「下載」）則 garbage=4 + deflate 整理乾淨。
+    # client 不送 is_auto → 預設 manual（向後相容）。
+    is_auto_save = bool(body.get("is_auto"))
     src = _work_dir() / f"pe_{upload_id}_src.pdf"
     if not src.exists():
         raise HTTPException(404, "upload expired or missing")
 
-    out = _work_dir() / f"pe_{upload_id}_out.pdf"
-    # Always open the pristine original — the client sends the FULL edit
-    # model (all origBboxes, all deleted_originals, all added objects) on
-    # each save, and we replay them from scratch. This keeps redactions
-    # idempotent and avoids content duplication when users move an
-    # extracted object multiple times.
+    # Wrap the heavy flatten (defined as the rest of this function body via the
+    # _do_flatten closure) in save_queue: per-upload Lock serializes rapid /save
+    # calls from one user (drag-spam), global Semaphore caps total concurrent
+    # flattens so multi-user load doesn't saturate CPU. (v1.7.17 改進)
+    async def _do_flatten():
+        out = _work_dir() / f"pe_{upload_id}_out.pdf"
+        # Always open the pristine original — the client sends the FULL edit
+        # model (all origBboxes, all deleted_originals, all added objects) on
+        # each save, and we replay them from scratch. This keeps redactions
+        # idempotent and avoids content duplication when users move an
+        # extracted object multiple times.
 
-    # 偵錯：印出本次收到的所有 text 物件，方便排查重複 / 字型切換 ghost
-    try:
-        import logging as _lg
-        _log = _lg.getLogger(__name__)
-        for pg in pages:
-            text_objs = [o for o in pg.get("objects", []) if o.get("type") == "text"]
-            if text_objs:
-                _log.info("pdf-editor /save page=%s text_objs_count=%d",
-                          pg.get("page"), len(text_objs))
-                for to in text_objs:
-                    _log.info("  text_obj id=%s x=%s y=%s w=%s h=%s font=%s size=%s "
-                              "orig_bbox=%s text=%r",
-                              to.get("id"), to.get("x"), to.get("y"),
-                              to.get("w"), to.get("h"),
-                              to.get("font"), to.get("font_size"),
-                              to.get("original_bbox"), (to.get("text") or "")[:30])
-    except Exception:
-        pass
+        # 偵錯：印出本次收到的所有 text 物件，方便排查重複 / 字型切換 ghost
+        try:
+            import logging as _lg
+            _log = _lg.getLogger(__name__)
+            for pg in pages:
+                text_objs = [o for o in pg.get("objects", []) if o.get("type") == "text"]
+                if text_objs:
+                    _log.info("pdf-editor /save page=%s text_objs_count=%d",
+                              pg.get("page"), len(text_objs))
+                    for to in text_objs:
+                        _log.info("  text_obj id=%s x=%s y=%s w=%s h=%s font=%s size=%s "
+                                  "orig_bbox=%s text=%r",
+                                  to.get("id"), to.get("x"), to.get("y"),
+                                  to.get("w"), to.get("h"),
+                                  to.get("font"), to.get("font_size"),
+                                  to.get("original_bbox"), (to.get("text") or "")[:30])
+        except Exception:
+            pass
 
-    doc = fitz.open(str(src))
-    # Per-page cache of system fonts already registered this save
-    # {(page_index, font_path, idx): buffername}
-    _custom_font_cache: dict = {}
-    try:
-        # ---- Pass 1: apply redactions (destructive removal of existing
-        # PDF content that the user deleted, moved, or resized). All
-        # redactions for a page must be applied before we insert new
-        # content, otherwise apply_redactions can wipe our new overlays.
-        for pg in pages:
-            pno = int(pg.get("page", 0))
-            if pno < 0 or pno >= doc.page_count:
-                continue
-            page = doc[pno]
-            has_redact = False
-            for obj in pg.get("objects", []):
-                orig = obj.get("original_bbox")
-                if not orig or len(orig) != 4:
+        doc = fitz.open(str(src))
+        # Per-page cache of system fonts already registered this save
+        # {(page_index, font_path, idx): buffername}
+        _custom_font_cache: dict = {}
+        try:
+            # ---- Pass 1: apply redactions (destructive removal of existing
+            # PDF content that the user deleted, moved, or resized). All
+            # redactions for a page must be applied before we insert new
+            # content, otherwise apply_redactions can wipe our new overlays.
+            for pg in pages:
+                pno = int(pg.get("page", 0))
+                if pno < 0 or pno >= doc.page_count:
                     continue
-                # Backend safety net (#6 v1.4.2): text 物件 text 為空但有
-                # original_bbox 是 bug state — redact 會清掉原文位置但 Pass 2
-                # 又跳過空 text 不寫，結果留下完全空白「文字消失」。直接 skip
-                # 此 obj 的 redact，原文保留；client safety net 也已有同樣邏輯
-                # 不送上來，這裡是雙保險。
-                if obj.get("type") == "text" and not str(obj.get("text") or "").strip():
-                    import logging as _lg
-                    from app.core.log_safe import safe_log
-                    _lg.getLogger(__name__).warning(
-                        "skipping redact for text obj with empty text "
-                        "(original_bbox=%s) — would leave blank area", safe_log(orig))
-                    continue
-                ox0, oy0, ox1, oy1 = [float(v) for v in orig]
-                # 字型 / 字級變更會讓新 bbox 跟 original_bbox 不一致；
-                # 若新 bbox 更大，舊 redact 沒蓋到的舊文字會殘留 (#21 客戶踩到)
-                # 修法：redact 範圍取 union(original_bbox, 當前 obj 的 x/y/w/h)
-                # 並加 2pt 安全邊距吃 anti-aliased 邊緣 / glyph 突出
-                if obj.get("type") == "text":
-                    cx0 = float(obj.get("x", ox0))
-                    cy0 = float(obj.get("y", oy0))
-                    cx1 = cx0 + float(obj.get("w", ox1 - ox0) or (ox1 - ox0))
-                    cy1 = cy0 + float(obj.get("h", oy1 - oy0) or (oy1 - oy0))
-                    ux0 = min(ox0, cx0) - 2
-                    uy0 = min(oy0, cy0) - 2
-                    ux1 = max(ox1, cx1) + 2
-                    uy1 = max(oy1, cy1) + 2
-                    page.add_redact_annot(fitz.Rect(ux0, uy0, ux1, uy1), fill=(1, 1, 1))
-                else:
+                page = doc[pno]
+                has_redact = False
+                for obj in pg.get("objects", []):
+                    orig = obj.get("original_bbox")
+                    if not orig or len(orig) != 4:
+                        continue
+                    # Backend safety net (#6 v1.4.2): text 物件 text 為空但有
+                    # original_bbox 是 bug state — redact 會清掉原文位置但 Pass 2
+                    # 又跳過空 text 不寫，結果留下完全空白「文字消失」。直接 skip
+                    # 此 obj 的 redact，原文保留；client safety net 也已有同樣邏輯
+                    # 不送上來，這裡是雙保險。
+                    if obj.get("type") == "text" and not str(obj.get("text") or "").strip():
+                        import logging as _lg
+                        from app.core.log_safe import safe_log
+                        _lg.getLogger(__name__).warning(
+                            "skipping redact for text obj with empty text "
+                            "(original_bbox=%s) — would leave blank area", safe_log(orig))
+                        continue
+                    ox0, oy0, ox1, oy1 = [float(v) for v in orig]
+                    # 一律只 redact OLD 位置（original_bbox）+ 2pt 邊距吃
+                    # anti-aliased 邊緣 / glyph 突出。NEW 位置不需要 redact —
+                    # apply_redactions 完後我們會 insert_text / insert_image
+                    # 把新內容寫到 NEW 位置，那一帶的 BG 是 redact 之外的
+                    # 原內容，新文字直接疊上去即可。
+                    #
+                    # fill=None：不畫白底覆蓋。否則底下穿過的頁面框線 / 表格
+                    # 線 / 有色背景會被白方塊整個蓋掉（v1.7.29 客戶慘案：
+                    # 移 logo 圖後底下頁框被截斷一段；v1.7.26 加 LINE_ART_NONE
+                    # 想保留向量線條但 fill 還是會把它蓋掉）。fill=None 時
+                    # apply_redactions 只移除矩形內的「文字 / 圖片內容項」，
+                    # 不畫覆蓋 → 底層 vector line art / 顏色保留原樣。
+                    #
+                    # 歷史包袱：v1.x 曾為「在原地放大字型，舊小字 redact 沒
+                    # 蓋到」加 union(OLD, NEW) 邏輯；v1.7.23 又加 disjoint 檢查
+                    # 避免拉動時 redact 跨越中間區域；v1.7.28 全部捨棄改回
+                    # 「永遠只 redact OLD + 2pt」最樸實做法。
                     page.add_redact_annot(
-                        fitz.Rect(ox0, oy0, ox1, oy1),
-                        fill=(1, 1, 1),
+                        fitz.Rect(ox0 - 2, oy0 - 2, ox1 + 2, oy1 + 2),
+                        fill=None,
                     )
-                has_redact = True
-            # Explicit "deleted existing" entries (no new content, just redact)
-            for dbb in pg.get("deleted_originals", []) or []:
-                if not dbb or len(dbb) != 4:
-                    continue
-                dx0, dy0, dx1, dy1 = [float(v) for v in dbb]
-                page.add_redact_annot(
-                    fitz.Rect(dx0, dy0, dx1, dy1),
-                    fill=(1, 1, 1),
-                )
-                has_redact = True
+                    has_redact = True
+                # Explicit "deleted existing" entries (no new content, just redact).
+                # fill=None：跟 obj original_bbox redact 同理，避免白底覆蓋底層
+                # vector 線條 / 顏色（v1.7.29）。
+                for dbb in pg.get("deleted_originals", []) or []:
+                    if not dbb or len(dbb) != 4:
+                        continue
+                    dx0, dy0, dx1, dy1 = [float(v) for v in dbb]
+                    page.add_redact_annot(
+                        fitz.Rect(dx0, dy0, dx1, dy1),
+                        fill=None,
+                    )
+                    has_redact = True
 
-            # AcroForm widgets marked for deletion. Match by field_name
-            # when available (survives bbox jitter), otherwise by bbox.
-            for wd in pg.get("deleted_widgets", []) or []:
-                target_name = (wd.get("field_name") or "").strip()
-                bb = wd.get("bbox") or []
-                try:
-                    for widget in list(page.widgets() or []):
-                        matched = False
-                        if target_name and (widget.field_name or "") == target_name:
-                            matched = True
-                        elif bb and len(bb) == 4 and widget.rect:
-                            # Loose bbox match (within 2pt) as fallback.
-                            wr = widget.rect
-                            if (abs(wr.x0 - bb[0]) < 2 and abs(wr.y0 - bb[1]) < 2
-                                and abs(wr.x1 - bb[2]) < 2 and abs(wr.y1 - bb[3]) < 2):
+                # AcroForm widgets marked for deletion. Match by field_name
+                # when available (survives bbox jitter), otherwise by bbox.
+                for wd in pg.get("deleted_widgets", []) or []:
+                    target_name = (wd.get("field_name") or "").strip()
+                    bb = wd.get("bbox") or []
+                    try:
+                        for widget in list(page.widgets() or []):
+                            matched = False
+                            if target_name and (widget.field_name or "") == target_name:
                                 matched = True
-                        if not matched:
-                            continue
-                        # Also paint over the widget area with a redact so
-                        # any visible appearance goes away.
-                        try:
-                            page.add_redact_annot(widget.rect, fill=(1, 1, 1))
-                            has_redact = True
-                        except Exception:
-                            pass
-                        try:
-                            page.delete_widget(widget)
-                        except Exception:
+                            elif bb and len(bb) == 4 and widget.rect:
+                                # Loose bbox match (within 2pt) as fallback.
+                                wr = widget.rect
+                                if (abs(wr.x0 - bb[0]) < 2 and abs(wr.y0 - bb[1]) < 2
+                                    and abs(wr.x1 - bb[2]) < 2 and abs(wr.y1 - bb[3]) < 2):
+                                    matched = True
+                            if not matched:
+                                continue
+                            # Also paint over the widget area with a redact so
+                            # any visible appearance goes away.
                             try:
-                                widget.field_name = ""
-                                widget.update()
+                                page.add_redact_annot(widget.rect, fill=(1, 1, 1))
+                                has_redact = True
                             except Exception:
                                 pass
-                except Exception:
-                    pass
+                            try:
+                                page.delete_widget(widget)
+                            except Exception:
+                                try:
+                                    widget.field_name = ""
+                                    widget.update()
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
 
-            if has_redact:
-                # IMAGES=NONE keeps embedded images intact outside redact
-                # rects (default behaviour would wipe whole images).
-                try:
-                    page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
-                except Exception:
-                    page.apply_redactions()
+                if has_redact:
+                    # 拉動既有圖片時要把 OLD 位置的圖清掉 → images 用預設
+                    # PDF_REDACT_IMAGE_PIXELS（清矩形內的圖 pixel，鄰近未涵蓋
+                    # 區域的圖原樣保留）。配上 fill=None 不畫白底，加
+                    # LINE_ART_NONE 保留底層 vector 線條 / 邊框 → 拉走的內容
+                    # 消失，底下穿過的頁框 / 表格線 / 背景色都留住。
+                    #
+                    # 舊版 PyMuPDF (< 1.23) 沒 graphics 參數，fallback 到無
+                    # graphics 控制（line art 會被一起清掉是已知 trade-off，
+                    # 不阻擋主路徑）。
+                    try:
+                        page.apply_redactions(
+                            graphics=fitz.PDF_REDACT_LINE_ART_NONE,
+                        )
+                    except (AttributeError, TypeError):
+                        try:
+                            page.apply_redactions()
+                        except Exception:
+                            page.apply_redactions()
 
-        # ---- Pass 2: draw overlays and re-inserts.
-        for pg in pages:
-            pno = int(pg.get("page", 0))
-            if pno < 0 or pno >= doc.page_count:
-                continue
-            page = doc[pno]
-            for obj in pg.get("objects", []):
-                ot = obj.get("type")
-                x = float(obj.get("x", 0))
-                y = float(obj.get("y", 0))
-                w = float(obj.get("w", 0))
-                h = float(obj.get("h", 0))
-                rect = fitz.Rect(x, y, x + w, y + h)
-                if ot == "whiteout":
-                    # Paint an opaque white rectangle over the target area.
-                    # Not a redaction (that removes content); this is a
-                    # visual cover. True redact lives in a later phase.
-                    page.draw_rect(rect, color=None, fill=(1, 1, 1),
-                                   fill_opacity=1.0, overlay=True)
-                elif ot == "image":
-                    # Source: either an asset (stamp/signature/logo) OR an
-                    # extracted existing image (existing_src points to a PNG
-                    # we wrote under work_dir during detect-objects).
-                    src_file = None
-                    asset_id = obj.get("asset_id") or ""
-                    if asset_id:
-                        a = asset_manager.get(asset_id)
-                        if a:
-                            cand = settings.assets_files_dir / a.file_key
-                            if cand.exists():
-                                src_file = cand
-                    if src_file is None:
-                        # existing_src is a URL like /tools/pdf-editor/preview/pe_<id>_imgxN_pM.png
-                        es = obj.get("existing_src") or ""
-                        if es:
-                            fname = es.rsplit("/", 1)[-1]
-                            # Only allow our own pe_ prefix files (no traversal)
-                            if (fname.startswith("pe_") and ".." not in fname
-                                and "/" not in fname):
-                                cand = _work_dir() / fname
+            # ---- Pass 2: draw overlays and re-inserts.
+            for pg in pages:
+                pno = int(pg.get("page", 0))
+                if pno < 0 or pno >= doc.page_count:
+                    continue
+                page = doc[pno]
+                for obj in pg.get("objects", []):
+                    ot = obj.get("type")
+                    x = float(obj.get("x", 0))
+                    y = float(obj.get("y", 0))
+                    w = float(obj.get("w", 0))
+                    h = float(obj.get("h", 0))
+                    rect = fitz.Rect(x, y, x + w, y + h)
+                    if ot == "whiteout":
+                        # Paint an opaque white rectangle over the target area.
+                        # Not a redaction (that removes content); this is a
+                        # visual cover. True redact lives in a later phase.
+                        page.draw_rect(rect, color=None, fill=(1, 1, 1),
+                                       fill_opacity=1.0, overlay=True)
+                    elif ot == "image":
+                        # Source: either an asset (stamp/signature/logo) OR an
+                        # extracted existing image (existing_src points to a PNG
+                        # we wrote under work_dir during detect-objects).
+                        src_file = None
+                        asset_id = obj.get("asset_id") or ""
+                        if asset_id:
+                            a = asset_manager.get(asset_id)
+                            if a:
+                                cand = settings.assets_files_dir / a.file_key
                                 if cand.exists():
                                     src_file = cand
-                    if src_file is None:
-                        continue
-                    try:
-                        # Use stream=bytes (same as pdf-stamp), which
-                        # preserves PNG alpha correctly. filename=... +
-                        # alpha=... can introduce a gray matte artefact
-                        # on some PyMuPDF versions.
-                        with open(src_file, "rb") as _f:
-                            img_bytes = _f.read()
-                        kwargs = dict(stream=img_bytes,
-                                      keep_proportion=False, overlay=True)
-                        ang = float(obj.get("angle") or 0.0)
-                        if ang:
-                            kwargs["rotate"] = ang
-                        page.insert_image(rect, **kwargs)
-                        # Optional opacity wasn't applied here — we omit
-                        # it on purpose because `alpha=int` in PyMuPDF
-                        # overwrites per-pixel transparency. If future
-                        # versions need user-controlled opacity, apply
-                        # via a Pillow pre-pass that multiplies the
-                        # alpha channel.
-                    except Exception:
-                        continue
-                elif ot == "rect":
-                    stroke = str(obj.get("stroke") or "#000000").lstrip("#")
-                    fill = obj.get("fill")  # nullable
-                    sw = float(obj.get("stroke_width") or 1.0)
-                    sr, sg, sb = _hex_rgb01(stroke)
-                    fill_rgb = _hex_rgb01(str(fill).lstrip("#")) if fill else None
-                    page.draw_rect(
-                        rect,
-                        color=(sr, sg, sb),
-                        fill=fill_rgb,
-                        width=sw,
-                        overlay=True,
-                    )
-                elif ot == "line":
-                    x2 = float(obj.get("x2", x + w))
-                    y2 = float(obj.get("y2", y + h))
-                    stroke = str(obj.get("stroke") or "#000000").lstrip("#")
-                    sw = float(obj.get("stroke_width") or 1.0)
-                    sr, sg, sb = _hex_rgb01(stroke)
-                    page.draw_line(
-                        fitz.Point(x, y), fitz.Point(x2, y2),
-                        color=(sr, sg, sb), width=sw, overlay=True,
-                    )
-                elif ot == "arrow":
-                    # Line + a filled triangular head at (x2, y2).
-                    x2 = float(obj.get("x2", x + w))
-                    y2 = float(obj.get("y2", y + h))
-                    stroke = str(obj.get("stroke") or "#000000").lstrip("#")
-                    sw = float(obj.get("stroke_width") or 1.0)
-                    col = _hex_rgb01(stroke)
-                    import math as _m
-                    page.draw_line(fitz.Point(x, y), fitz.Point(x2, y2),
-                                   color=col, width=sw, overlay=True)
-                    # Arrowhead triangle
-                    dx, dy = x2 - x, y2 - y
-                    ang = _m.atan2(dy, dx)
-                    ah = max(6.0, sw * 4.0)   # arrowhead length
-                    aw = ah * 0.6             # half-width
-                    p1 = fitz.Point(x2, y2)
-                    p2 = fitz.Point(x2 - ah*_m.cos(ang) + aw*_m.sin(ang),
-                                    y2 - ah*_m.sin(ang) - aw*_m.cos(ang))
-                    p3 = fitz.Point(x2 - ah*_m.cos(ang) - aw*_m.sin(ang),
-                                    y2 - ah*_m.sin(ang) + aw*_m.cos(ang))
-                    shape = page.new_shape()
-                    shape.draw_polyline([p1, p2, p3, p1])
-                    shape.finish(color=col, fill=col, width=sw)
-                    shape.commit(overlay=True)
-                elif ot == "highlight":
-                    # Yellow translucent rectangle over the area. Using
-                    # draw_rect with fill_opacity gives a predictable
-                    # visual result (PDF highlight annotations anchor to
-                    # text spans, which we don't track here).
-                    color_hex = str(obj.get("color") or "#fde047").lstrip("#")
-                    r, g, b = _hex_rgb01(color_hex)
-                    page.draw_rect(rect, color=None, fill=(r, g, b),
-                                   fill_opacity=0.45, overlay=True)
-                elif ot == "sticky":
-                    # Real PDF text annotation — clickable in viewers,
-                    # shows the note text as a popup bubble.
-                    note = str(obj.get("note") or "便箋")
-                    try:
-                        annot = page.add_text_annot(
-                            fitz.Point(x, y), note, icon="Note",
-                        )
-                        try:
-                            annot.set_colors(stroke=(1.0, 0.83, 0.09))
-                            annot.update()
-                        except Exception:
-                            pass
-                    except Exception:
-                        # Fallback: draw a small yellow square so user
-                        # still sees something even if annot API fails
-                        page.draw_rect(
-                            fitz.Rect(x, y, x + max(w, 18), y + max(h, 18)),
-                            color=(0.85, 0.47, 0.04), fill=(0.99, 0.90, 0.52),
-                            width=0.8, overlay=True,
-                        )
-                elif ot == "pencil":
-                    # Free-hand path. Frontend has resolved Fabric's
-                    # pathOffset/scale/translation and sent a flat list
-                    # of absolute (x, y) points in PDF points — all we
-                    # have to do is draw the polyline.
-                    raw_pts = obj.get("points") or []
-                    stroke = str(obj.get("stroke") or "#000000").lstrip("#")
-                    sw = float(obj.get("stroke_width") or 1.0)
-                    col = _hex_rgb01(stroke)
-                    pts = []
-                    for p in raw_pts:
-                        if isinstance(p, (list, tuple)) and len(p) >= 2:
-                            try:
-                                pts.append(fitz.Point(float(p[0]), float(p[1])))
-                            except (TypeError, ValueError):
-                                continue
-                    if len(pts) >= 2:
-                        shape = page.new_shape()
-                        shape.draw_polyline(pts)
-                        # closePath=False: do NOT connect last point back
-                        # to first. Essential for freehand strokes, which
-                        # otherwise form a filled loop.
-                        shape.finish(color=col, fill=None, width=sw,
-                                     lineCap=1, lineJoin=1, closePath=False)
-                        shape.commit(overlay=True)
-                elif ot == "ellipse":
-                    stroke = str(obj.get("stroke") or "#000000").lstrip("#")
-                    fill = obj.get("fill")
-                    sw = float(obj.get("stroke_width") or 1.0)
-                    sr, sg, sb = _hex_rgb01(stroke)
-                    fill_rgb = _hex_rgb01(str(fill).lstrip("#")) if fill else None
-                    page.draw_oval(
-                        rect, color=(sr, sg, sb), fill=fill_rgb,
-                        width=sw, overlay=True,
-                    )
-                elif ot == "text":
-                    text = str(obj.get("text") or "")
-                    has_orig = obj.get("original_bbox") is not None
-                    if not text:
-                        # Empty text — should never reach here because the
-                        # frontend safety net + Pass 1 redact safety both
-                        # filter empty-text+orig_bbox combinations.
-                        # Log if it does so we can find the path.
-                        import logging as _lg
-                        _lg.getLogger(__name__).warning(
-                            "text obj reached Pass 2 with empty text "
-                            "(has_orig_bbox=%s, page=%d) — skipping",
-                            has_orig, pno)
-                        continue
-                    # 診斷：印出每個 text obj 的關鍵欄位 + page.rotation（v1.4.13 #6 偵錯用）
-                    import logging as _lg
-                    from app.core.log_safe import safe_log
-                    _lg.getLogger(__name__).info(
-                        "pdf-editor insert text page=%d rect=%s text=%s "
-                        "font_pref=%s font_size=%.1f color=%s has_orig_bbox=%s "
-                        "page.rotation=%d page.mediabox=%s page.rect=%s",
-                        pno, [round(rect.x0,1), round(rect.y0,1),
-                              round(rect.x1,1), round(rect.y1,1)],
-                        safe_log(text[:50]),
-                        safe_log(obj.get("font") or "default"),
-                        float(obj.get("font_size") or 11),
-                        safe_log(obj.get("color")),
-                        has_orig,
-                        page.rotation,
-                        [round(v,1) for v in (page.mediabox.x0, page.mediabox.y0,
-                                              page.mediabox.x1, page.mediabox.y1)],
-                        [round(v,1) for v in (page.rect.x0, page.rect.y0,
-                                              page.rect.x1, page.rect.y1)])
-                    font_size = float(obj.get("font_size") or 11)
-                    col = _hex_rgb01(str(obj.get("color") or "#000000"))
-                    bold = bool(obj.get("bold"))
-                    italic = bool(obj.get("italic"))
-                    underline = bool(obj.get("underline"))
-                    font_pref = str(obj.get("font") or "default")
-                    has_cjk = any("一" <= c <= "鿿" for c in text)
-                    # System / custom font override — user picked a .ttf/.otf/.ttc
-                    # from the catalog（`system:<path>` 或 `custom:<filename>`）。
-                    # 註冊到 page 後用 reg_name 給 insert_text 用。
-                    # NOTE: 之前漏了 `custom:` 分支，導致 admin 上傳的字型 (例如「微軟
-                    # 正黑體」) 被 fall through 到 built-in china-t — UI 預覽看起來對
-                    # 但 auto-save 後重畫就跑掉。v1.4.74 修。
-                    custom_font_name = None
-                    if font_pref.startswith("system:") or font_pref.startswith("custom:"):
-                        from ...core import font_catalog
-                        entry = font_catalog.resolve_font_id(font_pref)
-                        if entry and entry.get("path"):
-                            fkey = (pno, entry["path"], int(entry.get("idx") or 0))
-                            if fkey in _custom_font_cache:
-                                custom_font_name = _custom_font_cache[fkey]
-                            else:
-                                try:
-                                    prefix = "uc" if font_pref.startswith("custom:") else "uf"
-                                    reg_name = f"{prefix}{len(_custom_font_cache)}"
-                                    page.insert_font(
-                                        fontname=reg_name,
-                                        fontfile=entry["path"],
-                                        # TTC subfont index (0 if not TTC)
-                                    )
-                                    _custom_font_cache[fkey] = reg_name
-                                    custom_font_name = reg_name
-                                except Exception:
-                                    # Registration failed — fall through to built-ins
-                                    custom_font_name = None
-
-                    # Pick PyMuPDF fontname based on user preference + content.
-                    # PyMuPDF built-in font names:
-                    #   helv / hebo / heit / hebi  — Helvetica family
-                    #   tiro / tibo / tiit / tibi  — Times family
-                    #   cour / cobo / coit / cobi  — Courier family
-                    #   china-s / china-ss          — SimSun (simplified CJK)
-                    #   china-t / china-ts          — MingLiu (traditional CJK)
-                    # _style_suffix() 已 hoist 到 module level —
-                    # 內部呼叫補上 bold/italic 參數即可。
-
-                    # PyMuPDF built-in CJK fonts:
-                    #   china-t  = Traditional 宋體 (MingLiU)     ← Taiwan default
-                    #   china-ts = Traditional 黑體 (DFKai-SB-ish)
-                    #   china-s  = Simplified 宋體 (SimSun)
-                    #   china-ss = Simplified 黑體 (SimHei)
-                    # Use traditional as default — this tool is
-                    # Taiwan-focused and 繁中 fonts substitute weirdly when
-                    # rendered through Simplified CID tables (銜 → 衛 etc).
-                    if custom_font_name:
-                        fontname = custom_font_name
-                    elif font_pref == "pymupdf:sans" or font_pref == "sans":
-                        fontname = "china-ts" if has_cjk else _style_suffix("helv", bold, italic)
-                    elif font_pref == "pymupdf:serif" or font_pref == "serif":
-                        fontname = "china-t" if has_cjk else _style_suffix("tiro", bold, italic)
-                    elif font_pref == "pymupdf:cour" or font_pref == "mono":
-                        fontname = "china-t" if has_cjk else _style_suffix("cour", bold, italic)
-                    elif font_pref == "pymupdf:helv" or font_pref == "helv":
-                        fontname = _style_suffix("helv", bold, italic)
-                    elif font_pref == "pymupdf:tiro" or font_pref == "tiro":
-                        fontname = _style_suffix("tiro", bold, italic)
-                    elif font_pref == "pymupdf:simplified" or font_pref == "simplified":
-                        fontname = "china-ss" if has_cjk else _style_suffix("helv", bold, italic)
-                    else:  # "default" / "pymupdf:default"
-                        fontname = "china-t" if has_cjk else _style_suffix("helv", bold, italic)
-                    # Split text into CJK / ASCII runs and render each
-                    # with the right font so ASCII punctuation in mixed
-                    # content doesn't blow up to full-width. ASCII font
-                    # tracks the user's preference (helv/tiro/cour) and
-                    # its bold/italic variant.
-                    # 把 china-* 內建升級為實際系統 CJK 字型（v1.4.77 修，
-                    # PyMuPDF 內建在 Linux 全部 render 成 sans，serif 選項
-                    # 沒效果）。Cache 用同一張 _custom_font_cache。
-                    def _u(builtin: str) -> str:
-                        return _upgrade_cjk_font(page, builtin, _custom_font_cache, pno)
-                    if fontname.startswith("uf") or fontname.startswith("uc"):
-                        # Custom / system font — user picked it specifically,
-                        # use it for all chars without splitting (it's
-                        # presumably designed for the content they pasted).
-                        ascii_font = fontname
-                        cjk_font = fontname
-                    elif font_pref in ("pymupdf:serif", "serif"):
-                        cjk_font = _u("china-t")
-                        ascii_font = _style_suffix("tiro", bold, italic)
-                    elif font_pref in ("pymupdf:simplified", "simplified"):
-                        cjk_font = _u("china-ss")
-                        ascii_font = _style_suffix("helv", bold, italic)
-                    elif font_pref in ("pymupdf:helv", "helv"):
-                        cjk_font = _u("china-t")  # fallback for any CJK in "ASCII-only" picks
-                        ascii_font = _style_suffix("helv", bold, italic)
-                    elif font_pref in ("pymupdf:tiro", "tiro"):
-                        cjk_font = _u("china-t")
-                        ascii_font = _style_suffix("tiro", bold, italic)
-                    elif font_pref in ("pymupdf:cour", "mono"):
-                        cjk_font = _u("china-t")
-                        ascii_font = _style_suffix("cour", bold, italic)
-                    else:  # sans / default
-                        cjk_font = _u("china-ts")
-                        ascii_font = _style_suffix("helv", bold, italic)
-
-                    lines = text.split("\n") if "\n" in text else [text]
-                    ybase = rect.y0 + font_size
-                    for i, line in enumerate(lines):
-                        if not line:
+                        if src_file is None:
+                            # existing_src is a URL like /tools/pdf-editor/preview/pe_<id>_imgxN_pM.png
+                            es = obj.get("existing_src") or ""
+                            if es:
+                                fname = es.rsplit("/", 1)[-1]
+                                # Only allow our own pe_ prefix files (no traversal)
+                                if (fname.startswith("pe_") and ".." not in fname
+                                    and "/" not in fname):
+                                    cand = _work_dir() / fname
+                                    if cand.exists():
+                                        src_file = cand
+                        if src_file is None:
                             continue
                         try:
-                            _insert_mixed_text(
-                                page, rect.x0, ybase + i * font_size * 1.2,
-                                line, cjk_font=cjk_font, ascii_font=ascii_font,
-                                font_size=font_size, color=col,
-                            )
+                            # Use stream=bytes (same as pdf-stamp), which
+                            # preserves PNG alpha correctly. filename=... +
+                            # alpha=... can introduce a gray matte artefact
+                            # on some PyMuPDF versions.
+                            with open(src_file, "rb") as _f:
+                                img_bytes = _f.read()
+                            kwargs = dict(stream=img_bytes,
+                                          keep_proportion=False, overlay=True)
+                            ang = float(obj.get("angle") or 0.0)
+                            if ang:
+                                kwargs["rotate"] = ang
+                            page.insert_image(rect, **kwargs)
+                            # Optional opacity wasn't applied here — we omit
+                            # it on purpose because `alpha=int` in PyMuPDF
+                            # overwrites per-pixel transparency. If future
+                            # versions need user-controlled opacity, apply
+                            # via a Pillow pre-pass that multiplies the
+                            # alpha channel.
                         except Exception:
-                            try:
-                                page.insert_text(
-                                    fitz.Point(rect.x0, ybase + i * font_size * 1.2),
-                                    line, fontname="helv",
-                                    fontsize=font_size, color=col,
-                                )
-                            except Exception:
-                                pass
-                    # Underline drawn manually beneath the first line
-                    if underline:
-                        y_line = rect.y1 - font_size * 0.15
-                        page.draw_line(
-                            fitz.Point(rect.x0, y_line),
-                            fitz.Point(rect.x1, y_line),
-                            color=col, width=max(0.5, font_size * 0.05),
+                            continue
+                    elif ot == "rect":
+                        stroke = str(obj.get("stroke") or "#000000").lstrip("#")
+                        fill = obj.get("fill")  # nullable
+                        sw = float(obj.get("stroke_width") or 1.0)
+                        sr, sg, sb = _hex_rgb01(stroke)
+                        fill_rgb = _hex_rgb01(str(fill).lstrip("#")) if fill else None
+                        page.draw_rect(
+                            rect,
+                            color=(sr, sg, sb),
+                            fill=fill_rgb,
+                            width=sw,
                             overlay=True,
                         )
-        doc.save(str(out), garbage=4, deflate=True)
-    finally:
-        doc.close()
+                    elif ot == "line":
+                        x2 = float(obj.get("x2", x + w))
+                        y2 = float(obj.get("y2", y + h))
+                        stroke = str(obj.get("stroke") or "#000000").lstrip("#")
+                        sw = float(obj.get("stroke_width") or 1.0)
+                        sr, sg, sb = _hex_rgb01(stroke)
+                        page.draw_line(
+                            fitz.Point(x, y), fitz.Point(x2, y2),
+                            color=(sr, sg, sb), width=sw, overlay=True,
+                        )
+                    elif ot == "arrow":
+                        # Line + a filled triangular head at (x2, y2).
+                        x2 = float(obj.get("x2", x + w))
+                        y2 = float(obj.get("y2", y + h))
+                        stroke = str(obj.get("stroke") or "#000000").lstrip("#")
+                        sw = float(obj.get("stroke_width") or 1.0)
+                        col = _hex_rgb01(stroke)
+                        import math as _m
+                        page.draw_line(fitz.Point(x, y), fitz.Point(x2, y2),
+                                       color=col, width=sw, overlay=True)
+                        # Arrowhead triangle
+                        dx, dy = x2 - x, y2 - y
+                        ang = _m.atan2(dy, dx)
+                        ah = max(6.0, sw * 4.0)   # arrowhead length
+                        aw = ah * 0.6             # half-width
+                        p1 = fitz.Point(x2, y2)
+                        p2 = fitz.Point(x2 - ah*_m.cos(ang) + aw*_m.sin(ang),
+                                        y2 - ah*_m.sin(ang) - aw*_m.cos(ang))
+                        p3 = fitz.Point(x2 - ah*_m.cos(ang) - aw*_m.sin(ang),
+                                        y2 - ah*_m.sin(ang) + aw*_m.cos(ang))
+                        shape = page.new_shape()
+                        shape.draw_polyline([p1, p2, p3, p1])
+                        shape.finish(color=col, fill=col, width=sw)
+                        shape.commit(overlay=True)
+                    elif ot == "highlight":
+                        # Yellow translucent rectangle over the area. Using
+                        # draw_rect with fill_opacity gives a predictable
+                        # visual result (PDF highlight annotations anchor to
+                        # text spans, which we don't track here).
+                        color_hex = str(obj.get("color") or "#fde047").lstrip("#")
+                        r, g, b = _hex_rgb01(color_hex)
+                        page.draw_rect(rect, color=None, fill=(r, g, b),
+                                       fill_opacity=0.45, overlay=True)
+                    elif ot == "sticky":
+                        # Real PDF text annotation — clickable in viewers,
+                        # shows the note text as a popup bubble.
+                        note = str(obj.get("note") or "便箋")
+                        try:
+                            annot = page.add_text_annot(
+                                fitz.Point(x, y), note, icon="Note",
+                            )
+                            try:
+                                annot.set_colors(stroke=(1.0, 0.83, 0.09))
+                                annot.update()
+                            except Exception:
+                                pass
+                        except Exception:
+                            # Fallback: draw a small yellow square so user
+                            # still sees something even if annot API fails
+                            page.draw_rect(
+                                fitz.Rect(x, y, x + max(w, 18), y + max(h, 18)),
+                                color=(0.85, 0.47, 0.04), fill=(0.99, 0.90, 0.52),
+                                width=0.8, overlay=True,
+                            )
+                    elif ot == "pencil":
+                        # Free-hand path. Frontend has resolved Fabric's
+                        # pathOffset/scale/translation and sent a flat list
+                        # of absolute (x, y) points in PDF points — all we
+                        # have to do is draw the polyline.
+                        raw_pts = obj.get("points") or []
+                        stroke = str(obj.get("stroke") or "#000000").lstrip("#")
+                        sw = float(obj.get("stroke_width") or 1.0)
+                        col = _hex_rgb01(stroke)
+                        pts = []
+                        for p in raw_pts:
+                            if isinstance(p, (list, tuple)) and len(p) >= 2:
+                                try:
+                                    pts.append(fitz.Point(float(p[0]), float(p[1])))
+                                except (TypeError, ValueError):
+                                    continue
+                        if len(pts) >= 2:
+                            shape = page.new_shape()
+                            shape.draw_polyline(pts)
+                            # closePath=False: do NOT connect last point back
+                            # to first. Essential for freehand strokes, which
+                            # otherwise form a filled loop.
+                            shape.finish(color=col, fill=None, width=sw,
+                                         lineCap=1, lineJoin=1, closePath=False)
+                            shape.commit(overlay=True)
+                    elif ot == "ellipse":
+                        stroke = str(obj.get("stroke") or "#000000").lstrip("#")
+                        fill = obj.get("fill")
+                        sw = float(obj.get("stroke_width") or 1.0)
+                        sr, sg, sb = _hex_rgb01(stroke)
+                        fill_rgb = _hex_rgb01(str(fill).lstrip("#")) if fill else None
+                        page.draw_oval(
+                            rect, color=(sr, sg, sb), fill=fill_rgb,
+                            width=sw, overlay=True,
+                        )
+                    elif ot == "text":
+                        text = str(obj.get("text") or "")
+                        has_orig = obj.get("original_bbox") is not None
+                        if not text:
+                            # Empty text — should never reach here because the
+                            # frontend safety net + Pass 1 redact safety both
+                            # filter empty-text+orig_bbox combinations.
+                            # Log if it does so we can find the path.
+                            import logging as _lg
+                            _lg.getLogger(__name__).warning(
+                                "text obj reached Pass 2 with empty text "
+                                "(has_orig_bbox=%s, page=%d) — skipping",
+                                has_orig, pno)
+                            continue
+                        # 診斷：印出每個 text obj 的關鍵欄位 + page.rotation（v1.4.13 #6 偵錯用）
+                        import logging as _lg
+                        from app.core.log_safe import safe_log
+                        _lg.getLogger(__name__).info(
+                            "pdf-editor insert text page=%d rect=%s text=%s "
+                            "font_pref=%s font_size=%.1f color=%s has_orig_bbox=%s "
+                            "page.rotation=%d page.mediabox=%s page.rect=%s",
+                            pno, [round(rect.x0,1), round(rect.y0,1),
+                                  round(rect.x1,1), round(rect.y1,1)],
+                            safe_log(text[:50]),
+                            safe_log(obj.get("font") or "default"),
+                            float(obj.get("font_size") or 11),
+                            safe_log(obj.get("color")),
+                            has_orig,
+                            page.rotation,
+                            [round(v,1) for v in (page.mediabox.x0, page.mediabox.y0,
+                                                  page.mediabox.x1, page.mediabox.y1)],
+                            [round(v,1) for v in (page.rect.x0, page.rect.y0,
+                                                  page.rect.x1, page.rect.y1)])
+                        font_size = float(obj.get("font_size") or 11)
+                        col = _hex_rgb01(str(obj.get("color") or "#000000"))
+                        bold = bool(obj.get("bold"))
+                        italic = bool(obj.get("italic"))
+                        underline = bool(obj.get("underline"))
+                        font_pref = str(obj.get("font") or "default")
+                        has_cjk = any("一" <= c <= "鿿" for c in text)
+                        # System / custom font override — user picked a .ttf/.otf/.ttc
+                        # from the catalog（`system:<path>` 或 `custom:<filename>`）。
+                        # 註冊到 page 後用 reg_name 給 insert_text 用。
+                        # NOTE: 之前漏了 `custom:` 分支，導致 admin 上傳的字型 (例如「微軟
+                        # 正黑體」) 被 fall through 到 built-in china-t — UI 預覽看起來對
+                        # 但 auto-save 後重畫就跑掉。v1.4.74 修。
+                        custom_font_name = None
+                        if font_pref.startswith("system:") or font_pref.startswith("custom:"):
+                            from ...core import font_catalog
+                            entry = font_catalog.resolve_font_id(font_pref)
+                            if entry and entry.get("path"):
+                                fkey = (pno, entry["path"], int(entry.get("idx") or 0))
+                                if fkey in _custom_font_cache:
+                                    custom_font_name = _custom_font_cache[fkey]
+                                else:
+                                    try:
+                                        prefix = "uc" if font_pref.startswith("custom:") else "uf"
+                                        reg_name = f"{prefix}{len(_custom_font_cache)}"
+                                        page.insert_font(
+                                            fontname=reg_name,
+                                            fontfile=entry["path"],
+                                            # TTC subfont index (0 if not TTC)
+                                        )
+                                        _custom_font_cache[fkey] = reg_name
+                                        custom_font_name = reg_name
+                                    except Exception:
+                                        # Registration failed — fall through to built-ins
+                                        custom_font_name = None
 
-    # Re-render previews so the user can see the result
-    preview_dpi = 120
-    pages_info = []
-    with fitz.open(str(out)) as d2:
-        for i in range(d2.page_count):
-            page = d2[i]
-            png = _work_dir() / f"pe_{upload_id}_out_p{i+1}.png"
-            pdf_preview.render_page_png(out, png, i, dpi=preview_dpi)
-            pages_info.append({
-                "index": i,
-                "width_pt": page.rect.width,
-                "height_pt": page.rect.height,
-                "preview_url": f"/tools/pdf-editor/preview/{png.name}",
-            })
+                        # Pick PyMuPDF fontname based on user preference + content.
+                        # PyMuPDF built-in font names:
+                        #   helv / hebo / heit / hebi  — Helvetica family
+                        #   tiro / tibo / tiit / tibi  — Times family
+                        #   cour / cobo / coit / cobi  — Courier family
+                        #   china-s / china-ss          — SimSun (simplified CJK)
+                        #   china-t / china-ts          — MingLiu (traditional CJK)
+                        # _style_suffix() 已 hoist 到 module level —
+                        # 內部呼叫補上 bold/italic 參數即可。
 
-    return {
-        "upload_id": upload_id,
-        "download_url": f"/tools/pdf-editor/download/{upload_id}",
-        "pages": pages_info,
-    }
+                        # PyMuPDF built-in CJK fonts:
+                        #   china-t  = Traditional 宋體 (MingLiU)     ← Taiwan default
+                        #   china-ts = Traditional 黑體 (DFKai-SB-ish)
+                        #   china-s  = Simplified 宋體 (SimSun)
+                        #   china-ss = Simplified 黑體 (SimHei)
+                        # Use traditional as default — this tool is
+                        # Taiwan-focused and 繁中 fonts substitute weirdly when
+                        # rendered through Simplified CID tables (銜 → 衛 etc).
+                        if custom_font_name:
+                            fontname = custom_font_name
+                        elif font_pref == "pymupdf:sans" or font_pref == "sans":
+                            fontname = "china-ts" if has_cjk else _style_suffix("helv", bold, italic)
+                        elif font_pref == "pymupdf:serif" or font_pref == "serif":
+                            fontname = "china-t" if has_cjk else _style_suffix("tiro", bold, italic)
+                        elif font_pref == "pymupdf:cour" or font_pref == "mono":
+                            fontname = "china-t" if has_cjk else _style_suffix("cour", bold, italic)
+                        elif font_pref == "pymupdf:helv" or font_pref == "helv":
+                            fontname = _style_suffix("helv", bold, italic)
+                        elif font_pref == "pymupdf:tiro" or font_pref == "tiro":
+                            fontname = _style_suffix("tiro", bold, italic)
+                        elif font_pref == "pymupdf:simplified" or font_pref == "simplified":
+                            fontname = "china-ss" if has_cjk else _style_suffix("helv", bold, italic)
+                        else:  # "default" / "pymupdf:default"
+                            fontname = "china-t" if has_cjk else _style_suffix("helv", bold, italic)
+                        # Split text into CJK / ASCII runs and render each
+                        # with the right font so ASCII punctuation in mixed
+                        # content doesn't blow up to full-width. ASCII font
+                        # tracks the user's preference (helv/tiro/cour) and
+                        # its bold/italic variant.
+                        # 把 china-* 內建升級為實際系統 CJK 字型（v1.4.77 修，
+                        # PyMuPDF 內建在 Linux 全部 render 成 sans，serif 選項
+                        # 沒效果）。Cache 用同一張 _custom_font_cache。
+                        def _u(builtin: str) -> str:
+                            return _upgrade_cjk_font(page, builtin, _custom_font_cache, pno)
+                        if fontname.startswith("uf") or fontname.startswith("uc"):
+                            # Custom / system font — user picked it specifically,
+                            # use it for all chars without splitting (it's
+                            # presumably designed for the content they pasted).
+                            ascii_font = fontname
+                            cjk_font = fontname
+                        elif font_pref in ("pymupdf:serif", "serif"):
+                            cjk_font = _u("china-t")
+                            ascii_font = _style_suffix("tiro", bold, italic)
+                        elif font_pref in ("pymupdf:simplified", "simplified"):
+                            cjk_font = _u("china-ss")
+                            ascii_font = _style_suffix("helv", bold, italic)
+                        elif font_pref in ("pymupdf:helv", "helv"):
+                            cjk_font = _u("china-t")  # fallback for any CJK in "ASCII-only" picks
+                            ascii_font = _style_suffix("helv", bold, italic)
+                        elif font_pref in ("pymupdf:tiro", "tiro"):
+                            cjk_font = _u("china-t")
+                            ascii_font = _style_suffix("tiro", bold, italic)
+                        elif font_pref in ("pymupdf:cour", "mono"):
+                            cjk_font = _u("china-t")
+                            ascii_font = _style_suffix("cour", bold, italic)
+                        else:  # sans / default
+                            cjk_font = _u("china-ts")
+                            ascii_font = _style_suffix("helv", bold, italic)
+
+                        lines = text.split("\n") if "\n" in text else [text]
+                        ybase = rect.y0 + font_size
+                        for i, line in enumerate(lines):
+                            if not line:
+                                continue
+                            try:
+                                _insert_mixed_text(
+                                    page, rect.x0, ybase + i * font_size * 1.2,
+                                    line, cjk_font=cjk_font, ascii_font=ascii_font,
+                                    font_size=font_size, color=col,
+                                )
+                            except Exception:
+                                try:
+                                    page.insert_text(
+                                        fitz.Point(rect.x0, ybase + i * font_size * 1.2),
+                                        line, fontname="helv",
+                                        fontsize=font_size, color=col,
+                                    )
+                                except Exception:
+                                    pass
+                        # Underline drawn manually beneath the first line
+                        if underline:
+                            y_line = rect.y1 - font_size * 0.15
+                            page.draw_line(
+                                fitz.Point(rect.x0, y_line),
+                                fitz.Point(rect.x1, y_line),
+                                color=col, width=max(0.5, font_size * 0.05),
+                                overlay=True,
+                            )
+            # autosave: 低 garbage / 不 deflate，~2-3x 快；manual: 完整整理。
+            if is_auto_save:
+                doc.save(str(out), garbage=1, deflate=False)
+            else:
+                doc.save(str(out), garbage=4, deflate=True)
+        finally:
+            doc.close()
+
+        # Re-render previews. v1.7.18: only render pages in `dirty_pages`
+        # (frontend tracks which page got edited), reuse existing PNG file
+        # for the rest. Multi-page PDFs go from O(n) to O(1) per save.
+        # Front-end uses cache buster (`?t=Date.now()`) on img.src so even
+        # the unchanged URL forces a refetch only when needed.
+        preview_dpi = 120
+        pages_info = []
+        with fitz.open(str(out)) as d2:
+            for i in range(d2.page_count):
+                page = d2[i]
+                png = _work_dir() / f"pe_{upload_id}_out_p{i+1}.png"
+                # Render only if (a) dirty_pages not provided (full render
+                # mode) OR (b) this page is in dirty_pages OR (c) PNG file
+                # doesn't exist yet (first save / cache cleaned)
+                should_render = (
+                    dirty_pages is None
+                    or i in dirty_pages
+                    or not png.exists()
+                )
+                if should_render:
+                    pdf_preview.render_page_png(out, png, i, dpi=preview_dpi)
+                pages_info.append({
+                    "index": i,
+                    "width_pt": page.rect.width,
+                    "height_pt": page.rect.height,
+                    "preview_url": f"/tools/pdf-editor/preview/{png.name}",
+                })
+
+        return {
+            "upload_id": upload_id,
+            "download_url": f"/tools/pdf-editor/download/{upload_id}",
+            "pages": pages_info,
+        }
+
+
+
+    return await _sq.run(upload_id, _do_flatten)
 
 
 @router.get("/download/{upload_id}")

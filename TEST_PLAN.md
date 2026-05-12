@@ -50,6 +50,13 @@
 - 裁剪右半 (`x=0.5,w=0.5`) → 結果 preset 比例 ≈ 1:1
 - `remove_white_background` 對 400x400 白底中間黑方塊 → 自動裁掉空白邊界，輸出尺寸落在 90~130
 
+### 1.6 HTML template inline JS 語法檢查 (`tests/test_template_js_syntax.py`) — v1.7.15+
+- 抽出每個 `app/**/templates/**/*.html` 內的 inline `<script>` block (排除 `<script src=...>` 引用外部檔)
+- 用 `node --check` 驗證每個 template 的所有 inline JS 連在一起跑得過 parser
+- 觸發 reason：v1.7.14 慘案 — `pdf_editor.html` 改 catch block 多敲一個 `}` → 整支 JS SyntaxError → drag-drop 失靈、savePdf 沒定義
+- node 不在 PATH 時自動 skip（不阻 CI / minimal dev shells）
+- **發版前必跑**：`uv run pytest tests/test_template_js_syntax.py` 或 `uv run pytest`（包進整體 suite）
+
 ## 2. 手動驗收清單（每個版本）
 
 ### 2.1 填單用印
@@ -77,20 +84,138 @@
 
 ### 2.2 檔案編輯
 
-#### PDF 編輯器 (pdf-editor) 🆕
-- [ ] 上傳 PDF 正確 render（PDF.js 背景 + Fabric overlay）
-- [ ] 新增文字框（選字型、字級、顏色、粗體、斜體、底線、旋轉）
-- [ ] 字型選單顯示系統 + 內建 CJK + 自訂，不是原生下拉
-- [ ] 新增圖片框（從 asset 或直接上傳）
-- [ ] 新增形狀 / 白底遮罩 / 螢光筆 / 底線 / 刪除線 / 便箋 / 手繪
-- [ ] 點選 canvas 上的既有文字/圖片 → 紅框反白
-- [ ] 刪除既有物件（redact 真刪，非浮層蓋）
-- [ ] AcroForm widget 刪除（如果 PDF 有表單欄位）
-- [ ] vector path / 線條刪除
-- [ ] **多選批次改屬性**：Shift+click 多個物件、改字型同時套用
-- [ ] **整份換字型**：右側面板按鈕一鍵替換全文字物件字型
-- [ ] 復原 / 重做
-- [ ] 存檔後重新開啟，物件保留或已 redact（destructive 項目）
+#### PDF 編輯器 (pdf-editor) — 完整測試清單（v1.7.22）
+
+##### A. 載入 / 卸載
+- [ ] 上傳 PDF：拖曳或點選；多頁 PDF（>= 5 頁）正確 render（BG image + Fabric overlay 對齊）
+- [ ] 載入後左側縮圖欄顯示每頁迷你圖 + 頁碼；點縮圖切換到該頁
+- [ ] 上傳非 PDF（如 .docx / .png）→ 400 錯誤訊息
+- [ ] 大檔（> 50 MB）上傳 → 進度條顯示
+- [ ] upload_id 過期（> 2 hr）→ 操作回 410 / 404 友善訊息
+
+##### B. 工具列（上方水平排）
+- [ ] **V 選取**：點物件選中，拖移、resize handles 出現
+- [ ] **S 選既有 PDF 物件**：點 PDF 上的文字 / 圖片 / 向量 → 紅框反白 → 變 Fabric 物件含 `_origBbox`
+- [ ] **T 文字框**：點空白 → 創建 IText「請輸入文字」placeholder + 自動進編輯模式
+- [ ] **I 圖片**：點空白 → 開啟 asset picker 或上傳新圖片
+- [ ] **W 白底遮罩**：拖出矩形 → 不透明白色覆蓋
+- [ ] **R 矩形 / L 線段 / A 箭頭 / O 橢圓**：拖出形狀，可設描邊色 / 線寬 / 填色
+- [ ] **P 手繪**：自由畫線（pencil brush）
+- [ ] **H 螢光筆**：拖出半透明黃色矩形
+- [ ] **N 便箋**：放置便箋 → 在屬性面板填內容 → 存檔後變 PDF text annotation
+- [ ] **Delete**：選中物件按 Delete → 刪除（既有 PDF 物件變 redact 標記）
+- [ ] 工具按鈕 hover 顯示 tooltip（在按鈕下方）
+- [ ] 鍵盤快捷鍵 V/S/T/I/W/R/L/A/O/P/H/N 切換工具
+
+##### C. 文字框屬性
+- [ ] 文字內容（含中文、英文、特殊字元、emoji）
+- [ ] 字型 dropdown：含「PyMuPDF 內建 (Helvetica/Serif/Sans/...)」「內建 CJK (思源)」「系統字型」「自訂上傳」四群組
+- [ ] 字級數字輸入 + 滑鼠拖 resize handle 也會自動換成 fontSize（v1.7.13 修）
+- [ ] 顏色：color picker + hex input 同步
+- [ ] B / I / U toggle（粗體 / 斜體 / 底線）
+- [ ] 雙擊進編輯模式 → 鍵盤輸入 → blur 後正確 save（v1.4.x text:editing:exited 修）
+- [ ] 多行文字（Shift+Enter / 換行）
+- [ ] 改字型立即生效，**重繪期間有半透明 overlay**（v1.7.22）
+
+##### D. 圖片 / 印章 / 簽名
+- [ ] 從 asset 庫挑選 → 顯示於 canvas
+- [ ] 直接上傳新圖（PNG / JPEG / WEBP / GIF）→ 通過後端驗證 + 顯示
+- [ ] 不透明度 slider 0-100%
+- [ ] 旋轉角度（含 15° 步進）
+- [ ] 比例縮放（拖角 handle）保持長寬比
+- [ ] 「自動去白底」asset preset 套用後自動裁邊
+
+##### E. 既有 PDF 物件（S 工具擷取）
+- [ ] 文字物件擷取：紅框反白 → 變 IText，可改內容 / 字型 / 顏色
+- [ ] 圖片物件擷取：紅框反白 → 變 fabric.Image
+- [ ] 表單欄位（AcroForm widget）擷取：標記為 `widget_delete` → 存檔時 backend 真刪
+- [ ] 向量 path / 線條擷取：紅框反白 → 標記為 `drawing_delete`
+- [ ] 文字 / 圖片擷取出來後，OLD 位置在背景顯示**紅虛線白底 marker**（redact 預覽）
+- [ ] 第一次 save 完成 → marker 自動變透明（已 redact 入 BG）
+- [ ] **多次移動既有物件不會「OLD 位置原文復活」**（v1.7.21 修）
+- [ ] OCR fallback：PDF 字型缺 ToUnicode CMap 時，自動跑 tesseract / EasyOCR 還原文字（visual bug check）
+
+##### F. 物件層次（z-order）
+- [ ] 屬性面板 4 個層次按鈕：置頂 / 上一層 / 下一層 / 置底
+- [ ] 鍵盤：`]` 上一層、`[` 下一層、`Cmd/Ctrl+]` 置頂、`Cmd/Ctrl+[` 置底
+- [ ] markers 自動保持在最底層（不被使用者推到上方）
+- [ ] 兩物件重疊時切層 → save 結果 PDF 順序符合預期
+
+##### G. 多選 / 批次屬性
+- [ ] Shift+click 多選；選取框包住所有
+- [ ] 框選（拖空白）多選
+- [ ] 屬性面板顯示「多選 N 個物件」+ 文字物件批次面板（字型 / 字級 / 顏色 / B / I / U）
+- [ ] 改字型 → 套用到所有文字物件，其他物件不影響
+- [ ] **整份換字型**：頂端工具列「整份換字型」按鈕 → 一鍵替換全文字 → 屬性面板「復原本次換字型」
+
+##### H. 多頁 PDF
+- [ ] 左縮圖欄：每頁迷你圖 + 頁碼，hover 灰邊、active 藍邊 + 陰影
+- [ ] 點縮圖切換到該頁；只顯示當前頁（其他 `display:none`）
+- [ ] 頁碼輸入框 / 上下頁按鈕 / Home / End / PageUp / PageDown 鍵盤快捷
+- [ ] 編輯第 3 頁不影響第 1 / 2 頁的 Fabric overlay 物件
+- [ ] save 後縮圖自動更新（與 BG 同步，僅 dirty 頁更新）
+- [ ] 50 頁 PDF 改 1 頁 → 後端只重 render 那 1 頁的 PNG（v1.7.18 incremental bake）
+
+##### I. 自動儲存 / 手動儲存 / 下載
+- [ ] 自動預覽勾選預設開；拖完物件 ~30 ms 後自動 save
+- [ ] 打字（text:changed）走 300 ms debounce，不每按一鍵就 save
+- [ ] 手動「儲存並預覽」按鈕 → 強制 save（含 `includeActive: true`）
+- [ ] 「下載 PDF」按鈕 → 先強制 save 再開 anchor download → 下載檔含最新 active 內容（v1.7.21 修）
+- [ ] 自動預覽關閉時，所有編輯都不觸發 save，須手動按按鈕
+- [ ] 重繪期間 canvas 上覆蓋半透明 overlay + 「重繪中…」spinner，**不擋互動**（v1.7.22）
+- [ ] BG image 真的載完才收 overlay（不只是 backend response 完成）
+
+##### J. 復原 / 重做
+- [ ] Cmd/Ctrl+Z 復原；Cmd/Ctrl+Shift+Z 重做
+- [ ] History stack 至少 50 步
+- [ ] 復原 / 重做按鈕 disable 狀態正確（無歷史 / 無未來）
+
+##### K. 全視窗模式
+- [ ] 「全視窗」按鈕 → 編輯區擴到側欄右側整個 main 區域（保留左側功能列）
+- [ ] Esc 退出
+- [ ] 退出後自動 fit 一次保持整頁可見
+
+##### L. 字型管理（重用 admin/fonts）
+- [ ] 字型 dropdown 含：標準 14 / 內建 CJK / 系統掃描 / 自訂上傳
+- [ ] 自訂字型上傳後立刻可用（無須重啟）
+- [ ] CJK 字型嵌入正確（download PDF 用 Adobe Reader 開啟，中文不變方框）
+
+##### M. 並發 / 效能（v1.7.17–v1.7.18）
+- [ ] 同 user 連續拖拉 10 次：save 排隊跑（per-upload Lock），不 spam server
+- [ ] 多 user 同時編輯 10 份 PDF：global semaphore 上限 8（預設 = `min(8, CPU×2)`），其他排隊
+- [ ] `JTDT_SAVE_CONCURRENCY=4` 環境變數覆寫 → semaphore 上限變 4
+- [ ] `tests/test_save_queue.py` 7 案綠燈
+
+##### N. ACL（多 user 隔離）
+- [ ] auth ON 模式：A 上傳 PDF 後拿到 `upload_id`，B 用同 URL `/load` `/save` `/preview` 全部 403
+- [ ] auth ON 模式：admin 看 A 的 upload → 通過（admin override）
+- [ ] auth ON 模式：B 拿不存在的 `upload_id` → 403（fail-secure）
+- [ ] auth OFF 模式（單機）：所有路由直通
+
+##### O. 視覺正確性 — 殘影 / 跑版
+- [ ] 拖既有 PDF 文字到新位置：OLD 位置不會出現原文「復活」（v1.7.21）
+- [ ] 拖已烘焙的新增文字：BG / Fabric 同位置同內容，無重影
+- [ ] 改字型：Fabric 立即生效；BG 載入有半透明 overlay 遮蓋過渡
+- [ ] 文字框 resize：scale 自動吸進 fontSize，scale 還原 1，BG 烘焙跟視覺一致（無「大框小字」）
+- [ ] PDF 既有線條 / 框線：經多次操作不會被白罩永久蓋斷（v1.7.15 撤回 _peCover）
+
+##### P. 後端 endpoint 完整度
+- [ ] `POST /load` — 上傳 PDF
+- [ ] `POST /save` — 模型 → BG 重烘焙；含 dirty_pages → 只 render dirty
+- [ ] `GET /download/{upload_id}` — 下載最新 baked PDF
+- [ ] `GET /preview/{filename}` — 取得 page preview PNG
+- [ ] `POST /list-objects` — 列出某頁的既有文字 / 圖片 / 向量 bbox
+- [ ] `POST /detect-objects` — 偵測座標下的物件（給 S 工具用）
+- [ ] `GET /assets` — 取 asset 庫清單
+- [ ] `POST /upload-image` — 上傳新圖（PNG / JPEG / WEBP / GIF）
+- [ ] `POST /replace-all-fonts` — 整份換字型
+- [ ] `POST /undo-replace-all-fonts` — 復原整份換字型
+- [ ] `GET /fonts` — 字型清單（admin/fonts API 共用）
+
+##### Q. 跨平台 / 跨瀏覽器
+- [ ] Chrome / Edge / Firefox / Safari 都正常（Fabric.js + 原生 fetch）
+- [ ] macOS Cmd+Z / Windows Ctrl+Z 都行
+- [ ] 中文輸入法（注音、倉頡、拼音）IME 不會被 Esc 取消選取打斷
 
 #### 合併 (pdf-merge)
 - [ ] 2 份以上 PDF 依序合併
@@ -308,7 +433,12 @@
        tests/test_llm_url_ssrf.py \
        tests/test_path_traversal_audit.py
    ```
-4. 重啟 server，所有路由 200（以 curl 跑 1.1 列表）
+4. **Inline JS 語法檢查全數綠燈**（v1.7.15 起列為發版必跑，補 v1.7.14 慘案）：
+   ```bash
+   uv run pytest tests/test_template_js_syntax.py -v
+   ```
+   `node` 不在 PATH 會 skip — **maintainer 機器必須有 node**，不能 skip 過去就放心。
+5. 重啟 server，所有路由 200（以 curl 跑 1.1 列表）
 5. 手動跑一輪 2.x 清單
 6. 跑完 §6 「歷史回歸案例」清單
 7. 更新 `app/main.py` `VERSION` + `pyproject.toml` `version` + `github/CHANGELOG.md` 加一筆 + `github/README.md` 標題版號

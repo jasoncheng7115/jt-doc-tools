@@ -5,7 +5,7 @@
 
 支援引擎：
 - `tesseract`：傳統 OCR，輕量、CJK 識別率較弱、per-CHAR 級 bbox（CJK 每字一個 word）
-- `easyocr`：JaidedAI 泰國公司開源 OCR，CJK 強很多、per-LINE bbox（一行一個 word）
+- `easyocr`：JaidedAI 泰國公司開源 OCR，中日韓辨識準確度高、per-LINE bbox（一行一個 word）
 
 設定值在 `data/ocr_settings.json` 的 `engine` 欄位（'easyocr' / 'tesseract'）。
 

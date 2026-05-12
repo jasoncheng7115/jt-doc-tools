@@ -4,6 +4,326 @@
 
 ---
 
+## [1.7.40] - 2026-05-12
+
+### 改進
+
+- **`pdf-editor` OCR loading overlay 保留到 BG 真正重畫完才收**：v1.7.38 把雙影時間從 1.5s 壓到 ~300-500ms，但這段時間 loading overlay 已收 → 使用者可能在 BG 還沒清空、雙影仍在的狀態下誤觸（雙擊、拖、按鍵）。修法：新增 `_keepLoadingUntilBgReady` flag，pick 確定建出 IText / Image 後 set true，savePdf 在 `bgLoadedPromises` 全部 resolve 後才 `hideLoading()` + reset flag。BG 還沒重畫完 = loading 持續顯示 = 使用者不會誤觸。偵測失敗 / 沒擷取到物件等非 IText 路徑不受影響（cleanupPickOverlay 立刻收）。
+
+---
+
+## [1.7.39] - 2026-05-12
+
+### 修正
+
+- **`pdf-editor` 選既有物件後編輯區位移（toolbar 跑到視野外）**：客戶截圖顯示 OCR 完成、IText 建好後，整個編輯區莫名往上 / 往左捲了一段，頂端 toolbar 不見了。根因：`fabric.IText` 加進 canvas 時內部會建一個 `hiddenTextarea` element 並 append 到 `document.body`，瀏覽器在這個 input 進入 DOM 時可能 auto-scroll 把它「捲進視野」。修法：pick 開始前快照 `window.scrollX/Y` + `canvasWrap.scrollLeft/Top`，finally 區塊強制還原（並在下一個 frame 再還原一次以涵蓋 fabric next-tick 的 focus）。
+
+---
+
+## [1.7.38] - 2026-05-12
+
+### 修正
+
+- **`pdf-editor` 第一次選既有物件後文字雙影**：v1.7.37 把 autosave debounce 拉長到 1500ms 之後，pick 完原 PDF 文字（BG）跟 Fabric IText overlay 同位置疊著看到雙影 1.5 秒（例：「NXLog」糊成兩層）。修法：新增 `triggerPickSave()` helper — pick 完一律 150ms 後 save，覆蓋掉 `object:added` 的 1500ms debounce。BG redact 在 ~300ms 內套上、IText 淡到 0.01，雙影只持續一瞬。文字 / 圖片兩種 pick 都套用。
+
+---
+
+## [1.7.37] - 2026-05-12
+
+### 改進
+
+- **`pdf-editor` autosave 用輕量序列化大幅加速 (A)**：autosave 高頻觸發但每次都跑 `doc.save(garbage=4, deflate=True)` 整理乾淨太慢。修法：①save 端點接收 `is_auto` 旗標；②autosave 用 `garbage=1` + 不 deflate（~2-3x 快），允許暫時殘留未引用物件；③manual save（按「儲存並預覽」/「下載」）用 `garbage=4 + deflate=True` 整理乾淨。下載按鈕的 forced save 從 isAuto=true 改成 isAuto=false 確保最終下載 PDF 內部一定乾淨。
+- **`pdf-editor` autosave debounce 拉長 (B)**：之前打字 300ms / 拖拉 30ms 太短，拖完放開幾乎立刻 save，連續操作會打斷重繪。改成打字 800ms、拖拉 / 縮放 / 加 / 刪 1500ms。是 true debounce — 使用者連續操作期間 timer 不斷被 reset，**只有停手後**才 fire 一次 save，把連續多次操作壓縮成一次。
+
+---
+
+## [1.7.36] - 2026-05-12
+
+### 改進
+
+- **`pdf-editor` 高解析 PDF 重繪 / 自動儲存加速**：使用者反應海報級 PDF（單頁 24"+ 寬）每次重繪要好幾秒。根因：所有預覽 PNG 一律 120 DPI，超大頁面渲染像素量爆炸（24" 寬 @ 120 DPI = 2880px → 14M pixels 一張）。修法：`pdf_preview.render_page_png()` 加 `adaptive=True`（預設）+ `compute_preview_dpi(page_w_pt, page_h_pt)` helper，限制預覽 PNG 最長邊 1800px，超大頁面自動降 DPI 達到此上限（24" 寬 → 75 DPI，2880×1920 → 1800×1200，render 速度約 2.5x）。下載出來的 PDF **完全不受影響** — PDF document 修改後直接 save，從來沒走 PNG render path。pdf-stamp / pdf-watermark / pdf-rotate 等其他預覽工具一併受惠。
+
+---
+
+## [1.7.35] - 2026-05-12
+
+### 改進
+
+- **檔案上傳 spinner 與「上傳 / 處理中…」標籤對齊修正**：原本 `.drop-zone.uploading::before` 跟 `::after` 兩個 pseudo element 用 `top:14px` 排在右上角，但 ::before 文字沒設 `white-space:nowrap`，drop-zone 較窄時會換行 → 文字跑到上方、spinner 在右下方對不齊。加 `white-space:nowrap` + 統一 18px 高度與 line-height，spinner 縮到 18px 與文字基線對齊。
+- **`pdf-editor` 內容區加邊框**：高解析 PDF 沒水平捲軸時，右側內容是「正好對齊邊界」還是「超出」分不出來。`.pe-canvas-wrap` 加 1px 灰邊框 + inset shadow 把可視範圍框出來。
+- **`pdf-editor` 頂列 chip 高度統一**：原本訊息列、整份換字型、設定、自動預覽、zoom-ctl、頁碼區、退出全視窗按鈕各自 padding 算出不同高度，視覺參差。改為 `.pe-top > *` 一律 `min-height:30px + box-sizing:border-box`，所有 chip 同高 — 包括 wrap 到下一行的「退出全視窗」也跟左邊訊息列等高。
+- **`pdf-editor` 拿掉「選既有文字」黃色底色提示**：原本擷取出來的文字加 `backgroundColor: 'rgba(255, 230, 100, 0.25)'` 想當「已擷取」視覺提示，但 PDF 本身是透明 / 深色背景時黃色變灰塊蓋住原內容，視覺干擾大。紅虛線 redact marker 已能標示「原位置會被刪掉」，足夠識別。
+- **`pdf-editor` redact marker 改透明 fill**：marker 原本用 `fill: '#ffffff'` 想預覽 redact 後白底，PDF 是深色 / 圖片背景時 opaque 白塊看起來像灰色方塊（客戶踩到 ── 公司簡介標題在深色 hero image 上被白塊蓋住）。改為 `fill: 'rgba(255,255,255,0)'`，紅虛線邊框仍標示 redact 範圍，使用者保留看見原 PDF 背景。save 完成後 BG 烘焙的 redact 才真正生效（fill=None 不畫白底，底層 vector 線條 / 顏色保留）。
+- **`pdf-editor` OCR 訊息更明確**：`「OCR 辨識中…」` → `「原文字物件已平面化（字型 Unicode 對應表不完整），需經 OCR 辨識後重建可編輯文字…」`。讓使用者知道：①不是因為 PDF 是 scan ②是 PDF 內字型編碼表的問題 ③OCR 是還原可編輯文字的手段。
+- **`pdf-editor` OCR 大標題加速**：之前所有需 OCR 的文字一律 300 DPI（高於 60pt 標題其實 200 DPI 足夠 95%+ 辨識率）。改為分級：bh<24 → 400 DPI、bh<60 → 300 DPI、bh≥60 → 200 DPI。大標題 OCR 速度約 2x。
+
+---
+
+## [1.7.34] - 2026-05-12
+
+### 改進
+
+- **`pdf-editor` 全視窗按鈕拆出來固定右側**：之前「全視窗」緊貼「符合視窗」黏在 `.pe-zoom-ctl` 內，視窗縮窄時跟 zoom slider 一起被擠。改成獨立按鈕放在 pe-top 最尾端，`margin-left:auto` 把它固定推到右邊界，狀態列在中間自然撐開。`flex:0 0 auto` 確保不會被壓縮。
+- **`pdf-editor` 高解析 PDF 按「符合視窗」仍超出畫面**：客戶載入海報級 PDF（每頁 1500pt+），50% 縮放仍超出 → 之前 zoom 下限寫死 0.5，符合視窗算到 0.3 也被夾回 0.5。修法：zoom slider min 從 50 → 10、step 5；`fitPageToView()` clamp 下限從 0.5 → 0.1。海報、工程圖、高解析掃描檔都能縮進來。
+- **`pdf-editor` Space 拖曳改綁 document capture phase**：v1.7.33 綁在 `canvasWrap` 的 capture-phase pointer event 偶爾被 Fabric upperCanvas 攔走 → 拖曳沒反應。改為 mousedown/move/up 全綁在 `document` capture phase + `stopImmediatePropagation`，比 Fabric 自己的監聽更早觸發，穩定攔下 Fabric 的 mouse:down。同時拿掉 `pe-can-pan` 條件 — Space 一律進 pan-mode 顯示 grab，沒捲軸時拖曳是 no-op（cursor 一致回饋）。
+
+### 修正
+
+- **`pdf-editor` 選既有文字框誤觸發 OCR 跑超久**：客戶踩到 ── 高解析 CJK PDF 上點純文字標題（如「○○○○○○○○」、「○○發展歷程」、「○○○○○○○○」），明明 PyMuPDF 可以直接抽出文字，卻跑了 5-15 秒 OCR。根因：`_looks_garbled()` 內 signal b) 「`cjk_count >= 8 AND common_hits == 0`」太激進 ── 真標題很常 8+ 字但完全沒 common particle（的 / 是 / 在 / 了 / 一），全被誤判 garbled 丟去 OCR。修法：撤回 signal b)，靠剩下三條（suspicious 符號、長字元重複、短週期模式）即可可靠偵測 Identity-H ToUnicode 壞掉的 garbage。
+- **`pdf-editor` 工具列按鈕縮小省空間**：左排 V/S/T/I/W/R/L/A/O/P/H/N + 快捷鍵的圓鈕原本 40×40 / icon 22×22，改成 30×30 / icon 18×18，gap 從 4→3、padding 6/8 → 4/6。整條工具列高度省約 12px 給 canvas 用。
+
+---
+
+## [1.7.33] - 2026-05-12
+
+### 新增
+
+- **`pdf-editor` 空白鍵 hand-pan**：繪圖軟體慣例 ── 按住 `Space` → 內容區游標變手掌（grab），左鍵拖曳 → 捲動內容區（grabbing）。內容已完整顯示沒捲軸時不會啟用（游標仍是箭頭）。輸入欄 / Fabric IText 編輯模式中按 Space 視為正常輸入不會誤觸發。pointer event capture-phase 攔截 → 不會誤觸 Fabric 的選取 / 建物件。Esc / 切走視窗自動釋放。快捷鍵 popup 內加一行「Space＋拖曳 拖動內容區」說明。
+
+### 改進
+
+- **`pdf-editor` 後端異常時不再把 HTML / stacktrace 原文塞到訊息列**：客戶截圖顯示 `儲存失敗：<html><head><title>502 Bad Gateway</title></head>…<center>nginx/1.18.0</center>…` 整段塞滿訊息列。修法：新增 `friendlyServerError(response)` helper — ①按 HTTP status 對應到中文提示（502 → 後端服務無回應、504 → 後端逾時、503 → 服務暫時不可用、413 → 檔案太大、500 → 伺服器內部錯誤 等）；②JSON 回應抽 `detail/error/message` 欄位補充；③HTML / 長文字 / stacktrace 一律抽到 `console.error`，訊息列只放簡短描述 + status code（例：「後端服務無回應（502）」）。涵蓋上傳 / 儲存 / 整份換字型 / 復原 / 公開上傳 5 個 fetch 失敗點。
+
+---
+
+## [1.7.32] - 2026-05-12
+
+### 修正
+
+- **`pdf-editor` 切頁後在新頁建物件，右屬性區顯示舊頁殘留的物件屬性**：客戶踩到 ── 在 P1 選了文字框「Subscription Key:」後切到 P2 加矩形，畫面選的是矩形但屬性區仍顯示「文字框」+「Subscription Key:」內容。根因：每個 PDF page 有獨立 Fabric canvas，`getActiveObject()` 迭代所有 canvas 找到第一個 active 就回 → P1 殘留的 active 永遠勝出。修法：①`selection:created/updated` 時把「非來源 canvas」的 active 全部 `discardActiveObject` ②`gotoPage` 切頁時清掉所有 canvas 的 active 並重置屬性面板。矩形 / 橢圓 / 線段 / 箭頭 / 圖片等所有非文字物件都受惠。
+
+---
+
+## [1.7.31] - 2026-05-12
+
+### 改進
+
+- **`pdf-editor` 已被「選既有」抓過 / 標記為刪除的原 PDF 位置不再可重覆選取**：之前若使用者用「選既有」抓出文字後拖到別處，又對舊位置點「選既有」會再呼叫後端 `/detect-objects`，後端從原 PDF 看那位置「還有文字」（save 還沒套用 redact）→ 生出第二份擷取 + 第二個 redact marker，產生重複 redact / 重複擷取的混亂。修法：新增 `_isOrigPicked(fc, xPt, yPt)` helper，掃描當前頁面所有帶 `_origBbox` 的 Fabric 物件 + `deletedOrigs[pageIndex]` 累積的刪除清單，落在任一已選範圍 → ①hover frame 不亮（_findPickableUnder 直接回 null）、②點擊時 `pickExistingObject` 早退 + 提示「此位置的原 PDF 物件已被選取過」。
+
+---
+
+## [1.7.30] - 2026-05-12
+
+### 改進
+
+- **`pdf-editor` 術語統一：「烘焙 / bake」→「平面化 / flatten」**：原本程式碼註解、JS 函式名、CSS class、CHANGELOG 大量混用「烘焙 / bake / baked」（從英文 bake 直譯，非台灣 / Adobe Acrobat 繁中慣用語）。一次替換完：①CHANGELOG 全文 13 處 中文「烘焙」→「平面化」；②`pdf_editor.html` 13 處中文 + 英文註解；③CSS class `pe-baking` → `pe-flattening`；④JS 函式 `bakeStart/bakeEnd` → `flattenStart/flattenEnd`、`_bakeRefcount` → `_flattenRefcount`；⑤JS 變數 `_lastBakedBbox` → `_lastFlattenedBbox`、`bakedOwnerIds` → `flattenedOwnerIds`；⑥`router.py` 內 closure 名 `_do_bake` → `_do_flatten`。對外行為零變化，純語意一致性。PyMuPDF 自身 API `doc.bake()`、`pdf_annotations_flatten` URL 路由 `baked_uid` 等綁定第三方 / URL 穩定性的識別字保留不動。
+
+---
+
+## [1.7.29] - 2026-05-12
+
+### 改進
+
+- **`pdf-editor` 「選既有物件」期間加半透明遮罩 + spinner**：`pickExistingObject` 後端要走字型解析、OCR fallback、圖片擷取等，慢的話 1-2 秒。期間用 `showLoading('物件轉換中…')` 全螢幕遮罩 + spinner，OCR 階段升級訊息為「OCR 辨識中…」。300 ms 內回來不顯示，避免閃爍。其他工具（新增 T/I/R 等）不受影響。
+
+### 修正
+
+- **`pdf-editor` 拉動既有物件後 OLD 位置底下的頁框 / 表格線 / 背景色仍被白塊蓋掉**：v1.7.26 加 `graphics=LINE_ART_NONE` 想保留 vector，但 `add_redact_annot(fill=(1,1,1))` 在 apply 時還是會畫白底蓋住所有 redact 範圍 — 蓋過 line-art 跟有色 cell。修法：所有 `original_bbox` / `deleted_originals` redact 改成 `fill=None`（只移除矩形內的文字 / 圖片內容項，不畫覆蓋），底層 vector 線條 / 顏色保留原樣。配套：`apply_redactions` 移除 `images=PDF_REDACT_IMAGE_NONE` 改用預設 `PDF_REDACT_IMAGE_PIXELS`，這樣拉動既有圖片時 OLD 位置的圖才會清掉（之前 IMAGE_NONE 設定讓 OLD 圖留住 → 客戶看到雙影）。
+- **`pdf-editor` 內容區頁面已完整顯示，捲軸仍可往右 / 往下拖動**：`#zoomStage` 用 CSS `transform: scale(zoom)`，但 transform 不影響 layout-box 尺寸 → stage 仍以子元素「未縮放」的原始尺寸佔位 → 父層 `.pe-canvas-wrap` 用原始尺寸畫捲軸，視覺已縮小但捲軸範圍沒同步。修法：`applyZoom()` 額外設 `stage.style.width/height = pageDim * zoom`，layout-box 縮成「縮放後可見尺寸」；子元素 transform 投影到該 box 內（origin 0,0）。切頁時也重套 `applyZoom()` 以更新尺寸。
+
+---
+
+## [1.7.28] - 2026-05-12
+
+### 修正
+
+- **`pdf-editor` 移動既有文字後，OLD 位置 redact 範圍跨越鄰行把別的內容也清掉**：客戶截圖顯示移動大號「Subscription」文字後，下一行「End Customer: JAIE HAOUR INDUSTRY CORPORATION」整段中間被剖開，只剩「End Cu」與「N」。根因：v1.7.23 為 partial overlap 案例做 union(OLD, NEW)，但 client 端 `wSafe = max(w, fontPt*2)` 安全墊讓 NEW bbox 比實際視覺寬一截（66pt 字 → 132pt 寬），union 一拉就跨到鄰行。**修法：永遠只 redact `original_bbox` + 2pt 邊距**。NEW 位置不需要 redact — insert_text 後續會把新內容寫上去，目標位置的 BG 本來就是 redact 之外的原內容。歷史包袱（v1.x 為「原地放大」加 union、v1.7.23 為「拉動」加 disjoint 檢查）一併捨棄。
+
+---
+
+## [1.7.27] - 2026-05-12
+
+### 修正
+
+- **`pdf-editor` 拖動既有文字後 NEW 位置出現「兩個重疊」殘影**：v1.7.21 修「OLD 復活」時改成「全部 include 平面化」，但平面化完還保留 `if (o === stillSelected) opacity:1` 給選中物件 → BG 已有平面化 + Fabric overlay 也滿不透明顯示 → 視覺重疊兩份。修法：選中與否一律 `opacity:0.01`，Fabric selection handles 仍會獨立繪製不丟選取。雙擊進編輯模式新加 `text:editing:entered` handler 自動 `opacity:1` 還原讓使用者能看到打字內容。
+- **`pdf-editor` OLD 位置殘留紅虛線框**：之前 marker 平面化完只清白底 fill 保留紅虛線提示「redact 範圍」；使用者覺得殘留視覺干擾。改為平面化完成直接 `fc.remove(marker)` — OLD 位置原內容已被 redact 進 BG，marker 任務完成可移除。
+
+---
+
+## [1.7.26] - 2026-05-12
+
+### 修正
+
+- **`pdf-editor` 拉動既有圖片 / 文字後，OLD 位置底下的頁面框線 / 表格線被截斷**：客戶截圖顯示移動 logo 圖後，原位置橫穿的頁面邊框線在 image bbox 範圍內被切了一段。根因：`page.apply_redactions(images=PDF_REDACT_IMAGE_NONE)` 雖然保留了 redact 矩形外的圖內容，但**矩形內的 vector line art**（線條、邊框、表格線等）預設仍會被清掉。修法加 `graphics=fitz.PDF_REDACT_LINE_ART_NONE` flag — 只移除「使用者明確拉走的內容」（文字、圖片），背景線條一律保留。舊版 PyMuPDF（< 1.23）無此 flag → fallback 原行為。
+- **`pdf-editor` 全視窗 + sidebar 收折時，左上殘留 `<h1>PDF 編輯器</h1>` 標題穿透**：`#editor-panel` 之外的 h1 / 提示文字 / 上傳區 `<div class="panel">` 仍在 DOM 內被部分視覺穿透。全視窗時用 CSS `display:none !important` 統一隱藏這些非 editor-panel 元素。
+
+---
+
+## [1.7.25] - 2026-05-12
+
+### 修正
+
+- **`pdf-editor` 全視窗時整個視窗仍可往右 / 往下捲動**：v1.7.24 改完內容區後仍見此問題；根因 `#editor-panel` 雖然 `position:fixed` 蓋滿視窗，但底下 body 與 main 維持原內容的自然高度（一堆未隱藏的 panel + 上傳區），導致瀏覽器仍認為頁面內容有溢出 → 右側 / 底部出現額外捲軸把使用者拉到「空白下方」。修法：`body.pe-max-window` 與 `html` 直接鎖 `overflow:hidden + height:100vh`（CSS `:has()` + JS 雙重保險，避免不支援 `:has()` 的瀏覽器漏掉）；退出全視窗自動還原。
+
+---
+
+## [1.7.24] - 2026-05-12
+
+### 改進
+
+- **`pdf-editor` 全視窗模式排版修正**：v1.7.23 全視窗時 `editor-panel` 用 `padding:12px 16px` 加 `overflow:auto`，導致 ①頂端有 12px 空白沒貼齊視窗、②縮圖欄 / 內容區 / 屬性面板總高超過 100vh → 出現外層橫捲軸把右側內容遮住。修法：改用 `display:flex; flex-direction:column`，`pe-top`/工具列 `flex:0 0 auto`，`pe-wrap` `flex:1 1 auto; min-height:0`，內部三欄各自 `overflow:auto; max-height:100%` 在自己 column 內捲。整個 panel 不再有外層捲軸，貼齊視窗頂部。
+- **`pdf-editor` 快捷鍵按鈕移到工具列右側**：原本獨立佔一條的「快捷鍵」按鈕，移進水平工具列最右端（margin-left:auto 推到底），跟 V/T/I/W 等工具按鈕同高同風格；popup 改靠右對齊（`right:0`）避免超出右邊界。再省一條垂直空間。
+- **`pdf-editor` 重繪改用游標 + 訊息列提示，移除半透明遮罩**：v1.7.22 加的 canvas 半透明白色 overlay + 「重繪中…」pill 移除；改成 ①body 加 `cursor:progress`（OS 原生 spinner 游標）+ ②上方綠色訊息列顯示「重繪中…」/「儲存並重繪中…」，取代視覺遮罩。canvas 整片無遮蔽、視覺更清爽，重繪狀態仍清楚。
+
+---
+
+## [1.7.23] - 2026-05-12
+
+### 修正
+
+- **`pdf-editor` 拉動既有 PDF 文字到頁面別處 → 中間出現一大塊白色誤蓋**：v1.x 的修法把 redact 範圍取 `union(原 bbox, 新 bbox)`（原意是「原地放大字型也要 redact 到新邊界」），但**沒考慮拉動 case** — 新舊 bbox 完全不重疊時，union 的 rect 從 OLD 位置橫跨到 NEW 位置，把中間所有原 PDF 內容全部 redact 掉。修法：先檢查兩 bbox 是否真的有重疊；不重疊（拉動）→ 只 redact OLD；有重疊（原地縮放 / 換字型）→ 沿用 union。下載出來的 PDF 跟視覺一致。
+
+### 新增（接續上一版）
+
+- **`pdf-editor` 快捷鍵列改 popup 按鈕**：原本一長條鍵盤對照表佔頂端空間；改成單顆「快捷鍵」按鈕，按下彈出 popup（含完整快捷鍵 + 層次 + 全視窗 + 翻頁鍵）。
+
+---
+
+## [1.7.22] - 2026-05-12
+
+### 改進
+
+- **`pdf-editor` 重繪期間加半透明 overlay + spinner**：使用者操作後 Fabric 立刻有反應（即時生效），但後端平面化與 BG 重繪仍需要 ~100-500 ms。期間在 canvas 上覆蓋 45% 半透明白色 + 中央深色「重繪中…」pill + 旋轉 spinner，告訴使用者「正在處理」，不擋互動（pointer-events:none，可繼續編輯，後續操作自動排隊）。BG 圖實際載完才收 overlay（不只是 backend 完成 response，而是新 PNG 也 onload）。
+
+---
+
+## [1.7.21] - 2026-05-12
+
+### 修正
+
+徹底檢查 pdf-editor 移動 / 重繪 / 殘影 / 誤蓋 等情境後三項根本修正：
+
+- **移動既有 PDF 物件時 OLD 位置原文「復活」殘影**：active 物件被 save skip → backend 沒收到該物件的 redact 資訊 → BG 重新平面化時 OLD 位置回到 pristine（原 PDF 內容跑出來）→ 直到 deselect 才修正。修法：只 skip 「全新未平面化」的物件（既無 `_peSaved` 也無 `_origBbox`）；已平面化物件或從 PDF 擷取的，一律 include 到 save model 裡。BG 平面化跟 Fabric overlay 同位置同內容，無 ghost。
+- **手動「儲存並預覽」改強制 includeActive**：之前 user 新加文字框 → 沒先 deselect → 按「儲存並預覽」→ 拿到的預覽缺那個文字框（save 跟 auto-save 同邏輯，skip active）。現在按鈕 click handler 一律帶 `{includeActive:true}` → 強制把 active 也平面化進 BG。
+- **「下載」按鈕補先強制 save**：原本是純 `<a href>`，user 編輯到一半按下載 → 拿到的 PDF 缺最新 active 內容（auto-save 一直 skip active）。現在 click 攔截，先 `await savePdf({includeActive:true})` → BG / 下載檔 同步最新 → 再開新 anchor 觸發下載。
+
+---
+
+## [1.7.20] - 2026-05-12
+
+### 改進
+
+- **`pdf-editor` 工具列從左側直排改為上方橫排**：原本左側 60 px 寬豎排，新版改成編輯區頂端水平排列，騰出更多橫向空間給編輯區 + 左縮圖欄。Tooltip 也從「按鈕右側」改為「按鈕下方」。
+
+---
+
+## [1.7.19] - 2026-05-12
+
+### 改進
+
+- **`pdf-editor` 改成左邊頁面縮圖、右邊單頁編輯**：原本所有頁直向堆疊，多頁文件畫面雜亂。改成左側 132 px 寬縮圖欄（每頁一個 mini PNG + 頁碼），點縮圖切換要編輯的頁；右側編輯區只顯示當前頁。
+  - 縮圖隨 save 自動刷新（與 BG image 同步）— 利用 single-page incremental bake，只更新有變動的頁
+  - 鍵盤導頁、頁碼輸入框照常運作
+  - 雙擊縮圖 / 用箭頭按鈕切換時，縮圖捲動到視野內
+  - 視覺更聚焦：每頁佔滿編輯區，無須上下捲動
+
+---
+
+## [1.7.18] - 2026-05-12
+
+### 改進
+
+- **`pdf-editor` single-page incremental bake**：多頁 PDF 改一頁時，後端只重新渲染那一頁的 preview PNG，其他頁沿用上次的。
+  - 50 頁 PDF 改第 3 頁：bake 時間從 ~3-10 秒降到 ~0.1-0.3 秒（**~50x 快**）
+  - 前端用 `dirtyPages` Set 追蹤哪頁有變動（`object:added/modified/removed/text:changed` 觸發時記錄），savePdf 把這個 set 送給後端
+  - 後端拿到 `dirty_pages` 陣列：只 `render_page_png` 那些頁，其他頁的 PNG 檔保留
+  - 前端也只 cache-bust + 重載 dirty 頁的 `<img>` src（避免無謂網路 request）
+  - **向後相容**：前端不送或送空陣列 → 維持舊行為（重新渲染全部）。第一次 save / PNG 檔不存在 → 強制渲染。
+  - 視覺、正確性零改變：仍是同一個 PyMuPDF 平面化，只是「沒改的頁不重做」。
+
+---
+
+## [1.7.17] - 2026-05-12
+
+### 新增
+
+- **`pdf-editor` 後端 save 加 per-upload queue + global semaphore**：解決多 user 同時編輯時 PyMuPDF 平面化撞 CPU 的瓶頸。
+  - **Per-upload Lock**：同份 PDF 同時間最多一個 bake；同一 user 連續拖拉產生的 /save 自動排隊（不會 10 次拖拉開 10 個並行 bake）
+  - **Global Semaphore**：全域同時最多 N 個 bake，N 預設 = `min(8, CPU×2)`，可用環境變數 `JTDT_SAVE_CONCURRENCY` 覆寫；保護 backend 不被突發流量打爆
+  - 新 module `app/core/save_queue.py`；`tests/test_save_queue.py` 7 案覆蓋
+  - 視覺 / 正確性零變化：仍是同一個 PyMuPDF 平面化，只是少做重複工 + 限總量
+
+---
+
+## [1.7.16] - 2026-05-12
+
+### 改進
+
+- **`pdf-editor` 自動預覽改「動作完成幾乎立刻重繪」**：拖拉 / 縮放 / 新加 / 刪除 / 手繪結束等「明確結束」的事件 debounce 從 800 ms 降到 30 ms，使用者拖完位置不用點別處就會立刻看到 BG 重繪。打字（text:changed）仍保留 300 ms（從 800 ms 降）防止連按時頻繁 thrash。
+
+---
+
+## [1.7.15] - 2026-05-12
+
+### 修正
+
+- **`pdf-editor` 撤回 `_peCover` 白罩機制**：v1.7.10 到 v1.7.14 嘗試用「立刻插白罩遮蓋舊平面化位置」加速視覺反饋，但這個 hack 連續產生問題：白罩累積、白罩比新物件大、看起來像永久 redact 把使用者搞糊塗。完全移除白罩、改回讓 BG image 自然非同步替換。短暫的「BG 舊內容 + Fabric 新內容」overlap (~300-500 ms) 是可接受的代價。`object:modified` 內保留「清掉任何遺留 _peCover」的防呆，舊版客戶升上來不會有殘留白罩。
+- **發版前必跑 inline JS 語法檢查**：v1.7.14 慘案 — `pdf_editor.html` 改 catch block 多敲一個 `}` → SyntaxError → drag-drop 整個失靈。新加 `tests/test_template_js_syntax.py` 自動掃所有 HTML template 的 inline `<script>`，用 `node --check` 驗證；CI 與本機 pytest 都會跑到。CLAUDE.md 同步補上 SOP 條目。
+
+---
+
+## [1.7.14] - 2026-05-12
+
+### 修正
+
+- **`pdf-editor` 反覆移動物件後，原 PDF 框線被白罩永久蓋斷**：v1.7.11 加的 `_peCover` 白罩本意只是視覺暫時掩蓋舊平面化位置，等 BG 重載完移除。但只有 `includeActive=true` 路徑會清，一般 move 的 save 不清 → 多次移動後白罩在 canvas 上累積永久蓋住底層 PDF 線條（下載出來的 PDF 沒此問題，僅前端視覺）。修法：①`object:modified` 加新 cover 前先清掉舊 cover（防累積）；②任何 save 完成後（不論 includeActive）都清 cover；③save 失敗時也清，避免卡在畫布。
+
+---
+
+## [1.7.13] - 2026-05-12
+
+### 新增
+
+- **`translate-doc` 文件領域常用 chips**：8 個常用領域（法律合約 / 醫療報告 / 軟體技術文件 / 財務報表 / 學術論文 / 新聞稿 / 商業合約 / 網路 / IT 維運文件）一鍵點亮，右側保留 240 px 文字框可自填。
+- **`translate-doc` 兩個面板都可摺疊**：「1. 來源文字」「2. 並排對照」改用 `<details>` + 標題列點擊收折 / 展開（與 OCR 結果頁一致風格）。
+- **`translate-doc` 自製語言下拉**（取代瀏覽器原生 `<select>`）：跟系統其他下拉視覺一致；鍵盤 Up/Down/Enter/Esc 支援；點外部自動關閉。
+
+### 修正
+
+- **`pdf-editor` 文字框拖拉縮放後字級沒跟著放大，BG 平面化小字 + Fabric 顯示大字殘影**：Fabric 預設縮放 IText 只改 `scaleX/Y`，`fontSize` 不變 → backend 在拉大的 bbox 內仍用原 fontSize 平面化 → 視覺「大框內小字 + 旁邊有大字殘影」。修法：`object:modified` 事件偵測到文字物件 scale ≠ 1 時，把 scale 吸收進 `fontSize`（與 `width`），scale 還原為 1，立即重算維度。屬性面板字級欄位也同步刷新。
+- **`pdf-editor` 全螢幕按鈕改全視窗模式**：用詞修正 — OS 級全螢幕（Fullscreen API）改成 in-app 全視窗（編輯區擴到側欄右側整個 main 區域），保留左側功能列方便切回別的工具。Esc 退出。
+- **`translate-doc` 純標記行送 LLM 會收到雜訊**：例 ` ``` ` （markdown code fence）、`---` `***`（horizontal rule）、純 URL、表格分隔線等送 LLM 會回「Please provide the text to translate」。新加 `_is_no_translate()` 過濾，這類行直接 passthrough、譯文欄留空。
+- **`translate-doc` markdown 列表行首符號遺失**：`- 裝置雙向同步` 翻譯後變 `Two-way device synchronization`（少了「- 」）。修法：`_split_line_prefix()` 抽出行首符號（`- ` `* ` `+ ` `1. ` `> ` `## ` 與縮排、checkbox 等），只送內文給 LLM，譯文回來再補回行首符號；防 LLM 自己又加同樣符號造成重複。
+- **`/admin/sys-deps` 標籤精簡**：「OxOffice / LibreOffice 執行時依賴 X11 lib」→「OxOffice / LibreOffice X11 函式庫」。
+
+---
+
+## [1.7.12] - 2026-05-12
+
+### 新增
+
+- **`pdf-editor` 物件層次（z-order）控制**：屬性面板加四個按鈕 — 置頂 / 上一層 / 下一層 / 置底（Adobe Illustrator icon 風格）。鍵盤捷徑：`]` 上一層、`[` 下一層、`Cmd/Ctrl+]` 置頂、`Cmd/Ctrl+[` 置底。Markers 永遠強制保持在最底層。
+- **`pdf-editor` 全螢幕模式**：頂端工具列加「全螢幕」按鈕，按了把整個編輯區（工具列 + canvas + 屬性面板）擴到整個視窗；Esc 或再點按鈕退出。退出時自動 fit 一次保持整頁可見。
+
+### 改進
+
+- **`pdf-editor` 警語「不會 reflow」改純中文「不會自動斷行重排」**：避免英文夾雜。
+- **`/admin/sys-deps` 改 AJAX 載入 + spinner**：之前一進頁要等 ~4 秒（subprocess 探 binary、import pytesseract 等），現在頁面框架先秒開、表格內顯示「正在檢查系統相依套件…」+ spinner，背景 fetch `/admin/api/sys-deps` 完才填內容。重新檢查按鈕也走同樣 flow，不需重新整理整頁。
+- **套件名稱有括號說明時自動斷行**：例「Office engine (OxOffice / LibreOffice)」、「Java Runtime (OxOffice / LibreOffice 部分匯入需要)」括號部份顯示為第二行 muted 小字，第一行更短更易掃過。
+- **狀態 pill 改純符號**：「✓ 就緒 / ⚠ 缺 / ✗ 缺」改成只顯示符號 ✓ / ⚠ / ✗，pill 寬度從 90 px 縮到 60 px，省掉橫向空間。
+- **OCR 引擎描述用語潤飾**：把「CJK 強」「CJK 識別率強」改成「中日韓辨識準確度高」（README / docs/index.html / admin/ocr-langs / sys-deps）。
+- **介紹網站「稽核員角色 + 強制 2FA」表格重新設計**：表頭 indigo 漸層底、圓角邊框、隔行 striped、ok / no 改 pill 樣式（綠 / 紅淺底圓角），整體更專業一致。
+- **少用「—」，改用「：」做標題分隔**：「稽核員角色 + 強制 2FA — 郵件歸檔風格的合規分離」改成「稽核員角色 + 強制 2FA：郵件歸檔風格的合規分離」；docs/index.html meta description / footer-tag / 「文件去識別化 — 編修結果預覽」h3 同步調整。鋪陳性的破折號保留。
+- **`/admin/sys-deps` 套件名稱說明排版**：括號描述改顯示為 muted 小字（不重複「（）」符號），與套件名靠近 (margin 2 px)；下方 binary 路徑加 14 px 空行間隔，視覺層次更清楚。
+
+---
+
+## [1.7.11] - 2026-05-12
+
+### 修正
+
+- **`pdf-editor` 移動既有圖片 / 文字後舊位置短暫殘影**：前次 save 把物件平面化在 BG 的 OLD 位置；user 把物件拖到 NEW 位置後，要等 ~1 秒 save 完成 + BG 重載才看到 OLD 位置消失。改成 `object:modified` 觸發時立刻用白罩（`_peCover`）蓋住 OLD 平面化位置（`_lastBakedBbox`，由 savePdf 在每次成功平面化後設定；剛擷取的物件 fallback 用 `_origBbox`）；BG 載完 savePdf 自動移除白罩。視覺上即時生效，無 ghost。
+
+---
+
+## [1.7.10] - 2026-05-12
+
+### 修正
+
+- **`pdf-editor` 改字型仍有 0.x 秒視覺延遲**：v1.7.9 改成等 BG `<img>.load` 才淡掉 IText，但這會等網路 + bake 來回 ~200-500 ms。本版改成「立刻插白色矩形」蓋住舊 BG 的平面化文字（`_peCover` marker），上面浮新字型的 IText，使用者選完字型即時看到新字型；BG 載完 savePdf 移除白罩 + 淡掉 IText。Save 失敗也會把白罩清掉以免卡在畫布。
+
+---
+
 ## [1.7.9] - 2026-05-12
 
 ### 修正

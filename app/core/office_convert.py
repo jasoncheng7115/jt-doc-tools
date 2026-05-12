@@ -182,7 +182,7 @@ def convert_to_pdf(src: Path, dst_pdf: Path, timeout: float = 60.0) -> None:
                 except Exception:
                     pass
                 raise RuntimeError(
-                    f"office 轉 PDF 卡住（超過 {int(timeout)} 秒）。這份檔案可能已損壞或"
+                    f"office 轉 PDF 卡住（超過 {int(timeout)} 秒）。這份檔案可能已毀損或"
                     f"含有 LibreOffice/OxOffice 無法解析的內容。請用 Word/Pages 另存"
                     f"一份乾淨的版本再試，或直接請對方提供 PDF 版。"
                 )
@@ -230,7 +230,7 @@ def convert_to_docx(src: Path, dst_docx: Path, timeout: float = 60.0) -> None:
                 try: proc.communicate(timeout=5)
                 except Exception: pass
                 raise RuntimeError(
-                    f"office 轉 .docx 卡住（超過 {int(timeout)} 秒）。檔案可能已損壞或含 LibreOffice 無法解析的內容。"
+                    f"office 轉 .docx 卡住（超過 {int(timeout)} 秒）。檔案可能已毀損或含 LibreOffice 無法解析的內容。"
                 )
             if proc.returncode != 0:
                 raise RuntimeError(
@@ -291,7 +291,7 @@ def convert_to_text(src: Path, timeout: float = 60.0) -> str:
                     pass
                 raise RuntimeError(
                     f"office 轉文字卡住（超過 {int(timeout)} 秒）。"
-                    "這份檔案可能已損壞或含有 LibreOffice/OxOffice 無法解析的內容。"
+                    "這份檔案可能已毀損或含有 LibreOffice/OxOffice 無法解析的內容。"
                 )
             if proc.returncode != 0:
                 raise RuntimeError(
