@@ -25,13 +25,63 @@
 </script>
 <style>
 .pe-wrap { display: flex; gap: 12px; height: calc(100vh - 220px); min-height: 500px; }
+/* 全視窗模式：撐滿側欄右側整個 main 區域（保留左側 nav）。
+   body.pe-max-window 由 #btnMaxView 切換，整個 #editor-panel 變 flex column
+   填滿 100vh：pe-top + 工具列 fixed height，pe-wrap flex:1 撐滿剩餘空間，
+   pe-wrap 內的縮圖/canvas/屬性面板各自 overflow:auto，整個 panel 不出現外層
+   橫捲軸。Esc 退出。 */
+body.pe-max-window main.container { max-width: none !important; padding: 0 !important; margin: 0 !important; }
+body.pe-max-window .home-fab { display: none !important; }
+/* 全視窗時，#editor-panel 之外（h1 / muted 提示 / 上傳區）全部隱藏 — 避免
+   sidebar 收折後左上殘留 h1「PDF 編輯器」標題或上傳區邊角穿透。 */
+body.pe-max-window main.container > h1,
+body.pe-max-window main.container > p,
+body.pe-max-window main.container > .panel:not(#editor-panel) { display: none !important; }
+/* 全視窗時 body / html 都不允許捲動 — #editor-panel 用 position:fixed 蓋住，
+   但底下 body 與 main 仍維持原內容的自然高度（一堆 panel + 縮圖區），
+   會讓視窗右側與底部出現多餘捲軸把使用者拉到「空白下方」。鎖死 overflow
+   讓只有 #editor-panel 內部的 .pe-canvas-wrap 自己捲。 */
+html:has(body.pe-max-window), body.pe-max-window { overflow: hidden !important; height: 100vh; }
+body.pe-max-window #editor-panel {
+  position: fixed; inset: 0 0 0 268px; /* sidebar width — see platform.css .sidebar */
+  z-index: 50; background: #fff;
+  padding: 8px 12px;
+  border-radius: 0;
+  display: flex; flex-direction: column;
+  overflow: hidden;   /* outer panel never scrolls — children handle it */
+}
+body.pe-max-window.sidebar-collapsed #editor-panel { left: 0; }
+body.pe-max-window #editor-panel .pe-top,
+body.pe-max-window #editor-panel .pe-toolbar { flex: 0 0 auto; }
+body.pe-max-window #editor-panel .pe-wrap {
+  flex: 1 1 auto; height: auto; min-height: 0;
+  margin-bottom: 0;
+}
+body.pe-max-window #editor-panel .pe-thumbs,
+body.pe-max-window #editor-panel .pe-canvas-wrap,
+body.pe-max-window #editor-panel .pe-sidebar {
+  min-height: 0; max-height: 100%; overflow: auto;
+}
+@media (max-width: 768px) {
+  body.pe-max-window #editor-panel { left: 0; }
+}
+/* 水平工具列（v1.7.20 起）— 跨整個編輯區寬度，按鈕橫排 */
+.pe-toolbar.pe-toolbar-h {
+  display: flex; flex-direction: row; gap: 3px;
+  width: auto; padding: 4px 6px; margin-bottom: 6px;
+  align-items: center; flex-wrap: wrap;
+  background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px;
+}
+/* 舊的 column 規則：保留給其他 .pe-toolbar 用（若還有），新樣式由 -h 變體覆寫 */
 .pe-toolbar { display: flex; flex-direction: column; gap: 4px; width: 60px; padding: 8px 4px;
-  align-items: center;   /* center the 40px buttons within the 60px toolbar */
+  align-items: center;
   background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; }
-.pe-toolbar button { padding: 6px; font-size: 0; background: #fff; border: 1px solid #e5e7eb;
+/* v1.7.34：工具列按鈕從 40×40 縮成 30×30，省一些垂直空間，icon 18→18 維持
+   清晰度但 padding 收緊。 */
+.pe-toolbar button { padding: 4px; font-size: 0; background: #fff; border: 1px solid #e5e7eb;
   border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px; color: #374151; }
-.pe-toolbar button svg { width: 22px; height: 22px; }
+  width: 30px; height: 30px; color: #374151; }
+.pe-toolbar button svg { width: 18px; height: 18px; }
 .pe-toolbar button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
 .pe-toolbar button.active svg { stroke: #fff; }
 .pe-toolbar button[disabled] { opacity: 0.4; cursor: not-allowed; }
@@ -39,7 +89,32 @@
 .pe-top .btn svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
 /* Custom instant tooltip for toolbar buttons — native title takes ~500ms */
 .pe-toolbar button { position: relative; }
-.pe-toolbar button[data-tip]:hover::after {
+/* Tooltip — 水平工具列時 tooltip 在按鈕下方 */
+.pe-toolbar.pe-toolbar-h button[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute; top: calc(100% + 8px); left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: #1f2937; color: #fff;
+  padding: 5px 10px; border-radius: 5px;
+  font-size: 12px; font-weight: 500;
+  pointer-events: none;
+  z-index: 8000;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+.pe-toolbar.pe-toolbar-h button[data-tip]:hover::before {
+  content: "";
+  position: absolute; top: calc(100% + 2px); left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 6px solid #1f2937;
+  pointer-events: none;
+  z-index: 8000;
+}
+/* 舊 column tooltip — 保留 fallback */
+.pe-toolbar:not(.pe-toolbar-h) button[data-tip]:hover::after {
   content: attr(data-tip);
   position: absolute; left: calc(100% + 8px); top: 50%;
   transform: translateY(-50%);
@@ -51,7 +126,7 @@
   z-index: 8000;
   box-shadow: 0 4px 10px rgba(0,0,0,0.2);
 }
-.pe-toolbar button[data-tip]:hover::before {
+.pe-toolbar:not(.pe-toolbar-h) button[data-tip]:hover::before {
   content: "";
   position: absolute; left: calc(100% + 2px); top: 50%;
   transform: translateY(-50%);
@@ -62,7 +137,61 @@
   pointer-events: none;
   z-index: 8000;
 }
-.pe-canvas-wrap { flex: 1; overflow: auto; background: #e5e7eb; padding: 16px; border-radius: 6px; }
+.pe-canvas-wrap { flex: 1; overflow: auto; background: #e5e7eb; padding: 16px; border-radius: 6px;
+  position: relative;
+  /* v1.7.35：明顯邊框讓使用者看得到內容區邊界 — 高解析 PDF 沒水平捲軸時，
+     右側 content 是不是「正好對齊邊界」還是「超出」很難判斷。1px 灰邊
+     + inner shadow 把可視範圍框出來。 */
+  border: 1px solid #cbd5e1;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5);
+}
+/* 重繪期間 body 加 .pe-flattening → 全頁游標變 progress（OS spinner），訊息列顯示
+   「重繪中…」。不蓋半透明遮罩，使用者可繼續編輯。v1.7.24 起。 */
+body.pe-flattening, body.pe-flattening * { cursor: progress !important; }
+/* 空白鍵 hand-pan 模式（v1.7.34）：按住 Space → .pe-canvas-wrap 內游標變
+   grab，按下滑鼠拖曳 → grabbing 同時捲動內容。沒捲軸時拖曳是 no-op
+   但游標仍變 grab 給一致回饋。Fabric 事件由 document capture-phase
+   listener + stopImmediatePropagation 攔截下來，不會誤觸 Fabric 選取 /
+   建立物件。 */
+body.pe-pan-mode .pe-canvas-wrap,
+body.pe-pan-mode .pe-canvas-wrap * { cursor: grab !important; }
+body.pe-pan-active .pe-canvas-wrap,
+body.pe-pan-active .pe-canvas-wrap *,
+body.pe-pan-active { cursor: grabbing !important; }
+/* Thumbnail strip — left side, click to switch active page */
+.pe-thumbs {
+  flex: 0 0 132px; display: flex; flex-direction: column;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+  overflow: hidden;
+}
+.pe-thumbs-head {
+  padding: 8px 10px; font-size: 11px; font-weight: 600; color: #64748b;
+  letter-spacing: 0.5px; text-transform: uppercase;
+  background: #fff; border-bottom: 1px solid #e2e8f0; flex-shrink: 0;
+}
+.pe-thumbs-list { flex: 1; overflow-y: auto; padding: 8px; display: flex;
+  flex-direction: column; gap: 6px; }
+.pe-thumb {
+  position: relative; cursor: pointer;
+  border: 2px solid transparent; border-radius: 4px;
+  background: #fff; padding: 4px 4px 18px;
+  transition: border-color .12s, box-shadow .12s;
+}
+.pe-thumb:hover { border-color: #cbd5e1; }
+.pe-thumb.is-active {
+  border-color: #3b82f6;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, .25);
+}
+.pe-thumb img { display: block; width: 100%; height: auto;
+  pointer-events: none; user-select: none; background: #fff; }
+.pe-thumb-no {
+  position: absolute; bottom: 2px; left: 0; right: 0; text-align: center;
+  font-size: 10.5px; font-weight: 600; color: #475569;
+}
+.pe-thumb.is-active .pe-thumb-no { color: #1d4ed8; }
+/* Single-page-visible mode：only show .pe-page.is-active in main canvas */
+.pe-page { display: none; }
+.pe-page.is-active { display: block; }
 .pe-zoom-stage { transform-origin: 0 0; }
 .pe-page { position: relative; margin: 0 auto 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); background: white; }
 .pe-page img.bg { display: block; user-select: none; pointer-events: none;
@@ -106,6 +235,13 @@
   margin-bottom: 10px;
 }
 .pe-top .btn { padding: 6px 12px; font-size: 13px; white-space: nowrap; }
+/* v1.7.35：pe-top 所有直接子元素統一高度 — 之前 status / 各種按鈕 / page-ctl
+   / zoom-ctl / 自動預覽各自 padding 算出不同視覺高度，看起來參差。改為統一
+   min-height 30px + box-sizing border-box，所有 chip 同高（包括 wrap 到下一行
+   的退出全視窗按鈕也跟左邊 status 等高）。 */
+.pe-top > *,
+.pe-top > * .btn { box-sizing: border-box; }
+.pe-top > *:not(.pe-top-divider) { min-height: 30px; }
 .pe-top-divider {
   width: 1px; height: 20px; background: #e5e7eb; margin: 0 4px;
   flex: 0 0 auto;
@@ -206,6 +342,32 @@
 .pe-shortcuts kbd.highlight { background: linear-gradient(180deg,#fef3c7 0%,#fde68a 100%);
   border-color: #d97706; color: #92400e; }
 .pe-shortcuts .sep { color: #cbd5e1; }
+/* Shortcut popup trigger + popup panel */
+.pe-shortcuts-trigger-wrap { position: relative; display: inline-block; margin-bottom: 10px; }
+.pe-shortcuts-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 200;
+  background: #fff; border: 1px solid #cbd5e1; border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .12);
+  padding: 12px 14px; min-width: 380px;
+  font-size: 12.5px;
+}
+.pe-shortcuts-pop[hidden] { display: none; }
+.pe-shortcuts-pop-head {
+  font-weight: 600; color: #1e293b; margin-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9; padding-bottom: 6px;
+}
+.pe-shortcuts-pop-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px;
+  color: #475569;
+}
+.pe-shortcuts-pop kbd {
+  display: inline-block; padding: 1px 6px; font-size: 11px;
+  font-family: -apple-system, 'SF Mono', ui-monospace, Consolas, monospace;
+  color: #374151; background: linear-gradient(180deg, #ffffff 0%, #e5e7eb 100%);
+  border: 1px solid #cbd5e1; border-bottom-width: 2px; border-radius: 4px;
+  min-width: 16px; text-align: center; font-weight: 600; line-height: 14px;
+  margin-right: 4px;
+}
 /* Full-screen overlay while re-rendering */
 #peLoading { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35);
   z-index: 9500; display: none; align-items: center; justify-content: center; }
@@ -283,7 +445,7 @@
 <h1>{{ icon('edit', size=22) }} PDF 編輯器</h1>
 <p class="muted">
   疊加文字 / 圖片 / 形狀 / 標註，或用「選既有」工具直接搬動、改內容、刪除原 PDF 上的物件。
-  <span style="color:#b45309; display:inline-flex; align-items:center; gap:4px; vertical-align:middle;">{{ icon('warn', size=13) }} 不會 reflow；字型為還原繪製，與原檔可能細微不同。</span>
+  <span style="color:#b45309; display:inline-flex; align-items:center; gap:4px; vertical-align:middle;">{{ icon('warn', size=13) }} 不會自動斷行重排；字型為還原繪製，與原檔可能細微不同。</span>
 </p>
 
 <div class="panel">
@@ -323,7 +485,7 @@
     </label>
     <div class="pe-zoom-ctl">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px;"><circle cx="11" cy="11" r="7"/><path d="M16 16l5 5M8 11h6M11 8v6"/></svg>
-      <input type="range" id="zoomSlider" min="50" max="200" value="100" step="10">
+      <input type="range" id="zoomSlider" min="10" max="200" value="100" step="5">
       <span class="muted" style="font-size:12px; min-width:3em;" id="zoomLabel">100%</span>
       <button class="btn" type="button" id="btnFitPage" title="縮放到剛好顯示整頁"
         style="padding: 2px 8px; display:inline-flex; align-items:center; gap:4px;">
@@ -352,62 +514,88 @@
       </span>
     </div>
     <span class="pe-status" id="peStatus"></span>
+    <button class="btn" type="button" id="btnMaxView" title="全視窗（編輯區擴到右側整個區域，Esc 退出）"
+      style="margin-left:auto; padding: 2px 10px; display:inline-flex; align-items:center; gap:4px; flex:0 0 auto;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px; height:13px;"><path d="M3 7V3h4M21 7V3h-4M3 17v4h4M21 17v4h-4"/></svg>
+      <span id="btnMaxViewLabel">全視窗</span>
+    </button>
   </div>
-  <div class="pe-shortcuts muted" style="font-size:11px;">
-    <span class="pe-shortcuts-label">快捷鍵</span>
-    <kbd>V</kbd> 選取<span class="sep">·</span>
-    <kbd class="highlight">S</kbd> 選既有<span class="sep">·</span>
-    <kbd>T</kbd> 文字<span class="sep">·</span>
-    <kbd>I</kbd> 圖片<span class="sep">·</span>
-    <kbd>W</kbd> 白底<span class="sep">·</span>
-    <kbd>R</kbd> 矩形<span class="sep">·</span>
-    <kbd>L</kbd> 線段<span class="sep">·</span>
-    <kbd>A</kbd> 箭頭<span class="sep">·</span>
-    <kbd>O</kbd> 橢圓<span class="sep">·</span>
-    <kbd>P</kbd> 手繪<span class="sep">·</span>
-    <kbd>H</kbd> 螢光筆<span class="sep">·</span>
-    <kbd>N</kbd> 便箋<span class="sep">·</span>
-    <kbd>Delete</kbd> 刪除
+  <div class="pe-toolbar pe-toolbar-h">
+    <button type="button" id="toolSelect" class="active" data-tip="選取 (V)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3l15 8-6 2-2 6z"/></svg>
+    </button>
+    <button type="button" id="toolPick" data-tip="選既有 PDF 物件 (S)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>
+    </button>
+    <button type="button" id="toolText" data-tip="文字框 (T)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6h12M12 6v14M9 20h6"/></svg>
+    </button>
+    <button type="button" id="toolImage" data-tip="圖片 / 印章 / 簽名 (I)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M3 16l5-4 5 5 3-2 5 4"/></svg>
+    </button>
+    <button type="button" id="toolWhiteout" data-tip="白底遮罩 (W)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="4" y="8" width="16" height="8" rx="1" stroke-dasharray="3 2"/><path d="M6 12h12" stroke="#e5e7eb" stroke-width="5" stroke-linecap="round"/></svg>
+    </button>
+    <button type="button" id="toolRect" data-tip="矩形 (R)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="1"/></svg>
+    </button>
+    <button type="button" id="toolLine" data-tip="線段 (L)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20L20 4"/></svg>
+    </button>
+    <button type="button" id="toolArrow" data-tip="箭頭 (A)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M14 6l6 6-6 6"/></svg>
+    </button>
+    <button type="button" id="toolEllipse" data-tip="橢圓 (O)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="12" rx="8" ry="6"/></svg>
+    </button>
+    <button type="button" id="toolPencil" data-tip="手繪 (P)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l3-1 11-11-2-2L5 17l-1 3z"/><path d="M14 6l2 2"/></svg>
+    </button>
+    <button type="button" id="toolHighlight" data-tip="螢光筆 (H)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l4 4 10-10-4-4z"/><path d="M2 22h8"/><path d="M15 6l3 3"/></svg>
+    </button>
+    <button type="button" id="toolStickyNote" data-tip="便箋註解 (N)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h10l4 4v12H5z"/><path d="M15 4v4h4"/><path d="M8 12h6M8 16h4"/></svg>
+    </button>
+    <div class="pe-shortcuts-trigger-wrap" style="margin-left:auto; margin-bottom:0;">
+      <button type="button" id="btnShortcuts" data-tip="快捷鍵總覽">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h.01M11 14h.01M15 14h.01"/></svg>
+      </button>
+      <div class="pe-shortcuts-pop" id="peShortcutsPop" hidden style="left:auto; right:0;">
+        <div class="pe-shortcuts-pop-head">編輯快捷鍵</div>
+        <div class="pe-shortcuts-pop-grid">
+          <div><kbd>V</kbd> 選取</div>
+          <div><kbd>S</kbd> 選既有</div>
+          <div><kbd>T</kbd> 文字</div>
+          <div><kbd>I</kbd> 圖片</div>
+          <div><kbd>W</kbd> 白底</div>
+          <div><kbd>R</kbd> 矩形</div>
+          <div><kbd>L</kbd> 線段</div>
+          <div><kbd>A</kbd> 箭頭</div>
+          <div><kbd>O</kbd> 橢圓</div>
+          <div><kbd>P</kbd> 手繪</div>
+          <div><kbd>H</kbd> 螢光筆</div>
+          <div><kbd>N</kbd> 便箋</div>
+          <div><kbd>Delete</kbd> 刪除選中</div>
+          <div><kbd>Cmd/Ctrl+Z</kbd> 復原</div>
+          <div><kbd>Cmd/Ctrl+Shift+Z</kbd> 重做</div>
+          <div><kbd>]</kbd> 上一層</div>
+          <div><kbd>[</kbd> 下一層</div>
+          <div><kbd>Cmd/Ctrl+]</kbd> 置頂</div>
+          <div><kbd>Cmd/Ctrl+[</kbd> 置底</div>
+          <div><kbd>PageUp / Down</kbd> 上 / 下頁</div>
+          <div><kbd>Home / End</kbd> 第一 / 最後頁</div>
+          <div><kbd>Esc</kbd> 退出全視窗</div>
+          <div><kbd>Space</kbd>＋拖曳 拖動內容區</div>
+        </div>
+      </div>
+    </div>
   </div>
   <div class="pe-wrap">
-    <div class="pe-toolbar">
-      <button type="button" id="toolSelect" class="active" data-tip="選取 (V)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3l15 8-6 2-2 6z"/></svg>
-      </button>
-      <button type="button" id="toolPick" data-tip="選既有 PDF 物件 (S)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>
-      </button>
-      <button type="button" id="toolText" data-tip="文字框 (T)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6h12M12 6v14M9 20h6"/></svg>
-      </button>
-      <button type="button" id="toolImage" data-tip="圖片 / 印章 / 簽名 (I)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M3 16l5-4 5 5 3-2 5 4"/></svg>
-      </button>
-      <button type="button" id="toolWhiteout" data-tip="白底遮罩 (W)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="4" y="8" width="16" height="8" rx="1" stroke-dasharray="3 2"/><path d="M6 12h12" stroke="#e5e7eb" stroke-width="5" stroke-linecap="round"/></svg>
-      </button>
-      <button type="button" id="toolRect" data-tip="矩形 (R)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="1"/></svg>
-      </button>
-      <button type="button" id="toolLine" data-tip="線段 (L)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20L20 4"/></svg>
-      </button>
-      <button type="button" id="toolArrow" data-tip="箭頭 (A)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M14 6l6 6-6 6"/></svg>
-      </button>
-      <button type="button" id="toolEllipse" data-tip="橢圓 (O)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="12" rx="8" ry="6"/></svg>
-      </button>
-      <button type="button" id="toolPencil" data-tip="手繪 (P)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l3-1 11-11-2-2L5 17l-1 3z"/><path d="M14 6l2 2"/></svg>
-      </button>
-      <button type="button" id="toolHighlight" data-tip="螢光筆 (H)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l4 4 10-10-4-4z"/><path d="M2 22h8"/><path d="M15 6l3 3"/></svg>
-      </button>
-      <button type="button" id="toolStickyNote" data-tip="便箋註解 (N)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h10l4 4v12H5z"/><path d="M15 4v4h4"/><path d="M8 12h6M8 16h4"/></svg>
-      </button>
-    </div>
+    <aside class="pe-thumbs" id="peThumbs">
+      <div class="pe-thumbs-head">頁面</div>
+      <div class="pe-thumbs-list" id="peThumbsList"></div>
+    </aside>
     <div class="pe-canvas-wrap" id="canvasWrap">
       <div class="pe-zoom-stage" id="zoomStage"></div>
     </div>
@@ -525,19 +713,46 @@ let snapshotTimer = null;
 const SNAPSHOT_DELAY = 250;  // ms coalescing window
 // Auto-save debounce
 let autoSaveTimer = null;
+// 哪些頁有變動 (0-based index)。savePdf 把這個 set 傳給後端，後端只重新
+// 渲染這些頁的 preview PNG，其他頁沿用上次的 PNG → 多頁 PDF 編輯快上 50x。
+// save 成功後 clear；失敗保留下次重試。v1.7.18
+const dirtyPages = new Set();
+function markPageDirty(pageIndex) {
+  if (typeof pageIndex === 'number' && pageIndex >= 0) dirtyPages.add(pageIndex);
+}
 let saveInFlight = false;
 let pendingSave = false;
-const AUTOSAVE_DELAY = 800;   // ms after last edit before we save
+// v1.7.37：debounce 拉長 — autosave 是 true debounce，使用者連續操作不會
+// 中途打斷重繪。只在停手後 N ms 才 fire 一次。高解析多頁 PDF 每次 save
+// 都要重序列化整份 doc，過於頻繁拖累體感。
+const AUTOSAVE_DELAY = 800;   // 打字停 800ms 後存（之前 300ms）
+const AUTOSAVE_DELAY_IMMEDIATE = 1500; // 拖拉 / 縮放 / 加 / 刪停 1.5s 後存（之前 30ms 近即時）
 // Set to true when the last save skipped the active object (because it
 // was being edited). selection:cleared watches this and triggers one
-// follow-up save to bake the now-finished object into the background.
+// follow-up save to flatten the now-finished object into the background.
 let needBakeOnDeselect = false;
+// v1.7.40：pick 完到 BG 真正重畫完之間，仍會看到原 PDF + Fabric overlay
+// 短暫雙影。為避免使用者誤觸（雙擊、拖、按鍵等），這段期間繼續顯示 OCR
+// loading overlay。flag 由 pickExistingObject 設 true，savePdf 在
+// bgLoadedPromises resolve 後才 hideLoading 並 reset。
+let _keepLoadingUntilBgReady = false;
 
-function scheduleAutoSave() {
+function scheduleAutoSave(opts) {
   if (!$('peAutoSave')?.checked) return;
   if (!uploadId) return;
   if (autoSaveTimer) clearTimeout(autoSaveTimer);
-  autoSaveTimer = setTimeout(doAutoSave, AUTOSAVE_DELAY);
+  const delay = (opts && opts.immediate) ? AUTOSAVE_DELAY_IMMEDIATE : AUTOSAVE_DELAY;
+  autoSaveTimer = setTimeout(doAutoSave, delay);
+}
+// v1.7.38：「選既有物件」後專用的短延遲 save trigger。pick 完原 PDF 內容
+// 還在 BG，Fabric overlay 又疊在同位置 → 雙影。150ms 內快速 save 讓 BG
+// redact + IText 淡化，雙影只持續一瞬。覆蓋掉 object:added 的 1500ms
+// debounce。
+function triggerPickSave() {
+  if (!$('peAutoSave')?.checked) return;
+  if (!uploadId) return;
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(doAutoSave, 150);
 }
 async function doAutoSave() {
   if (saveInFlight) { pendingSave = true; return; }
@@ -550,6 +765,51 @@ async function doAutoSave() {
 }
 
 const $ = (id) => document.getElementById(id);
+
+// v1.7.33：把後端 / reverse proxy 的錯誤回應轉成「人話」訊息給訊息列用。
+// 原本任何 fetch fail 都把 await r.text() 整段塞進 setStatus，碰到 nginx
+// 502/504 HTML、FastAPI 500 stacktrace 之類就會看到一大串 `<html>...` 亂碼。
+// 規則：
+//   ①HTTP status 對應到一句中文提示（503 / 502 / 504 → 後端異常；413 →
+//     檔案太大；401/403 → 權限；500 → 內部錯誤）。
+//   ②如果 backend 回的是 application/json，且有 .detail / .error 欄位就
+//     拿來補充（FastAPI 慣例）。
+//   ③HTML / stacktrace / 過長純文字一律抽到 console.error，訊息列只放
+//     簡短描述加 status code。
+async function friendlyServerError(r, fallback) {
+  const code = r ? r.status : 0;
+  const codeMap = {
+    400: '請求格式錯誤', 401: '未登入或登入逾期', 403: '權限不足',
+    404: '找不到資源', 408: '請求逾時', 410: '檔案已過期',
+    413: '檔案太大', 422: '參數驗證失敗', 429: '請求過於頻繁',
+    500: '伺服器內部錯誤', 502: '後端服務無回應', 503: '服務暫時不可用',
+    504: '後端逾時',
+  };
+  const base = codeMap[code] || (fallback || '操作失敗');
+  let detail = '';
+  try {
+    const ct = (r.headers && r.headers.get && r.headers.get('content-type')) || '';
+    if (ct.indexOf('application/json') >= 0) {
+      const j = await r.json();
+      const d = (j && (j.detail || j.error || j.message));
+      if (typeof d === 'string' && d.length && d.length < 200) detail = d;
+      // 若 detail 是 array (FastAPI validation)，挑第一筆的 msg
+      else if (Array.isArray(d) && d[0] && d[0].msg) detail = String(d[0].msg).slice(0, 200);
+    } else {
+      // 純文字錯誤 — 取前 120 字非空白，且不能像 HTML
+      const t = await r.text();
+      if (t && t.indexOf('<') !== 0 && t.length < 200 && !/\n/.test(t)) {
+        detail = t;
+      } else if (t) {
+        // HTML / stacktrace → 寫 console，訊息列只放代碼
+        try { console.error('[pdf-editor] server error body:', t.slice(0, 1500)); } catch (_) {}
+      }
+    }
+  } catch (_) {}
+  const codeTag = code ? `（${code}）` : '';
+  return detail ? `${base}${codeTag}：${detail}` : `${base}${codeTag}`;
+}
+
 function setStatus(msg, kind) {
   const el = $('peStatus');
   el.textContent = msg || '';
@@ -627,6 +887,11 @@ async function prefetchPickableObjects(fc) {
 function _findPickableUnder(fc, xPx, yPx) {
   if (!fc._pickables) return null;
   const xPt = xPx / PT2PX, yPt = yPx / PT2PX;
+  // v1.7.31：原 PDF 物件已被「選既有」抓出來或標記為刪除過 → 不能再選一次
+  // （否則會在同位置產生重複的擷取 / 重複的 redact marker，且 save 時也會
+  //  重覆 redact）。先檢查當前頁面 Fabric 上是否已存在 _origBbox 涵蓋該點
+  //  的物件，或 deletedOrigs 內已記錄該點。
+  if (_isOrigPicked(fc, xPt, yPt)) return null;
   // Reverse iterate so topmost (last drawn) wins
   for (let i = fc._pickables.length - 1; i >= 0; i--) {
     const o = fc._pickables[i];
@@ -636,6 +901,25 @@ function _findPickableUnder(fc, xPx, yPx) {
     }
   }
   return null;
+}
+
+// 判斷 (xPt, yPt)（PDF pt）是否落在「已被選取過 / 標記為刪除過」的原 PDF 物件
+// bbox 內。用來阻止使用者對同一位置重覆執行「選既有」。
+// 兩個資料來源：
+//   ①Fabric 上仍存在、且帶 `_origBbox` 的物件（pick 抓出來後物件還沒被刪）
+//   ②`deletedOrigs[pageIndex]` 累積的 bbox 清單（純標記為刪除，已無 Fabric 物件）
+function _isOrigPicked(fc, xPt, yPt) {
+  const inside = (bb) => bb && bb.length === 4 &&
+    bb[0] <= xPt && xPt <= bb[2] && bb[1] <= yPt && yPt <= bb[3];
+  for (const o of fc.getObjects()) {
+    if (o && o._origBbox && inside(o._origBbox)) return true;
+  }
+  const pi = fc._pageIndex;
+  const dels = (typeof deletedOrigs !== 'undefined') ? (deletedOrigs[pi] || []) : [];
+  for (const bb of dels) {
+    if (inside(bb)) return true;
+  }
+  return false;
 }
 
 function showHoverFrame(fc, bb /* PDF pt */, kind) {
@@ -689,7 +973,7 @@ async function handleUpload(file) {
     const r = await (peFu
       ? peFu.upload('/tools/pdf-editor/load', fd, {processingLabel: '渲染預覽中…'})
       : fetch('/tools/pdf-editor/load', {method:'POST', body: fd}));
-    if (!r.ok) { setStatus('上傳失敗：' + await r.text()); return; }
+    if (!r.ok) { setStatus(await friendlyServerError(r, '上傳失敗'), 'error'); return; }
     const data = await r.json();
     uploadId = data.upload_id;
     originalFilename = data.filename || 'edited.pdf';
@@ -739,6 +1023,9 @@ function buildCanvases() {
   });
   applyZoom();
   setupPageTracking();
+  buildThumbs();
+  // Single-page-visible mode：default to page 1
+  gotoPage(1);
 }
 
 // ============ Page indicator + jump-to-page ============
@@ -788,11 +1075,70 @@ function gotoPage(n) {
   const total = pages.length;
   if (!total) return;
   const idx = Math.max(1, Math.min(total, n | 0));
-  const target = document.querySelector(`.pe-page[data-page-index="${idx}"]`);
-  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Single-page-visible mode（v1.7.19）：hide all .pe-page，only show the
+  // active one. Thumbnail strip on left mirrors the active state.
+  document.querySelectorAll('.pe-page').forEach(el => {
+    el.classList.toggle('is-active', el.dataset.pageIndex === String(idx));
+  });
+  document.querySelectorAll('.pe-thumb').forEach(el => {
+    el.classList.toggle('is-active', el.dataset.pageIndex === String(idx));
+  });
+  // Smooth-scroll the active thumb into view in case it's off-screen
+  const activeThumb = document.querySelector(`.pe-thumb[data-page-index="${idx}"]`);
+  if (activeThumb && activeThumb.scrollIntoView) {
+    activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
   const inp = $('pePageInput'); if (inp) inp.value = String(idx);
   _curPage = idx;
   _refreshNavBtns();
+  // v1.7.29：切頁後重套 zoom 以更新 stage layout-box 尺寸（每頁尺寸不同
+  // 時，scrollbar 範圍才會跟著新頁尺寸縮放，不殘留前一頁的捲動空間）
+  try { applyZoom(); } catch (_) {}
+  // v1.7.32：切頁後丟掉所有 canvas 上的 active object 並清空屬性面板，
+  // 否則新頁建物件時屬性區仍顯示舊頁殘留選取
+  try {
+    pageCanvases.forEach(c => { if (c.getActiveObject()) { c.discardActiveObject(); c.requestRenderAll(); } });
+    const panel = $('propsPanel');
+    if (panel) panel.innerHTML = '<h3>屬性</h3><div class="muted">點選物件後在此編輯。</div>';
+  } catch (_) {}
+}
+
+// Build / refresh the left thumbnail strip from current `pages` array.
+// Called after buildCanvases() and after each savePdf so thumbs reflect
+// latest preview PNGs (cache-busted).
+function buildThumbs() {
+  const list = document.getElementById('peThumbsList');
+  if (!list) return;
+  list.innerHTML = '';
+  pages.forEach((pg, pIdx) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'pe-thumb';
+    thumb.dataset.pageIndex = String(pIdx + 1);
+    if (pIdx + 1 === _curPage) thumb.classList.add('is-active');
+    const img = document.createElement('img');
+    img.src = pg.preview_url;
+    img.alt = `第 ${pIdx + 1} 頁`;
+    img.loading = 'lazy';
+    const no = document.createElement('div');
+    no.className = 'pe-thumb-no';
+    no.textContent = String(pIdx + 1);
+    thumb.appendChild(img);
+    thumb.appendChild(no);
+    thumb.addEventListener('click', () => gotoPage(pIdx + 1));
+    list.appendChild(thumb);
+  });
+}
+
+// Update thumbnail src for pages that just got re-rendered (savePdf result)
+function refreshThumbsForPages(dirtyPageIndices) {
+  if (!dirtyPageIndices || !dirtyPageIndices.length) return;
+  const set = new Set(dirtyPageIndices);
+  document.querySelectorAll('.pe-thumb').forEach((thumb, i) => {
+    if (!set.has(i)) return;
+    const img = thumb.querySelector('img');
+    const pg = pages[i];
+    if (img && pg) img.src = pg.preview_url + '?t=' + Date.now();
+  });
 }
 {
   const _pi = $('pePageInput');
@@ -821,14 +1167,55 @@ function gotoPage(n) {
     else if (e.key === 'End')  { e.preventDefault(); gotoPage(pages.length); }
     else if (e.key === 'PageUp')   { e.preventDefault(); gotoPage(_curPage - 1); }
     else if (e.key === 'PageDown') { e.preventDefault(); gotoPage(_curPage + 1); }
+    // 層次：[ / ] 上下層；Cmd/Ctrl+[ / ] 置底 / 置頂（Adobe Illustrator 慣例）
+    else if (e.key === ']' || e.key === '[') {
+      const a = getActiveObject();
+      if (!a || a._peMarker || a._peCover) return;
+      const fc = a.canvas; if (!fc) return;
+      e.preventDefault();
+      const meta = e.metaKey || e.ctrlKey;
+      const apiName = e.key === ']'
+        ? (meta ? ['bringObjectToFront','bringToFront'] : ['bringObjectForward','bringForward'])
+        : (meta ? ['sendObjectToBack','sendToBack']     : ['sendObjectBackwards','sendBackwards']);
+      for (const n of apiName) {
+        if (typeof fc[n] === 'function') { fc[n](a); break; }
+        if (typeof a[n] === 'function') { a[n](); break; }
+      }
+      // markers 永遠在最底
+      fc.getObjects().forEach(o => {
+        if (o._peMarker) {
+          if (typeof fc.sendObjectToBack === 'function') fc.sendObjectToBack(o);
+          else if (typeof fc.sendToBack === 'function') fc.sendToBack(o);
+        }
+      });
+      fc.requestRenderAll();
+      snapshotHistory();
+      scheduleAutoSave();
+    }
   });
 }
 
 function applyZoom() {
   const stage = $('zoomStage');
   stage.style.transform = `scale(${zoom})`;
-  // Ensure canvas-wrap scrollable area matches scaled content
-  stage.style.width = 'max-content';
+  stage.style.transformOrigin = '0 0';
+  // CSS transform 不影響 layout-box 大小 — 不設 width/height 的話 stage
+  // 維持子元素（pe-page）的「未縮放」原始寬高，畫布父層 (.pe-canvas-wrap)
+  // 仍以原始尺寸畫捲軸 → 即使視覺已縮小，捲軸還可往右下拖出多餘空白。
+  // 解法：把 stage 的 layout-box 顯式縮成「縮放後可見尺寸」，捲軸範圍才
+  // 與實際視覺內容對齊。子元素仍以原始尺寸 layout，靠 transform 投影到
+  // 縮小後的 stage box（origin 0,0）。
+  if (pages.length) {
+    const idx = Math.max(0, (typeof _curPage === 'number' ? _curPage - 1 : 0));
+    const cur = pages[idx] || pages[0];
+    const pageW_px = (cur.width_pt || pages[0].width_pt) * PT2PX;
+    const pageH_px = (cur.height_pt || pages[0].height_pt) * PT2PX;
+    stage.style.width  = Math.ceil(pageW_px * zoom) + 'px';
+    stage.style.height = Math.ceil(pageH_px * zoom) + 'px';
+  } else {
+    stage.style.width = 'max-content';
+    stage.style.height = 'auto';
+  }
 }
 
 // ============ Object creation ============
@@ -918,12 +1305,25 @@ function attachPageHandlers(fc) {
       o.set('opacity', 1);
       o.canvas && o.canvas.requestRenderAll();
     }
+    // v1.7.32：清掉「其他頁面 canvas」上殘留的 active object — 否則切頁後
+    // 在新頁建物件時 getActiveObject() 因為迭代是「找到第一個 active 就回」
+    // 仍會抓到舊頁殘留的選取（例：上一頁文字 → 切到本頁加矩形 → 屬性區
+    // 卻顯示舊頁文字框）。每次選取事件只允許本 canvas 有 active。
+    const src = o && o.canvas;
+    if (src) {
+      pageCanvases.forEach(c => {
+        if (c !== src && c.getActiveObject()) {
+          c.discardActiveObject();
+          c.requestRenderAll();
+        }
+      });
+    }
     updatePropsPanel();
   };
   fc.on('selection:created', onSelect);
   fc.on('selection:updated', onSelect);
   fc.on('selection:cleared', () => {
-    // Split handling: objects already baked into the background PDF
+    // Split handling: objects already flattened into the background PDF
     // (_peSaved) can safely fade back to invisible — no flicker because
     // the background shows them. Objects that were EDITED or never
     // saved stay opaque until the upcoming save completes; otherwise
@@ -943,18 +1343,68 @@ function attachPageHandlers(fc) {
   // NOTE: 'object:moving' and 'object:scaling' fire many times during a
   // drag; we only listen to the "end" events (object:modified) to avoid
   // thrashing.
-  ['object:added', 'object:modified', 'object:removed', 'path:created',
-   'text:changed'].forEach(ev => {
+  // 「discrete」事件（拖拉結束 / 縮放結束 / 新加 / 刪除 / 手繪結束）→ 幾乎
+  // 立刻 save，提升回饋體感；text:changed（每按一鍵）→ 仍走 300 ms debounce
+  // 防止連按時 thrash。事件觸發時也標記該頁為 dirty，savePdf 只會請後端重
+  // 渲染 dirty 頁的 preview PNG（多頁 PDF 的關鍵效能優化，v1.7.18）。
+  ['object:added', 'object:modified', 'object:removed', 'path:created'].forEach(ev => {
     fc.on(ev, () => {
       if (!suppressHistory) snapshotHistory();
-      scheduleAutoSave();
+      markPageDirty(fc._pageIndex);
+      scheduleAutoSave({ immediate: true });
     });
+  });
+  fc.on('text:changed', () => {
+    if (!suppressHistory) snapshotHistory();
+    markPageDirty(fc._pageIndex);
+    scheduleAutoSave();
+  });
+  // 物件被移動 / 縮放後處理：(1) 文字 scale 吸進 fontSize；(2) 順手清掉
+  // 任何遺留的 _peCover 白罩。**不再插白罩**：v1.7.10–v1.7.14 嘗試用白罩
+  // 蓋住舊平面化位置以避免 BG 載新版前的 ghost，但白罩會在多次移動後累積、
+  // 視覺上比新物件還大、而且看起來像永久 redact，反而困惑使用者。改回讓
+  // BG 載入時自然替換，~300-500 ms 的暫時 ghost 是可接受的代價。
+  fc.on('object:modified', (opt) => {
+    const o = opt && opt.target;
+    if (!o || o._peMarker || o._peCover) return;
+    // 文字 scale → fontSize：Fabric 預設縮放 IText 只改 scaleX/Y，fontSize 不變
+    // → backend 在拉大的 bbox 內仍用原 fontSize 平面化 → 視覺「大框內小字」。
+    if ((o.type === 'i-text' || o.type === 'text' || o.type === 'textbox') &&
+        (Math.abs(o.scaleX - 1) > 0.001 || Math.abs(o.scaleY - 1) > 0.001)) {
+      const ratio = Math.max(o.scaleX, o.scaleY);
+      o.set({
+        fontSize: o.fontSize * ratio,
+        width: (o.width || 100) * o.scaleX,
+        scaleX: 1, scaleY: 1,
+      });
+      o.dirty = true;
+      if (o._clearCache) o._clearCache();
+      if (typeof o.initDimensions === 'function') { try { o.initDimensions(); } catch (_) {} }
+      o.setCoords();
+      const pfSize = document.getElementById('pfSize');
+      if (pfSize && getActiveObject() === o) pfSize.value = Math.round(o.fontSize);
+    }
+    // 防呆：清掉任何遺留的 _peCover（之前版本可能留下，避免永久蓋住 PDF）
+    const stale = fc.getObjects().filter(x => x._peCover);
+    if (stale.length) {
+      stale.forEach(x => fc.remove(x));
+      fc.requestRenderAll();
+    }
   });
   // 在原物件擷取的 IText 內直接編輯文字（雙擊進編輯模式 → 鍵盤輸入 → blur）後，
   // Fabric IText 內部 dirty 旗標 + width 沒主動 recompute，造成 background image
   // 重新 render 時用的是「舊的 text 值」或「舊的 width / coords」，編輯框視覺上
   // 只剩部份字。`text:editing:exited` 觸發後強制重算 + 立即排隊 auto-save，
   // 把使用者實際 typed 的最新字串送回 backend。
+  // v1.7.27：進入編輯模式時還原 opacity — 已平面化文字平常 opacity:0.01
+  // 不可見（避免跟 BG 重疊），雙擊進編輯時要看見才能改字。
+  fc.on('text:editing:entered', (e) => {
+    const o = e && e.target;
+    if (o && (o.opacity || 0) < 0.5) {
+      o.set('opacity', 1);
+      fc.requestRenderAll();
+    }
+  });
   fc.on('text:editing:exited', (e) => {
     const o = e && e.target;
     if (!o) return;
@@ -1155,10 +1605,12 @@ function addRedactMarker(fc, bb, ownerObj) {
     left: bb[0] * PT2PX, top: bb[1] * PT2PX,
     width: (bb[2] - bb[0]) * PT2PX,
     height: (bb[3] - bb[1]) * PT2PX,
-    // Fully opaque white — this simulates the post-save redaction so
-    // the user sees the ORIGINAL CONTENT HIDDEN immediately, not
-    // bleeding through. Dashed red border tells them it's a preview.
-    fill: '#ffffff',
+    // v1.7.36：fill 改為透明 — 原本 #ffffff 想預覽 redact 後白底，但 PDF
+    // 背景是深色 / 圖片時，opaque 白塊蓋住底層內容，視覺看起來像灰色
+    // 方塊（客戶踩到）。透明 fill 讓使用者保留看見原 PDF 背景；紅虛線
+    // 邊框仍標示「儲存後此區會被 redact」。save 完成後 BG 烘焙的 redact
+    // 才會真正生效（fill=None 不畫白底，背景線條 / 顏色都保留）。
+    fill: 'rgba(255,255,255,0)',
     stroke: '#dc2626', strokeDashArray: [5, 3], strokeWidth: 1.2,
     selectable: false, evented: false,
     hoverCursor: 'default',
@@ -1180,13 +1632,54 @@ async function pickExistingObject(fc, p) {
   // Convert canvas px → PDF pt for the hit test
   const x_pt = p.x / PT2PX;
   const y_pt = p.y / PT2PX;
+  // v1.7.31：該位置已被「選既有」抓出來過（或標記為刪除過）就不再次處理
+  if (_isOrigPicked(fc, x_pt, y_pt)) {
+    setStatus('此位置的原 PDF 物件已被選取過，請直接編輯既有的擷取物件或先刪除它再重選。');
+    setTimeout(() => setStatus(''), 3000);
+    setTool('select');
+    return;
+  }
   setStatus('偵測中…');
+  // v1.7.29：選既有物件（特別是文字）後端可能要走 OCR / 字型解析，
+  // 慢的話 1-2 秒；期間用半透明遮罩 + spinner 告訴使用者「轉換中」，
+  // 避免覺得當掉或重複點擊。300 ms 內回來就不顯示，避免閃爍。
+  let pickOverlayShown = false;
+  const pickOverlayTimer = setTimeout(() => {
+    showLoading('物件轉換中…');
+    pickOverlayShown = true;
+  }, 300);
   // 若 detect-objects 在 500 ms 內沒回，幾乎一定是文字 span 撞到 OCR
   // fallback (字型缺/壞 ToUnicode → render bbox + tesseract)，OCR 通常
   // 要 1-2 秒。提前升級訊息讓使用者知道在做什麼，不會以為當掉。
   const ocrHintTimer = setTimeout(() => {
-    setStatus('辨識中…（原文字字型無 Unicode 對應表，正在 OCR 重建文字）');
+    setStatus('原文字物件已平面化（字型 Unicode 對應表不完整），需經 OCR 辨識後重建可編輯文字…');
+    if (pickOverlayShown) showLoading('原文字物件已平面化，需經 OCR 辨識後重建可編輯文字…');
   }, 500);
+  const cleanupPickOverlay = () => {
+    clearTimeout(pickOverlayTimer);
+    clearTimeout(ocrHintTimer);
+    // 若沒設 _keepLoadingUntilBgReady（例：偵測失敗 / 沒擷取到任何物件 /
+    // widget / drawing / filler 這些非 OCR 路徑），立刻 hide loading。
+    // 有設的話留給 savePdf 在 BG 重畫完後 hide。
+    if (pickOverlayShown && !_keepLoadingUntilBgReady) hideLoading();
+  };
+  // v1.7.39：pick 過程中 fabric.IText 加進 canvas 後，Fabric 內部會建一個
+  // hiddenTextarea 並 append 到 document.body，瀏覽器可能因此 auto-scroll
+  // 把它「捲進視野」→ 整個編輯區位移（toolbar 跑到視野上方、canvas-wrap
+  // 也橫向位移）。快照 scroll 位置，pick 完成後強制還原。
+  const _wrap = document.getElementById('canvasWrap');
+  const _scrollSnap = {
+    winX: window.scrollX, winY: window.scrollY,
+    wrapL: _wrap ? _wrap.scrollLeft : 0,
+    wrapT: _wrap ? _wrap.scrollTop : 0,
+  };
+  const _restoreScroll = () => {
+    window.scrollTo(_scrollSnap.winX, _scrollSnap.winY);
+    if (_wrap) {
+      _wrap.scrollLeft = _scrollSnap.wrapL;
+      _wrap.scrollTop = _scrollSnap.wrapT;
+    }
+  };
   try {
     const r = await fetch('/tools/pdf-editor/detect-objects', {
       method: 'POST',
@@ -1197,7 +1690,6 @@ async function pickExistingObject(fc, p) {
         x: x_pt, y: y_pt,
       }),
     });
-    clearTimeout(ocrHintTimer);
     const data = await r.json();
     if (!data || !data.kind) {
       setStatus('此位置沒有可選取的物件');
@@ -1282,7 +1774,9 @@ async function pickExistingObject(fc, p) {
         fontSize: Math.max(6, (data.font_size || 11) * PT2PX),
         fill: data.color || '#000000',
         fontFamily: 'sans-serif',
-        backgroundColor: 'rgba(255, 230, 100, 0.25)',
+        // v1.7.35：拿掉黃色底色 — 原本想用半透明黃當「已擷取」視覺提示，
+        // 但 PDF 本身是透明 / 深色背景時黃色變灰塊蓋住原內容，視覺干擾大。
+        // 紅虛線 redact marker 已能告訴使用者「原位置會被刪掉」，足夠。
       });
       obj._peType = 'text';
       obj._origBbox = bb.slice();
@@ -1295,6 +1789,13 @@ async function pickExistingObject(fc, p) {
       } else {
         setStatus(`已擷取文字。原位置有虛線框表示儲存時會被真刪除。`);
       }
+      // v1.7.38：pick 完立刻 schedule 一個短延遲的 save（150ms）覆蓋掉
+      // object:added 的 1500ms debounce — 否則 user 看到原 PDF 文字 +
+      // Fabric IText 兩層疊在同位置 1.5 秒（明顯雙影）。150ms 內 BG 套上
+      // redact、IText 淡到 0.01，視覺只剩一份 BG 文字。
+      // v1.7.40：BG 真正重畫完前，loading overlay 繼續顯示避免使用者誤觸。
+      if (pickOverlayShown) _keepLoadingUntilBgReady = true;
+      triggerPickSave();
     } else if (data.kind === 'image') {
       if (!data.thumb_url) {
         setStatus('此圖片無法擷取（可能是 vector）');
@@ -1316,11 +1817,19 @@ async function pickExistingObject(fc, p) {
         lockUntilMouseUp(fc, img);
         fc.setActiveObject(img); fc.requestRenderAll();
         setStatus(`已擷取圖片。原位置有虛線框表示儲存時會被真刪除。`);
+        if (pickOverlayShown) _keepLoadingUntilBgReady = true;  // v1.7.40
+        triggerPickSave();   // 同 text pick：壓制 BG 與 Fabric overlay 雙影 (v1.7.38)
       }, { crossOrigin: 'anonymous' });
     }
   } catch (e) {
-    clearTimeout(ocrHintTimer);
     setStatus('偵測失敗：' + e.message);
+  } finally {
+    cleanupPickOverlay();
+    // 快照還原 scroll — Fabric 內部 hiddenTextarea append 可能讓瀏覽器
+    // auto-scroll，這裡強制復原使用者原本看到的位置。下一個 frame 跑兩次
+    // 確保涵蓋 fabric 在 next tick 才執行 focus 的 case。
+    _restoreScroll();
+    requestAnimationFrame(() => { _restoreScroll(); });
   }
   setTool('select');
 }
@@ -1432,6 +1941,16 @@ function updatePropsPanel() {
   } else {
     html = `<h3>物件</h3><div class="muted">未知類型</div>`;
   }
+  // 層次（z-order）— 適用於所有實際物件，markers / covers 不在此面板出現
+  const _zsvg = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"';
+  html += `
+    <div class="row chip-row" style="margin-top:14px; border-top:1px solid #e5e7eb; padding-top:10px;">
+      <label style="min-width:48px;">層次</label>
+      <button type="button" id="pfZTop"    title="置頂（Cmd+]）"><svg ${_zsvg}><path d="M4 4h16"/><polyline points="7 14 12 9 17 14"/><line x1="12" y1="9" x2="12" y2="20"/></svg></button>
+      <button type="button" id="pfZUp"     title="上一層（]）"><svg ${_zsvg}><polyline points="6 15 12 9 18 15"/></svg></button>
+      <button type="button" id="pfZDown"   title="下一層（[）"><svg ${_zsvg}><polyline points="6 9 12 15 18 9"/></svg></button>
+      <button type="button" id="pfZBottom" title="置底（Cmd+[）"><svg ${_zsvg}><line x1="12" y1="4" x2="12" y2="15"/><polyline points="7 10 12 15 17 10"/><path d="M4 20h16"/></svg></button>
+    </div>`;
   panel.innerHTML = html;
   wirePropsPanel(active);
 }
@@ -1491,11 +2010,10 @@ function wirePropsPanel(active) {
       const ff = fontFamilyForKey(v);
       active.set('fontFamily', ff);
       rerender();
-      // 字型變更要立即重繪（CSS generic 的 serif/sans-serif 看起來常常一樣，
-      // 真正的視覺差別在後端 bake 後 PNG 上看到）— 立刻 trigger save 不
-      // 等 800ms debounce。**includeActive: true** 讓 active 物件這次也被
-      // bake（不然客戶 T 加文字框後改字型，左邊預覽不變 — 因為 active 被
-      // skip）。autoSave 關閉時尊重使用者選擇，需手動按儲存。v1.4.91 修。
+      // 字型改變要立即觸發 save 不等 800ms debounce — backend 重新平面化，
+      // BG 載入後視覺一致。短暫的「BG 舊字 + Fabric 新字」overlap 約 300-500 ms
+      // 是可接受的代價。（v1.7.10–v1.7.14 嘗試插白罩遮蓋 → 反而累積成永久
+      // 殘影，已撤回。）
       if ($('peAutoSave')?.checked) {
         if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
         if (saveInFlight) { pendingSave = true; }
@@ -1550,6 +2068,35 @@ function wirePropsPanel(active) {
   if (pfAngle) pfAngle.addEventListener('input', (e) => { active.set('angle', Number(e.target.value)||0); rerender(); });
   const pfNote = $('pfNote');
   if (pfNote) pfNote.addEventListener('input', (e) => { active._noteText = e.target.value; scheduleAutoSave(); });
+  // 層次（z-order）按鈕：Fabric 5/6 API 不一致，做個 helper 兼容兩者
+  function applyZ(action) {
+    if (!active || !active.canvas) return;
+    const fc = active.canvas;
+    const apiMap = {
+      top:    ['bringObjectToFront', 'bringToFront'],
+      up:     ['bringObjectForward', 'bringForward'],
+      down:   ['sendObjectBackwards', 'sendBackwards'],
+      bottom: ['sendObjectToBack',    'sendToBack'],
+    };
+    const names = apiMap[action];
+    if (!names) return;
+    for (const n of names) {
+      if (typeof fc[n] === 'function') { fc[n](active); break; }
+      if (typeof active[n] === 'function') { active[n](); break; }
+    }
+    // Markers 永遠在最底層；cover 永遠在最上層；重排後重新調整
+    fc.getObjects().forEach(o => {
+      if (o._peMarker && typeof fc.sendObjectToBack === 'function') fc.sendObjectToBack(o);
+      else if (o._peMarker && typeof fc.sendToBack === 'function') fc.sendToBack(o);
+    });
+    fc.requestRenderAll();
+    snapshotHistory();
+    scheduleAutoSave();
+  }
+  const zTop = $('pfZTop'); if (zTop) zTop.addEventListener('click', () => applyZ('top'));
+  const zUp = $('pfZUp'); if (zUp) zUp.addEventListener('click', () => applyZ('up'));
+  const zDown = $('pfZDown'); if (zDown) zDown.addEventListener('click', () => applyZ('down'));
+  const zBot = $('pfZBottom'); if (zBot) zBot.addEventListener('click', () => applyZ('bottom'));
 }
 
 function wireBatchPanel(sel, textKids) {
@@ -1576,7 +2123,7 @@ function wireBatchPanel(sel, textKids) {
     textKids.forEach(o => { o._peFont = v; o.set('fontFamily', fontFamilyForKey(v)); });
     bump();
     // 立即 trigger save（同單選 pfFont），includeActive: true 讓選取的
-    // 物件也被 bake，使用者立刻看到字型差別
+    // 物件也被平面化，使用者立刻看到字型差別
     if ($('peAutoSave')?.checked) {
       if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
       if (saveInFlight) { pendingSave = true; }
@@ -1889,8 +2436,9 @@ function fitPageToView() {
   const pageW_px = page.width_pt * PT2PX;
   const pageH_px = page.height_pt * PT2PX;
   const r = Math.min(availW / pageW_px, availH / pageH_px);
-  // Clamp to slider range 50-200
-  zoom = Math.max(0.5, Math.min(2.0, r));
+  // Clamp to slider range 10-200% — 大尺寸 PDF（海報 / 工程圖 / 高解析掃描）
+  // 縮到 50% 仍會超出視窗（v1.7.34 客戶踩到），下限放寬到 10%。
+  zoom = Math.max(0.1, Math.min(2.0, r));
   // Update UI
   const pct = Math.round(zoom * 100);
   $('zoomSlider').value = pct;
@@ -1898,6 +2446,146 @@ function fitPageToView() {
   applyZoom();
 }
 $('btnFitPage').addEventListener('click', fitPageToView);
+
+// ============ Spacebar hand-pan (v1.7.34) ============
+// 繪圖軟體慣例：按住 Space → 游標變 grab，左鍵拖曳 → 捲動 .pe-canvas-wrap
+// （grabbing）。內容沒捲軸時拖曳實際無作用，但游標仍會變 grab 給使用者
+// 一致回饋。輸入欄 / Fabric IText 編輯中按 Space 視為正常輸入。
+//
+// 為了壓過 Fabric 自己的 mouse 監聽，event 全綁在 document 的 capture
+// phase + stopImmediatePropagation，這樣 Fabric upperCanvas 上的監聽完全
+// 不會被觸發（之前綁在 wrap 的 capture phase 仍偶爾被 Fabric 攔走）。
+(function setupHandPan() {
+  let spaceDown = false;
+  let panAnchor = null;  // {x, y, sl, st, wrap}
+  const wrapEl = () => document.getElementById('canvasWrap');
+
+  // 是否處於「不該觸發 pan 的輸入情境」
+  const inTextEntry = (e) => {
+    const t = (e && e.target) || document.activeElement;
+    if (!t) return false;
+    const tag = (t.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (t.isContentEditable) return true;
+    if (typeof pageCanvases !== 'undefined') {
+      for (const c of pageCanvases) {
+        const a = c.getActiveObject && c.getActiveObject();
+        if (a && (a.isEditing === true)) return true;
+      }
+    }
+    return false;
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space' && e.key !== ' ') return;
+    if (inTextEntry(e)) return;
+    if (spaceDown) { e.preventDefault(); return; }
+    spaceDown = true;
+    document.body.classList.add('pe-pan-mode');
+    e.preventDefault();
+  });
+  document.addEventListener('keyup', (e) => {
+    if (e.code !== 'Space' && e.key !== ' ') return;
+    if (!spaceDown) return;
+    spaceDown = false;
+    document.body.classList.remove('pe-pan-mode');
+    if (panAnchor) endPan();
+  });
+  window.addEventListener('blur', () => {
+    spaceDown = false;
+    document.body.classList.remove('pe-pan-mode');
+    if (panAnchor) endPan();
+  });
+
+  const endPan = () => {
+    panAnchor = null;
+    document.body.classList.remove('pe-pan-active');
+  };
+
+  // document capture-phase — 比 Fabric upperCanvas 上的監聽更早觸發
+  document.addEventListener('mousedown', (e) => {
+    if (!spaceDown || e.button !== 0) return;
+    const wrap = wrapEl();
+    if (!wrap || !wrap.contains(e.target)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    panAnchor = { x: e.clientX, y: e.clientY, sl: wrap.scrollLeft, st: wrap.scrollTop, wrap };
+    document.body.classList.add('pe-pan-active');
+  }, true);
+  document.addEventListener('mousemove', (e) => {
+    if (!panAnchor) return;
+    panAnchor.wrap.scrollLeft = panAnchor.sl - (e.clientX - panAnchor.x);
+    panAnchor.wrap.scrollTop  = panAnchor.st - (e.clientY - panAnchor.y);
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, true);
+  document.addEventListener('mouseup', (e) => {
+    if (!panAnchor) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    endPan();
+  }, true);
+})();
+
+// 全視窗切換 — 不走 OS Fullscreen API；改加 body.pe-max-window class，
+// 讓 #editor-panel 撐滿側欄右側整個 main 區域（保留左側 nav，使用者隨時切回
+// 別的工具）。Esc 或再點按鈕退出。退出時自動 re-fit 一次避免縮放比例不對。
+(function setupMaxView() {
+  const btn = $('btnMaxView');
+  const label = $('btnMaxViewLabel');
+  if (!btn) return;
+  const enter = () => {
+    document.body.classList.add('pe-max-window');
+    // 直接鎖 html overflow（CSS :has() fallback：保證所有瀏覽器都不會出現外層捲軸）
+    document.documentElement.style.overflow = 'hidden';
+    label.textContent = '退出全視窗';
+    btn.title = '退出全視窗（Esc）';
+    setTimeout(() => { try { fitPageToView(); } catch (_) {} }, 60);
+  };
+  const exit = () => {
+    document.body.classList.remove('pe-max-window');
+    document.documentElement.style.overflow = '';
+    label.textContent = '全視窗';
+    btn.title = '全視窗（編輯區擴到右側整個區域，Esc 退出）';
+    setTimeout(() => { try { fitPageToView(); } catch (_) {} }, 60);
+  };
+  btn.addEventListener('click', () => {
+    if (document.body.classList.contains('pe-max-window')) exit(); else enter();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.body.classList.contains('pe-max-window')) {
+      const t = e.target;
+      // 若使用者正在輸入欄裡按 Esc，先讓欄位處理（例如失焦），不退全視窗
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      exit();
+    }
+  });
+  // 視窗 resize 時重 fit 一次
+  window.addEventListener('resize', () => {
+    if (document.body.classList.contains('pe-max-window')) {
+      setTimeout(() => { try { fitPageToView(); } catch (_) {} }, 60);
+    }
+  });
+})();
+
+// ============ Shortcuts popup ============
+(function setupShortcutsPop() {
+  const btn = document.getElementById('btnShortcuts');
+  const pop = document.getElementById('peShortcutsPop');
+  if (!btn || !pop) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    pop.hidden = !pop.hidden;
+  });
+  document.addEventListener('click', (e) => {
+    if (!pop.hidden && !pop.contains(e.target) && e.target !== btn) {
+      pop.hidden = true;
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !pop.hidden) pop.hidden = true;
+  });
+})();
 
 // ============ Prefs popover ============
 const prefsBox = $('peSettings');
@@ -2073,7 +2761,7 @@ async function _doImageUpload(f) {
   fd.append('file', f);
   try {
     const r = await fetch('/tools/pdf-editor/upload-image', {method:'POST', body: fd});
-    if (!r.ok) { status.textContent = '上傳失敗：' + await r.text(); return; }
+    if (!r.ok) { status.textContent = await friendlyServerError(r, '上傳失敗'); return; }
     const d = await r.json();
     $('assetPicker').style.display = 'none';
     status.textContent = '';
@@ -2114,7 +2802,33 @@ $('apUploadInput').addEventListener('change', () => {
 })();
 
 // ============ Save ============
-$('btnSave').addEventListener('click', () => savePdf(false));
+// 手動「儲存並預覽」一律 includeActive — 確保 active 物件也被平面化進 BG /
+// 下載 PDF。否則使用者新加文字框 → 沒先 deselect → 按下載 → 下載檔少了
+// 那個文字框（save 一直 skip active）。v1.7.21 修。
+$('btnSave').addEventListener('click', () => savePdf(false, { includeActive: true }));
+
+// 「下載」按鈕：先強制 save (includeActive) 把 active 物件平面化進去，再
+// 開下載 URL。否則 user 編輯到一半（active 物件還在編輯狀態）就按下載 →
+// 拿到的 PDF 缺最新 active 內容（auto-save 一直 skip active）。v1.7.21 修。
+$('btnDownload').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const btn = e.currentTarget;
+  const url = btn._downloadUrl;
+  if (!url) return;
+  // 先存一次 (includeActive=true) 確保 active 物件在最新 BG 內。
+  // v1.7.37：isAuto=false 強制走 garbage=4 整理 — 之前 autosave 累積的
+  // 低 garbage 版本可能有未引用物件殘留，下載前一次性整理乾淨。
+  try { await savePdf(false, { includeActive: true }); } catch (_) {}
+  // 用更新後的 _downloadUrl（save 完會重設）
+  const finalUrl = btn._downloadUrl || url;
+  // 用程式化 anchor 觸發下載（href + download attr）
+  const a = document.createElement('a');
+  a.href = finalUrl;
+  a.download = btn._downloadName || 'edited.pdf';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+});
 // 下載按鈕：純 anchor + download attribute + server 回 attachment header
 // 是最簡單也最跨瀏覽器穩的設計。savePdf() 完成後設好 href / download。
 // (v1.1.93~95 為了追一個 Chrome 擴充攔截 download 的環境問題加了一堆
@@ -2139,14 +2853,14 @@ $('gfGo').addEventListener('click', async () => {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({upload_id: uploadId, font_id}),
     });
-    if (!r.ok) { status.textContent = '失敗：' + await r.text(); hideLoading(); return; }
+    if (!r.ok) { status.textContent = await friendlyServerError(r, '失敗'); hideLoading(); return; }
     const data = await r.json();
     // Refresh each page's background thumbnail (same technique as save)
     document.querySelectorAll('.pe-page img.bg').forEach((img, i) => {
       if (data.pages[i]) img.src = data.pages[i].preview_url;
     });
     // 換字型只改 src.pdf，下載用的 out.pdf 還是舊的 — 馬上觸發一次 savePdf
-    // 把目前 overlay 加新 src bake 進 out.pdf，使用者下載才拿得到新字型版。
+    // 把目前 overlay 加新 src 平面化進 out.pdf，使用者下載才拿得到新字型版。
     status.textContent = `完成！已重繪 ${data.replaced} 段文字，正在更新下載檔…`;
     try { await savePdf(true); } catch (_e) {}
     status.textContent = `完成！已重繪 ${data.replaced} 段文字，下載檔已更新。`;
@@ -2187,7 +2901,7 @@ function _showUndoReplaceFonts(replaced) {
         body: JSON.stringify({upload_id: uploadId}),
       });
       if (!r.ok) {
-        showAlert('復原失敗：' + await r.text());
+        showAlert(await friendlyServerError(r, '復原失敗'));
         undoBtn.disabled = false;
         return;
       }
@@ -2214,23 +2928,64 @@ function showLoading(text) {
 }
 function hideLoading() { $('peLoading').classList.remove('show'); }
 
+// 重繪期間：body 加 .pe-flattening → 全頁游標變 progress（OS spinner），訊息列
+// 由 setStatus('重繪中…') 顯示。refcount 處理多個並發 save。v1.7.24。
+let _flattenRefcount = 0;
+function flattenStart() {
+  _flattenRefcount += 1;
+  document.body.classList.add('pe-flattening');
+}
+function flattenEnd() {
+  _flattenRefcount = Math.max(0, _flattenRefcount - 1);
+  if (_flattenRefcount === 0) document.body.classList.remove('pe-flattening');
+}
+
 async function savePdf(isAuto, opts) {
   opts = opts || {};
   if (!uploadId) return;
-  if (!isAuto) setStatus('儲存中…');
-  else setStatus('自動儲存中…');
+  setStatus(isAuto ? '重繪中…' : '儲存並重繪中…');
   // Full-screen overlay only on manual save — auto-save shouldn't cover
   // the canvas because it hides the object the user is editing.
   if (!isAuto) showLoading('儲存並重繪中…');
-  const model = { upload_id: uploadId, pages: [] };
+  // 重繪期間 body 加 .pe-flattening → 全頁游標變 OS progress spinner。
+  flattenStart();
+  // bgLoadedPromises 宣告在 try 外 — finally 要等這些 promise resolve 才收
+  // overlay；try 內透過 .push() 累加，不重新賦值。
+  const bgLoadedPromises = [];
+  // 把當前 dirty pages snapshot 起來；savePdf 進行中若有新編輯，那些是
+  // 「下一次 save」的責任，不要在這次 save 完成後 clear 掉。
+  const dirtyForThisSave = [...dirtyPages];
+  dirtyPages.clear();
+  const model = {
+    upload_id: uploadId,
+    pages: [],
+    dirty_pages: dirtyForThisSave,  // 給後端決定只重渲染哪些頁的 preview PNG
+    // v1.7.37：is_auto = true 讓後端用 garbage=1 / 不 deflate 快速序列化
+    // （autosave 高頻觸發，省 ~50% 時間）；manual save / 下載前的 forced
+    // save 走 garbage=4 整理乾淨。
+    is_auto: !!isAuto,
+  };
   // Active object per canvas — skip it during this save so the background
   // PDF doesn't duplicate its rendering on top of the Fabric overlay the
   // user is actively editing. Next save (after deselect) bakes it in.
-  // opts.includeActive=true：font 換完後立刻 bake 即時看到差別（v1.4.91 修
+  // opts.includeActive=true：font 換完後立刻平面化 即時看到差別（v1.4.91 修
   // 客戶反映「T 加文字框後改字型左邊預覽不變」— 因為原本一律 skip active）。
+  //
+  // v1.7.21 修「移動既有 PDF 物件時 OLD 位置原文復活」殘影：只 skip「全新
+  // 未平面化」的物件（既無 _peSaved 也無 _origBbox 的）；已平面化物件或從 PDF
+  // 擷取出來的，一律 include — 否則 backend 沒收到該物件 → 沒 redact /
+  // 沒 insert → BG 重新平面化時原 PDF 內容就會「跑出來」。
   const activePerCanvas = opts.includeActive
     ? pageCanvases.map(_ => null)
-    : pageCanvases.map(fc => fc.getActiveObject());
+    : pageCanvases.map(fc => {
+        const a = fc.getActiveObject();
+        if (!a) return null;
+        // 已平面化 / 從 PDF 擷取的物件 → include（不 skip）
+        if (a._peSaved || a._origBbox) return null;
+        // 全新未平面化物件（剛 T 工具新加、還在輸入文字、還沒任何 save 平面化過）
+        // → 仍 skip，避免初次創建時 BG 平面化 跟 Fabric 雙層重疊
+        return a;
+      });
   let anySkipped = false;
   pageCanvases.forEach((fc, pIdx) => {
     const objs = [];
@@ -2240,6 +2995,7 @@ async function savePdf(isAuto, opts) {
     if (skipObj) anySkipped = true;
     fc.getObjects().forEach((o) => {
       if (o._peMarker) return;   // visual-only redact preview, not serialized
+      if (o._peCover) return;    // visual-only whiteout cover (font-change anti-flash), not serialized
       if (o === skipObj) return; // live-edit object — leave it as Fabric overlay only
       // Phase-3 deletions: AcroForm widgets + vector drawings
       if (o._peType === 'widget_delete') {
@@ -2391,23 +3147,27 @@ async function savePdf(isAuto, opts) {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify(model),
     });
-    if (!r.ok) { setStatus('儲存失敗：' + await r.text(), 'error'); return; }
+    if (!r.ok) { setStatus(await friendlyServerError(r, '儲存失敗'), 'error'); return; }
     const data = await r.json();
     pages = data.pages;
-    // 換背景圖時拿一個 promise 等載入完成 — 後面 includeActive 路徑要在
-    // 新 BG 真的載入後才把 active object 淡掉，避免「換字型瞬間 IText 還在
-    // 畫舊字 + 舊 BG 還沒換 → 視覺重疊」(font-overlap bug v1.7.9)
-    const bgLoadedPromises = [];
+    // bgLoadedPromises 已在 try 外宣告（給 finally 用）；這裡直接 push 即可
+    // v1.7.18：只 cache-bust + 重載 dirtyForThisSave 內的頁，其他頁的 PNG
+    // 沒重新渲染（後端跳過了），重設 img.src 反而觸發無謂的網路 request。
+    // dirtyForThisSave 為空（初次儲存 / 強制全部重 render） → 重載全部。
+    const refreshAll = !dirtyForThisSave.length;
+    const dirtySet = new Set(dirtyForThisSave);
     document.querySelectorAll('.pe-page img.bg').forEach((img, i) => {
-      if (data.pages[i]) {
-        bgLoadedPromises.push(new Promise((resolve) => {
-          const done = () => { img.removeEventListener('load', done); img.removeEventListener('error', done); resolve(); };
-          img.addEventListener('load', done);
-          img.addEventListener('error', done);
-          img.src = data.pages[i].preview_url + '?t=' + Date.now();
-        }));
-      }
+      if (!data.pages[i]) return;
+      if (!refreshAll && !dirtySet.has(i)) return;  // skip clean pages
+      bgLoadedPromises.push(new Promise((resolve) => {
+        const done = () => { img.removeEventListener('load', done); img.removeEventListener('error', done); resolve(); };
+        img.addEventListener('load', done);
+        img.addEventListener('error', done);
+        img.src = data.pages[i].preview_url + '?t=' + Date.now();
+      }));
     });
+    // Also refresh left thumbnail strip for the same dirty pages
+    refreshThumbsForPages(refreshAll ? pages.map((_, i) => i) : dirtyForThisSave);
     const dl = $('btnDownload');
     // 直接記住 url，給 click handler 用（不靠 anchor href + download attr，
     // 那組合在某些瀏覽器擴充 / autosave 環境下會被攔截不下載）。
@@ -2420,70 +3180,103 @@ async function savePdf(isAuto, opts) {
     // replays all edits on pristine SRC, so state must persist across
     // saves. The user can explicitly delete markers to cancel redactions.
     // Fade all overlay objects to near-invisible after save — the
-    // background PDF now shows them baked in. EXCEPT the currently
+    // background PDF now shows them flattened in. EXCEPT the currently
     // selected object (preserve selection across auto-save so the user
     // keeps editing the same thing without re-clicking).
     pageCanvases.forEach((fc, pIdx) => {
       const stillSelected = fc.getActiveObject();
-      // The active object was SKIPPED from this bake (savePdf skips
+      // The active object was SKIPPED from this flatten (savePdf skips
       // skipObj per canvas), so do NOT mark it _peSaved — otherwise
       // selection:cleared will fade it to opacity 0.01 even though the
-      // background PDF doesn't have it baked, making the object look
+      // background PDF doesn't have it flattened, making the object look
       // blank/empty after deselecting (#6 bug regression 2026-05).
       const skippedActive = activePerCanvas[pIdx];
-      // Track which obj _peId got baked, so we can dim their markers below
-      const bakedOwnerIds = new Set();
+      // Track which obj _peId got flattened, so we can dim their markers below
+      const flattenedOwnerIds = new Set();
       fc.getObjects().forEach(o => {
         if (o._peMarker) return;
+        if (o._peCover) return;
         if (o === skippedActive) {
-          // Stay opaque; not yet baked into BG. Subsequent save (after
-          // deselect) will bake it and only then mark _peSaved.
+          // Stay opaque; not yet flattened into BG. Subsequent save (after
+          // deselect) will flatten it and only then mark _peSaved.
           o.set('opacity', 1);
           return;
         }
         o._peSaved = true;
-        if (o._peId) bakedOwnerIds.add(o._peId);
-        if (o === stillSelected) {
-          o.set('opacity', 1);
-        } else {
-          o.set('opacity', 0.01);
-        }
+        // Record where BG just flattened this — so future move can mask the OLD
+        // position with a temporary _peCover (object:modified handler reads
+        // this; v1.7.11 ghost-on-move fix).
+        o._lastFlattenedBbox = {
+          left: o.left, top: o.top,
+          width: o.getScaledWidth(), height: o.getScaledHeight(),
+        };
+        if (o._peId) flattenedOwnerIds.add(o._peId);
+        // v1.7.27：選中物件也要淡掉 — 之前保留 opacity:1 給「使用者
+        // 還在編輯/選中」的物件，但 BG 已平面化該物件 → Fabric overlay 與
+        // BG 兩層同位置 → 視覺重疊。Fabric selection 控制把手 (handles)
+        // 仍會獨立繪製不受 obj.opacity 影響，使用者選取狀態不會丟失。
+        // 真要編輯文字內容雙擊進 editing 模式 → text:editing:entered
+        // 自動 set opacity=1 還原視覺。
+        o.set('opacity', 0.01);
       });
-      // Dim markers whose owner has been baked — once redact applied + new
-      // text inserted into BG, the white-filled marker would HIDE the new
-      // baked text from the user (#6 root cause v1.4.16). Keep red dashed
-      // border visible (so user knows redact zone) but make fill transparent.
-      fc.getObjects().forEach(o => {
-        if (!o._peMarker) return;
-        if (o._ownerId && bakedOwnerIds.has(o._ownerId)) {
-          o.set({fill: 'rgba(255,255,255,0)'});  // 透明 fill，邊框保留
-        }
-      });
+      // v1.7.27：marker 已平面化 → 直接 remove（之前只清 fill 留紅虛線框，
+      // 但使用者覺得殘留紅框視覺干擾）。OLD 位置原內容已被 redact 進 BG，
+      // marker 任務完成可移除。
+      const toRemove = fc.getObjects().filter(o =>
+        o._peMarker && o._ownerId && flattenedOwnerIds.has(o._ownerId));
+      toRemove.forEach(o => fc.remove(o));
       if (stillSelected) fc.setActiveObject(stillSelected);
       fc.requestRenderAll();
     });
     // Remember if we skipped the active object, so selection:cleared
-    // can trigger a follow-up save to finally bake it in.
+    // can trigger a follow-up save to finally flatten it in.
     needBakeOnDeselect = anySkipped;
-    // includeActive 模式：active 物件已被 bake 進新 BG。等 BG 真的載入後
+    // includeActive 模式：active 物件已被 平面化進新 BG。等 BG 真的載入後
     // 把 active 也淡掉（保留選取 / 控制把手 / 屬性面板，但避免兩層重疊）。
-    // 此時 user 看到的就是新 BG 的 baked 版本；要繼續編輯文字內容點兩下
+    // 此時 user 看到的就是新 BG 的平面化版本；要繼續編輯文字內容點兩下
     // 會 trigger text:editing:entered 自動 set opacity=1 還原。
-    if (opts.includeActive && bgLoadedPromises.length) {
+    // 任何 save 完成後都要移除暫時白罩 (object:modified 在 move / resize 時加的，
+    // 也包含 font-change includeActive=true 加的)。之前只在 includeActive 時清，
+    // 結果一般 move 累積一堆白罩永久蓋在原物件上 → 客戶看到底層 PDF 框線被切斷。
+    if (bgLoadedPromises.length) {
       Promise.all(bgLoadedPromises).then(() => {
         pageCanvases.forEach(fc => {
-          const a = fc.getActiveObject();
-          if (a && !a._peMarker) {
-            a._peSaved = true;
-            a.set('opacity', 0.01);
+          fc.getObjects().filter(o => o._peCover).forEach(o => fc.remove(o));
+          if (opts.includeActive) {
+            const a = fc.getActiveObject();
+            if (a && !a._peMarker) {
+              a._peSaved = true;
+              a.set('opacity', 0.01);
+            }
           }
           fc.requestRenderAll();
         });
       });
     }
     setStatus(isAuto ? '已自動儲存。' : '已儲存。預覽已更新，點「下載 PDF」取回。', 'saved');
-  } catch (e) { setStatus('儲存錯誤：' + e.message, 'error'); }
-  finally { if (!isAuto) hideLoading(); }
+  } catch (e) {
+    setStatus('儲存錯誤：' + e.message, 'error');
+    // Save failed — restore dirty pages so next save retries those pages
+    dirtyForThisSave.forEach(p => dirtyPages.add(p));
+    // Save failed — remove whiteout covers so they don't stay stuck on canvas
+    pageCanvases.forEach(fc => {
+      fc.getObjects().filter(o => o._peCover).forEach(o => fc.remove(o));
+      fc.requestRenderAll();
+    });
+  }
+  finally {
+    if (!isAuto) hideLoading();
+    // 等 BG image 真的載完才收 cursor；try 失敗時 bgLoadedPromises 是空陣列
+    // → Promise.all([]) 立刻 resolve → cursor 也立刻還原。
+    Promise.all(bgLoadedPromises).finally(() => {
+      flattenEnd();
+      // v1.7.40：BG 真正畫完後，pick 啟動的 loading overlay 才收。
+      if (_keepLoadingUntilBgReady) {
+        _keepLoadingUntilBgReady = false;
+        hideLoading();
+      }
+    });
+  }
 }
 
 function suggestedFilename() {

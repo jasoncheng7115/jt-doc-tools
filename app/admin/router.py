@@ -904,14 +904,14 @@ def build_router(templates) -> APIRouter:
     # ---- 系統相依套件檢查 -----------------------------------------------------
     @router.get("/sys-deps", response_class=HTMLResponse)
     async def sys_deps_page(request: Request):
-        from ..core.sys_deps import collect_sys_deps
+        # 不在這裡 collect — 改由前端載完頁面後 fetch /admin/api/sys-deps，避免
+        # 探測 binaries / 跑 subprocess 阻塞首屏（之前進頁要等 ~1-2 秒）。
         from ..main import VERSION as _app_version
-        deps = collect_sys_deps()
         return templates.TemplateResponse(
             "sys_deps.html",
             {
                 "request": request,
-                "deps": deps,
+                "deps": [],  # placeholder — JS will populate
                 "app_version": _app_version,
             },
         )

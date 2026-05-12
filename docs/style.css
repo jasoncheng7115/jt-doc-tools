@@ -628,39 +628,78 @@ code {
 .sod-table-wrap {
   overflow-x: auto;
   margin: 28px 0 36px;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.06);
 }
 .sod-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   background: var(--card);
-  font-size: 14.5px;
+  font-size: 14px;
 }
 .sod-table th, .sod-table td {
   padding: 14px 18px;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #f1f5f9;
   vertical-align: top;
 }
-.sod-table thead th {
-  background: var(--indigo-light);
-  color: var(--indigo-dark);
-  font-weight: 700;
-  white-space: nowrap;
+.sod-table th {
+  text-align: left;
 }
-.sod-table thead th:first-child { width: 38%; }
+.sod-table thead th {
+  background: linear-gradient(180deg, #eef2ff 0%, #e0e7ff 100%);
+  color: #312e81;
+  font-weight: 700;
+  font-size: 13.5px;
+  letter-spacing: 0.2px;
+  border-bottom: 2px solid #c7d2fe;
+  padding: 16px 18px;
+}
+.sod-table thead th:first-child {
+  width: 36%;
+  border-top-left-radius: 12px;
+}
+.sod-table thead th:last-child { border-top-right-radius: 12px; }
+.sod-table thead th:nth-child(2),
+.sod-table thead th:nth-child(3) { width: 32%; text-align: center; }
+.sod-table tbody td:first-child { color: #1f2937; font-weight: 500; }
+.sod-table tbody td:nth-child(2),
+.sod-table tbody td:nth-child(3) { text-align: center; }
+.sod-table tbody tr:nth-child(even) td { background: #fafbfc; }
 .sod-table tbody tr:last-child td { border-bottom: none; }
-.sod-table tbody tr:hover { background: rgba(99,102,241,0.04); }
-.sod-table .ok { color: #16a34a; font-weight: 600; white-space: nowrap; }
-.sod-table .no { color: #dc2626; font-weight: 600; white-space: nowrap; }
-.sod-table .muted { color: var(--text-3); font-size: 12.5px; font-weight: 400; }
-.sod-table code {
-  background: var(--code-bg, #f1f5f9);
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-family: var(--font-mono);
+.sod-table tbody tr:last-child td:first-child { border-bottom-left-radius: 12px; }
+.sod-table tbody tr:last-child td:last-child { border-bottom-right-radius: 12px; }
+.sod-table tbody tr:hover td { background: #eef2ff; transition: background .15s ease; }
+.sod-table .ok {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: #15803d; font-weight: 600; white-space: nowrap;
+  background: #dcfce7; padding: 3px 10px; border-radius: 999px;
   font-size: 13px;
+}
+.sod-table .no {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: #b91c1c; font-weight: 600; white-space: nowrap;
+  background: #fee2e2; padding: 3px 10px; border-radius: 999px;
+  font-size: 13px;
+}
+.sod-table .muted { color: var(--text-3); font-size: 12.5px; font-weight: 400; }
+.sod-table thead th .muted { color: #6366f1; opacity: 0.85; font-weight: 500; }
+.sod-table code {
+  background: rgba(255,255,255,0.7);
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+}
+.sod-table thead th code {
+  background: rgba(255,255,255,0.85);
+  color: #1e1b4b;
+  font-size: 13px;
+  font-weight: 700;
 }
 /* 標題列的 <code> 拿掉 padding / 背景，避免 jtdt-admin 比下一行
    「系統管理員」往右縮進 — 視覺上對齊欄位左邊界。 */

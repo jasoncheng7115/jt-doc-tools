@@ -1,4 +1,4 @@
-# Jason Tools 文件工具箱 v1.7.9
+# Jason Tools 文件工具箱 v1.7.40
 
 > 整合式 PDF / Office 文件處理平台，32 個工具一站式解決：**填單用印**、**浮水印**、**多頁合併 / 拆分 / 旋轉 / 整理**、**轉檔**、**去識別化**、**字數統計**、**註解整理**、**差異比對**、**逐句翻譯**、**頁面編輯器**、**加密 / 解密**...
 >
@@ -69,7 +69,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 - **擷取文字 / 圖片 / 附件** — 含 LLM 段落重排選項
 - **字數統計** — 表格 + 圖表 + LLM 摘要
 - **註解整理 / 清除 / 平面化**
-- **OCR 文字辨識** — 掃描 PDF / 圖片跑 OCR 後變可搜尋、可滑鼠選取複製（同 macOS 預覽程式 Live Text 概念）；雙引擎（**EasyOCR** 預設，CJK 強；**Tesseract** 備援），可選 LLM 校正 typo
+- **OCR 文字辨識** — 掃描 PDF / 圖片跑 OCR 後變可搜尋、可滑鼠選取複製（同 macOS 預覽程式 Live Text 概念）；雙引擎（**EasyOCR** 預設，中日韓辨識準確度高；**Tesseract** 備援），可選 LLM 校正 typo
 - **送件前檢核** — 批次驗收：頁面尺寸、字型嵌入、欄位完整、敏感資料殘留、隱藏內容
 
 ### 格式轉換 [需 OxOffice/LibreOffice]

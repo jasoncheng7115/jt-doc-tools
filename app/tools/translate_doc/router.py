@@ -253,13 +253,57 @@ def _build_prompt(src_text: str, source_lang: str, target_lang: str,
         + tw_terminology
         + domain_hint +
         "只輸出翻譯結果，不要附上原文、不要加任何標記、不要解釋、"
-        "不要 markdown、不要前綴、不要後綴。"
+        "不要 markdown、不要行首符號、不要後綴。"
         "如果原文是專有名詞或無法翻譯，照原樣輸出即可。\n\n"
         f"原文：{src_text}"
     )
 
 
 _FILLER_RE = re.compile(r"^[\s_\-=·.•◦▪■◇◆●○※—–…]+$")
+# 「不需翻譯的純標記行」— 例：markdown code fence (``` / ~~~ 可帶語言名)、
+# horizontal rule (--- / *** / ___)、純符號 / emoji、URL only。LLM 收到這
+# 類輸入會掰一句「Please provide the text to translate」回來，造成譯文欄
+# 雜訊。直接 passthrough 回原文，譯文留空。
+_NOTRANSLATE_RES = (
+    re.compile(r"^\s*(`{3,}|~{3,})\s*[A-Za-z0-9_+\-.#]*\s*$"),  # ``` python / ~~~ bash
+    re.compile(r"^\s*(\*\s*){3,}\s*$"),                          # *** thematic break
+    re.compile(r"^\s*[`~*#>]\s*$"),                              # 單個 markdown 標記
+    re.compile(r"^\s*<[^>]+>\s*$"),                              # 純 HTML tag 一行
+    re.compile(r"^\s*https?://\S+\s*$"),                          # 純 URL 一行
+    re.compile(r"^[\s|+\-=]{3,}$"),                              # 表格分隔線 |---|---|
+)
+
+
+def _is_no_translate(src: str) -> bool:
+    """回 True 表示這行只是 markdown / 標點 / 符號，不該送 LLM。"""
+    if _FILLER_RE.match(src):
+        return True
+    for r in _NOTRANSLATE_RES:
+        if r.match(src):
+            return True
+    return False
+
+
+# 抽出行首 markdown / 縮排行首符號（list bullet、blockquote、heading、checkbox 等）
+# 翻完後再補回譯文，免得 LLM 把 "- 裝置雙向同步" 翻成 "Two-way device sync" 漏掉「- 」
+_LINE_PREFIX_RE = re.compile(
+    r"^(\s*"                          # 縮排
+    r"(?:[-*+]\s+(?:\[[ xX]\]\s+)?"   # - / * / + bullet，可帶 [x] checkbox
+    r"|\d+\.\s+"                      # 1. 2. 3. 列表
+    r"|>\s+"                          # > blockquote
+    r"|#{1,6}\s+"                     # # / ## / ### 標題
+    r")?)(.*)$",
+    re.DOTALL,
+)
+
+
+def _split_line_prefix(src: str) -> tuple[str, str]:
+    """回 (prefix, body)。沒行首符號時 prefix=''，body=src。"""
+    m = _LINE_PREFIX_RE.match(src)
+    if not m:
+        return "", src
+    prefix, body = m.group(1) or "", m.group(2) or ""
+    return prefix, body
 
 
 def _translate_one(client, model: str, src: str,
@@ -270,11 +314,19 @@ def _translate_one(client, model: str, src: str,
     不 raise — caller 用 list 收集所有結果。"""
     if not src.strip():
         return {"src": src, "translated": "", "error": ""}
-    # 「填寫位」(form blank fields like ___________) 不送 LLM — 直接 echo
-    # 原樣，譯文欄維持空白（前端會顯示「（填寫位）」），保留原文版面對齊。
-    if _FILLER_RE.match(src):
+    # 「填寫位」(form blank fields like ___________) 與 markdown 標記行
+    # （``` / ~~~ / *** / 純符號 / URL / 表格分隔線）不送 LLM — 直接 passthrough，
+    # 譯文欄維持空白（前端會顯示「（填寫位）」），保留原文版面對齊。送 LLM 反而
+    # 會回「Please provide the text to translate」之類雜訊。
+    if _is_no_translate(src):
         return {"src": src, "translated": "", "error": "", "skipped": "filler"}
-    prompt = _build_prompt(src, source_lang, target_lang, domain=domain)
+    # 抽出 markdown / 列表行首符號（如 "- "、"1. "、"> "、"## "），只送 body 給 LLM，
+    # 譯文回來後再補回行首符號 — 不然 LLM 常會吃掉行首符號只翻內容。
+    prefix, body = _split_line_prefix(src)
+    if not body.strip():
+        # 整行就是個行首符號（例 "- " 後面什麼都沒）— 不送 LLM
+        return {"src": src, "translated": "", "error": "", "skipped": "filler"}
+    prompt = _build_prompt(body, source_lang, target_lang, domain=domain)
     try:
         resp = client.text_query(
             prompt=prompt, model=model, temperature=0.0, think=False,
@@ -282,6 +334,11 @@ def _translate_one(client, model: str, src: str,
         translated = (resp or "").strip()
         translated = re.sub(r"^(翻譯[:：]?\s*|Translation:\s*)",
                             "", translated, flags=re.IGNORECASE)
+        # 防 LLM 自己又加上同樣的行首符號 → 重複
+        if prefix and translated.startswith(prefix.strip()):
+            translated = translated[len(prefix.strip()):].lstrip()
+        if prefix:
+            translated = prefix + translated
         return {"src": src, "translated": translated, "error": ""}
     except Exception as e:
         return {"src": src, "translated": "", "error": f"LLM 失敗：{e}"}

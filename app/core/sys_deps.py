@@ -425,7 +425,7 @@ _DEPS = [
     },
     {
         "key": "oxoffice-x11-libs",
-        "label": "OxOffice / LibreOffice 執行時依賴 X11 lib",
+        "label": "OxOffice / LibreOffice X11 函式庫",
         "category": "文書轉檔",
         "impact": "OxOffice 與 LibreOffice 的 oosplash 啟動時會 dlopen libXinerama / libXrandr / libXcursor 等 X11 client lib（即使 --headless 模式也一樣）。Debian / Ubuntu 的 minimal / server 安裝沒有這些 lib，缺的話 office-to-pdf、pdf-to-image、文件差異比對等需轉檔的工具會失敗，錯誤訊息類似「libXinerama.so.1: cannot open shared object file: No such file or directory」。",
         "impact_en": "OxOffice and LibreOffice oosplash dlopens X11 client libs (libXinerama / libXrandr / libXcursor / ...) at startup even in --headless mode. Debian/Ubuntu minimal/server installs lack these libs; missing => office-to-pdf, pdf-to-image, doc-diff fail with 'libXinerama.so.1: cannot open shared object file: No such file or directory'.",
@@ -483,7 +483,7 @@ _DEPS = [
         "key": "easyocr",
         "label": "EasyOCR (主 OCR 引擎)",
         "category": "OCR",
-        "impact": "v1.7.2 起的主 OCR 引擎，CJK 識別率明顯優於 tesseract（per-line bbox + LSTM-based）。沒裝會自動降回 tesseract。重型依賴：pulls in PyTorch (~700MB)。",
+        "impact": "v1.7.2 起的主 OCR 引擎，中日韓辨識準確度明顯優於 tesseract（per-line bbox + LSTM-based）。沒裝會自動降回 tesseract。重型依賴：pulls in PyTorch (~700MB)。",
         "impact_en": "Primary OCR engine since v1.7.2 (CJK accuracy >> tesseract). Falls back to tesseract if missing.",
         "soft": True,
         "probe": lambda: _probe_python_pkg("easyocr"),
