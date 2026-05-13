@@ -4,6 +4,26 @@
 
 ---
 
+## [1.7.71] - 2026-05-13
+
+### 新增
+
+- **`einvoice-scan` 連續掃描模式（WebRTC + jsQR）**：M1 階段每張發票都要走「拍照 → 確認 → 上傳」的流程麻煩。新增 third 模式「連續掃描」：
+  - WebRTC `getUserMedia` 開相機 live preview，jsQR 在 browser 內每 frame decode（無需上傳影像）
+  - 對著發票 → 自動掃 → 加入 buffer → 視覺 flash 反饋 → 繼續對下一張
+  - 防短時間重複（同 QR 2 秒內不重打 endpoint）
+  - 跨裝置即時同步（電腦端 polling 同步看到）
+  - 不可用時 button auto-disable + 顯示原因（HTTPS 缺 / 不支援 / lib 沒載入）
+- **新 endpoint `POST /scan-text`**：收 pre-decoded QR 字串列表（無影像），給 jsQR client 用，比 `/scan` 快很多
+- **vendor jsQR v1.4.0**（Apache 2.0，cozmo/jsQR）到 `static/vendor/jsqr/`
+
+### 改進
+
+- UI 由兩種模式變三種：連續掃描 / 拍照相簿 / 上傳拖放
+- 響應式 grid 在 ≥720px 變成三欄（手機仍單欄堆疊）
+
+---
+
 ## [1.7.70] - 2026-05-13
 
 ### 新增

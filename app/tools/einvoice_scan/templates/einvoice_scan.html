@@ -14,8 +14,56 @@
   grid-template-columns: 1fr;
   gap: 10px;
 }
+/* 連續掃描按鈕 disabled 狀態 — 沒 HTTPS 時 */
+.es-drop.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #f1f5f9 !important;
+  border-style: dashed !important;
+  border-color: #cbd5e1 !important;
+}
+.es-drop.disabled:hover { background: #f1f5f9 !important; border-color: #cbd5e1 !important; }
+.es-drop.disabled input { pointer-events: none; }
+.es-drop.disabled .ic { color: #94a3b8 !important; }
 @media (min-width: 720px) {
-  .es-uploader { grid-template-columns: 1fr 1fr; }
+  .es-uploader { grid-template-columns: 1fr 1fr 1fr; }
+}
+
+/* 連續掃描 — 相機 live preview */
+.es-live {
+  background: #1e293b; color: #fff;
+  border-radius: 10px; padding: 18px;
+  display: flex; flex-direction: column; gap: 10px;
+  align-items: center;
+}
+.es-live video {
+  width: 100%; max-width: 480px; max-height: 360px;
+  border-radius: 8px; background: #000;
+  object-fit: cover;
+}
+.es-live .live-status {
+  font-size: 13px; opacity: 0.85; min-height: 18px;
+}
+.es-live .live-counter {
+  font-size: 20px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.es-live .live-counter b { color: #34d399; }
+.es-live button {
+  background: #ef4444; color: #fff; border: 0;
+  padding: 10px 24px; font-size: 14px; font-weight: 600;
+  border-radius: 6px; cursor: pointer;
+}
+.es-live button:hover { background: #dc2626; }
+.es-live .err {
+  background: #7f1d1d; color: #fee2e2; padding: 10px;
+  border-radius: 6px; font-size: 12px; max-width: 480px;
+}
+
+/* 掃到 QR 時 video 邊框閃綠色 */
+.es-live video.flash {
+  outline: 4px solid #34d399;
+  outline-offset: -4px;
 }
 
 .es-drop {
@@ -114,20 +162,34 @@
 <div class="panel">
   <h2 style="margin-top:0;">1. 上傳發票</h2>
   <div class="es-uploader">
+    <label class="es-drop" id="liveBtn" style="background:#eff6ff; border-color:#2563eb;">
+      <input type="button" hidden id="liveStartTrigger">
+      <span class="ic" style="color:#2563eb;">{{ icon('qr', size=32) }}</span>
+      <span class="ttl" id="liveBtnTitle">連續掃描（相機）</span>
+      <span class="desc" id="liveBtnDesc">手機推薦 — 對著發票自動掃，不用一張一張按</span>
+    </label>
     <label class="es-drop">
       <input type="file" id="cameraInput" accept="image/*" capture="environment" multiple>
       <span class="ic">{{ icon('image', size=32) }}</span>
       <span class="ttl">拍照 / 從相簿選</span>
-      <span class="desc">手機按此會啟動相機；可一次選多張</span>
+      <span class="desc">無 HTTPS 環境用此；可一次選多張</span>
     </label>
     <label class="es-drop" id="dropZone">
       <input type="file" id="fileInput" accept="image/*,application/pdf" multiple>
       <span class="ic">{{ icon('paperclip', size=32) }}</span>
       <span class="ttl">上傳檔案 / 拖放</span>
-      <span class="desc">支援 PNG / JPG / WebP / PDF（一份可含多張）</span>
+      <span class="desc">支援 PNG / JPG / WebP / PDF</span>
     </label>
   </div>
   <div class="es-status" id="status"></div>
+
+  <!-- 連續掃描的 live preview 區，預設隱藏 -->
+  <div class="es-live" id="liveBox" hidden style="margin-top: 14px;">
+    <video id="liveVideo" autoplay playsinline muted></video>
+    <div class="live-counter">本次已掃描：<b id="liveCount">0</b> 張</div>
+    <div class="live-status" id="liveStatus">對準發票 QR Code…</div>
+    <button type="button" id="liveStop">停止掃描</button>
+  </div>
 </div>
 
 <div class="panel">
@@ -170,6 +232,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/vendor/jsqr/jsQR.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 
@@ -346,5 +409,168 @@ $('autoRefresh').addEventListener('change', e => {
 // 初始載入 + 開啟 polling
 loadBuffer();
 if ($('autoRefresh').checked) startPolling();
+
+// ─── 連續掃描（WebRTC + jsQR）───
+// 三種模式並列：(1) 連續掃描 (2) 拍照/相簿 (3) 拖放上傳
+// 連續掃描需要 secure context (HTTPS / localhost) + getUserMedia 支援
+// 不可用時 button disabled + 顯示原因
+const liveBtn = $('liveBtn');
+const liveBox = $('liveBox');
+const liveVideo = $('liveVideo');
+const liveStop = $('liveStop');
+const liveCount = $('liveCount');
+const liveStatusEl = $('liveStatus');
+
+let _liveStream = null;
+let _liveAnimFrame = null;
+let _liveCanvas = null;
+let _liveCtx = null;
+let _liveScannedThisSession = 0;
+let _lastScannedQrText = '';   // 防短時間內重複掃同張
+let _lastScannedAt = 0;
+
+function liveSupportCheck() {
+  // 1) HTTPS / localhost
+  if (typeof window.isSecureContext !== 'undefined' && !window.isSecureContext) {
+    return { ok: false, reason: '需 HTTPS — 內網直連 IP 請改用「拍照 / 從相簿選」' };
+  }
+  // 2) getUserMedia API
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    return { ok: false, reason: '此瀏覽器不支援相機 API（請改 Chrome / Safari）' };
+  }
+  // 3) jsQR loaded
+  if (typeof jsQR !== 'function') {
+    return { ok: false, reason: 'QR 解碼 lib 未載入（重新整理試試）' };
+  }
+  return { ok: true };
+}
+
+const supportCheck = liveSupportCheck();
+if (!supportCheck.ok) {
+  liveBtn.classList.add('disabled');
+  liveBtn.style.cursor = 'not-allowed';
+  $('liveBtnTitle').textContent = '連續掃描（不可用）';
+  $('liveBtnDesc').textContent = supportCheck.reason;
+} else {
+  liveBtn.style.cursor = 'pointer';
+  liveBtn.addEventListener('click', e => {
+    e.preventDefault();
+    startLiveScan();
+  });
+}
+
+async function startLiveScan() {
+  if (_liveStream) return;
+  liveStatusEl.textContent = '請允許相機權限…';
+  liveBox.hidden = false;
+  _liveScannedThisSession = 0;
+  liveCount.textContent = '0';
+
+  try {
+    _liveStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+  } catch (e) {
+    liveStatusEl.innerHTML = `<div class="err">啟動相機失敗：${escapeHtml(e.message || String(e))}</div>`;
+    stopLiveScan();
+    return;
+  }
+
+  liveVideo.srcObject = _liveStream;
+  await liveVideo.play().catch(() => {});
+
+  _liveCanvas = document.createElement('canvas');
+  _liveCtx = _liveCanvas.getContext('2d', { willReadFrequently: true });
+  liveStatusEl.textContent = '對準發票 QR Code…';
+  scanLoop();
+}
+
+function stopLiveScan() {
+  if (_liveAnimFrame) {
+    cancelAnimationFrame(_liveAnimFrame);
+    _liveAnimFrame = null;
+  }
+  if (_liveStream) {
+    _liveStream.getTracks().forEach(t => t.stop());
+    _liveStream = null;
+  }
+  liveVideo.srcObject = null;
+  liveBox.hidden = true;
+  // 提示掃完幾張 + refresh buffer
+  if (_liveScannedThisSession > 0) {
+    showToast(`連續掃描結束 — 共加入 ${_liveScannedThisSession} 張`, 'ok');
+  }
+  loadBuffer();
+}
+
+liveStop.addEventListener('click', stopLiveScan);
+
+function scanLoop() {
+  if (!_liveStream) return;
+  if (liveVideo.readyState !== liveVideo.HAVE_ENOUGH_DATA) {
+    _liveAnimFrame = requestAnimationFrame(scanLoop);
+    return;
+  }
+  // Render frame to canvas + decode
+  _liveCanvas.width = liveVideo.videoWidth;
+  _liveCanvas.height = liveVideo.videoHeight;
+  _liveCtx.drawImage(liveVideo, 0, 0, _liveCanvas.width, _liveCanvas.height);
+  let imgData;
+  try {
+    imgData = _liveCtx.getImageData(0, 0, _liveCanvas.width, _liveCanvas.height);
+  } catch (e) {
+    // canvas tainted? 不太會發生，但保險
+    _liveAnimFrame = requestAnimationFrame(scanLoop);
+    return;
+  }
+  const code = jsQR(imgData.data, imgData.width, imgData.height, {
+    inversionAttempts: 'dontInvert',  // 一般 QR 黑底白方塊不需反相，省 CPU
+  });
+  if (code && code.data) {
+    handleLiveScanResult(code.data);
+  }
+  _liveAnimFrame = requestAnimationFrame(scanLoop);
+}
+
+async function handleLiveScanResult(qrText) {
+  // 防短時間內重複掃同張（鏡頭一直對著同張會狂打 endpoint）
+  const now = Date.now();
+  if (qrText === _lastScannedQrText && (now - _lastScannedAt) < 2000) {
+    return;
+  }
+  _lastScannedQrText = qrText;
+  _lastScannedAt = now;
+
+  // 視覺 feedback 立即（不用等 server）
+  liveVideo.classList.add('flash');
+  setTimeout(() => liveVideo.classList.remove('flash'), 200);
+  liveStatusEl.textContent = '掃到 QR…送出中';
+
+  try {
+    const r = await fetch('/tools/einvoice-scan/scan-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ qr_texts: [qrText] }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+    if (j.added_count > 0) {
+      _liveScannedThisSession += j.added_count;
+      liveCount.textContent = String(_liveScannedThisSession);
+      const last = j.added[0];
+      liveStatusEl.textContent = `已加入 ${last.invoice_number}（${j.buffer.count} / ${j.buffer.limit}）`;
+    } else if ((j.duplicates || []).length > 0) {
+      liveStatusEl.textContent = `已存在 ${j.duplicates.join(', ')} — 跳過`;
+    } else if (j.parsed_count === 0) {
+      liveStatusEl.textContent = '不是電子發票 QR — 跳過';
+    }
+  } catch (e) {
+    liveStatusEl.innerHTML = `<span style="color:#fca5a5;">送出失敗：${escapeHtml(e.message)}</span>`;
+  }
+}
+
+// 離開頁面前確保關掉相機（避免相機燈一直亮）
+window.addEventListener('beforeunload', stopLiveScan);
 </script>
 {% endblock %}

@@ -237,6 +237,48 @@ def test_scan_with_real_qr(tmp_path):
     assert j["parsed_count"] >= 1
 
 
+def test_scan_text_basic():
+    """連續掃描 endpoint：直接傳 QR 字串（不傳影像）。"""
+    qr = _build_qr_text(invoice_number="CD12345678")
+    r = client.post("/tools/einvoice-scan/scan-text",
+                    json={"qr_texts": [qr]})
+    assert r.status_code == 200
+    j = r.json()
+    assert j["scanned_qr_count"] == 1
+    assert j["parsed_count"] == 1
+    # 清理
+    client.delete("/tools/einvoice-scan/buffer")
+
+
+def test_scan_text_invalid_body():
+    r = client.post("/tools/einvoice-scan/scan-text",
+                    json={"qr_texts": "not-a-list"})
+    assert r.status_code == 400
+
+
+def test_scan_text_too_many():
+    r = client.post("/tools/einvoice-scan/scan-text",
+                    json={"qr_texts": ["x"] * 100})
+    assert r.status_code == 413
+
+
+def test_scan_text_too_long_string():
+    r = client.post("/tools/einvoice-scan/scan-text",
+                    json={"qr_texts": ["x" * 5000]})
+    assert r.status_code == 413
+
+
+def test_scan_text_skips_non_einvoice():
+    """非 e-invoice QR 自動跳過，不報錯。"""
+    r = client.post("/tools/einvoice-scan/scan-text",
+                    json={"qr_texts": ["https://example.com", "random text"]})
+    assert r.status_code == 200
+    j = r.json()
+    assert j["scanned_qr_count"] == 2
+    assert j["parsed_count"] == 0
+    assert j["added_count"] == 0
+
+
 def test_scan_unsupported_format():
     r = client.post("/tools/einvoice-scan/scan",
                     files={"file": ("test.exe", b"\x00\x00", "application/octet-stream")})

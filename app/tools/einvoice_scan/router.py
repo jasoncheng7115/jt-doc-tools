@@ -128,6 +128,55 @@ async def clear_buffer(request: Request):
     return {"cleared": n, "buffer": buffer.buffer_info(user)}
 
 
+@router.post("/scan-text")
+async def scan_text(request: Request):
+    """Accept pre-decoded QR text strings (no image upload).
+
+    給「連續掃描」用 — 手機端用 jsQR 直接 in-browser decode，
+    decode 完只把字串傳上來，不傳影像。比 /scan 快很多（影像通常 0.5-2 MB）。
+
+    Body: {"qr_texts": [str, ...]}  — list of raw QR strings
+    Returns: 同 /scan 的格式
+    """
+    if not qr_decoder.is_qr_backend_available():
+        # /scan-text 其實不需要 zbar (字串已 decode 完)，但為了一致性還是檢查
+        # — 不對，連續掃描就應該繞過 zbar。直接 parse 即可。
+        pass
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "invalid JSON body")
+
+    qr_texts = body.get("qr_texts") or []
+    if not isinstance(qr_texts, list):
+        raise HTTPException(400, "qr_texts 必須是陣列")
+    # 限長度防 DoS — 連續掃描一次傳 10 張內合理
+    if len(qr_texts) > 50:
+        raise HTTPException(413, "一次最多 50 個 QR 字串")
+    # 各字串長度限制
+    for s in qr_texts:
+        if not isinstance(s, str):
+            raise HTTPException(400, "qr_texts 內必須全為字串")
+        if len(s) > 4096:
+            raise HTTPException(413, "單一 QR 字串過長")
+
+    parsed = qr_decoder.parse_qr_list(qr_texts)
+    user = _request_user(request)
+    add_result = buffer.add_invoices(user, parsed)
+    info = buffer.buffer_info(user)
+
+    return JSONResponse({
+        "scanned_qr_count": len(qr_texts),
+        "parsed_count": len(parsed),
+        "added_count": len(add_result["added"]),
+        "duplicates": add_result["duplicates"],
+        "cap_reached": add_result["cap_reached"],
+        "added": add_result["added"],
+        "buffer": info,
+    })
+
+
 @router.post("/api/einvoice-scan")
 async def api_einvoice_scan(request: Request, file: UploadFile = File(...)):
     """Public alias 同 /scan — 給 REST API caller 用。"""
