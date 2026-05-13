@@ -1236,4 +1236,60 @@ def build_router(templates) -> APIRouter:
         return {"ok": result.ok, "code": result.code,
                 "error": result.error, "hint": result.hint}
 
+    # ─── 統編資料庫管理 (M4) ─────────────────────────────────────────
+    @router.get("/vat-db", response_class=HTMLResponse)
+    async def vat_db_page(request: Request):
+        from ..core import vat_db as _vatdb
+        return templates.TemplateResponse("vat_db.html", {
+            "request": request,
+            "meta": _vatdb.get_meta(),
+            "sources": _vatdb.SOURCE_URLS,
+        })
+
+    @router.get("/vat-db/info")
+    async def vat_db_info():
+        from ..core import vat_db as _vatdb
+        return {"meta": _vatdb.get_meta(), "sources": _vatdb.SOURCE_URLS}
+
+    @router.post("/vat-db/upload")
+    async def vat_db_upload(file: UploadFile = File(...)):
+        """手動上傳 CSV 或 ZIP — 200MB 上限。"""
+        from ..core import vat_db as _vatdb
+        data = await file.read()
+        if not data:
+            raise HTTPException(400, "空檔案")
+        if len(data) > 1024 * 1024 * 1024:  # 1 GB hard cap (政府資料就大)
+            raise HTTPException(413, "檔案超過 1 GB 上限")
+        try:
+            result = _vatdb.ingest_archive_or_csv(
+                data, source=f"manual:{file.filename or 'upload'}",
+            )
+        except ValueError as e:
+            raise HTTPException(400, f"資料格式錯誤：{e}")
+        except Exception as e:
+            raise HTTPException(500, f"匯入失敗：{e}")
+        return {"ok": True, **result}
+
+    @router.post("/vat-db/auto-download")
+    async def vat_db_auto_download():
+        """從備援 URL list 試下載 — 第一個成功的用。"""
+        from ..core import vat_db as _vatdb
+        try:
+            data, src = _vatdb.download_from_sources()
+        except RuntimeError as e:
+            raise HTTPException(503, str(e))
+        try:
+            result = _vatdb.ingest_archive_or_csv(
+                data, source=f"auto:{src['name']}",
+            )
+        except ValueError as e:
+            raise HTTPException(400, f"來源 {src['name']} 資料格式錯誤：{e}")
+        return {"ok": True, "source_used": src, **result}
+
+    @router.post("/vat-db/clear")
+    async def vat_db_clear():
+        from ..core import vat_db as _vatdb
+        _vatdb.clear_db()
+        return {"ok": True}
+
     return router

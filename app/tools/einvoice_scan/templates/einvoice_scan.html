@@ -599,6 +599,7 @@ function cellValue(invoice, fieldId, rowIndex) {
     if (Array.isArray(invoice.items)) return `${invoice.items.length} 項`;
     return '';
   }
+  if (fieldId === 'seller_name') return invoice.seller_name || '';
   return applyFormat(fieldId, invoice[fieldId]);
 }
 

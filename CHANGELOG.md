@@ -4,6 +4,50 @@
 
 ---
 
+## [1.7.76] - 2026-05-13
+
+### 新增（einvoice-scan M4.a — 統編資料庫 + 賣方名稱反查）
+
+- **新 admin 頁「統編資料庫」**(`/admin/vat-db`)：
+  - 顯示目前資料筆數 / 最後更新時間 / 來源
+  - **自動下載**：依備援 URL list 順序試（財政部 BGMOPEN zip / csv / data.gov.tw 9210 / 經濟部 9911），第一個成功的用
+  - **手動上傳**：CSV 或 ZIP（內含 .csv），200MB+ 都接受
+  - **反查測試**：輸入 8 位統編快速驗證
+  - 清空按鈕
+- **`app/core/vat_db.py`** SQLite-based 反查後端：
+  - `vat_registry` (vat PRIMARY KEY, name, address, owner, org_type, status) + `vat_meta`
+  - `parse_csv_to_records()` 自動偵測編碼（UTF-8 BOM / UTF-8 / Big5 fallback）
+  - `_COLUMN_ALIASES` 對中英文 header 自動 map（統一編號 / 商業名稱 / 營業地址等）
+  - **Atomic swap ingest**：先寫 staging 表 → atomic rename，避免長時間重建造成 lookup 中斷
+  - 5000 筆 / batch 寫入，~1GB CSV 也撐得住
+  - O(1) lookup + per-process LRU cache（5000 entries）
+- **`GET /api/vat-lookup/{vat}`** public endpoint — 任何登入使用者可用
+- **`einvoice-scan` 整合**：
+  - FIELD_DEFINITIONS 加 `seller_name` 欄位（預設可見）
+  - scan 時自動 `vat_db.lookup_vat(seller_vat)` 填進 buffer entry（找不到留 None 不爆炸）
+  - 表格 + 細節 modal 自動顯示
+- **15 個 vat_db 新測試 + 1 個 endpoint 測試**：CSV parsing / 編碼 fallback / English header / atomic swap / lookup cache / clear / ZIP unwrap
+
+### 安全
+
+- 上傳檔 1GB hard cap（防 DoS）
+- vat lookup 嚴格驗證 8 位數字（防 SQL injection / path traversal）
+- staging swap 失敗自動 rollback
+- ingest 用 background thread lock（並行 ingest 不會撞）
+
+### 文件 / Nav
+
+- 側邊欄「設定」加「統編資料庫」連結（icon: id-card）
+
+### 待 M4.b（未做）
+
+- 排程自動更新（每月 / 每週）
+- 增量更新 vs 整檔重建選項
+- 文件 docs/einvoice-scan.md
+- OWASP regression（admin upload 已有 size cap，但完整 OWASP 順過跑一次）
+
+---
+
 ## [1.7.75] - 2026-05-13
 
 ### 新增（einvoice-scan M3 — 欄位格式系統 + 匯出 + 報帳檢查 + 細節 modal）
