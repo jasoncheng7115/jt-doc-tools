@@ -39,18 +39,17 @@
   transition: background 0.12s, border-color 0.12s;
   position: relative;
 }
-/* Pipeline 連接箭頭：每張勾選卡片右側顯示「→」，最後一張不顯示。
-   位於 grid gap 內（right: -7px、gap: 8px），藍色配色與 .on 卡片呼應。
-   row-wrap 時最右邊那張的箭頭會被藏到下一列前 — 用 .row-end 標記隱藏 */
+/* Pipeline 連接箭頭：每張勾選卡片右側顯示三角形，對齊 head row（卡頂約 18px）。
+   不用 vertical-center 是因為展開子選項的卡片變高時箭頭會跑到中段不好看，
+   固定對齊 head row 就跟 checkbox / 順序編號同水平線。 */
 .tl-op.on::after {
   content: "";
   position: absolute;
-  right: -10px; top: 50%;
+  right: -10px; top: 18px;
   width: 0; height: 0;
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  border-left: 6px solid #2563eb;
-  transform: translateY(-50%);
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 8px solid #2563eb;
   pointer-events: none;
   z-index: 2;
 }
