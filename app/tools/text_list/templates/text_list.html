@@ -202,7 +202,7 @@
 </div>
 
 <div class="panel">
-  <h2 style="margin-top:0;">2. 操作（勾選會依序套用）</h2>
+  <h2 style="margin-top:0;">2. 操作（勾選會依序套用，拖曳可改變順序）</h2>
   <div class="tl-ops">
     <svg class="tl-connectors" xmlns="http://www.w3.org/2000/svg"></svg>
     <div class="tl-op" data-op="trim">
@@ -630,15 +630,12 @@ function drawWrapConnectors() {
     } else {
       // 跨列：bottom of cur → 行間中點 → 橫向到 next 卡片左外 stub → 上下到 head row →
       // 水平 stub 18px → 箭頭右進左（與同列風格一致）。最後 stub 留 18 px 給箭頭三角形視覺空間。
-      // 跨列：cur 右側 head row 出去（10-12px stub 給視覺呼吸不貼卡片邊）→ 下到
-      // cur 底下 12px → 橫向左到 next 正中 X → 下進入 next 頂端正中。
-      // 最後段垂直 16+ px 給箭頭三角形足夠空間；next.left 靠容器邊也安全（用 bMidX 不算負值）。
-      const exitY = aTopY + 18;
-      const exitStubX = Math.min(aRightX + 12, wrapRect.width - 8);
+      // 跨列：從 cur 卡片底部正中出發 → 下到 cur 底下 12px → 橫向左到 next 正中 X
+      //       → 下進入 next 頂端正中。最後段垂直 16+ px 給箭頭三角形足夠空間；
+      //       next.left 靠容器邊也安全（用 bMidX 永遠在容器內）。
       const traverseY = aBottomY + 12;
-      d = `M ${aRightX + 1} ${exitY}
-           L ${exitStubX} ${exitY}
-           L ${exitStubX} ${traverseY}
+      d = `M ${aMidX} ${aBottomY + 1}
+           L ${aMidX} ${traverseY}
            L ${bMidX} ${traverseY}
            L ${bMidX} ${bTopY - 2}`;
     }

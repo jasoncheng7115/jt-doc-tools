@@ -226,11 +226,11 @@
           </li>
           <li>
             <span class="fl-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="14.01"/><line x1="17" y1="14" x2="17" y2="14.01"/><line x1="20" y1="14" x2="20" y2="14.01"/><line x1="14" y1="17" x2="17" y2="17"/><line x1="20" y1="17" x2="20" y2="17.01"/><line x1="14" y1="20" x2="14" y2="20.01"/><line x1="17" y1="20" x2="20" y2="20"/></svg></span>
-            <div class="fl-text"><span class="fn">電子發票處理</span><span class="fd">掃台灣電子發票 QR Code 解出發票號碼 / 日期 / 金額 / 統編，自動帶賣方公司名、行業、會計科目（規則 + 可選 LLM 判讀），支援報帳檢查 + 當期發票檢查，匯出 .xlsx / .ods / .csv / .json / .xml / .txt / .md</span></div>
+            <div class="fl-text"><span class="fn">電子發票處理</span><span class="fd">掃台灣電子發票 QR 解出發票號碼 / 日期 / 金額 / 統編，自動帶賣方名 + 行業 + 會計科目（規則 + 可選 LLM），支援報帳檢查 + 當期檢查，匯出 7 種格式</span></div>
           </li>
           <li>
             <span class="fl-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
-            <div class="fl-text"><span class="fn">統編查詢</span><span class="fd">輸入 8 位統一編號反查，或公司 / 機關 / 學校名稱、地址、行業關鍵字模糊搜尋（高亮命中字）；含類別篩選 + 批次查詢 + CSV 匯出。資料源：財政部 BGMOPEN + 行政院 / 地方政府機關 + 全國學校</span></div>
+            <div class="fl-text"><span class="fn">統編查詢</span><span class="fd">8 位統編反查，或公司 / 機關 / 學校名稱、地址、行業模糊搜尋；含類別篩選 + 批次查詢 + CSV 匯出</span></div>
           </li>
           <li>
             <span class="fl-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
@@ -555,10 +555,10 @@
 <section id="llm" class="section section-light">
   <div class="container">
     <div class="section-eyebrow">AI 加值（選用）</div>
-    <h2 class="section-title">10 個工具支援 LLM AI，效率與品質再升一級</h2>
+    <h2 class="section-title">11 個工具支援 LLM AI，效率與品質再升一級</h2>
     <p class="section-lede">
       接你自己的 LLM（本機 Ollama / vLLM / LM Studio / DGX Spark 都可），
-      即可在這 10 個工具開啟智慧選項。<b>核心工具完全不依賴 LLM</b>，沒設定也照樣 100% 可用。
+      即可在這 11 個工具開啟智慧選項。<b>核心工具完全不依賴 LLM</b>，沒設定也照樣 100% 可用。
     </p>
 
     <div class="llm-grid">
@@ -661,6 +661,16 @@
         <h3>送件前檢核（語意 + 視覺驗收）</h3>
         <p>結構檢查（頁面尺寸 / 字型嵌入）跑完後，LLM 對內容做語意檢查（必填欄是否真有填、敘述是否前後矛盾），並用 vision 模型對 PNG 做視覺驗收（蓋章是否壓字、頁面排版是否破損）。</p>
         <p class="llm-effect"><b>效果</b>：補上 regex / 結構檢查抓不到的「字面對但意思錯」、「視覺有問題」案例</p>
+      </article>
+
+      <article class="llm-card">
+        <div class="llm-card-head">
+          <span class="llm-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="14.01"/><line x1="17" y1="14" x2="17" y2="14.01"/><line x1="20" y1="14" x2="20" y2="14.01"/><line x1="14" y1="17" x2="17" y2="17"/></svg></span>
+          <div class="llm-tag">text</div>
+        </div>
+        <h3>電子發票處理（會計科目判讀）</h3>
+        <p>掃完發票後，依賣方統編 + 公司名 + 行業批次送 LLM 判定會計科目（油料費 / 餐費 / 郵電費 等）。內建規則先過，LLM 補規則漏抓的；可同時用使用者自訂規則覆寫。</p>
+        <p class="llm-effect"><b>效果</b>：報帳前自動分類，免人工逐筆挑科目</p>
       </article>
 
     </div>
