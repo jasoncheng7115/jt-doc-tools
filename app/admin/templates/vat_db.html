@@ -5,14 +5,24 @@
 {% block head %}
 <style>
 .vd-summary {
-  display: flex; gap: 16px; flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 4px 24px;
   padding: 14px 18px; background: #f8fafc;
   border: 1px solid #e2e8f0; border-radius: 8px;
   margin-bottom: 16px;
 }
-.vd-stat { font-size: 13px; color: #475569; }
-.vd-stat b { color: #0f172a; font-size: 16px; font-variant-numeric: tabular-nums; }
-.vd-stat .empty { color: #94a3b8; }
+.vd-stat {
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 12.5px; color: #64748b;
+  line-height: 1.5;
+}
+.vd-stat b {
+  color: #0f172a; font-size: 16px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+.vd-stat b.empty { color: #94a3b8; font-weight: 400; font-size: 13px; }
 
 .vd-section {
   background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
@@ -49,14 +59,22 @@
 .vd-sources li::before { content: '• '; color: #94a3b8; }
 
 .vd-status {
-  margin-top: 10px; font-size: 13px;
-  padding: 8px 12px; border-radius: 6px;
+  font-size: 13px;
+  padding: 10px 14px; border-radius: 6px;
   background: #f1f5f9; color: #475569;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap; min-height: 20px;
+  margin-bottom: 14px;
+  display: none;          /* 沒事不顯示 */
 }
-.vd-status.ok { background: #ecfdf5; color: #166534; }
-.vd-status.err { background: #fef2f2; color: #991b1b; }
+.vd-status.show { display: block; }
+.vd-status.ok { background: #ecfdf5; color: #166534; border: 1px solid #86efac; }
+.vd-status.err { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+.vd-status.busy { background: #eff6ff; color: #1d4ed8; border: 1px solid #93c5fd; animation: vd-pulse 1.6s infinite; }
+@keyframes vd-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
 
 .vd-test {
   display: flex; gap: 6px; align-items: center; margin-top: 8px;
@@ -83,6 +101,9 @@
 {% block content %}
 <h1>{{ icon('id-card', size=22) }} 統編資料庫</h1>
 <p class="muted">電子發票掃描工具用此反查賣方公司名稱。資料來源：財政部「營業（稅籍）登記資料集」(BGMOPEN) 為主，可從備援 URL 自動下載或手動上傳 CSV / ZIP。</p>
+
+<!-- 操作狀態 / 訊息 — 最頂端，狀態才顯示 -->
+<div class="vd-status" id="status"></div>
 
 <!-- 目前資料庫狀態 -->
 <div class="vd-summary" id="summary">
@@ -141,8 +162,6 @@
   </div>
 </div>
 
-<div class="vd-status" id="status">就緒</div>
-
 {% endblock %}
 
 {% block scripts %}
@@ -152,7 +171,15 @@ const $ = id => document.getElementById(id);
 function setStatus(msg, kind) {
   const el = $('status');
   el.textContent = msg;
-  el.className = 'vd-status' + (kind ? ' ' + kind : '');
+  el.className = 'vd-status show' + (kind ? ' ' + kind : '');
+  // 視覺即時可見 — 訊息 sticky 在頂端
+  if (kind === 'err') {
+    // 失敗訊息保留在頂端不自動消失
+  } else if (kind === 'ok') {
+    // 成功訊息 5 秒後淡出
+    clearTimeout(setStatus._t);
+    setStatus._t = setTimeout(() => el.classList.remove('show'), 5000);
+  }
 }
 
 function escapeHtml(s) {
