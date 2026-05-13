@@ -512,13 +512,21 @@ def search_companies(query: str, field: str = "any", limit: int = 50,
     init_db()
     conn = _connect()
     try:
-        valid_fields = {"name", "address", "owner", "industries"}
+        # 用 static map 而不是 f-string 拼接欄位名 — 避免 CodeQL 誤判 SQL injection
+        # （也是 defense-in-depth：即使未來 valid_fields whitelist 失守，也不會
+        # 把任意字串拼進 SQL）
+        _FIELD_WHERE = {
+            "name":       "name LIKE ? ESCAPE '\\'",
+            "address":    "address LIKE ? ESCAPE '\\'",
+            "owner":      "owner LIKE ? ESCAPE '\\'",
+            "industries": "industries LIKE ? ESCAPE '\\'",
+        }
         if field == "any":
             field_where = ("(name LIKE ? ESCAPE '\\' OR address LIKE ? ESCAPE '\\' "
                            "OR owner LIKE ? ESCAPE '\\' OR industries LIKE ? ESCAPE '\\')")
             params: list = [pattern, pattern, pattern, pattern]
-        elif field in valid_fields:
-            field_where = f"{field} LIKE ? ESCAPE '\\'"
+        elif field in _FIELD_WHERE:
+            field_where = _FIELD_WHERE[field]
             params = [pattern]
         else:
             raise ValueError(f"未知欄位：{field}")
