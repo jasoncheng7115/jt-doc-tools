@@ -56,13 +56,33 @@ _BEST_SIZE_MULTIPLIER = {
     "vie": 3.0, "tha": 3.0, "ind": 2.5, "ara": 2.5, "heb": 2.5, "hin": 2.5,
 }
 # 兩變體的檔案命名 convention（除 active 主檔 chi_tra.traineddata 外）
+# v1.7.50：嚴格驗證 code / variant 並用 safe_join 確保檔案路徑落在 tessdata 內。
+# 入口（install_lang / switch_active_quality 等）已 is_valid_lang_code 過濾，
+# 但 CodeQL 靜態分析追不過函式呼叫，所以這裡再過一次 sanitizer 防 path
+# traversal（例如惡意 code = "../../etc/passwd"）— defense in depth。
+_VARIANT_WHITELIST = frozenset({"fast", "best"})
+
+
+def _safe_tessdata_path(tessdata: Path, filename: str) -> Path:
+    """組成 tessdata/<filename> 並驗證落在 tessdata 內（防 traversal）。"""
+    from app.core.safe_paths import safe_join
+    return safe_join(tessdata, filename)
+
+
 def _variant_path(tessdata: Path, code: str, variant: str) -> Path:
     """e.g. chi_tra.fast.traineddata, chi_tra.best.traineddata"""
-    return tessdata / f"{code}.{variant}.traineddata"
+    if not _LANG_CODE_RE.match(code or ""):
+        raise ValueError(f"invalid lang code: {code!r}")
+    if variant not in _VARIANT_WHITELIST:
+        raise ValueError(f"invalid variant: {variant!r}")
+    return _safe_tessdata_path(tessdata, f"{code}.{variant}.traineddata")
+
 
 def _active_path(tessdata: Path, code: str) -> Path:
     """e.g. chi_tra.traineddata (tesseract 真正讀的檔)"""
-    return tessdata / f"{code}.traineddata"
+    if not _LANG_CODE_RE.match(code or ""):
+        raise ValueError(f"invalid lang code: {code!r}")
+    return _safe_tessdata_path(tessdata, f"{code}.traineddata")
 
 # Backward-compat shim — 仍然有 code 引用 _TESSDATA_BASE_URL（fast）
 _TESSDATA_BASE_URL = _TESSDATA_URLS["fast"]

@@ -4,6 +4,27 @@
 
 ---
 
+## [1.7.50] - 2026-05-13
+
+### 安全
+
+清空 GitHub CodeQL 在我們代碼裡的 alerts（v1.7.46 推完累積 22 個 open，扣除第三方 vendor library）：
+
+- **`app/core/tessdata_manager.py` 11 個 path traversal alert**：`_variant_path` / `_active_path` 用 `tessdata / f"{code}.{variant}.traineddata"` 拼路徑；雖然入口（`install_lang` / `switch_active_quality`）有 `is_valid_lang_code` 白名單檢查，但 CodeQL 靜態分析追不過函式呼叫鏈。修法：兩函式內加嚴格 input validation（`_LANG_CODE_RE` + `_VARIANT_WHITELIST = {fast, best}`）+ `safe_paths.safe_join` 確保檔案路徑落在 tessdata 內（defense in depth + clear analyzer）。
+- **`app/tools/pdf_ocr/templates/pdf_ocr.html:571` DOM text XSS alert**：`summaryEl.innerHTML = '...' + list` 把 chip textContent 拼進 HTML。雖然來源是我們 server-rendered 信任資料，但 CodeQL flag DOM-text-as-HTML pattern。改用 DOM API（`createElement` + `textContent` + `appendChild`）一個 node 一個 node 組，避免 innerHTML 注入。
+
+### 新增
+
+- **壓力測試框架 `tests/stress/run_stress.py`**：模擬 N 個使用者並行打 7 個工具 API（5 輕型 + 2 重型），量化吞吐 / latency p50/p95/p99 / 錯誤率。weight 機制（輕 3× / 重 1×）模擬真實混合負載。詳見獨立文件 [STRESS_TEST.md](STRESS_TEST.md)。
+
+### 已知議題（CodeQL alerts 待 dismiss）
+
+下列為第三方 / 測試程式 alert，技術上非真實風險，留待 GitHub 上 dismiss：
+- **PDF.js vendored 5 個 alert**（`static/vendor/pdfjs/build/pdf.worker.mjs` / `web/viewer.mjs`）：Double escaping / Overly permissive regex range / Client-side URL redirect — 第三方 library 不修
+- **`tests/test_template_js_syntax.py` 1 個 alert**：「Bad HTML filtering regexp」用 regex 抽我們自己 templates 內的 `<script>` 跑 syntax check，不處理 user input，非安全邊界
+
+---
+
 ## [1.7.49] - 2026-05-13
 
 ### 修正
