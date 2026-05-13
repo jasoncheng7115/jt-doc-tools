@@ -4,6 +4,53 @@
 
 ---
 
+## [1.7.46] - 2026-05-13
+
+### 改進
+
+- **`pdf-editor` 屬性面板改字型 / 字級 / 顏色立刻看到變化**：之前 IText 是 `opacity:0.01` 隱形，使用者改屬性看不到 IText，要等 BG 重畫完才在 BG 看到新樣式 (~2 秒)。修法：①rerender() 已有 `_peSaved=false + opacity:1` un-fade 邏輯（v1.7.x 既有）；②再加 v1.7.45 的 cover 機制 — 蓋住 BG 舊樣式那一片 → 使用者立刻在 IText 上看到新樣式生效，BG 舊樣式被 cover 遮住。改字型 / 字級 / 顏色 / B / I / U 立即生效。
+- **新增物件（T/I/R 等工具）也享有 cover-on-modify 視覺**：v1.7.45 把 `_peId` 改為「第一次 save 時自動補」（之前只有 picked 物件有 _peId）+ `addModifyCover` helper 統一處理。新建文字 / 圖片 / 矩形 / 線段 / 箭頭 / 橢圓 / 手繪 / 螢光筆 / 便箋等，第一次 save 後都自動有 _peId / _lastFlattenedBbox，後續拖曳 / 縮放 / 改屬性都套用 cover。
+- **重構 `addModifyCover` helper**：把 v1.7.45 寫在 `object:modified` 內的 cover 邏輯抽成 helper（`opts.force` 控制「跳 dx/dy 過濾」），讓 `object:modified`（拖曳）跟 `rerender`（屬性面板）共用。維護單一 cover-add 邏輯。
+
+---
+
+## [1.7.45] - 2026-05-13
+
+### 改進
+
+- **`pdf-editor` 拖動後 OLD 位置即時淡化提示**：v1.7.44 雖然拖完立刻在新位置看到 IText，但 OLD 位置 BG 還沒重畫前仍是「原文字」狀態 — 同時看到舊新兩個位置都有文字，視覺上不夠明確「移動了」。修法：`object:modified` 觸發時在 `_lastFlattenedBbox`（或新物件的 `_origBbox`）加一個半透明白色 cover（`rgba(255,255,255,0.7)`）蓋住 OLD 位置 → 讓使用者立刻看到「OLD 淡化、NEW 出現」。BG 重畫完 savePdf 在 `bgLoadedPromises.then` 內清掉所有 `_peCover`。
+- **嚴格按 obj 清理 cover 不累積**（v1.7.10–14 的 `_peCover` 累積 bug 教訓）：①add 新 cover 前先 remove 該 obj 的舊 cover（per-obj 嚴格 1:1）；②加新 cover 後也跑 `ownerIds` check 清掉「owner 已不存在」的孤兒 cover；③save 完成 / 失敗都統一清掉所有 `_peCover`；④只在「真的移動 >2px」才加 cover，避免單純點選也加。
+- **`_peId` 一律設**：之前只有 picked 物件有 `_peId`（addRedactMarker 給的），新建 T/I 物件沒有。改為 savePdf 第一次平面化某物件時若 `!o._peId` 就補 `auto_xxxxxx` ID，給 `_peCover` 對應 obj 用。
+
+---
+
+## [1.7.44] - 2026-05-13
+
+### 改進
+
+- **`pdf-editor` 拖曳文字框後立刻看到新位置**（不用等 ~2 秒重繪）：之前 v1.7.42 把 IText 設 `opacity:0.01` 隱藏避免雙影，但拖曳後 IText 仍是 0.01 → 使用者要等 1.5s debounce + ~500ms BG 重繪才看到變化。修法：①`object:modified` 觸發時把 IText 還原 `opacity:1`，使用者**立刻**看到文字「跑到新位置」；②savePdf 把 `opacity:0.01` 淡化操作從 backend 回應後移到 `bgLoadedPromises.then(...)` 內 — 等 BG 真的有新位置內容了，IText 才隱形交棒給 BG。整個過渡無雙影也無延遲感。
+
+---
+
+## [1.7.43] - 2026-05-13
+
+### 修正
+
+- **`pdf-editor` 移動文字壓在 logo 上時 OLD 位置變白方塊**：v1.7.29 把 `apply_redactions` 的 `images` 從 `IMAGE_NONE` 改回預設 `IMAGE_PIXELS`（為了讓「移動既有圖片」OLD 位置消失），但這會把**文字 redact rect 範圍內的圖片像素也清掉** → 文字壓在 logo 上，移走後 logo 那塊變白。修法：分兩階段 `apply_redactions`：①Pass 1A 處理文字 / drawing / widget redact，用 `IMAGE_NONE` 保留圖片像素；②Pass 1B 處理 image 物件 redact，用 `IMAGE_PIXELS` 清圖片像素。文字移動不再傷害底下圖片，圖片移動仍正常清除 OLD 位置。
+
+### 修正
+
+兩件 pdf-editor 「pick 完仍見雙影 + 拖不動」根因修正：
+
+- **pick 完 IText / Image 直接 `opacity: 0.01` 隱藏**：原 PDF 文字仍在 BG 上、Fabric overlay 同位置同內容 → 不論 overlay 多透明都會看到雙影。修法：IText 一建出來就 opacity 0.01，使用者只看到 BG（內容相同），但 Fabric selection handles 仍可見不丟選取。雙擊進文字編輯模式 (`text:editing:entered`) 自動還原 opacity 1 給使用者看打字。完全沒視覺雙影。
+- **移除 pick 路徑的 `lockUntilMouseUp`**：這個 helper 假設「click → 同步建物件 → 同次 mouse:up 解鎖」。但 pick 是 async (要等 detect-objects + OCR 回來)，IText 建好時原 click 早就 mouse:up 過了 → 鎖被延後到「使用者下次拖完放開」才解 → 整段拖曳被鎖住沒反應，要點空白處再回來才正常。pick 是 async 不需要這個保護，整段拿掉。
+
+### 修正
+
+- **`pdf-editor` 無 OCR 的 pick 仍看到 1-2 秒雙影**：v1.7.40 加的 `_keepLoadingUntilBgReady` 只在 `pickOverlayShown=true` 時才生效（OCR 過了 500ms 才設 true）。但無 OCR 情境（字型 Unicode 對應表完整，detect-objects 100ms 內就回）overlay 從未顯示 → 雙影 1-2 秒視覺很差。修法：pick 成功建出 IText / Image 後**一律** `showLoading('重繪中…')` + 設 flag，不論之前有沒有顯示過。savePdf BG 重畫完才 hideLoading。任何 pick 後雙影都被遮罩擋住直到 BG 真的乾淨。
+
+---
+
 ## [1.7.40] - 2026-05-12
 
 ### 改進

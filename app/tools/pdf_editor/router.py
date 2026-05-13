@@ -1336,17 +1336,26 @@ async def save(request: Request):
                 if pno < 0 or pno >= doc.page_count:
                     continue
                 page = doc[pno]
-                has_redact = False
+                # v1.7.43：兩階段 redact 分開處理 image / 非 image
+                # ----------------------------------------------
+                # Pass 1A：文字 / drawing / widget 的 redact 用
+                #   `images=PDF_REDACT_IMAGE_NONE` → 矩形內的圖片 pixel 一律
+                #   保留。否則「文字壓在 logo 上 → 移走文字」會把 logo 那塊
+                #   pixel 也清掉變白方塊（客戶踩到）。
+                # Pass 1B：image 物件的 redact 用 `IMAGE_PIXELS` → 矩形內
+                #   的圖片 pixel 才會清掉（移動既有 logo / 圖片時必要）。
+                # 兩階段都用 fill=None（不畫白底覆蓋）+ LINE_ART_NONE
+                # （保留 vector 線條 / 邊框）。
+                non_image_redacted = False
+                image_redacted = False
                 for obj in pg.get("objects", []):
                     orig = obj.get("original_bbox")
                     if not orig or len(orig) != 4:
                         continue
+                    obj_type = obj.get("type")
                     # Backend safety net (#6 v1.4.2): text 物件 text 為空但有
-                    # original_bbox 是 bug state — redact 會清掉原文位置但 Pass 2
-                    # 又跳過空 text 不寫，結果留下完全空白「文字消失」。直接 skip
-                    # 此 obj 的 redact，原文保留；client safety net 也已有同樣邏輯
-                    # 不送上來，這裡是雙保險。
-                    if obj.get("type") == "text" and not str(obj.get("text") or "").strip():
+                    # original_bbox 是 bug state，跳過 redact 避免空白。
+                    if obj_type == "text" and not str(obj.get("text") or "").strip():
                         import logging as _lg
                         from app.core.log_safe import safe_log
                         _lg.getLogger(__name__).warning(
@@ -1354,41 +1363,19 @@ async def save(request: Request):
                             "(original_bbox=%s) — would leave blank area", safe_log(orig))
                         continue
                     ox0, oy0, ox1, oy1 = [float(v) for v in orig]
-                    # 一律只 redact OLD 位置（original_bbox）+ 2pt 邊距吃
-                    # anti-aliased 邊緣 / glyph 突出。NEW 位置不需要 redact —
-                    # apply_redactions 完後我們會 insert_text / insert_image
-                    # 把新內容寫到 NEW 位置，那一帶的 BG 是 redact 之外的
-                    # 原內容，新文字直接疊上去即可。
-                    #
-                    # fill=None：不畫白底覆蓋。否則底下穿過的頁面框線 / 表格
-                    # 線 / 有色背景會被白方塊整個蓋掉（v1.7.29 客戶慘案：
-                    # 移 logo 圖後底下頁框被截斷一段；v1.7.26 加 LINE_ART_NONE
-                    # 想保留向量線條但 fill 還是會把它蓋掉）。fill=None 時
-                    # apply_redactions 只移除矩形內的「文字 / 圖片內容項」，
-                    # 不畫覆蓋 → 底層 vector line art / 顏色保留原樣。
-                    #
-                    # 歷史包袱：v1.x 曾為「在原地放大字型，舊小字 redact 沒
-                    # 蓋到」加 union(OLD, NEW) 邏輯；v1.7.23 又加 disjoint 檢查
-                    # 避免拉動時 redact 跨越中間區域；v1.7.28 全部捨棄改回
-                    # 「永遠只 redact OLD + 2pt」最樸實做法。
-                    page.add_redact_annot(
-                        fitz.Rect(ox0 - 2, oy0 - 2, ox1 + 2, oy1 + 2),
-                        fill=None,
-                    )
-                    has_redact = True
-                # Explicit "deleted existing" entries (no new content, just redact).
-                # fill=None：跟 obj original_bbox redact 同理，避免白底覆蓋底層
-                # vector 線條 / 顏色（v1.7.29）。
+                    rect = fitz.Rect(ox0 - 2, oy0 - 2, ox1 + 2, oy1 + 2)
+                    if obj_type == "image":
+                        # 暫存到 Pass 1B（先處理 Pass 1A）
+                        continue
+                    page.add_redact_annot(rect, fill=None)
+                    non_image_redacted = True
+                # deleted_originals 進 Pass 1A（一般是文字 / 向量 drawing 刪除）
                 for dbb in pg.get("deleted_originals", []) or []:
                     if not dbb or len(dbb) != 4:
                         continue
                     dx0, dy0, dx1, dy1 = [float(v) for v in dbb]
-                    page.add_redact_annot(
-                        fitz.Rect(dx0, dy0, dx1, dy1),
-                        fill=None,
-                    )
-                    has_redact = True
-
+                    page.add_redact_annot(fitz.Rect(dx0, dy0, dx1, dy1), fill=None)
+                    non_image_redacted = True
                 # AcroForm widgets marked for deletion. Match by field_name
                 # when available (survives bbox jitter), otherwise by bbox.
                 for wd in pg.get("deleted_widgets", []) or []:
@@ -1400,18 +1387,15 @@ async def save(request: Request):
                             if target_name and (widget.field_name or "") == target_name:
                                 matched = True
                             elif bb and len(bb) == 4 and widget.rect:
-                                # Loose bbox match (within 2pt) as fallback.
                                 wr = widget.rect
                                 if (abs(wr.x0 - bb[0]) < 2 and abs(wr.y0 - bb[1]) < 2
                                     and abs(wr.x1 - bb[2]) < 2 and abs(wr.y1 - bb[3]) < 2):
                                     matched = True
                             if not matched:
                                 continue
-                            # Also paint over the widget area with a redact so
-                            # any visible appearance goes away.
                             try:
                                 page.add_redact_annot(widget.rect, fill=(1, 1, 1))
-                                has_redact = True
+                                non_image_redacted = True
                             except Exception:
                                 pass
                             try:
@@ -1425,18 +1409,37 @@ async def save(request: Request):
                     except Exception:
                         pass
 
-                if has_redact:
-                    # 拉動既有圖片時要把 OLD 位置的圖清掉 → images 用預設
-                    # PDF_REDACT_IMAGE_PIXELS（清矩形內的圖 pixel，鄰近未涵蓋
-                    # 區域的圖原樣保留）。配上 fill=None 不畫白底，加
-                    # LINE_ART_NONE 保留底層 vector 線條 / 邊框 → 拉走的內容
-                    # 消失，底下穿過的頁框 / 表格線 / 背景色都留住。
-                    #
-                    # 舊版 PyMuPDF (< 1.23) 沒 graphics 參數，fallback 到無
-                    # graphics 控制（line art 會被一起清掉是已知 trade-off，
-                    # 不阻擋主路徑）。
+                # ---- Apply Pass 1A：保留圖片 + 線條，只清文字 / drawing
+                if non_image_redacted:
                     try:
                         page.apply_redactions(
+                            images=fitz.PDF_REDACT_IMAGE_NONE,
+                            graphics=fitz.PDF_REDACT_LINE_ART_NONE,
+                        )
+                    except (AttributeError, TypeError):
+                        try:
+                            page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+                        except Exception:
+                            page.apply_redactions()
+
+                # ---- Pass 1B：image 物件的 redact（清矩形內 image pixel）
+                for obj in pg.get("objects", []):
+                    if obj.get("type") != "image":
+                        continue
+                    orig = obj.get("original_bbox")
+                    if not orig or len(orig) != 4:
+                        continue
+                    ox0, oy0, ox1, oy1 = [float(v) for v in orig]
+                    page.add_redact_annot(
+                        fitz.Rect(ox0 - 2, oy0 - 2, ox1 + 2, oy1 + 2),
+                        fill=None,
+                    )
+                    image_redacted = True
+
+                if image_redacted:
+                    try:
+                        page.apply_redactions(
+                            images=fitz.PDF_REDACT_IMAGE_PIXELS,
                             graphics=fitz.PDF_REDACT_LINE_ART_NONE,
                         )
                     except (AttributeError, TypeError):
