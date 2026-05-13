@@ -47,10 +47,41 @@
   display: flex; align-items: center; gap: 6px;
   font-size: 13px; cursor: pointer;
   color: #334155;
+  flex: 1; min-width: 0;
 }
 .tl-op.on label.head { color: #1e293b; font-weight: 600; }
 .tl-op label.head svg { color: #94a3b8; flex-shrink: 0; }
 .tl-op.on label.head svg { color: #2563eb; }
+.tl-op .head-row {
+  display: flex; align-items: center; gap: 4px;
+}
+/* 順序控制：只有勾選後才顯示 */
+.tl-op .order-ctl {
+  display: none;
+  align-items: center; gap: 2px; flex-shrink: 0;
+}
+.tl-op.on .order-ctl { display: inline-flex; }
+.tl-op .order-ctl .order-num {
+  font-size: 11px; font-weight: 600;
+  color: #1d4ed8; background: #dbeafe;
+  padding: 1px 6px; border-radius: 9px;
+  font-variant-numeric: tabular-nums;
+  min-width: 16px; text-align: center;
+}
+.tl-op .order-ctl button {
+  background: #fff; border: 1px solid #cbd5e1;
+  border-radius: 3px; padding: 0; cursor: pointer;
+  width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #475569;
+}
+.tl-op .order-ctl button:hover:not(:disabled) {
+  background: #eff6ff; border-color: #93c5fd; color: #2563eb;
+}
+.tl-op .order-ctl button:disabled {
+  opacity: 0.3; cursor: not-allowed;
+}
+.tl-op .order-ctl svg { width: 11px; height: 11px; }
 .tl-op .sub {
   display: none;          /* 預設摺疊 — 只有勾選後才展開 */
   gap: 8px 10px; flex-wrap: wrap; font-size: 12.5px;
@@ -155,22 +186,55 @@
   <h2 style="margin-top:0;">2. 操作（勾選會依序套用）</h2>
   <div class="tl-ops">
     <div class="tl-op" data-op="trim">
+      <div class="head-row">
       <label class="head">
         <input type="checkbox" data-op-toggle>
         {{ icon('crop', size=14) }} Trim 前後空白
       </label>
+      <span class="order-ctl">
+        <button type="button" class="ord-up" title="往前移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <span class="order-num">–</span>
+      </span>
+    </div>
     </div>
     <div class="tl-op" data-op="drop_empty">
+      <div class="head-row">
       <label class="head">
         <input type="checkbox" data-op-toggle checked>
         {{ icon('trash', size= 14) }} 移除空行
       </label>
+      <span class="order-ctl">
+        <button type="button" class="ord-up" title="往前移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <span class="order-num">–</span>
+      </span>
+    </div>
     </div>
     <div class="tl-op" data-op="dedup">
+      <div class="head-row">
       <label class="head">
         <input type="checkbox" data-op-toggle>
         {{ icon('layers', size= 14) }} 去重複
       </label>
+      <span class="order-ctl">
+        <button type="button" class="ord-up" title="往前移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <span class="order-num">–</span>
+      </span>
+    </div>
       <div class="sub">
         <select data-param="keep">
           <option value="first">保留首次出現</option>
@@ -181,10 +245,21 @@
       </div>
     </div>
     <div class="tl-op" data-op="sort">
+      <div class="head-row">
       <label class="head">
         <input type="checkbox" data-op-toggle>
         {{ icon('chart-bar', size= 14) }} 排序
       </label>
+      <span class="order-ctl">
+        <button type="button" class="ord-up" title="往前移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <span class="order-num">–</span>
+      </span>
+    </div>
       <div class="sub">
         <select data-param="order">
           <option value="asc">升序 A→Z</option>
@@ -195,22 +270,55 @@
       </div>
     </div>
     <div class="tl-op" data-op="reverse">
+      <div class="head-row">
       <label class="head">
         <input type="checkbox" data-op-toggle>
         {{ icon('rotate-180', size= 14) }} 反轉順序
       </label>
+      <span class="order-ctl">
+        <button type="button" class="ord-up" title="往前移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <span class="order-num">–</span>
+      </span>
+    </div>
     </div>
     <div class="tl-op" data-op="shuffle">
+      <div class="head-row">
       <label class="head">
         <input type="checkbox" data-op-toggle>
         {{ icon('dice', size= 14) }} 隨機洗牌
       </label>
+      <span class="order-ctl">
+        <button type="button" class="ord-up" title="往前移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <span class="order-num">–</span>
+      </span>
+    </div>
     </div>
     <div class="tl-op" data-op="case">
+      <div class="head-row">
       <label class="head">
         <input type="checkbox" data-op-toggle>
         {{ icon('text', size= 14) }} 大小寫轉換
       </label>
+      <span class="order-ctl">
+        <button type="button" class="ord-up" title="往前移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <span class="order-num">–</span>
+      </span>
+    </div>
       <div class="sub">
         <select data-param="mode">
           <option value="lower">全部小寫</option>
@@ -220,10 +328,21 @@
       </div>
     </div>
     <div class="tl-op" data-op="filter">
+      <div class="head-row">
       <label class="head">
         <input type="checkbox" data-op-toggle>
         {{ icon('search', size= 14) }} 篩選
       </label>
+      <span class="order-ctl">
+        <button type="button" class="ord-up" title="往前移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <span class="order-num">–</span>
+      </span>
+    </div>
       <div class="sub">
         <select data-param="mode">
           <option value="include">包含</option>
@@ -235,28 +354,61 @@
       </div>
     </div>
     <div class="tl-op" data-op="head">
+      <div class="head-row">
       <label class="head">
         <input type="checkbox" data-op-toggle>
         {{ icon('align-tl', size= 14) }} 取前 N 筆
       </label>
+      <span class="order-ctl">
+        <button type="button" class="ord-up" title="往前移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <span class="order-num">–</span>
+      </span>
+    </div>
       <div class="sub">
         <input type="number" data-param="n" value="100" min="0">
       </div>
     </div>
     <div class="tl-op" data-op="tail">
+      <div class="head-row">
       <label class="head">
         <input type="checkbox" data-op-toggle>
         {{ icon('align-bl', size= 14) }} 取後 N 筆
       </label>
+      <span class="order-ctl">
+        <button type="button" class="ord-up" title="往前移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <span class="order-num">–</span>
+      </span>
+    </div>
       <div class="sub">
         <input type="number" data-param="n" value="100" min="0">
       </div>
     </div>
     <div class="tl-op" data-op="wrap">
+      <div class="head-row">
       <label class="head">
         <input type="checkbox" data-op-toggle>
         {{ icon('paragraph', size= 14) }} 加前 / 後綴
       </label>
+      <span class="order-ctl">
+        <button type="button" class="ord-up" title="往前移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <span class="order-num">–</span>
+      </span>
+    </div>
       <div class="sub">
         <input type="text" data-param="prefix" placeholder="前綴" style="width:90px;">
         <input type="text" data-param="suffix" placeholder="後綴" style="width:90px;">
@@ -389,15 +541,85 @@ function collectOps() {
   return ops;
 }
 
-// 勾選後改 .on 高亮
+// 勾選後改 .on 高亮 + 更新順序編號
 document.querySelectorAll('[data-op-toggle]').forEach(t => {
   t.addEventListener('change', () => {
     const card = t.closest('.tl-op');
     if (card) card.classList.toggle('on', t.checked);
+    refreshOrderNumbers();
   });
   // 初始 sync
   if (t.checked) t.closest('.tl-op').classList.add('on');
 });
+
+// ─────────── 處理順序：編號 + 上下移 ───────────
+// 只算 .on 卡片之間的相對順序；未勾選的卡片仍留在 DOM 原位（視覺
+// 不亂跳），但不參與「排第幾」的計算。
+function _enabledCards() {
+  return Array.from(document.querySelectorAll('.tl-op.on'));
+}
+
+function refreshOrderNumbers() {
+  const enabled = _enabledCards();
+  document.querySelectorAll('.tl-op').forEach(card => {
+    const num = card.querySelector('.order-num');
+    const up = card.querySelector('.ord-up');
+    const dn = card.querySelector('.ord-dn');
+    if (!num || !up || !dn) return;
+    if (!card.classList.contains('on')) {
+      num.textContent = '–';
+      return;
+    }
+    const idx = enabled.indexOf(card);
+    num.textContent = String(idx + 1);
+    up.disabled = (idx === 0);
+    dn.disabled = (idx === enabled.length - 1);
+  });
+}
+
+// 上下移：只在 .on 卡片之間 swap DOM 位置；
+// 未勾選的卡片留原位，視覺上 .on 卡片從原處消失，到目標 .on 卡片的位置。
+function moveOp(card, dir) {
+  const enabled = _enabledCards();
+  const idx = enabled.indexOf(card);
+  if (idx < 0) return;
+  const targetIdx = idx + (dir === 'up' ? -1 : 1);
+  if (targetIdx < 0 || targetIdx >= enabled.length) return;
+  const target = enabled[targetIdx];
+  // 在 DOM 內 swap：先把 card 標記，把 target 移到 card 位置，再把 card 移到 target 原位
+  const cardNext = card.nextSibling;
+  const targetNext = target.nextSibling;
+  const parent = card.parentNode;
+  if (cardNext === target) {
+    // 緊鄰：直接把 card 插到 target 後面
+    parent.insertBefore(card, targetNext);
+  } else if (targetNext === card) {
+    parent.insertBefore(target, cardNext);
+  } else {
+    // 不相鄰：用 placeholder 雙向交換
+    const placeholder = document.createComment('swap');
+    parent.insertBefore(placeholder, card);
+    parent.insertBefore(card, targetNext);
+    parent.insertBefore(target, placeholder);
+    parent.removeChild(placeholder);
+  }
+  refreshOrderNumbers();
+}
+
+document.querySelectorAll('.tl-op .ord-up').forEach(b => {
+  b.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    moveOp(b.closest('.tl-op'), 'up');
+  });
+});
+document.querySelectorAll('.tl-op .ord-dn').forEach(b => {
+  b.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    moveOp(b.closest('.tl-op'), 'down');
+  });
+});
+
+refreshOrderNumbers();  // 初始 sync
 
 // ─────────── 執行 ───────────
 let _resultLines = [];
