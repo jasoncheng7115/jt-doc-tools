@@ -53,19 +53,26 @@
 .tl-op.on label.head svg { color: #2563eb; }
 .tl-op .sub {
   display: none;          /* 預設摺疊 — 只有勾選後才展開 */
-  gap: 6px; flex-wrap: wrap; font-size: 11.5px;
-  color: #475569; margin-top: 2px;
+  gap: 8px 10px; flex-wrap: wrap; font-size: 12.5px;
+  color: #475569; margin-top: 4px;
+  align-items: center;
 }
 .tl-op.on .sub {
   display: flex;          /* 勾選後展開子選項 */
 }
-.tl-op .sub label { display: inline-flex; gap: 3px; align-items: center; cursor: pointer; }
+.tl-op .sub label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
 .tl-op .sub select, .tl-op .sub input[type="text"], .tl-op .sub input[type="number"] {
-  font-size: 11.5px; padding: 1px 4px;
-  border: 1px solid #cbd5e1; border-radius: 3px;
+  font-size: 12.5px; padding: 3px 6px; line-height: 1.3;
+  border: 1px solid #cbd5e1; border-radius: 4px;
+  background: #fff;
 }
-.tl-op .sub input[type="number"] { width: 70px; }
-.tl-op .sub input[type="text"] { width: 140px; }
+.tl-op .sub select:focus, .tl-op .sub input:focus {
+  outline: 2px solid #93c5fd; outline-offset: 0;
+  border-color: #2563eb;
+}
+.tl-op .sub input[type="number"] { width: 80px; }
+.tl-op .sub input[type="text"] { width: 150px; }
+.tl-op .sub input[type="checkbox"] { width: 14px; height: 14px; }
 
 .tl-result-toolbar {
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
@@ -251,8 +258,8 @@
         {{ icon('paragraph', size= 14) }} 加前 / 後綴
       </label>
       <div class="sub">
-        <input type="text" data-param="prefix" placeholder="前綴" style="width:80px;">
-        <input type="text" data-param="suffix" placeholder="後綴" style="width:80px;">
+        <input type="text" data-param="prefix" placeholder="前綴" style="width:90px;">
+        <input type="text" data-param="suffix" placeholder="後綴" style="width:90px;">
       </div>
     </div>
   </div>
