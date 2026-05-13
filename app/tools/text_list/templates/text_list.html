@@ -19,11 +19,14 @@
 .tl-mini-btn:hover { background:#e2e8f0; }
 
 .tl-ops {
-  /* 多欄 column-flow（類 masonry）— 每張卡片依自身內容自然高度排列，
-     不會像 grid 為了對齊把空白撐出來；視窗寬度變時 column-count 自動調 */
-  column-width: 240px;
-  column-gap: 8px;
+  /* Grid + align-items:start：未勾選卡片全是同樣短高度，整齊排列；
+     勾選後卡片變高（顯示子選項），那一格的 row 才會撐高，其他卡片仍維持
+     自身短高度（不會被拉伸）。比 masonry 更整齊好讀 */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
   margin: 8px 0;
+  align-items: start;
 }
 .tl-op {
   border: 1px solid #e5e7eb;
@@ -34,11 +37,6 @@
   flex-direction: column;
   gap: 6px;
   transition: background 0.12s, border-color 0.12s;
-  /* 防止單張卡片被斷在兩欄之間 */
-  break-inside: avoid;
-  -webkit-column-break-inside: avoid;
-  page-break-inside: avoid;
-  margin-bottom: 8px;
 }
 .tl-op:hover { background: #f8fafc; }
 .tl-op.on {
@@ -54,8 +52,12 @@
 .tl-op label.head svg { color: #94a3b8; flex-shrink: 0; }
 .tl-op.on label.head svg { color: #2563eb; }
 .tl-op .sub {
-  display: flex; gap: 6px; flex-wrap: wrap; font-size: 11.5px;
+  display: none;          /* 預設摺疊 — 只有勾選後才展開 */
+  gap: 6px; flex-wrap: wrap; font-size: 11.5px;
   color: #475569; margin-top: 2px;
+}
+.tl-op.on .sub {
+  display: flex;          /* 勾選後展開子選項 */
 }
 .tl-op .sub label { display: inline-flex; gap: 3px; align-items: center; cursor: pointer; }
 .tl-op .sub select, .tl-op .sub input[type="text"], .tl-op .sub input[type="number"] {
