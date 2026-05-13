@@ -37,7 +37,25 @@
   flex-direction: column;
   gap: 6px;
   transition: background 0.12s, border-color 0.12s;
+  position: relative;
 }
+/* Pipeline 連接箭頭：每張勾選卡片右側顯示「→」，最後一張不顯示。
+   位於 grid gap 內（right: -7px、gap: 8px），藍色配色與 .on 卡片呼應。
+   row-wrap 時最右邊那張的箭頭會被藏到下一列前 — 用 .row-end 標記隱藏 */
+.tl-op.on::after {
+  content: "";
+  position: absolute;
+  right: -10px; top: 50%;
+  width: 0; height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid #2563eb;
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 2;
+}
+.tl-op.on.pipeline-last::after,
+.tl-op.on.row-end::after { display: none; }
 .tl-op:hover { background: #f8fafc; }
 .tl-op.on {
   background: #eff6ff;
@@ -514,11 +532,29 @@ function collectOps() {
   return ops;
 }
 
-// 勾選後改 .on 高亮 + 更新順序編號
+// 記住初始 DOM 順序，用來「取消勾選後還原回原位」
+document.querySelectorAll('.tl-op').forEach((card, i) => {
+  card.dataset.naturalIndex = String(i);
+});
+
+// 重排：.on 卡片擠到前面（保留 pipeline 順序），未勾選的卡片照原順序排在後面
+function arrangeCards() {
+  const parent = document.querySelector('.tl-ops');
+  if (!parent) return;
+  const all = Array.from(parent.querySelectorAll('.tl-op'));
+  const onCards = all.filter(c => c.classList.contains('on'));     // 保留現有 pipeline 順序
+  const offCards = all.filter(c => !c.classList.contains('on'))
+    .sort((a, b) => parseInt(a.dataset.naturalIndex || '0') - parseInt(b.dataset.naturalIndex || '0'));
+  // 依新順序重新 append
+  [...onCards, ...offCards].forEach(c => parent.appendChild(c));
+}
+
+// 勾選後改 .on 高亮 + 自動排到前面 + 更新順序編號
 document.querySelectorAll('[data-op-toggle]').forEach(t => {
   t.addEventListener('change', () => {
     const card = t.closest('.tl-op');
     if (card) card.classList.toggle('on', t.checked);
+    arrangeCards();
     refreshOrderNumbers();
   });
   // 初始 sync
@@ -537,12 +573,31 @@ function refreshOrderNumbers() {
   document.querySelectorAll('.tl-op').forEach(card => {
     const num = card.querySelector('.order-num');
     if (!num) return;
+    card.classList.remove('pipeline-last', 'row-end');
     if (!card.classList.contains('on')) {
       num.textContent = '–';
       return;
     }
     const idx = enabled.indexOf(card);
     num.textContent = String(idx + 1);
+  });
+  // 標記 pipeline 最後一張（不畫箭頭）
+  if (enabled.length) {
+    enabled[enabled.length - 1].classList.add('pipeline-last');
+  }
+  // grid 換行的卡片：下一張 .on 卡片的 top 比目前大 = 換行
+  // 用 getBoundingClientRect 偵測（要在下一個 frame 才有正確排版）
+  requestAnimationFrame(() => {
+    for (let i = 0; i < enabled.length - 1; i++) {
+      const cur = enabled[i];
+      const next = enabled[i + 1];
+      const curRect = cur.getBoundingClientRect();
+      const nextRect = next.getBoundingClientRect();
+      // 同列 = top 接近相同（容忍 5px）；不同列 = top 不同
+      if (Math.abs(curRect.top - nextRect.top) > 5) {
+        cur.classList.add('row-end');  // 換行邊界，箭頭沒意義就隱藏
+      }
+    }
   });
 }
 
@@ -622,7 +677,15 @@ document.querySelectorAll('.tl-op').forEach(card => {
   });
 });
 
+arrangeCards();         // 初始就把 .on 卡片排到前面（避免預設勾選的卡片落在原位）
 refreshOrderNumbers();  // 初始 sync
+
+// 視窗縮放會改變 grid 換行位置 → 重算箭頭隱藏
+let _resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(refreshOrderNumbers, 100);
+});
 
 // ─────────── 執行 ───────────
 let _resultLines = [];
