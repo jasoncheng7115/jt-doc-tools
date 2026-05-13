@@ -73,9 +73,10 @@ FIELD_DEFINITIONS = [
     {"id": "tax",            "label": "稅額",     "default_visible": True,  "default_order": 6,
      "formats": _AMOUNT_FORMATS},
     {"id": "seller_vat",     "label": "賣方統編", "default_visible": True,  "default_order": 7},
-    {"id": "buyer_vat",      "label": "買方統編", "default_visible": True,  "default_order": 8},
-    {"id": "random_code",    "label": "隨機碼",   "default_visible": False, "default_order": 9},
-    {"id": "scanned_at",     "label": "掃描時間", "default_visible": True,  "default_order": 10,
+    {"id": "seller_name",    "label": "賣方名稱", "default_visible": True,  "default_order": 8},  # M4: 統編資料庫反查
+    {"id": "buyer_vat",      "label": "買方統編", "default_visible": True,  "default_order": 9},
+    {"id": "random_code",    "label": "隨機碼",   "default_visible": False, "default_order": 10},
+    {"id": "scanned_at",     "label": "掃描時間", "default_visible": True,  "default_order": 11,
      "formats": {
          "options": [
              {"id": "iso",       "label": "ISO 8601",     "example": "2026-05-13T14:30:00+08:00"},
@@ -85,8 +86,8 @@ FIELD_DEFINITIONS = [
          ],
          "default": "local",
      }},
-    {"id": "items",          "label": "品項數",   "default_visible": False, "default_order": 11},
-    {"id": "note",           "label": "備註",     "default_visible": False, "default_order": 12},
+    {"id": "items",          "label": "品項數",   "default_visible": False, "default_order": 12},
+    {"id": "note",           "label": "備註",     "default_visible": False, "default_order": 13},
 ]
 
 VALID_FIELD_IDS = {f["id"] for f in FIELD_DEFINITIONS}

@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.7.75"
+VERSION = "1.7.76"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -235,6 +235,9 @@ templates.env.globals["nav_settings"] = [
     {"icon": "text", "name": "OCR 引擎", "description": "EasyOCR (主) + Tesseract (備) 雙 OCR 引擎切換與訓練檔管理",
      "url": "/admin/ocr-langs",
      "keywords": "ocr engine easyocr tesseract traineddata trained data lang language chi_tra chi_sim jpn kor 引擎 訓練檔 語言 安裝 中文 日文 韓文 繁中 簡中"},
+    {"icon": "id-card", "name": "統編資料庫", "description": "電子發票掃描用：反查賣方公司名稱（財政部 BGMOPEN 等）",
+     "url": "/admin/vat-db",
+     "keywords": "vat tax id business registry company taiwan einvoice einvoice-scan bgmopen 統編 統一編號 公司 商業 登記 反查 賣方 發票 財政部"},
     # ---- v1.1.0 auth / perm / audit pages ----
     # 認證設定 always visible — that's where admin enables auth in the first place.
     {"icon": "lock", "name": "認證設定", "description": "啟用本機 / LDAP / AD 認證",
@@ -760,6 +763,22 @@ async def api_job_status(job_id: str):
     if not job:
         return JSONResponse({"error": "job not found"}, status_code=404)
     return job.to_public()
+
+
+@app.get("/api/vat-lookup/{vat}")
+async def api_vat_lookup(vat: str):
+    """反查統編 → 公司資料 (M4)。
+
+    來源：本地 vat_db.sqlite（admin 預先匯入）。
+    Public endpoint — 任何登入使用者都能用（不像 admin 才能改資料）。
+    """
+    from .core import vat_db
+    if not vat or len(vat) != 8 or not vat.isdigit():
+        raise _HTTPException2(400, "vat 必須是 8 位數字")
+    result = vat_db.lookup_vat(vat)
+    if not result:
+        raise _HTTPException2(404, "查無此統編")
+    return result
 
 
 @app.post("/api/convert-to-pdf")

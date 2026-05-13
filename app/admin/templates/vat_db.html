@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}統編資料庫 · {{ app_name }}{% endblock %}
+
+{% block head %}
+<style>
+.vd-summary {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  padding: 14px 18px; background: #f8fafc;
+  border: 1px solid #e2e8f0; border-radius: 8px;
+  margin-bottom: 16px;
+}
+.vd-stat { font-size: 13px; color: #475569; }
+.vd-stat b { color: #0f172a; font-size: 16px; font-variant-numeric: tabular-nums; }
+.vd-stat .empty { color: #94a3b8; }
+
+.vd-section {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 14px 18px; margin-bottom: 12px;
+}
+.vd-section h3 {
+  margin: 0 0 8px; font-size: 14px; color: #1e293b;
+}
+.vd-section p {
+  margin: 0 0 10px; font-size: 12.5px; color: #64748b;
+}
+
+.vd-actions {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+}
+.vd-btn {
+  padding: 7px 14px; border-radius: 6px; font-size: 13px;
+  cursor: pointer; border: 1px solid #cbd5e1; background: #fff;
+  color: #1e293b; display: inline-flex; align-items: center; gap: 6px;
+}
+.vd-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+.vd-btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+.vd-btn.primary:hover { background: #1d4ed8; }
+.vd-btn.danger { color: #b91c1c; }
+.vd-btn.danger:hover { background: #fee2e2; border-color: #fca5a5; }
+.vd-btn:disabled { opacity: 0.5; cursor: wait; }
+
+.vd-sources {
+  margin-top: 10px;
+  font-size: 12px; color: #475569;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.vd-sources li { padding: 3px 0; word-break: break-all; }
+.vd-sources li::before { content: '• '; color: #94a3b8; }
+
+.vd-status {
+  margin-top: 10px; font-size: 13px;
+  padding: 8px 12px; border-radius: 6px;
+  background: #f1f5f9; color: #475569;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap; min-height: 20px;
+}
+.vd-status.ok { background: #ecfdf5; color: #166534; }
+.vd-status.err { background: #fef2f2; color: #991b1b; }
+
+.vd-test {
+  display: flex; gap: 6px; align-items: center; margin-top: 8px;
+}
+.vd-test input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px; padding: 6px 10px; width: 130px;
+  border: 1px solid #cbd5e1; border-radius: 4px;
+}
+.vd-test input:focus { outline: 2px solid #93c5fd; outline-offset: 0; }
+.vd-test-result {
+  font-size: 13px; padding: 8px 12px;
+  background: #f8fafc; border: 1px solid #e2e8f0;
+  border-radius: 4px; margin-top: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  display: none;
+}
+.vd-test-result.show { display: block; }
+.vd-test-result.found { background: #ecfdf5; border-color: #86efac; }
+.vd-test-result.miss { background: #fef2f2; border-color: #fca5a5; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>{{ icon('id-card', size=22) }} 統編資料庫</h1>
+<p class="muted">電子發票掃描工具用此反查賣方公司名稱。資料來源：財政部「營業（稅籍）登記資料集」(BGMOPEN) 為主，可從備援 URL 自動下載或手動上傳 CSV / ZIP。</p>
+
+<!-- 目前資料庫狀態 -->
+<div class="vd-summary" id="summary">
+  <div class="vd-stat">資料筆數 <b id="recordCount">{{ "{:,}".format(meta.record_count) if meta.record_count else 0 }}</b></div>
+  <div class="vd-stat">最後更新 <b id="lastUpdated" class="{% if not meta.last_updated %}empty{% endif %}">{{ meta.last_updated or '尚未匯入' }}</b></div>
+  <div class="vd-stat">資料來源 <b id="sourceUsed" class="{% if not meta.source %}empty{% endif %}">{{ meta.source or '—' }}</b></div>
+</div>
+
+<!-- 自動下載 -->
+<div class="vd-section">
+  <h3>自動下載並更新</h3>
+  <p>依下列備援 URL 順序試，第一個成功的用。下載 + 解析時間視資料量約 5-30 分鐘，期間請勿關閉頁面。</p>
+  <div class="vd-actions">
+    <button type="button" class="vd-btn primary" id="btnAutoDownload">
+      {{ icon('download', size=14) }} 立即自動下載
+    </button>
+  </div>
+  <ul class="vd-sources">
+    {% for src in sources %}
+    <li>{{ src.name }} — <code>{{ src.url }}</code></li>
+    {% endfor %}
+  </ul>
+</div>
+
+<!-- 手動上傳 -->
+<div class="vd-section">
+  <h3>手動上傳 CSV / ZIP</h3>
+  <p>當自動下載失敗或需要客製來源時用。支援 .csv (UTF-8 / Big5 自動偵測) 或 .zip (內含 .csv)。</p>
+  <div class="vd-actions">
+    <label class="vd-btn">
+      {{ icon('paperclip', size=14) }} 選擇檔案上傳
+      <input type="file" id="fileInput" accept=".csv,.zip" hidden>
+    </label>
+  </div>
+</div>
+
+<!-- 反查測試 -->
+<div class="vd-section">
+  <h3>反查測試</h3>
+  <p>輸入 8 位統編快速驗證資料庫正確匯入。</p>
+  <div class="vd-test">
+    <input type="text" id="testVat" maxlength="8" placeholder="12345678">
+    <button type="button" class="vd-btn" id="btnTest">{{ icon('search', size=14) }} 反查</button>
+  </div>
+  <div class="vd-test-result" id="testResult"></div>
+</div>
+
+<!-- 危險操作 -->
+<div class="vd-section">
+  <h3>清空資料庫</h3>
+  <p>刪除所有匯入的統編資料；einvoice-scan 暫時失去反查能力但發票掃描仍可用。</p>
+  <div class="vd-actions">
+    <button type="button" class="vd-btn danger" id="btnClear">
+      {{ icon('trash', size=14) }} 清空
+    </button>
+  </div>
+</div>
+
+<div class="vd-status" id="status">就緒</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = id => document.getElementById(id);
+
+function setStatus(msg, kind) {
+  const el = $('status');
+  el.textContent = msg;
+  el.className = 'vd-status' + (kind ? ' ' + kind : '');
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[<>&"']/g, c =>
+    ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function refreshInfo() {
+  try {
+    const r = await fetch('/admin/vat-db/info');
+    const j = await r.json();
+    $('recordCount').textContent = (j.meta.record_count || 0).toLocaleString('en-US');
+    const lu = j.meta.last_updated;
+    $('lastUpdated').textContent = lu || '尚未匯入';
+    $('lastUpdated').classList.toggle('empty', !lu);
+    const src = j.meta.source;
+    $('sourceUsed').textContent = src || '—';
+    $('sourceUsed').classList.toggle('empty', !src);
+  } catch (e) {
+    setStatus('讀取資訊失敗：' + e.message, 'err');
+  }
+}
+
+$('btnAutoDownload').addEventListener('click', async () => {
+  if (!confirm('將從備援 URL 下載最新統編資料（可能 5-30 分鐘）。確定？')) return;
+  $('btnAutoDownload').disabled = true;
+  setStatus('下載中…請耐心等待，視資料量可能 5-30 分鐘', '');
+  try {
+    const r = await fetch('/admin/vat-db/auto-download', { method: 'POST' });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+    setStatus(`✓ 已從「${j.source_used.name}」下載並匯入 ${j.records.toLocaleString('en-US')} 筆`, 'ok');
+    refreshInfo();
+  } catch (e) {
+    setStatus('自動下載失敗：' + e.message, 'err');
+  } finally {
+    $('btnAutoDownload').disabled = false;
+  }
+});
+
+$('fileInput').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  e.target.value = '';
+  setStatus(`上傳 ${f.name} 中…`);
+  const fd = new FormData();
+  fd.append('file', f);
+  try {
+    const r = await fetch('/admin/vat-db/upload', { method: 'POST', body: fd });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+    setStatus(`✓ 匯入 ${j.records.toLocaleString('en-US')} 筆 (來源：${j.source})`, 'ok');
+    refreshInfo();
+  } catch (err) {
+    setStatus('上傳失敗：' + err.message, 'err');
+  }
+});
+
+$('btnTest').addEventListener('click', async () => {
+  const vat = $('testVat').value.trim();
+  if (!/^\d{8}$/.test(vat)) {
+    alert('請輸入 8 位數字統編');
+    return;
+  }
+  const result = $('testResult');
+  result.className = 'vd-test-result';
+  try {
+    const r = await fetch(`/api/vat-lookup/${vat}`);
+    if (r.status === 404) {
+      result.classList.add('show', 'miss');
+      result.textContent = `✗ 統編 ${vat} 在資料庫中找不到`;
+      return;
+    }
+    const j = await r.json();
+    result.classList.add('show', 'found');
+    result.innerHTML = `<div><b>${escapeHtml(j.name)}</b></div>` +
+      (j.address ? `<div style="margin-top:4px;">${escapeHtml(j.address)}</div>` : '') +
+      (j.owner ? `<div style="margin-top:4px;">負責人：${escapeHtml(j.owner)}</div>` : '');
+  } catch (e) {
+    result.classList.add('show', 'miss');
+    result.textContent = '反查失敗：' + e.message;
+  }
+});
+
+$('btnClear').addEventListener('click', async () => {
+  if (!confirm('確定清空所有統編資料？此動作不可復原。')) return;
+  try {
+    const r = await fetch('/admin/vat-db/clear', { method: 'POST' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    setStatus('✓ 已清空', 'ok');
+    refreshInfo();
+  } catch (e) {
+    setStatus('清空失敗：' + e.message, 'err');
+  }
+});
+
+refreshInfo();
+</script>
+{% endblock %}

@@ -141,6 +141,13 @@ def add_invoices(user: Optional[Any], parsed: list[dict]) -> dict:
     if not parsed:
         return {"added": [], "duplicates": [], "cap_reached": False}
 
+    # M4: VAT 資料庫反查 — 把 seller_name 填進 entry（找不到 = 留 None，不爆炸）
+    try:
+        from ...core import vat_db
+        _vat_lookup = vat_db.lookup_vat
+    except Exception:
+        _vat_lookup = lambda v: None
+
     path = _buffer_path(user)
     key = _user_key(user)
     now = datetime.now(timezone.utc).isoformat()
@@ -161,9 +168,20 @@ def add_invoices(user: Optional[Any], parsed: list[dict]) -> dict:
             if len(invoices) + len(added) >= _MAX_INVOICES_PER_USER:
                 cap_reached = True
                 break
+            # 反查賣方名稱
+            seller_vat = p.get("seller_vat")
+            seller_name = None
+            if seller_vat:
+                try:
+                    info = _vat_lookup(seller_vat)
+                    if info:
+                        seller_name = info.get("name")
+                except Exception:
+                    pass  # lookup 失敗不影響主流程
             entry = {
                 "id": secrets.token_hex(8),
                 "scanned_at": now,
+                "seller_name": seller_name,
                 **p,
             }
             added.append(entry)
