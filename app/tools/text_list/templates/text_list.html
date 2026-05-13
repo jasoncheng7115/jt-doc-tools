@@ -53,12 +53,12 @@
 .tl-op label.head svg { color: #94a3b8; flex-shrink: 0; }
 .tl-op.on label.head svg { color: #2563eb; }
 .tl-op .head-row {
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: 6px;
 }
-/* 順序控制：只有勾選後才顯示 */
+/* 順序 + 拖曳把手：只有勾選後才顯示 */
 .tl-op .order-ctl {
   display: none;
-  align-items: center; gap: 2px; flex-shrink: 0;
+  align-items: center; gap: 4px; flex-shrink: 0;
 }
 .tl-op.on .order-ctl { display: inline-flex; }
 .tl-op .order-ctl .order-num {
@@ -68,20 +68,26 @@
   font-variant-numeric: tabular-nums;
   min-width: 16px; text-align: center;
 }
-.tl-op .order-ctl button {
-  background: #fff; border: 1px solid #cbd5e1;
-  border-radius: 3px; padding: 0; cursor: pointer;
-  width: 18px; height: 18px;
+.tl-op .drag-handle {
   display: inline-flex; align-items: center; justify-content: center;
-  color: #475569;
+  width: 18px; height: 18px;
+  border-radius: 3px; color: #94a3b8;
+  cursor: grab;
+  user-select: none; -webkit-user-select: none;
 }
-.tl-op .order-ctl button:hover:not(:disabled) {
-  background: #eff6ff; border-color: #93c5fd; color: #2563eb;
+.tl-op .drag-handle:hover { background: #e0e7ff; color: #4f46e5; }
+.tl-op .drag-handle:active { cursor: grabbing; }
+.tl-op .drag-handle svg { width: 13px; height: 13px; pointer-events: none; }
+
+/* 拖曳中：原卡片半透明 */
+.tl-op.dragging {
+  opacity: 0.4;
+  outline: 2px dashed #2563eb;
+  outline-offset: -2px;
 }
-.tl-op .order-ctl button:disabled {
-  opacity: 0.3; cursor: not-allowed;
-}
-.tl-op .order-ctl svg { width: 11px; height: 11px; }
+/* drop target hint：藍色橫條提示插入位置 */
+.tl-op.drop-before { box-shadow: -3px 0 0 #2563eb inset, 0 -3px 0 #2563eb; }
+.tl-op.drop-after  { box-shadow: -3px 0 0 #2563eb inset, 0  3px 0 #2563eb; }
 .tl-op .sub {
   display: none;          /* 預設摺疊 — 只有勾選後才展開 */
   gap: 8px 10px; flex-wrap: wrap; font-size: 12.5px;
@@ -192,13 +198,10 @@
         {{ icon('crop', size=14) }} Trim 前後空白
       </label>
       <span class="order-ctl">
-        <button type="button" class="ord-up" title="往前移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-        </button>
-        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
         <span class="order-num">–</span>
+        <span class="drag-handle" title="拖曳調整順序">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+        </span>
       </span>
     </div>
     </div>
@@ -209,13 +212,10 @@
         {{ icon('trash', size= 14) }} 移除空行
       </label>
       <span class="order-ctl">
-        <button type="button" class="ord-up" title="往前移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-        </button>
-        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
         <span class="order-num">–</span>
+        <span class="drag-handle" title="拖曳調整順序">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+        </span>
       </span>
     </div>
     </div>
@@ -226,13 +226,10 @@
         {{ icon('layers', size= 14) }} 去重複
       </label>
       <span class="order-ctl">
-        <button type="button" class="ord-up" title="往前移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-        </button>
-        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
         <span class="order-num">–</span>
+        <span class="drag-handle" title="拖曳調整順序">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+        </span>
       </span>
     </div>
       <div class="sub">
@@ -251,13 +248,10 @@
         {{ icon('chart-bar', size= 14) }} 排序
       </label>
       <span class="order-ctl">
-        <button type="button" class="ord-up" title="往前移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-        </button>
-        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
         <span class="order-num">–</span>
+        <span class="drag-handle" title="拖曳調整順序">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+        </span>
       </span>
     </div>
       <div class="sub">
@@ -276,13 +270,10 @@
         {{ icon('rotate-180', size= 14) }} 反轉順序
       </label>
       <span class="order-ctl">
-        <button type="button" class="ord-up" title="往前移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-        </button>
-        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
         <span class="order-num">–</span>
+        <span class="drag-handle" title="拖曳調整順序">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+        </span>
       </span>
     </div>
     </div>
@@ -293,13 +284,10 @@
         {{ icon('dice', size= 14) }} 隨機洗牌
       </label>
       <span class="order-ctl">
-        <button type="button" class="ord-up" title="往前移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-        </button>
-        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
         <span class="order-num">–</span>
+        <span class="drag-handle" title="拖曳調整順序">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+        </span>
       </span>
     </div>
     </div>
@@ -310,13 +298,10 @@
         {{ icon('text', size= 14) }} 大小寫轉換
       </label>
       <span class="order-ctl">
-        <button type="button" class="ord-up" title="往前移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-        </button>
-        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
         <span class="order-num">–</span>
+        <span class="drag-handle" title="拖曳調整順序">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+        </span>
       </span>
     </div>
       <div class="sub">
@@ -334,13 +319,10 @@
         {{ icon('search', size= 14) }} 篩選
       </label>
       <span class="order-ctl">
-        <button type="button" class="ord-up" title="往前移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-        </button>
-        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
         <span class="order-num">–</span>
+        <span class="drag-handle" title="拖曳調整順序">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+        </span>
       </span>
     </div>
       <div class="sub">
@@ -360,13 +342,10 @@
         {{ icon('align-tl', size= 14) }} 取前 N 筆
       </label>
       <span class="order-ctl">
-        <button type="button" class="ord-up" title="往前移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-        </button>
-        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
         <span class="order-num">–</span>
+        <span class="drag-handle" title="拖曳調整順序">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+        </span>
       </span>
     </div>
       <div class="sub">
@@ -380,13 +359,10 @@
         {{ icon('align-bl', size= 14) }} 取後 N 筆
       </label>
       <span class="order-ctl">
-        <button type="button" class="ord-up" title="往前移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-        </button>
-        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
         <span class="order-num">–</span>
+        <span class="drag-handle" title="拖曳調整順序">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+        </span>
       </span>
     </div>
       <div class="sub">
@@ -400,13 +376,10 @@
         {{ icon('paragraph', size= 14) }} 加前 / 後綴
       </label>
       <span class="order-ctl">
-        <button type="button" class="ord-up" title="往前移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-        </button>
-        <button type="button" class="ord-dn" title="往後移" tabindex="-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
         <span class="order-num">–</span>
+        <span class="drag-handle" title="拖曳調整順序">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+        </span>
       </span>
     </div>
       <div class="sub">
@@ -552,7 +525,7 @@ document.querySelectorAll('[data-op-toggle]').forEach(t => {
   if (t.checked) t.closest('.tl-op').classList.add('on');
 });
 
-// ─────────── 處理順序：編號 + 上下移 ───────────
+// ─────────── 處理順序：編號 + HTML5 拖曳 ───────────
 // 只算 .on 卡片之間的相對順序；未勾選的卡片仍留在 DOM 原位（視覺
 // 不亂跳），但不參與「排第幾」的計算。
 function _enabledCards() {
@@ -563,59 +536,89 @@ function refreshOrderNumbers() {
   const enabled = _enabledCards();
   document.querySelectorAll('.tl-op').forEach(card => {
     const num = card.querySelector('.order-num');
-    const up = card.querySelector('.ord-up');
-    const dn = card.querySelector('.ord-dn');
-    if (!num || !up || !dn) return;
+    if (!num) return;
     if (!card.classList.contains('on')) {
       num.textContent = '–';
       return;
     }
     const idx = enabled.indexOf(card);
     num.textContent = String(idx + 1);
-    up.disabled = (idx === 0);
-    dn.disabled = (idx === enabled.length - 1);
   });
 }
 
-// 上下移：只在 .on 卡片之間 swap DOM 位置；
-// 未勾選的卡片留原位，視覺上 .on 卡片從原處消失，到目標 .on 卡片的位置。
-function moveOp(card, dir) {
-  const enabled = _enabledCards();
-  const idx = enabled.indexOf(card);
-  if (idx < 0) return;
-  const targetIdx = idx + (dir === 'up' ? -1 : 1);
-  if (targetIdx < 0 || targetIdx >= enabled.length) return;
-  const target = enabled[targetIdx];
-  // 在 DOM 內 swap：先把 card 標記，把 target 移到 card 位置，再把 card 移到 target 原位
-  const cardNext = card.nextSibling;
-  const targetNext = target.nextSibling;
-  const parent = card.parentNode;
-  if (cardNext === target) {
-    // 緊鄰：直接把 card 插到 target 後面
-    parent.insertBefore(card, targetNext);
-  } else if (targetNext === card) {
-    parent.insertBefore(target, cardNext);
-  } else {
-    // 不相鄰：用 placeholder 雙向交換
-    const placeholder = document.createComment('swap');
-    parent.insertBefore(placeholder, card);
-    parent.insertBefore(card, targetNext);
-    parent.insertBefore(target, placeholder);
-    parent.removeChild(placeholder);
+// 拖曳重排：用 HTML5 native DnD。
+// - 只有 .on 卡片可拖（drag-handle 顯示在 .on 卡片）
+// - mousedown 在 drag-handle 才把 draggable=true，其他地方 mousedown
+//   保持 draggable=false 避免拖到輸入框 / select 起反應
+// - 只能 drop 在另一張 .on 卡片身上；drop 位置依滑鼠在卡片上半 / 下半決定
+//   插在前 / 後（交換 DOM 位置）。未勾選的卡片不可被 drop（保留視覺位置）
+let _dragging = null;
+
+document.querySelectorAll('.tl-op').forEach(card => {
+  // mousedown 在 drag-handle → 開啟 draggable；其他地方 → 關閉
+  const handle = card.querySelector('.drag-handle');
+  if (handle) {
+    handle.addEventListener('mousedown', () => {
+      card.setAttribute('draggable', 'true');
+    });
   }
-  refreshOrderNumbers();
-}
-
-document.querySelectorAll('.tl-op .ord-up').forEach(b => {
-  b.addEventListener('click', e => {
-    e.preventDefault(); e.stopPropagation();
-    moveOp(b.closest('.tl-op'), 'up');
+  card.addEventListener('mousedown', e => {
+    if (!handle || !handle.contains(e.target)) {
+      card.setAttribute('draggable', 'false');
+    }
   });
-});
-document.querySelectorAll('.tl-op .ord-dn').forEach(b => {
-  b.addEventListener('click', e => {
-    e.preventDefault(); e.stopPropagation();
-    moveOp(b.closest('.tl-op'), 'down');
+
+  card.addEventListener('dragstart', e => {
+    if (!card.classList.contains('on')) {
+      e.preventDefault();
+      return;
+    }
+    _dragging = card;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    // Firefox 需要 setData 才會啟動拖曳
+    try { e.dataTransfer.setData('text/plain', card.dataset.op || ''); } catch (err) {}
+  });
+
+  card.addEventListener('dragend', () => {
+    card.classList.remove('dragging');
+    document.querySelectorAll('.tl-op.drop-before, .tl-op.drop-after')
+      .forEach(c => c.classList.remove('drop-before', 'drop-after'));
+    _dragging = null;
+    refreshOrderNumbers();
+  });
+
+  card.addEventListener('dragover', e => {
+    if (!_dragging || _dragging === card) return;
+    if (!card.classList.contains('on')) return;  // 只能 drop 在 .on 卡片身上
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    // 上半 → drop before；下半 → drop after
+    const rect = card.getBoundingClientRect();
+    const after = (e.clientY - rect.top) > rect.height / 2;
+    document.querySelectorAll('.tl-op.drop-before, .tl-op.drop-after')
+      .forEach(c => c.classList.remove('drop-before', 'drop-after'));
+    card.classList.add(after ? 'drop-after' : 'drop-before');
+  });
+
+  card.addEventListener('dragleave', () => {
+    card.classList.remove('drop-before', 'drop-after');
+  });
+
+  card.addEventListener('drop', e => {
+    if (!_dragging || _dragging === card) return;
+    if (!card.classList.contains('on')) return;
+    e.preventDefault();
+    const rect = card.getBoundingClientRect();
+    const after = (e.clientY - rect.top) > rect.height / 2;
+    const parent = card.parentNode;
+    if (after) {
+      parent.insertBefore(_dragging, card.nextSibling);
+    } else {
+      parent.insertBefore(_dragging, card);
+    }
+    card.classList.remove('drop-before', 'drop-after');
+    refreshOrderNumbers();
   });
 });
 
