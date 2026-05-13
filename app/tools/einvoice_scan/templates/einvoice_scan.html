@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}電子發票掃描 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.es-warn {
+  background: #fef3c7; border: 1px solid #fcd34d; color: #78350f;
+  padding: 10px 14px; border-radius: 6px; margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.es-uploader {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 720px) {
+  .es-uploader { grid-template-columns: 1fr 1fr; }
+}
+
+.es-drop {
+  border: 2px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 28px 20px;
+  text-align: center;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.es-drop:hover, .es-drop.drop-hover {
+  background: #eff6ff; border-color: #2563eb;
+}
+.es-drop input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer;
+}
+.es-drop .ic { color: #2563eb; }
+.es-drop .ttl { font-size: 14px; font-weight: 600; color: #1e293b; }
+.es-drop .desc { font-size: 12px; color: #64748b; }
+
+.es-status { font-size: 12.5px; color: #64748b; min-height: 18px; margin-top: 8px; }
+.es-status .ok { color: #059669; }
+.es-status .err { color: #b91c1c; }
+
+.es-buffer-toolbar {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin: 14px 0 8px;
+}
+.es-buffer-toolbar .info {
+  font-size: 13px; color: #475569;
+  font-variant-numeric: tabular-nums;
+}
+.es-buffer-toolbar .info b { color: #1e293b; }
+.es-buffer-toolbar .right { margin-left: auto; display: flex; gap: 6px; }
+.es-mini-btn {
+  font-size: 12px; padding: 4px 10px; background: #f1f5f9;
+  border: 1px solid #e2e8f0; border-radius: 4px; color: #475569;
+  cursor: pointer;
+}
+.es-mini-btn:hover { background: #e2e8f0; }
+.es-mini-btn.danger { color: #b91c1c; }
+.es-mini-btn.danger:hover { background: #fee2e2; }
+
+.es-table-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 6px; }
+.es-table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.es-table th, .es-table td {
+  padding: 6px 10px; border-bottom: 1px solid #e5e7eb;
+  text-align: left; white-space: nowrap;
+}
+.es-table th {
+  background: #f1f5f9; color: #475569; font-weight: 600;
+  font-size: 12px; position: sticky; top: 0;
+}
+.es-table tr:hover td { background: #f8fafc; }
+.es-table .num { text-align: right; }
+.es-table .del-btn {
+  background: none; border: 0; color: #94a3b8; cursor: pointer;
+  padding: 2px 6px; font-size: 16px; line-height: 1;
+}
+.es-table .del-btn:hover { color: #b91c1c; }
+.es-empty {
+  padding: 28px; text-align: center; color: #94a3b8; font-size: 13px;
+}
+
+.es-toast {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+  background: #1e293b; color: #fff; padding: 8px 14px; border-radius: 6px;
+  font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  z-index: 9999;
+}
+.es-toast.show { opacity: 1; }
+.es-toast.ok { background: #059669; }
+.es-toast.err { background: #b91c1c; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>{{ icon('qr', size=22) }} 電子發票掃描</h1>
+<p class="muted">上傳發票照片或 PDF，自動掃描 QR Code 解出發票號碼 / 日期 / 金額 / 統編。手機可直接拍照，掃完的資料會即時同步到電腦端的列表（同一帳號跨裝置共用）。</p>
+
+{% if not qr_backend_available %}
+<div class="es-warn">
+  <b>⚠ QR 解碼後端 (pyzbar) 未安裝。</b>
+  Linux 請執行 <code>apt install libzbar0</code>，macOS 執行 <code>brew install zbar</code>，
+  Windows wheel 已內含 dll。安裝完請執行 <code>jtdt restart</code>。
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 上傳發票</h2>
+  <div class="es-uploader">
+    <label class="es-drop">
+      <input type="file" id="cameraInput" accept="image/*" capture="environment" multiple>
+      <span class="ic">{{ icon('image', size=32) }}</span>
+      <span class="ttl">拍照 / 從相簿選</span>
+      <span class="desc">手機按此會啟動相機；可一次選多張</span>
+    </label>
+    <label class="es-drop" id="dropZone">
+      <input type="file" id="fileInput" accept="image/*,application/pdf" multiple>
+      <span class="ic">{{ icon('paperclip', size=32) }}</span>
+      <span class="ttl">上傳檔案 / 拖放</span>
+      <span class="desc">支援 PNG / JPG / WebP / PDF（一份可含多張）</span>
+    </label>
+  </div>
+  <div class="es-status" id="status"></div>
+</div>
+
+<div class="panel">
+  <div class="es-buffer-toolbar">
+    <h2 style="margin: 0;">2. 已掃描清單</h2>
+    <div class="info" id="bufferInfo">— / 1000</div>
+    <div class="right">
+      <label style="font-size: 12px; color: #64748b; display: inline-flex; align-items: center; gap: 4px;">
+        <input type="checkbox" id="autoRefresh" checked> 自動更新
+      </label>
+      <button type="button" class="es-mini-btn" id="btnRefresh">{{ icon('refresh', size=12) }} 重新整理</button>
+      <button type="button" class="es-mini-btn danger" id="btnClear">{{ icon('trash', size=12) }} 全部清空</button>
+    </div>
+  </div>
+  <div class="es-table-wrap">
+    <table class="es-table" id="bufferTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>發票號碼</th>
+          <th>日期</th>
+          <th class="num">總計</th>
+          <th class="num">銷售額</th>
+          <th class="num">稅額</th>
+          <th>賣方統編</th>
+          <th>買方統編</th>
+          <th>掃描時間</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="bufferTbody">
+        <tr><td colspan="10" class="es-empty">尚未掃描任何發票</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="es-toast" id="toast"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = id => document.getElementById(id);
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[<>&"']/g, c =>
+    ({"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+function showToast(msg, kind) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'es-toast show' + (kind ? ' ' + kind : '');
+  clearTimeout(showToast._h);
+  showToast._h = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function fmtAmount(v) {
+  if (v == null) return '';
+  return Number(v).toLocaleString('en-US');
+}
+
+function fmtTax(total, untaxed) {
+  if (total == null || untaxed == null) return '';
+  return fmtAmount(total - untaxed);
+}
+
+function fmtScannedAt(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('zh-TW', { hour12: false });
+  } catch (e) { return iso; }
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  return iso.replace(/-/g, '/');
+}
+
+// ─── 上傳 + 掃描 ───
+async function uploadFiles(files) {
+  if (!files || !files.length) return;
+  const arr = Array.from(files);
+  $('status').innerHTML = `<span>掃描中…(${arr.length} 張)</span>`;
+  let totalAdded = 0, totalDup = 0, totalErr = 0;
+  for (const f of arr) {
+    const fd = new FormData();
+    fd.append('file', f);
+    try {
+      const r = await fetch('/tools/einvoice-scan/scan', { method: 'POST', body: fd });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+      totalAdded += j.added_count || 0;
+      totalDup += (j.duplicates || []).length;
+    } catch (e) {
+      totalErr++;
+      console.error(`Failed to scan ${f.name}:`, e);
+    }
+  }
+  let msg = `掃描完成：新增 ${totalAdded} 張`;
+  if (totalDup) msg += `，跳過重複 ${totalDup} 張`;
+  if (totalErr) msg += `，${totalErr} 張失敗`;
+  $('status').innerHTML = `<span class="ok">${escapeHtml(msg)}</span>`;
+  showToast(msg, totalAdded ? 'ok' : (totalErr ? 'err' : ''));
+  await loadBuffer();
+}
+
+['cameraInput', 'fileInput'].forEach(id => {
+  $(id).addEventListener('change', e => {
+    if (e.target.files && e.target.files.length) uploadFiles(e.target.files);
+    e.target.value = '';
+  });
+});
+
+// 拖放（PC 用）
+const dropZone = $('dropZone');
+let dragDepth = 0;
+dropZone.addEventListener('dragenter', e => {
+  e.preventDefault(); dragDepth++; dropZone.classList.add('drop-hover');
+});
+dropZone.addEventListener('dragleave', () => {
+  dragDepth--;
+  if (dragDepth <= 0) { dragDepth = 0; dropZone.classList.remove('drop-hover'); }
+});
+dropZone.addEventListener('dragover', e => e.preventDefault());
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dragDepth = 0; dropZone.classList.remove('drop-hover');
+  if (e.dataTransfer && e.dataTransfer.files) uploadFiles(e.dataTransfer.files);
+});
+
+// ─── Buffer 列表 ───
+async function loadBuffer() {
+  try {
+    const r = await fetch('/tools/einvoice-scan/buffer');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    renderBuffer(j.invoices || [], j.info || {});
+  } catch (e) {
+    console.error('loadBuffer failed:', e);
+  }
+}
+
+function renderBuffer(invoices, info) {
+  $('bufferInfo').innerHTML = `<b>${invoices.length}</b> / ${info.limit || 1000} 張`;
+  const tbody = $('bufferTbody');
+  if (!invoices.length) {
+    tbody.innerHTML = '<tr><td colspan="10" class="es-empty">尚未掃描任何發票</td></tr>';
+    return;
+  }
+  const rows = invoices.map((inv, i) => {
+    const tax = (inv.amount_total != null && inv.amount_untaxed != null)
+      ? inv.amount_total - inv.amount_untaxed : null;
+    return `<tr>
+      <td>${i + 1}</td>
+      <td>${escapeHtml(inv.invoice_number || '')}</td>
+      <td>${escapeHtml(fmtDate(inv.date))}</td>
+      <td class="num">${escapeHtml(fmtAmount(inv.amount_total))}</td>
+      <td class="num">${escapeHtml(fmtAmount(inv.amount_untaxed))}</td>
+      <td class="num">${escapeHtml(fmtAmount(tax))}</td>
+      <td>${escapeHtml(inv.seller_vat || '')}</td>
+      <td>${escapeHtml(inv.buyer_vat || '')}</td>
+      <td>${escapeHtml(fmtScannedAt(inv.scanned_at))}</td>
+      <td><button class="del-btn" data-id="${escapeHtml(inv.id)}" title="刪除">×</button></td>
+    </tr>`;
+  });
+  tbody.innerHTML = rows.join('');
+  // 綁刪除按鈕
+  tbody.querySelectorAll('.del-btn').forEach(b => {
+    b.addEventListener('click', () => deleteInvoice(b.dataset.id));
+  });
+}
+
+async function deleteInvoice(id) {
+  if (!id) return;
+  try {
+    const r = await fetch(`/tools/einvoice-scan/buffer/${id}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    showToast('已刪除');
+    await loadBuffer();
+  } catch (e) {
+    showToast(`刪除失敗：${e.message}`, 'err');
+  }
+}
+
+$('btnRefresh').addEventListener('click', () => loadBuffer());
+
+$('btnClear').addEventListener('click', async () => {
+  if (!confirm('確定要清空全部已掃描的發票？此動作不可復原。')) return;
+  try {
+    const r = await fetch('/tools/einvoice-scan/buffer', { method: 'DELETE' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    showToast(`已清空 ${j.cleared} 張`, 'ok');
+    await loadBuffer();
+  } catch (e) {
+    showToast(`清空失敗：${e.message}`, 'err');
+  }
+});
+
+// 自動 polling — 電腦端跨裝置即時看到手機掃進來的發票
+let _pollTimer = null;
+function startPolling() {
+  stopPolling();
+  _pollTimer = setInterval(loadBuffer, 3000);
+}
+function stopPolling() {
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+}
+$('autoRefresh').addEventListener('change', e => {
+  if (e.target.checked) startPolling();
+  else stopPolling();
+});
+
+// 初始載入 + 開啟 polling
+loadBuffer();
+if ($('autoRefresh').checked) startPolling();
+</script>
+{% endblock %}

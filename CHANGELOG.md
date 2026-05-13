@@ -4,6 +4,24 @@
 
 ---
 
+## [1.7.70] - 2026-05-13
+
+### 新增
+
+- **新工具：電子發票掃描（`einvoice-scan`）— M1 階段**：上傳台灣電子發票 (B2C) 照片或 PDF，自動掃描左 QR Code 解出結構化資料：發票號碼 / 開立日期 / 隨機碼 / 銷售額（hex）/ 總計金額（hex）/ 買賣方統編。準確率近 100%（不靠 OCR 不會有辨識錯誤）。
+  - **手機 / PC 跨裝置**：手機按上傳會啟動相機（`<input capture="environment">`），同帳號下手機掃完的發票即時同步到電腦端列表（每 3 秒自動 polling）
+  - **per-user buffer**：認證 ON 時用 sha1(username|realm) 雜湊區分；認證 OFF 用單一 default 檔。上限 1000 張 / 用戶
+  - **重複偵測**：同一 invoice_number 視為 dup，提示跳過
+  - **辨識後端**：pyzbar (Apache 2.0 + zbar LGPL-2.1)。Linux 需 `apt install libzbar0`，macOS `brew install zbar`，Windows wheel 內含 dll
+  - **API endpoints**：POST /scan、GET /buffer、DELETE /buffer/{id}、DELETE /buffer、POST /api/einvoice-scan
+  - 預設權限：default-user 即可使用
+  - **新增依賴**：`pyzbar>=0.1.9` 加入 pyproject.toml
+  - **新增 icon**：`qr` 圖示加入 `components/icons.html`
+
+  M2 階段（規劃中）：表格欄位顯示 / 排序設定。M3：欄位顯示格式系統 + CSV / XLSX / JSON 匯出。
+
+---
+
 ## [1.7.69] - 2026-05-13
 
 ### 改進
