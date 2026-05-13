@@ -27,6 +27,15 @@
   gap: 8px;
   margin: 8px 0;
   align-items: start;
+  position: relative;       /* 給 .tl-connectors SVG overlay 定位用 */
+}
+.tl-connectors {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 1;
 }
 .tl-op {
   border: 1px solid #e5e7eb;
@@ -208,6 +217,7 @@
 <div class="panel">
   <h2 style="margin-top:0;">2. 操作（勾選會依序套用）</h2>
   <div class="tl-ops">
+    <svg class="tl-connectors" xmlns="http://www.w3.org/2000/svg"></svg>
     <div class="tl-op" data-op="trim">
       <div class="head-row">
       <label class="head">
@@ -580,24 +590,69 @@ function refreshOrderNumbers() {
     const idx = enabled.indexOf(card);
     num.textContent = String(idx + 1);
   });
-  // 標記 pipeline 最後一張（不畫箭頭）
+  // 標記 pipeline 最後一張（不畫 ::after 箭頭）
   if (enabled.length) {
     enabled[enabled.length - 1].classList.add('pipeline-last');
   }
-  // grid 換行的卡片：下一張 .on 卡片的 top 比目前大 = 換行
-  // 用 getBoundingClientRect 偵測（要在下一個 frame 才有正確排版）
+  // 標記換行邊界 + 畫 SVG wrap connector（要等下一個 frame layout 完成才量得到位置）
   requestAnimationFrame(() => {
     for (let i = 0; i < enabled.length - 1; i++) {
       const cur = enabled[i];
       const next = enabled[i + 1];
       const curRect = cur.getBoundingClientRect();
       const nextRect = next.getBoundingClientRect();
-      // 同列 = top 接近相同（容忍 5px）；不同列 = top 不同
       if (Math.abs(curRect.top - nextRect.top) > 5) {
-        cur.classList.add('row-end');  // 換行邊界，箭頭沒意義就隱藏
+        cur.classList.add('row-end');  // 換行邊界，CSS ::after 箭頭隱藏
       }
     }
+    drawWrapConnectors();
   });
+}
+
+// SVG overlay：在 row-end 卡片右側拉條 L 線到下一行第一張卡片，箭頭指向其頂端
+function drawWrapConnectors() {
+  const wrap = document.querySelector('.tl-ops');
+  const svg = document.querySelector('.tl-connectors');
+  if (!wrap || !svg) return;
+  const wrapRect = wrap.getBoundingClientRect();
+  // 重設 SVG（保留 defs）
+  svg.innerHTML = '<defs><marker id="tl-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker></defs>';
+  svg.setAttribute('width', wrapRect.width);
+  svg.setAttribute('height', wrapRect.height);
+
+  const enabled = _enabledCards();
+  for (let i = 0; i < enabled.length - 1; i++) {
+    const cur = enabled[i];
+    const next = enabled[i + 1];
+    const a = cur.getBoundingClientRect();
+    const b = next.getBoundingClientRect();
+    if (Math.abs(a.top - b.top) < 5) continue;  // 同列由 CSS ::after 三角形處理
+
+    // 座標轉成相對 wrap
+    const aR = a.right - wrapRect.left + 1;
+    const aT = a.top - wrapRect.top + 18;          // head row 高度
+    const aB = a.bottom - wrapRect.top;
+    const bL = b.left - wrapRect.left;
+    const bT = b.top - wrapRect.top + 18;
+    const wallR = wrapRect.width - 1;
+    const gapMidY = (aB + (b.top - wrapRect.top)) / 2;
+    const targetX = bL + 18;                        // 對齊 next card 內 checkbox 中心
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    // 出 cur 右邊 → 牆 → 下 → 左移到 next 上方 → 進 next 頂端
+    const d = `M ${aR} ${aT}
+               L ${wallR} ${aT}
+               L ${wallR} ${gapMidY}
+               L ${targetX} ${gapMidY}
+               L ${targetX} ${bT - 8}`;
+    path.setAttribute('d', d);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', '#2563eb');
+    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('marker-end', 'url(#tl-arr)');
+    svg.appendChild(path);
+  }
 }
 
 // 拖曳重排：用 HTML5 native DnD。
