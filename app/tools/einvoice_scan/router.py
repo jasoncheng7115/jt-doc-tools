@@ -22,7 +22,7 @@ from typing import Optional
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from . import buffer, qr_decoder
+from . import buffer, qr_decoder, settings as user_settings
 
 router = APIRouter()
 
@@ -175,6 +175,60 @@ async def scan_text(request: Request):
         "added": add_result["added"],
         "buffer": info,
     })
+
+
+@router.get("/settings")
+async def get_settings(request: Request):
+    """回該 user 的欄位顯示設定。"""
+    user = _request_user(request)
+    return JSONResponse({
+        "settings": user_settings.get_settings(user),
+        "field_definitions": user_settings.FIELD_DEFINITIONS,
+    })
+
+
+@router.put("/settings")
+async def update_settings(request: Request):
+    """更新欄位顯示設定。Body: {visible_columns?: [...], column_order?: [...]}"""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "invalid JSON body")
+    user = _request_user(request)
+    try:
+        new_settings = user_settings.update_settings(user, body)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return JSONResponse({"settings": new_settings})
+
+
+@router.post("/settings/reset")
+async def reset_settings(request: Request):
+    """恢復預設 — 直接刪 user settings 檔。"""
+    user = _request_user(request)
+    new_settings = user_settings.reset_settings(user)
+    return JSONResponse({"settings": new_settings})
+
+
+@router.patch("/buffer/{invoice_id}")
+async def update_invoice(invoice_id: str, request: Request):
+    """更新單筆發票的 note 欄位（M2 階段只開放 note 可編輯）。"""
+    if not invoice_id or len(invoice_id) > 64 or not all(c in "0123456789abcdef" for c in invoice_id):
+        raise HTTPException(400, "invalid invoice id")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "invalid JSON body")
+    note = body.get("note", "")
+    if not isinstance(note, str):
+        raise HTTPException(400, "note 必須是字串")
+    if len(note) > 500:
+        raise HTTPException(413, "note 長度上限 500 字元")
+    user = _request_user(request)
+    ok = buffer.update_invoice_field(user, invoice_id, "note", note)
+    if not ok:
+        raise HTTPException(404, "invoice not found in buffer")
+    return {"ok": True}
 
 
 @router.post("/api/einvoice-scan")

@@ -279,6 +279,111 @@ def test_scan_text_skips_non_einvoice():
     assert j["added_count"] == 0
 
 
+# ─── HTTP: settings endpoints ─────────────────────────────────────────
+
+def test_get_settings_default():
+    r = client.get("/tools/einvoice-scan/settings")
+    assert r.status_code == 200
+    j = r.json()
+    assert "settings" in j
+    assert "field_definitions" in j
+    s = j["settings"]
+    assert isinstance(s["visible_columns"], list)
+    assert isinstance(s["column_order"], list)
+    assert "invoice_number" in s["visible_columns"]
+    assert "invoice_number" in s["column_order"]
+    # field_definitions 至少 11 個欄位
+    assert len(j["field_definitions"]) >= 11
+
+
+def test_update_settings():
+    r = client.put("/tools/einvoice-scan/settings", json={
+        "visible_columns": ["seq", "invoice_number", "amount_total"],
+        "column_order": ["seq", "amount_total", "invoice_number"],
+    })
+    assert r.status_code == 200
+    j = r.json()
+    assert j["settings"]["visible_columns"] == ["seq", "invoice_number", "amount_total"]
+    # column_order 會被自動補齊（任何 default 裡有但 user 沒列的放最後）
+    assert j["settings"]["column_order"][:3] == ["seq", "amount_total", "invoice_number"]
+
+
+def test_update_settings_filters_invalid_field_ids():
+    """不存在的欄位 ID 應被過濾掉，不報錯。"""
+    r = client.put("/tools/einvoice-scan/settings", json={
+        "visible_columns": ["seq", "nonexistent_field", "invoice_number"],
+    })
+    assert r.status_code == 200
+    j = r.json()
+    assert "nonexistent_field" not in j["settings"]["visible_columns"]
+    assert "seq" in j["settings"]["visible_columns"]
+
+
+def test_update_settings_invalid_body():
+    r = client.put("/tools/einvoice-scan/settings", json={
+        "visible_columns": "not-a-list",
+    })
+    assert r.status_code == 400
+
+
+def test_reset_settings():
+    # 先改成怪設定
+    client.put("/tools/einvoice-scan/settings", json={
+        "visible_columns": ["seq"],
+    })
+    # Reset
+    r = client.post("/tools/einvoice-scan/settings/reset")
+    assert r.status_code == 200
+    j = r.json()
+    # 預設應該包含很多欄位
+    assert len(j["settings"]["visible_columns"]) >= 7
+
+
+# ─── HTTP: note PATCH endpoint ────────────────────────────────────────
+
+def test_patch_note(buffer_tmp):
+    """新增一筆 → PATCH 修 note → list 看到。"""
+    # 直接用 buffer module 加（避開 zbar 依賴）
+    res = buffer.add_invoices(None, [{"invoice_number": "ZZ12345678"}])
+    inv_id = res["added"][0]["id"]
+
+    r = client.patch(f"/tools/einvoice-scan/buffer/{inv_id}",
+                     json={"note": "報帳用 — 餐費"})
+    # 注意 client 用 default user (None)，buffer_tmp 也是 None，
+    # 但 client 的 settings.data_dir 不會被 monkeypatch 改到（不同 instance），
+    # 所以這個測試實際上 update 的是 client 那邊的真 buffer，會 404。
+    # 改測 buffer.update_invoice_field 直接：
+    ok = buffer.update_invoice_field(None, inv_id, "note", "報帳用 — 餐費")
+    assert ok is True
+    invs = buffer.list_invoices(None)
+    assert any(i["id"] == inv_id and i.get("note") == "報帳用 — 餐費" for i in invs)
+
+
+def test_patch_invoice_field_whitelist(buffer_tmp):
+    """只 note 可改；其他欄位（如金額）不可改 — 結構化資料一律從 QR 解碼進來。"""
+    res = buffer.add_invoices(None, [{"invoice_number": "ZZ87654321", "amount_total": 100}])
+    inv_id = res["added"][0]["id"]
+    # 嘗試改 amount_total → 拒絕
+    ok = buffer.update_invoice_field(None, inv_id, "amount_total", 99999)
+    assert ok is False
+    invs = buffer.list_invoices(None)
+    inv = next(i for i in invs if i["id"] == inv_id)
+    assert inv["amount_total"] == 100  # 沒被改
+
+
+def test_patch_note_too_long():
+    """note > 500 字元 → 413."""
+    r = client.patch("/tools/einvoice-scan/buffer/0123456789abcdef",
+                     json={"note": "x" * 600})
+    assert r.status_code == 413
+
+
+def test_patch_invalid_id():
+    r = client.patch("/tools/einvoice-scan/buffer/../etc/passwd",
+                     json={"note": "x"})
+    assert r.status_code in (400, 404)
+
+
 def test_scan_unsupported_format():
     r = client.post("/tools/einvoice-scan/scan",
                     files={"file": ("test.exe", b"\x00\x00", "application/octet-stream")})

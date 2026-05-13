@@ -4,6 +4,40 @@
 
 ---
 
+## [1.7.74] - 2026-05-13
+
+### 新增（einvoice-scan M2 — 欄位顯示 / 排序 + 備註可編輯）
+
+- **欄位設定面板**：buffer 工具列加「⚙ 欄位」按鈕。摺疊面板含 11 個欄位卡片：
+  - 序號 / 發票號碼 / 開立日期 / 總計金額 / 銷售額 / 稅額 / 賣方統編 / 買方統編 / 隨機碼 / 掃描時間 / 備註
+  - 每張卡片：拖曳把手 ⋮⋮ + checkbox + 欄位名稱
+  - 勾選 = 顯示；拖曳調整順序
+  - **變更立即套用到表格**（debounce 500ms 後同步存到 server）
+  - 「恢復預設」按鈕
+- **跨裝置設定同步**：設定存到 `data/einvoice_settings/<user_hash>.json`（與 buffer 同 user_key 算法）。手機改設定電腦端 polling 時自動同步
+- **備註欄位可編輯**：勾選顯示後，每張發票多一個 `<input>` 欄位輸入備註，blur / change 時 PATCH `/buffer/{id}`（debounce 300ms）
+- **動態表格**：thead + tbody 完全由 settings 動態生成，不再寫死 column。新欄位以後加只要更新 FIELD_DEFINITIONS
+
+### 新 endpoints
+
+- `GET /tools/einvoice-scan/settings` — 回 settings + field_definitions
+- `PUT /tools/einvoice-scan/settings` — 更新 visible_columns / column_order
+- `POST /tools/einvoice-scan/settings/reset` — 恢復預設（刪 user settings 檔）
+- `PATCH /tools/einvoice-scan/buffer/{id}` — 改 note 欄位（白名單，只 note 可改；其他結構化欄位拒絕）
+
+### 安全
+
+- field id 嚴格白名單（VALID_FIELD_IDS），未知 ID 自動過濾不報錯
+- note 長度上限 500 字元
+- buffer update field 白名單只允許 note — 結構化資料（金額 / 號碼）只能從 QR 解碼進來，避免使用者誤改造成核帳對不上
+- 設定檔讀失敗 / 毀損 → fallback 預設不卡使用者
+
+### 文件
+
+- `field_definitions.py` 集中 11 個欄位定義（後端 single source of truth；endpoint 給前端用）— M3 會擴充 formats
+
+---
+
 ## [1.7.73] - 2026-05-13
 
 ### 改進
