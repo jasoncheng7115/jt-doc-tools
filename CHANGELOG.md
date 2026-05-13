@@ -4,6 +4,59 @@
 
 ---
 
+## [1.7.54] - 2026-05-13
+
+### 修正
+
+- **`translate-doc` 匯出 PDF 短列空白**：v1.7.53 修了 CJK 字型載入後，使用者反映多行的列正常但單行短列（`Login` / `Secure` / `*Email` 等）仍空白。根因：`page.insert_textbox` 對 `fontsize=10` 需要 rect 內高 ≥ 18pt 才會渲染，rect 不足時靜默回負數（`h=13` 回 `-4.36`，`h=16` 仍回 `-1.36`）。原 `line_h=13` → 單行 row 內高只有 13pt → insert_textbox 拒絕。修法：`line_h` 提到 20，單行 row_h = 28，內高 20pt 留足餘量。同時 `_est_lines()` 改估 CJK 字寬 1.6x ASCII，避免長 CJK 譯文被擠超出 rect。
+
+---
+
+## [1.7.53] - 2026-05-13
+
+### 修正
+
+- **`translate-doc` 匯出 PDF 中文亂碼**：v1.7.52 寫的 `_build_pdf` 呼叫 `font_catalog.best_cjk_path("sans", True)` ── 第二參數 `cjk` 應該是 `"traditional"` / `"simplified"` 字串，傳 `True` 永遠 lookup miss → 回 `None` → 落到 `helv` 字型 → 中文全變方框 / 缺字。修法：傳 `"traditional"`，並正確解包回傳的 `(Path, ttc_idx)` tuple。TTC 字型用 `set_simple=False`（PyMuPDF CID 字型）。.30 上實測 NotoSansCJK 載入成功，原文 + 譯文 CJK 都正確顯示。
+
+### 改進
+
+- **`translate-doc` 匯出試算表原文 / 譯文兩欄不同色系**：之前 xlsx / ods 只有交替橫條淡灰；現在原文用暖黃（`#FFFBEB` / 偶數列 `#FEF3C7`），譯文用冷綠（`#ECFDF5` / 偶數列 `#D1FAE5`）。色系區分讓使用者一眼看出哪欄是原文、哪欄是譯文，配合交替列也保留可讀性。
+
+---
+
+## [1.7.52] - 2026-05-13
+
+### 改進
+
+- **`translate-doc` 並排對照面板 summary 簡化**：summary 只放「2. 並排對照」標題，meta 文字 + 5 顆按鈕（複製譯文 / 對照 + 3 個匯出 dropdown）改放進面板內第一條 toolbar，標題列乾淨清爽。
+- **`translate-doc` 5 種匯出格式加樣式 + 頁首 meta**：之前 docx / odt / pdf / xlsx / ods 都是純內容、無樣式，標題沒突出、欄寬參差、沒對齊。改進：
+  - **docx**：藍底白字粗體標題列、表格框線、欄寬均分 8cm、交替橫條淡灰底、文件最上方加 heading「逐句翻譯對照」+ meta（原檔名 / 翻譯時間 / 共 N 對）
+  - **odt**：同 docx 用 ODF Style — 標題列藍底白字、淡灰交替列、欄寬 8cm、頁首 heading + meta 文字
+  - **pdf**：A4 兩欄、藍底白字標題列、交替列淡底、外框線、首頁標題 + meta；CJK 字型自動載入
+  - **xlsx**：藍底白字粗體 freeze 標題列、A/B 欄寬 60、儲存格 wrap_text、交替淡底、A1 起兩列 meta
+  - **ods**：同 xlsx 用 ODF Style — 藍底白字、欄寬 8cm、交替列、頁首 meta
+- **`translate-doc` 匯出檔名帶原檔 stem**：例「公司簡介_2026.pdf」→ 匯出 docx 變「公司簡介_2026_translated.docx」（沒上傳檔則 fallback「translated.{fmt}」）。Filename stem sanitize 過濾 `/ \ ..` 防 traversal。
+- **`translate-doc` 匯出 metadata（檔名 + 翻譯時間）**：5 種文件 / 試算表格式頁首加「原檔：xxx ・ 翻譯時間：YYYY-MM-DD HH:MM ・ 共 N 對」；文字檔（txt / md / csv）保持純內容不加 meta。
+
+---
+
+## [1.7.51] - 2026-05-13
+
+### 新增
+
+- **`translate-doc` 匯出 8 種格式**：「複製譯文」「複製對照」按鈕旁加 3 顆下拉按鈕，總共 8 種格式：
+  - **匯出文字檔**：`.txt`（原譯對照空行分隔）、`.md`（Markdown 表格）、`.csv`（兩欄 source,target 帶 UTF-8 BOM）
+  - **匯出文件檔**：`.docx`（Word 兩欄表格）、`.odt`（OpenDocument 文字）、`.pdf`（兩欄表格 A4，CJK 字型自動載入）
+  - **匯出試算表**：`.xlsx`（Excel）、`.ods`（OpenDocument 試算表）
+
+  後端 `POST /tools/translate-doc/export` 接 `{format, pairs}` 回對應檔。新增 `openpyxl>=3.1` 依賴（Excel 用）。每種格式都跑 `asyncio.to_thread` 不阻塞 event loop。1 萬對上限保護。
+
+### 改進
+
+- **`translate-doc` 單格複製按鈕加 toast 訊息**：之前點原文 / 譯文右下角複製按鈕只有按鈕短暫變色，使用者不確定有沒有複製到。改為彈 toast「已複製原文 / 譯文（N 字）」；複製失敗（瀏覽器禁剪貼簿）也會明確提示。
+
+---
+
 ## [1.7.50] - 2026-05-13
 
 ### 安全

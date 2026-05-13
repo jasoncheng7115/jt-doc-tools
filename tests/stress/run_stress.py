@@ -151,6 +151,32 @@ async def _worker(wid, client, base_url, stop_at, results, token, sequence):
         n += 1
 
 
+async def _login(client, base_url, login_str):
+    """user[:pass[@realm]] → POST /login → session cookie 設進 client cookie jar。
+    回傳 True 表示登入成功；False 表示失敗。"""
+    realm = ""
+    if "@" in login_str:
+        login_str, realm = login_str.rsplit("@", 1)
+    if ":" in login_str:
+        user, pw = login_str.split(":", 1)
+    else:
+        user, pw = login_str, ""
+    print(f"  Login as:  {user}{'@' + realm if realm else ''}", flush=True)
+    r = await client.post(
+        base_url + "/login",
+        data={"username": user, "password": pw, "realm": realm, "next": "/"},
+        timeout=15.0,
+        follow_redirects=False,
+    )
+    # 成功登入回 302 redirect 到 next，session cookie 在 Set-Cookie 標頭。
+    # 失敗回 200 含 login form。
+    if r.status_code == 302 and any(c.name == "session" for c in client.cookies.jar):
+        print(f"  ✓ login ok (got session cookie)")
+        return True
+    print(f"  ✗ login failed: HTTP {r.status_code}", flush=True)
+    return False
+
+
 async def run(args):
     base_url = args.base_url.rstrip("/")
     print(f"\n=== jt-doc-tools 壓力測試 ===")
@@ -179,7 +205,12 @@ async def run(args):
     stop_at = time.time() + args.duration
     sequence = _scenario_sequence()
     limits = httpx.Limits(max_connections=args.users * 2, max_keepalive_connections=args.users)
-    async with httpx.AsyncClient(limits=limits) as client:
+    async with httpx.AsyncClient(limits=limits, follow_redirects=False) as client:
+        if args.login:
+            ok = await _login(client, base_url, args.login)
+            if not ok:
+                print(f"  ✗ login 失敗，無法繼續壓測", file=sys.stderr)
+                sys.exit(3)
         t0 = time.perf_counter()
         tasks = [_worker(i, client, base_url, stop_at, results, args.token, sequence)
                  for i in range(args.users)]
@@ -256,7 +287,8 @@ def main():
                     help="並行使用者數（建議跑 1 / 5 / 10 / 30 / 50）")
     ap.add_argument("--duration", type=int, default=60,
                     help="持續秒數（預設 60s）")
-    ap.add_argument("--token", default="", help="Bearer token（auth-on 環境用）")
+    ap.add_argument("--token", default="", help="Bearer token（API token，目前僅 admin/api 端點 accept）")
+    ap.add_argument("--login", default="", help="登入帳密 user[:pass[@realm]]，跑前先 POST /login 換 session cookie，給 auth-on 環境用")
     ap.add_argument("--csv", default="", help="CSV 匯出路徑（每筆請求一列）")
     args = ap.parse_args()
     asyncio.run(run(args))

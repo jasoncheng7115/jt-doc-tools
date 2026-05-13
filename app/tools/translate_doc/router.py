@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from ...config import settings
 from ...core.llm_settings import llm_settings
@@ -516,3 +516,545 @@ async def api_translate_doc(request: Request):
         "target_lang": target_lang,
         "results": results,
     }
+
+
+# ============ 匯出格式（v1.7.51）============
+# 接受 {format, pairs:[{source, target}]}，產對應檔回傳。
+# 三組 dropdown 對應 8 個格式：
+#   文字檔: txt / md / csv
+#   文件檔: docx / odt / pdf
+#   試算表: xlsx / ods
+_EXPORT_FORMATS = {"txt", "md", "csv", "docx", "odt", "pdf", "xlsx", "ods"}
+_EXPORT_MIME = {
+    "txt":  "text/plain; charset=utf-8",
+    "md":   "text/markdown; charset=utf-8",
+    "csv":  "text/csv; charset=utf-8",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "odt":  "application/vnd.oasis.opendocument.text",
+    "pdf":  "application/pdf",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "ods":  "application/vnd.oasis.opendocument.spreadsheet",
+}
+
+
+def _build_txt(pairs: list[dict]) -> bytes:
+    """純文字「原文／譯文」對照，每對中間空行分隔。"""
+    out = []
+    for p in pairs:
+        out.append((p.get("source") or "").rstrip())
+        out.append((p.get("target") or "").rstrip())
+        out.append("")
+    return "\n".join(out).encode("utf-8")
+
+
+def _build_md(pairs: list[dict]) -> bytes:
+    """Markdown 表格（兩欄：原文 / 譯文）。"""
+    def esc(s: str) -> str:
+        return (s or "").replace("|", "\\|").replace("\n", "<br>")
+    out = ["| 原文 | 譯文 |", "|---|---|"]
+    for p in pairs:
+        out.append(f"| {esc(p.get('source', ''))} | {esc(p.get('target', ''))} |")
+    return "\n".join(out).encode("utf-8")
+
+
+def _build_csv(pairs: list[dict]) -> bytes:
+    """CSV — 兩欄 source,target，UTF-8 BOM 讓 Excel 正確識別中文。"""
+    import csv as _csv
+    buf = io.StringIO()
+    w = _csv.writer(buf, quoting=_csv.QUOTE_MINIMAL)
+    w.writerow(["source", "target"])
+    for p in pairs:
+        w.writerow([p.get("source", ""), p.get("target", "")])
+    return b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8")
+
+
+def _meta_lines(meta: dict) -> list[str]:
+    """頁首 meta 文字 — 上傳檔名（如有）+ 翻譯時間。"""
+    out = []
+    src_name = (meta.get("source_filename") or "").strip()
+    if src_name:
+        out.append(f"原檔：{src_name}")
+    ts = (meta.get("translated_at") or "").strip()
+    if ts:
+        # ISO → 友善格式
+        try:
+            from datetime import datetime as _dt
+            dt = _dt.fromisoformat(ts.replace("Z", "+00:00"))
+            ts_pretty = dt.strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            ts_pretty = ts
+        out.append(f"翻譯時間：{ts_pretty}")
+    out.append(f"共 {meta.get('count', '?')} 對")
+    return out
+
+
+def _build_docx(pairs: list[dict], meta: dict) -> bytes:
+    """Word 兩欄表格，加樣式：標題列藍底白字粗體、表格框線、欄寬均分、
+    交替橫條淡底，文件最上方加 heading + 檔名 + 翻譯時間。"""
+    from docx import Document
+    from docx.shared import Pt, Cm, RGBColor
+    from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+
+    doc = Document()
+    # heading
+    h = doc.add_heading("逐句翻譯對照", level=1)
+    for r in h.runs:
+        r.font.color.rgb = RGBColor(0x1E, 0x3A, 0x8A)
+    # meta
+    sub = doc.add_paragraph()
+    r = sub.add_run("　・　".join(_meta_lines({**meta, "count": len(pairs)})))
+    r.font.size = Pt(9)
+    r.font.color.rgb = RGBColor(0x64, 0x74, 0x8B)
+
+    table = doc.add_table(rows=1 + len(pairs), cols=2)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.autofit = False
+    for col in table.columns:
+        for cell in col.cells:
+            cell.width = Cm(8)
+
+    def _set_cell_bg(cell, hex_color):
+        tc_pr = cell._tc.get_or_add_tcPr()
+        shd = OxmlElement('w:shd')
+        shd.set(qn('w:val'), 'clear')
+        shd.set(qn('w:color'), 'auto')
+        shd.set(qn('w:fill'), hex_color)
+        tc_pr.append(shd)
+
+    tbl_pr = table._tbl.tblPr
+    borders = OxmlElement('w:tblBorders')
+    for tag in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+        b = OxmlElement(f'w:{tag}')
+        b.set(qn('w:val'), 'single')
+        b.set(qn('w:sz'), '4')
+        b.set(qn('w:color'), 'CBD5E1')
+        borders.append(b)
+    tbl_pr.append(borders)
+
+    hdr_cells = table.rows[0].cells
+    for i, txt in enumerate(("原文", "譯文")):
+        cell = hdr_cells[i]
+        cell.text = ""
+        run = cell.paragraphs[0].add_run(txt)
+        run.bold = True
+        run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+        run.font.size = Pt(11)
+        cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+        _set_cell_bg(cell, "2563EB")
+
+    for i, p in enumerate(pairs, start=1):
+        cells = table.rows[i].cells
+        for j, key in enumerate(("source", "target")):
+            cell = cells[j]
+            cell.text = ""
+            run = cell.paragraphs[0].add_run(p.get(key) or "")
+            run.font.size = Pt(10)
+            cell.vertical_alignment = WD_ALIGN_VERTICAL.TOP
+            if i % 2 == 0:
+                _set_cell_bg(cell, "F1F5F9")
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def _build_odt(pairs: list[dict], meta: dict) -> bytes:
+    """ODT 兩欄表格 + 樣式：標題列藍底白字、淡灰交替列底、欄寬 8cm。"""
+    from odf.opendocument import OpenDocumentText
+    from odf.style import (Style, TableColumnProperties, TableCellProperties,
+                           TextProperties, ParagraphProperties)
+    from odf.table import Table, TableColumn, TableRow, TableCell
+    from odf.text import P, H
+
+    doc = OpenDocumentText()
+    # styles
+    col_st = Style(name="ColW8", family="table-column")
+    col_st.addElement(TableColumnProperties(columnwidth="8cm"))
+    doc.automaticstyles.addElement(col_st)
+
+    hdr_cell_st = Style(name="HdrCell", family="table-cell")
+    hdr_cell_st.addElement(TableCellProperties(
+        backgroundcolor="#2563EB", padding="0.15cm",
+        border="0.05pt solid #1E3A8A"))
+    doc.automaticstyles.addElement(hdr_cell_st)
+
+    hdr_text_st = Style(name="HdrText", family="paragraph")
+    hdr_text_st.addElement(TextProperties(
+        color="#FFFFFF", fontweight="bold", fontsize="11pt"))
+    hdr_text_st.addElement(ParagraphProperties(textalign="center"))
+    doc.automaticstyles.addElement(hdr_text_st)
+
+    even_cell_st = Style(name="EvenCell", family="table-cell")
+    even_cell_st.addElement(TableCellProperties(
+        backgroundcolor="#F1F5F9", padding="0.15cm",
+        border="0.05pt solid #CBD5E1"))
+    doc.automaticstyles.addElement(even_cell_st)
+
+    odd_cell_st = Style(name="OddCell", family="table-cell")
+    odd_cell_st.addElement(TableCellProperties(
+        backgroundcolor="#FFFFFF", padding="0.15cm",
+        border="0.05pt solid #CBD5E1"))
+    doc.automaticstyles.addElement(odd_cell_st)
+
+    body_text_st = Style(name="BodyText", family="paragraph")
+    body_text_st.addElement(TextProperties(fontsize="10pt"))
+    doc.automaticstyles.addElement(body_text_st)
+
+    meta_text_st = Style(name="MetaText", family="paragraph")
+    meta_text_st.addElement(TextProperties(fontsize="9pt", color="#64748B"))
+    doc.automaticstyles.addElement(meta_text_st)
+
+    # Heading + meta
+    h = H(outlinelevel=1, text="逐句翻譯對照")
+    doc.text.addElement(h)
+    meta_p = P(stylename=meta_text_st, text="　・　".join(_meta_lines({**meta, "count": len(pairs)})))
+    doc.text.addElement(meta_p)
+
+    table = Table(name="translations")
+    table.addElement(TableColumn(stylename=col_st))
+    table.addElement(TableColumn(stylename=col_st))
+
+    hdr = TableRow()
+    for txt in ("原文", "譯文"):
+        cell = TableCell(stylename=hdr_cell_st)
+        cell.addElement(P(stylename=hdr_text_st, text=txt))
+        hdr.addElement(cell)
+    table.addElement(hdr)
+
+    for i, p in enumerate(pairs):
+        row = TableRow()
+        cell_st = even_cell_st if (i % 2 == 1) else odd_cell_st
+        for key in ("source", "target"):
+            cell = TableCell(stylename=cell_st)
+            cell.addElement(P(stylename=body_text_st, text=p.get(key) or ""))
+            row.addElement(cell)
+        table.addElement(row)
+    doc.text.addElement(table)
+    buf = io.BytesIO()
+    doc.write(buf)
+    return buf.getvalue()
+
+
+def _build_pdf(pairs: list[dict], meta: dict) -> bytes:
+    """A4 兩欄表格：標題列藍底白字、交替橫條淡底、首頁標題 + 檔名 + 翻譯時間。"""
+    import fitz
+    from app.core import font_catalog
+    doc = fitz.open()
+    # v1.7.53：修 CJK 字型載入錯誤 — best_cjk_path 簽章是 cjk:str
+    # （"traditional" / "simplified"），之前傳 True 變成 falsy lookup → 永遠
+    # 回 None → 落到 helv 字型 → 中文全變方框 / 缺字。回傳是 (Path, ttc_idx)
+    # tuple，要正確解包；TTC 字型用 ttc_idx 指定 sub-font。
+    cjk_font_path = None
+    cjk_ttc_idx = 0
+    try:
+        result = font_catalog.best_cjk_path("sans", "traditional")
+        if result:
+            cjk_font_path, cjk_ttc_idx = result
+    except Exception:
+        pass
+    font_alias = "cjk"
+    def _register(p):
+        nonlocal font_alias
+        if cjk_font_path:
+            try:
+                # PyMuPDF insert_font 支援 TTC 指定 face index
+                kwargs = {"fontname": font_alias, "fontfile": str(cjk_font_path)}
+                if cjk_ttc_idx:
+                    kwargs["set_simple"] = False  # CJK 用 CID 字型
+                p.insert_font(**kwargs)
+                return
+            except Exception:
+                pass
+        font_alias = "helv"
+
+    page = doc.new_page(width=595, height=842)
+    _register(page)
+    margin = 40
+    col_w = (page.rect.width - margin * 2) / 2
+    # v1.7.54：line_h 提到 20 — 實測 fontsize=10 時 insert_textbox 需 rect
+    # height >= 18pt 才會渲染（h=16 仍回 -1.36 表示空間不足靜默失敗），
+    # 所以單行 row_h = line_h(20) + pad*2(8) = 28，text rect 內高 20pt 才穩
+    line_h = 20
+    pad = 4
+    y = margin
+
+    # 文件標題
+    page.insert_text((margin, y + 16), "逐句翻譯對照",
+                     fontname=font_alias, fontsize=16, color=(0.12, 0.23, 0.54))
+    y += 24
+    # meta
+    meta_text = "　・　".join(_meta_lines({**meta, "count": len(pairs)}))
+    page.insert_text((margin, y + 12), meta_text,
+                     fontname=font_alias, fontsize=9, color=(0.39, 0.45, 0.55))
+    y += 22
+
+    # 標題列藍底白字
+    hdr_h = line_h + pad * 2
+    page.draw_rect(fitz.Rect(margin, y, page.rect.width - margin, y + hdr_h),
+                   color=(0.12, 0.23, 0.54), fill=(0.15, 0.39, 0.92))
+    page.insert_text((margin + pad, y + line_h + 1),
+                     "原文", fontname=font_alias, fontsize=11, color=(1, 1, 1))
+    page.insert_text((margin + col_w + pad, y + line_h + 1),
+                     "譯文", fontname=font_alias, fontsize=11, color=(1, 1, 1))
+    y += hdr_h
+    page_h = page.rect.height - margin
+
+    def _est_lines(s: str, max_chars_ascii: int = 28, max_chars_cjk: int = 18) -> int:
+        # CJK 字寬約 ASCII 1.6x；分開估行數取大者
+        cjk_count = sum(1 for c in s if ord(c) > 0x2E80)
+        ascii_count = len(s) - cjk_count
+        # 等效 ASCII 寬度
+        eff = ascii_count + cjk_count * (max_chars_ascii / max_chars_cjk)
+        return max(1, int(eff // max_chars_ascii) + (1 if eff % max_chars_ascii else 0))
+
+    for idx, p in enumerate(pairs):
+        src = (p.get("source") or "").strip()
+        tgt = (p.get("target") or "").strip()
+        approx_lines = max(1, _est_lines(src), _est_lines(tgt))
+        row_h = approx_lines * line_h + pad * 2
+        if y + row_h > page_h:
+            page = doc.new_page(width=595, height=842)
+            _register(page)
+            y = margin
+        # 交替列底色
+        if idx % 2 == 1:
+            page.draw_rect(fitz.Rect(margin, y, page.rect.width - margin, y + row_h),
+                           color=None, fill=(0.945, 0.957, 0.973))
+        page.insert_textbox(
+            fitz.Rect(margin + pad, y + pad, margin + col_w - pad, y + row_h - pad),
+            src, fontname=font_alias, fontsize=10, color=(0, 0, 0),
+        )
+        page.insert_textbox(
+            fitz.Rect(margin + col_w + pad, y + pad, page.rect.width - margin - pad, y + row_h - pad),
+            tgt, fontname=font_alias, fontsize=10, color=(0, 0, 0),
+        )
+        # 邊框 + 中欄分隔
+        page.draw_rect(fitz.Rect(margin, y, page.rect.width - margin, y + row_h),
+                       color=(0.80, 0.84, 0.88), width=0.4, fill=None)
+        page.draw_line(fitz.Point(margin + col_w, y),
+                       fitz.Point(margin + col_w, y + row_h),
+                       color=(0.80, 0.84, 0.88), width=0.4)
+        y += row_h
+    out = doc.tobytes(garbage=4, deflate=True)
+    doc.close()
+    return out
+
+
+def _build_xlsx(pairs: list[dict], meta: dict) -> bytes:
+    """Excel 樣式：標題列藍底白字粗體 freeze；A/B 欄寬 60；換行；交替列淡底；
+    A1:B2 兩列頁首（檔名 / 翻譯時間 / 共 N 對）。"""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "translations"
+
+    meta_lines = _meta_lines({**meta, "count": len(pairs)})
+    meta_row_count = len(meta_lines)
+    # 第 1～N 列是 meta（合併兩欄），N+1 列是標題列，N+2 起是資料
+    for i, line in enumerate(meta_lines, start=1):
+        ws.cell(row=i, column=1, value=line).font = Font(size=10, color="64748B")
+        ws.merge_cells(start_row=i, start_column=1, end_row=i, end_column=2)
+    hdr_row = meta_row_count + 1
+
+    ws.cell(row=hdr_row, column=1, value="原文")
+    ws.cell(row=hdr_row, column=2, value="譯文")
+    hdr_font = Font(bold=True, color="FFFFFF", size=11)
+    hdr_fill = PatternFill("solid", fgColor="2563EB")
+    hdr_align = Alignment(horizontal="center", vertical="center")
+    border_thin = Border(
+        left=Side(style="thin", color="CBD5E1"),
+        right=Side(style="thin", color="CBD5E1"),
+        top=Side(style="thin", color="CBD5E1"),
+        bottom=Side(style="thin", color="CBD5E1"),
+    )
+    for c in (1, 2):
+        cell = ws.cell(row=hdr_row, column=c)
+        cell.font = hdr_font
+        cell.fill = hdr_fill
+        cell.alignment = hdr_align
+        cell.border = border_thin
+
+    body_align = Alignment(wrap_text=True, vertical="top")
+    # v1.7.53：原文 / 譯文兩欄用不同色系區分（暖黃 vs 冷綠），交替列再加深一階
+    src_odd  = PatternFill("solid", fgColor="FFFBEB")  # 原文奇數列：淺黃
+    src_even = PatternFill("solid", fgColor="FEF3C7")  # 原文偶數列：較深黃
+    tgt_odd  = PatternFill("solid", fgColor="ECFDF5")  # 譯文奇數列：淺綠
+    tgt_even = PatternFill("solid", fgColor="D1FAE5")  # 譯文偶數列：較深綠
+    for i, p in enumerate(pairs, start=1):
+        row = hdr_row + i
+        ws.cell(row=row, column=1, value=p.get("source") or "")
+        ws.cell(row=row, column=2, value=p.get("target") or "")
+        for c in (1, 2):
+            cell = ws.cell(row=row, column=c)
+            cell.alignment = body_align
+            cell.font = Font(size=10)
+            cell.border = border_thin
+            if c == 1:
+                cell.fill = src_even if (i % 2 == 0) else src_odd
+            else:
+                cell.fill = tgt_even if (i % 2 == 0) else tgt_odd
+
+    ws.column_dimensions["A"].width = 60
+    ws.column_dimensions["B"].width = 60
+    # freeze 標題列
+    ws.freeze_panes = ws.cell(row=hdr_row + 1, column=1)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def _build_ods(pairs: list[dict], meta: dict) -> bytes:
+    """ODF 試算表：標題列藍底白字、欄寬 8cm、交替列淡底、頁首 meta 列。"""
+    from odf.opendocument import OpenDocumentSpreadsheet
+    from odf.style import (Style, TableColumnProperties, TableCellProperties,
+                           TextProperties)
+    from odf.table import Table, TableColumn, TableRow, TableCell
+    from odf.text import P
+
+    doc = OpenDocumentSpreadsheet()
+    col_st = Style(name="ColW8", family="table-column")
+    col_st.addElement(TableColumnProperties(columnwidth="8cm"))
+    doc.automaticstyles.addElement(col_st)
+
+    hdr_cell_st = Style(name="HdrCell", family="table-cell")
+    hdr_cell_st.addElement(TableCellProperties(
+        backgroundcolor="#2563EB", border="0.05pt solid #1E3A8A"))
+    doc.automaticstyles.addElement(hdr_cell_st)
+    hdr_text_st = Style(name="HdrText", family="paragraph")
+    hdr_text_st.addElement(TextProperties(
+        color="#FFFFFF", fontweight="bold", fontsize="11pt"))
+    doc.automaticstyles.addElement(hdr_text_st)
+
+    # v1.7.53：原文 / 譯文兩欄不同色系（暖黃 vs 冷綠），交替列再加深
+    src_odd_st  = Style(name="SrcOdd",  family="table-cell")
+    src_odd_st.addElement(TableCellProperties(
+        backgroundcolor="#FFFBEB", border="0.05pt solid #CBD5E1"))
+    doc.automaticstyles.addElement(src_odd_st)
+    src_even_st = Style(name="SrcEven", family="table-cell")
+    src_even_st.addElement(TableCellProperties(
+        backgroundcolor="#FEF3C7", border="0.05pt solid #CBD5E1"))
+    doc.automaticstyles.addElement(src_even_st)
+    tgt_odd_st  = Style(name="TgtOdd",  family="table-cell")
+    tgt_odd_st.addElement(TableCellProperties(
+        backgroundcolor="#ECFDF5", border="0.05pt solid #CBD5E1"))
+    doc.automaticstyles.addElement(tgt_odd_st)
+    tgt_even_st = Style(name="TgtEven", family="table-cell")
+    tgt_even_st.addElement(TableCellProperties(
+        backgroundcolor="#D1FAE5", border="0.05pt solid #CBD5E1"))
+    doc.automaticstyles.addElement(tgt_even_st)
+
+    meta_text_st = Style(name="MetaText", family="paragraph")
+    meta_text_st.addElement(TextProperties(fontsize="9pt", color="#64748B"))
+    doc.automaticstyles.addElement(meta_text_st)
+
+    table = Table(name="translations")
+    table.addElement(TableColumn(stylename=col_st))
+    table.addElement(TableColumn(stylename=col_st))
+
+    # meta 列（合併效果用單格 + 空格代替；ODS row 沒簡單 merge API）
+    for line in _meta_lines({**meta, "count": len(pairs)}):
+        meta_row = TableRow()
+        cell = TableCell(valuetype="string")
+        cell.addElement(P(stylename=meta_text_st, text=line))
+        meta_row.addElement(cell)
+        meta_row.addElement(TableCell(valuetype="string"))   # 空 B 欄
+        table.addElement(meta_row)
+
+    hdr = TableRow()
+    for txt in ("原文", "譯文"):
+        cell = TableCell(valuetype="string", stylename=hdr_cell_st)
+        cell.addElement(P(stylename=hdr_text_st, text=txt))
+        hdr.addElement(cell)
+    table.addElement(hdr)
+
+    for i, p in enumerate(pairs):
+        row = TableRow()
+        # v1.7.53：原文 / 譯文兩欄不同色系
+        for key in ("source", "target"):
+            if key == "source":
+                st = src_even_st if (i % 2 == 1) else src_odd_st
+            else:
+                st = tgt_even_st if (i % 2 == 1) else tgt_odd_st
+            cell = TableCell(valuetype="string", stylename=st)
+            cell.addElement(P(text=p.get(key) or ""))
+            row.addElement(cell)
+        table.addElement(row)
+    doc.spreadsheet.addElement(table)
+    buf = io.BytesIO()
+    doc.write(buf)
+    return buf.getvalue()
+
+
+# 文字檔不需要 meta 頁首；文件 / 試算表才會帶上原檔名 + 翻譯時間
+_TEXT_FORMATS = {"txt", "md", "csv"}
+_BUILDERS_TEXT = {"txt": _build_txt, "md": _build_md, "csv": _build_csv}
+_BUILDERS_RICH = {
+    "docx": _build_docx, "odt": _build_odt, "pdf": _build_pdf,
+    "xlsx": _build_xlsx, "ods": _build_ods,
+}
+
+
+def _output_filename(fmt: str, source_filename: str) -> str:
+    """匯出檔名 — 若有原檔名，取 stem 加 _translated.<fmt>；否則 translated.<fmt>。"""
+    from pathlib import Path as _P
+    if source_filename:
+        stem = _P(source_filename).stem or "translated"
+        # 過濾 path traversal / 只留檔名 stem 部分
+        stem = stem.replace("/", "").replace("\\", "").replace("..", "").strip()[:80] or "translated"
+        return f"{stem}_translated.{fmt}"
+    return f"translated.{fmt}"
+
+
+@router.post("/export")
+async def export_translations(request: Request):
+    """匯出翻譯結果到指定格式。Body: {format, pairs:[{source,target}],
+    source_filename?, translated_at?}。文字檔（txt/md/csv）忽略 meta；文件 /
+    試算表會在頁首帶原檔名 + 翻譯時間。"""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "invalid JSON body")
+    fmt = str(body.get("format") or "").strip().lower()
+    if fmt not in _EXPORT_FORMATS:
+        raise HTTPException(400, f"unsupported format: {fmt}")
+    pairs = body.get("pairs") or []
+    if not isinstance(pairs, list):
+        raise HTTPException(400, "pairs must be a list")
+    if len(pairs) > 10000:
+        raise HTTPException(413, "pairs exceeds 10000 limit")
+    cleaned = [p for p in pairs
+               if isinstance(p, dict) and (p.get("source") or p.get("target"))]
+    if not cleaned:
+        raise HTTPException(400, "no non-empty pairs to export")
+    source_filename = str(body.get("source_filename") or "").strip()[:200]
+    translated_at = str(body.get("translated_at") or "").strip()[:64]
+    meta = {"source_filename": source_filename, "translated_at": translated_at}
+
+    import asyncio as _asyncio
+    if fmt in _TEXT_FORMATS:
+        builder = _BUILDERS_TEXT[fmt]
+        try:
+            data = await _asyncio.to_thread(builder, cleaned)
+        except Exception as e:
+            import logging as _lg
+            _lg.getLogger("app.translate_doc").exception("export %s failed", fmt)
+            raise HTTPException(500, f"匯出 {fmt} 失敗：{e}")
+    else:
+        builder = _BUILDERS_RICH[fmt]
+        try:
+            data = await _asyncio.to_thread(builder, cleaned, meta)
+        except Exception as e:
+            import logging as _lg
+            _lg.getLogger("app.translate_doc").exception("export %s failed", fmt)
+            raise HTTPException(500, f"匯出 {fmt} 失敗：{e}")
+
+    from app.core.http_utils import content_disposition
+    fname = _output_filename(fmt, source_filename)
+    return Response(
+        content=data,
+        media_type=_EXPORT_MIME[fmt],
+        headers={"Content-Disposition": content_disposition(fname)},
+    )
