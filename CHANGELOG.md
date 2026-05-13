@@ -4,6 +4,14 @@
 
 ---
 
+## [1.7.66] - 2026-05-13
+
+### 改進
+
+- **`text-list` 跨行 pipeline 用 SVG 連線**：v1.7.65 同列卡片之間有 CSS 三角形箭頭，但跨行（例如 4 → 5 從第一列尾跳第二列頭）就斷了視覺。新增 `<svg class="tl-connectors">` overlay 蓋在 `.tl-ops` 上，每對跨行連續的 `.on` 卡片之間畫一條 L 形藍線：右移到容器右牆 → 下到行間中點 → 左移到下一張卡片正上方 → 下進卡片頂端，箭頭指下。`requestAnimationFrame` 等 layout 完成才量；window resize 也會 redraw。
+
+---
+
 ## [1.7.65] - 2026-05-13
 
 ### 改進
