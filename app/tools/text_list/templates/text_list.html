@@ -628,12 +628,17 @@ function drawWrapConnectors() {
       const y = aTopY + 18;
       d = `M ${aRightX + 1} ${y} L ${bLeftX - 2} ${y}`;
     } else {
-      // 跨列：從 cur 底部正中 → 往下走到行間中點 → 往左到 next 正上方 → 往下進 next 頂端
+      // 跨列：從 cur 底部正中 → 行間中點 → 左到 next 卡片左側外緣 → 上到 next 的 head row → 進左邊
+      // 箭頭從 next 卡片「左側」進入（與「同列」線出入位置一致：右出 / 左入），
+      // 並且都在 head row 高度 (top + 18)，視覺對齊不突兀
       const midY = (aBottomY + bTopY) / 2;
+      const enterY = bTopY + 18;
+      const enterStubX = bLeftX - 8;       // 距離 next 卡片左邊緣 8px 開始往內進
       d = `M ${aMidX} ${aBottomY + 1}
            L ${aMidX} ${midY}
-           L ${bMidX} ${midY}
-           L ${bMidX} ${bTopY - 2}`;
+           L ${enterStubX} ${midY}
+           L ${enterStubX} ${enterY}
+           L ${bLeftX - 2} ${enterY}`;
     }
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
