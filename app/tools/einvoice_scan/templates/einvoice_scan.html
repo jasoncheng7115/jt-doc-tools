@@ -28,6 +28,12 @@
 @media (min-width: 720px) {
   .es-uploader { grid-template-columns: 1fr 1fr 1fr; }
 }
+/* 手機（窄螢幕 + touch 為主）預設隱藏「上傳檔案 / 拖放」— 拖放手機沒用、
+   選檔在此情境也不如「拍照 / 從相簿選」直覺 */
+@media (max-width: 720px) {
+  #dropZone { display: none; }
+  .es-uploader { grid-template-columns: 1fr; }
+}
 
 /* 連續掃描 — 相機 live preview */
 .es-live {
@@ -189,6 +195,116 @@
   opacity: 0; transition: opacity 0.2s;
 }
 .es-settings-actions .saved.show { opacity: 1; }
+
+/* Tabs */
+.es-tabs {
+  display: flex; gap: 0; border-bottom: 1px solid #cbd5e1;
+  margin-bottom: 12px;
+}
+.es-tabs button {
+  background: none; border: 0; padding: 8px 14px; cursor: pointer;
+  font-size: 13px; color: #64748b; font-weight: 500;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.es-tabs button:hover { color: #1e293b; }
+.es-tabs button.active {
+  color: #1d4ed8; border-bottom-color: #2563eb; font-weight: 600;
+}
+
+/* 格式設定區 */
+.es-format-group {
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+}
+.es-format-group .gtitle {
+  font-size: 12.5px; font-weight: 600; color: #1e293b;
+  margin-bottom: 6px;
+}
+.es-format-group .opts {
+  display: flex; flex-wrap: wrap; gap: 4px 16px;
+  font-size: 12.5px;
+}
+.es-format-group .opts label {
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+  color: #475569;
+}
+.es-format-group .opts label.checked { color: #1d4ed8; font-weight: 500; }
+.es-format-group .opts .ex {
+  color: #94a3b8; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+}
+
+.es-my-vat-row {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 8px 12px; background: #fff;
+  border: 1px solid #e5e7eb; border-radius: 4px;
+  font-size: 12.5px; color: #475569;
+}
+.es-my-vat-row input {
+  font-size: 13px; padding: 3px 8px;
+  border: 1px solid #cbd5e1; border-radius: 4px;
+  width: 120px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.es-my-vat-row input:focus { outline: 2px solid #93c5fd; outline-offset: 0; }
+.es-my-vat-row .hint { font-size: 11.5px; color: #94a3b8; }
+
+/* 細節 modal */
+.es-modal-backdrop {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55);
+  z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.es-modal {
+  background: #fff; border-radius: 8px;
+  max-width: 540px; width: 100%;
+  max-height: 85vh; display: flex; flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+}
+.es-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid #e5e7eb;
+}
+.es-modal-header h3 {
+  margin: 0; font-size: 15px; color: #1e293b;
+}
+.es-modal-close {
+  background: none; border: 0; font-size: 24px; line-height: 1;
+  color: #94a3b8; cursor: pointer; padding: 0 4px;
+}
+.es-modal-close:hover { color: #b91c1c; }
+.es-modal-body {
+  padding: 14px 18px; overflow-y: auto; font-size: 13px;
+}
+.es-detail-row {
+  display: grid; grid-template-columns: 100px 1fr;
+  gap: 8px; padding: 4px 0; border-bottom: 1px solid #f1f5f9;
+}
+.es-detail-row .label { color: #64748b; font-size: 12.5px; }
+.es-detail-row .val { color: #1e293b; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+.es-detail-items {
+  margin-top: 14px; padding: 10px 12px;
+  background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 4px;
+}
+.es-detail-items .ttl {
+  font-size: 12.5px; font-weight: 600; color: #1e293b; margin-bottom: 6px;
+}
+.es-detail-items ul {
+  margin: 0; padding-left: 20px; font-size: 13px; color: #475569;
+}
+.es-detail-items .empty { color: #94a3b8; font-size: 12px; }
+.es-detail-row.warn .val { color: #b91c1c; }
+
+/* 細節按鈕 */
+.es-table .info-btn {
+  background: none; border: 0; color: #64748b; cursor: pointer;
+  padding: 2px 6px; font-size: 14px; line-height: 1;
+}
+.es-table .info-btn:hover { color: #2563eb; }
 .es-table {
   width: 100%; border-collapse: collapse; font-size: 13px;
   font-variant-numeric: tabular-nums;
@@ -202,6 +318,18 @@
   font-size: 12px; position: sticky; top: 0;
 }
 .es-table tr:hover td { background: #f8fafc; }
+/* 報帳檢查警告 row */
+.es-table tr.warn-row td { background: #fef2f2; }
+.es-table tr.warn-row:hover td { background: #fee2e2; }
+.es-table tr.warn-row td:first-child { border-left: 3px solid #ef4444; }
+.es-table tr.warn-row .warn-tag {
+  display: inline-block; font-size: 10px; padding: 1px 5px;
+  background: #ef4444; color: #fff; border-radius: 3px; margin-left: 4px;
+  vertical-align: middle;
+}
+.es-table .sel-check {
+  width: 14px; height: 14px; cursor: pointer;
+}
 .es-table .num { text-align: right; }
 .es-table .del-btn {
   background: none; border: 0; color: #94a3b8; cursor: pointer;
@@ -279,6 +407,17 @@
 <!-- 全螢幕閃光彈 overlay -->
 <div class="es-flashbang" id="flashbang"></div>
 
+<!-- 細節 modal -->
+<div class="es-modal-backdrop" id="detailModal" hidden>
+  <div class="es-modal">
+    <div class="es-modal-header">
+      <h3 id="detailTitle">發票細節</h3>
+      <button type="button" class="es-modal-close" id="detailClose">×</button>
+    </div>
+    <div class="es-modal-body" id="detailBody"></div>
+  </div>
+</div>
+
 <div class="panel" style="margin-top: 18px;">
   <div class="es-buffer-toolbar">
     <h2 style="margin: 0;">2. 已掃描清單</h2>
@@ -287,17 +426,54 @@
       <label style="font-size: 12px; color: #64748b; display: inline-flex; align-items: center; gap: 4px;">
         <input type="checkbox" id="autoRefresh" checked> 自動更新
       </label>
-      <button type="button" class="es-mini-btn" id="btnSettings" title="欄位顯示設定">{{ icon('gear', size=12) }} 欄位</button>
+      <button type="button" class="es-mini-btn" id="btnSettings" title="欄位顯示設定">{{ icon('gear', size=12) }} 設定</button>
+      <span class="es-export-wrap" style="position:relative; display:inline-block;">
+        <button type="button" class="es-mini-btn" id="btnExport">{{ icon('download', size=12) }} 匯出 ▾</button>
+        <span id="exportMenu" hidden style="position:absolute; top:100%; right:0; margin-top:2px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.1); min-width:160px; padding:4px 0; z-index:100;">
+          <button type="button" data-fmt="csv" style="display:block; width:100%; text-align:left; padding:6px 12px; background:none; border:0; font-size:12.5px; cursor:pointer; color:#1e293b;">.csv (Excel)</button>
+          <button type="button" data-fmt="xlsx" style="display:block; width:100%; text-align:left; padding:6px 12px; background:none; border:0; font-size:12.5px; cursor:pointer; color:#1e293b;">.xlsx 試算表</button>
+          <button type="button" data-fmt="json" style="display:block; width:100%; text-align:left; padding:6px 12px; background:none; border:0; font-size:12.5px; cursor:pointer; color:#1e293b;">.json (raw)</button>
+          <label style="display:flex; align-items:center; gap:4px; padding:6px 12px; border-top:1px solid #f1f5f9; font-size:11.5px; color:#64748b;">
+            <input type="checkbox" id="exportClearAfter"> 匯出後清空 buffer
+          </label>
+        </span>
+      </span>
       <button type="button" class="es-mini-btn" id="btnRefresh">{{ icon('refresh', size=12) }} 重新整理</button>
+      <button type="button" class="es-mini-btn danger" id="btnDeleteSelected" hidden>{{ icon('trash', size=12) }} 刪除選取 (<span id="selectedCount">0</span>)</button>
       <button type="button" class="es-mini-btn danger" id="btnClear">{{ icon('trash', size=12) }} 全部清空</button>
     </div>
   </div>
 
-  <!-- 欄位設定面板（預設摺疊；按 ⚙️ 欄位 開啟） -->
+  <!-- 設定面板（預設摺疊；按 ⚙️ 欄位 開啟） -->
   <div class="es-settings-panel" id="settingsPanel" hidden>
-    <h3>{{ icon('gear', size=14) }} 欄位顯示設定</h3>
-    <p style="margin: 0 0 8px; font-size: 11.5px; color: #64748b;">勾選顯示哪些欄位；拖曳左側 ⋮⋮ 把手調整順序。設定變更立即套用，並同步到帳號（手機 / 電腦共用）。</p>
-    <div class="es-settings-fields" id="settingsFields"></div>
+    <div class="es-tabs">
+      <button type="button" data-tab="display" class="active">欄位顯示</button>
+      <button type="button" data-tab="format">欄位格式</button>
+      <button type="button" data-tab="check">報帳檢查</button>
+    </div>
+
+    <!-- Tab 1：欄位顯示 / 排序 -->
+    <div data-tab-pane="display">
+      <p style="margin: 0 0 8px; font-size: 11.5px; color: #64748b;">勾選顯示哪些欄位；拖曳左側 ⋮⋮ 把手調整順序。設定變更立即套用，並同步到帳號（手機 / 電腦共用）。</p>
+      <div class="es-settings-fields" id="settingsFields"></div>
+    </div>
+
+    <!-- Tab 2：欄位格式 -->
+    <div data-tab-pane="format" hidden>
+      <p style="margin: 0 0 8px; font-size: 11.5px; color: #64748b;">選擇欄位的顯示樣式。設定立即套用到表格與匯出 (CSV / XLSX)；JSON 匯出永遠用內部標準格式。</p>
+      <div id="settingsFormats"></div>
+    </div>
+
+    <!-- Tab 3：報帳檢查 (M3.5) -->
+    <div data-tab-pane="check" hidden>
+      <p style="margin: 0 0 8px; font-size: 11.5px; color: #64748b;">設定我方公司統編後，發票買方統編不符或為空者會在表格中標註為「非報帳用」。</p>
+      <div class="es-my-vat-row">
+        <span>我方公司統編：</span>
+        <input type="text" id="myCompanyVat" maxlength="8" placeholder="8 位數字 / 留空關閉檢查">
+        <span class="hint">必須是 8 位數字。空白 = 不檢查</span>
+      </div>
+    </div>
+
     <div class="es-settings-actions">
       <button type="button" class="es-mini-btn" id="btnSettingsReset">{{ icon('refresh', size=12) }} 恢復預設</button>
       <span class="saved" id="settingsSaved">{{ icon('check', size=12) }} 已儲存</span>
@@ -334,27 +510,96 @@ function showToast(msg, kind) {
   showToast._h = setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-function fmtAmount(v) {
+// ─── 欄位格式化器（與後端 formatters.py 邏輯保持一致） ───
+const AMOUNT_FIELD_IDS = new Set(['amount_total', 'amount_untaxed', 'tax']);
+
+function _fmtInvoiceNumber(v, fid) {
+  if (!v) return '';
+  if (v.length !== 10) return v;
+  if (fid === 'dash') return v.slice(0, 2) + '-' + v.slice(2);
+  if (fid === 'space') return v.slice(0, 2) + ' ' + v.slice(2);
+  return v;
+}
+function _fmtDate(v, fid) {
+  if (!v) return '';
+  const parts = v.split('-');
+  if (parts.length !== 3) return v;
+  const [y, m, d] = parts;
+  const adY = parseInt(y, 10);
+  if (isNaN(adY)) return v;
+  const rocY = adY - 1911;
+  if (fid === 'iso') return v;
+  if (fid === 'slash') return `${y}/${m}/${d}`;
+  if (fid === 'chinese') return `${y}年${m}月${d}日`;
+  if (fid === 'roc') return `${String(rocY).padStart(3, '0')}/${m}/${d}`;
+  if (fid === 'roc_chinese') return `民國${rocY}年${m}月${d}日`;
+  return v;
+}
+function _fmtAmount(v, fid) {
   if (v == null) return '';
-  return Number(v).toLocaleString('en-US');
+  const n = Number(v);
+  if (isNaN(n)) return String(v);
+  if (fid === 'comma') return n.toLocaleString('en-US');
+  if (fid === 'currency') return 'NT$ ' + n.toLocaleString('en-US');
+  return String(Math.round(n));
+}
+function _fmtScannedAt(v, fid) {
+  if (!v) return '';
+  let dt;
+  try { dt = new Date(v); } catch (e) { return v; }
+  if (isNaN(dt.getTime())) return v;
+  if (fid === 'iso') return dt.toISOString();
+  if (fid === 'date_only') {
+    return dt.getFullYear() + '/' +
+      String(dt.getMonth() + 1).padStart(2, '0') + '/' +
+      String(dt.getDate()).padStart(2, '0');
+  }
+  if (fid === 'relative') {
+    const now = new Date();
+    const secs = Math.floor((now - dt) / 1000);
+    if (secs < 60) return '剛剛';
+    if (secs < 3600) return Math.floor(secs / 60) + ' 分鐘前';
+    if (secs < 86400) return Math.floor(secs / 3600) + ' 小時前';
+    const days = Math.floor(secs / 86400);
+    if (days < 7) return days + ' 天前';
+    return _fmtScannedAt(v, 'date_only');
+  }
+  // local
+  return dt.toLocaleString('zh-TW', { hour12: false }).replace(/-/g, '/');
 }
 
-function fmtTax(total, untaxed) {
-  if (total == null || untaxed == null) return '';
-  return fmtAmount(total - untaxed);
+function _fieldDef(id) {
+  return _fieldDefs.find(f => f.id === id);
+}
+function _formatId(fieldId) {
+  const def = _fieldDef(fieldId);
+  if (!def || !def.formats) return null;
+  return _settings.field_formats[fieldId] || def.formats.default;
 }
 
-function fmtScannedAt(iso) {
-  if (!iso) return '';
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString('zh-TW', { hour12: false });
-  } catch (e) { return iso; }
+function applyFormat(fieldId, value) {
+  const fid = _formatId(fieldId);
+  if (!fid) return value == null ? '' : String(value);
+  if (fieldId === 'invoice_number') return _fmtInvoiceNumber(value, fid);
+  if (fieldId === 'date') return _fmtDate(value, fid);
+  if (AMOUNT_FIELD_IDS.has(fieldId)) return _fmtAmount(value, fid);
+  if (fieldId === 'scanned_at') return _fmtScannedAt(value, fid);
+  return value == null ? '' : String(value);
 }
 
-function fmtDate(iso) {
-  if (!iso) return '';
-  return iso.replace(/-/g, '/');
+// 給 cell renderer 用 — 從 invoice 資料取值再過 formatter
+function cellValue(invoice, fieldId, rowIndex) {
+  if (fieldId === 'seq') return String(rowIndex + 1);
+  if (fieldId === 'tax') {
+    if (invoice.amount_total == null || invoice.amount_untaxed == null) return '';
+    return applyFormat('tax', invoice.amount_total - invoice.amount_untaxed);
+  }
+  if (fieldId === 'note') return invoice.note || '';
+  if (fieldId === 'items') {
+    if (Array.isArray(invoice.items)) return `${invoice.items.length} 項`;
+    return '';
+  }
+  return applyFormat(fieldId, invoice[fieldId]);
 }
 
 // ─── 上傳 + 掃描 ───
@@ -414,23 +659,6 @@ let _settings = { visible_columns: [], column_order: [] };
 let _saveTimer = null;
 
 const NUMERIC_FIELDS = new Set(['amount_total', 'amount_untaxed', 'tax']);
-// 各欄位 cell 內容生成器（取一筆 invoice + 全表 index → cell HTML/text）
-const CELL_RENDERERS = {
-  seq:            (inv, i) => String(i + 1),
-  invoice_number: inv => inv.invoice_number || '',
-  date:           inv => fmtDate(inv.date),
-  amount_total:   inv => fmtAmount(inv.amount_total),
-  amount_untaxed: inv => fmtAmount(inv.amount_untaxed),
-  tax:            inv => {
-    if (inv.amount_total == null || inv.amount_untaxed == null) return '';
-    return fmtAmount(inv.amount_total - inv.amount_untaxed);
-  },
-  seller_vat:     inv => inv.seller_vat || '',
-  buyer_vat:      inv => inv.buyer_vat || '',
-  random_code:    inv => inv.random_code || '',
-  scanned_at:     inv => fmtScannedAt(inv.scanned_at),
-  note:           inv => inv.note || '',
-};
 
 async function loadSettings() {
   try {
@@ -439,7 +667,12 @@ async function loadSettings() {
     const j = await r.json();
     _settings = j.settings;
     _fieldDefs = j.field_definitions || [];
+    // 初始 settings 缺欄位 fallback 空物件
+    if (!_settings.field_formats) _settings.field_formats = {};
+    if (!_settings.my_company_vat) _settings.my_company_vat = '';
     renderSettingsPanel();
+    renderFormatsPanel();
+    if ($('myCompanyVat')) $('myCompanyVat').value = _settings.my_company_vat;
   } catch (e) {
     console.error('loadSettings failed:', e);
   }
@@ -540,6 +773,8 @@ async function saveSettings() {
       body: JSON.stringify({
         visible_columns: _settings.visible_columns,
         column_order: _settings.column_order,
+        field_formats: _settings.field_formats,
+        my_company_vat: _settings.my_company_vat,
       }),
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -554,6 +789,88 @@ async function saveSettings() {
 $('btnSettings').addEventListener('click', () => {
   $('settingsPanel').hidden = !$('settingsPanel').hidden;
 });
+
+// Tabs
+document.querySelectorAll('.es-tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.es-tabs button').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('[data-tab-pane]').forEach(p => {
+      p.hidden = p.dataset.tabPane !== tab;
+    });
+  });
+});
+
+// 格式設定面板渲染：把同 group (amount) 的欄位合併顯示一個 group
+function renderFormatsPanel() {
+  const container = $('settingsFormats');
+  if (!container) return;
+  const seenGroups = new Set();
+  const blocks = [];
+  for (const def of _fieldDefs) {
+    if (!def.formats) continue;
+    const grp = def.formats.group;
+    let title, repId;
+    if (grp) {
+      if (seenGroups.has(grp)) continue;
+      seenGroups.add(grp);
+      // amount group：「金額（總計 / 銷售額 / 稅額 共用設定）」
+      const groupLabels = _fieldDefs.filter(f => f.formats && f.formats.group === grp).map(f => f.label);
+      title = '金額：' + groupLabels.join(' / ') + '（共用）';
+      repId = def.id;  // 用第一個欄位 ID 當 group 的代表
+    } else {
+      title = def.label;
+      repId = def.id;
+    }
+    const currentFmt = _settings.field_formats[repId] || def.formats.default;
+    const opts = def.formats.options.map(o => {
+      const checked = o.id === currentFmt ? 'checked' : '';
+      const labelClass = o.id === currentFmt ? 'checked' : '';
+      return `<label class="${labelClass}" data-opt="${escapeHtml(o.id)}">
+        <input type="radio" name="fmt-${escapeHtml(repId)}" value="${escapeHtml(o.id)}" ${checked}
+               data-group="${escapeHtml(grp || '')}" data-rep="${escapeHtml(repId)}">
+        <span class="ex">${escapeHtml(o.example)}</span>
+      </label>`;
+    }).join('');
+    blocks.push(`<div class="es-format-group" data-rep="${escapeHtml(repId)}">
+      <div class="gtitle">${escapeHtml(title)}</div>
+      <div class="opts">${opts}</div>
+    </div>`);
+  }
+  container.innerHTML = blocks.join('');
+  // Wire radio change
+  container.querySelectorAll('input[type=radio]').forEach(r => {
+    r.addEventListener('change', () => {
+      const grp = r.dataset.group;
+      const repId = r.dataset.rep;
+      // 找這個 group 的所有 field IDs，全部設成同一個 format
+      const fids = grp
+        ? _fieldDefs.filter(f => f.formats && f.formats.group === grp).map(f => f.id)
+        : [repId];
+      fids.forEach(fid => { _settings.field_formats[fid] = r.value; });
+      // 更新 label highlight
+      r.closest('.es-format-group').querySelectorAll('label').forEach(lab => {
+        lab.classList.toggle('checked', lab.dataset.opt === r.value);
+      });
+      renderBufferRows();
+      scheduleSettingsSave();
+    });
+  });
+}
+
+// my_company_vat input
+const myVatInput = $('myCompanyVat');
+if (myVatInput) {
+  myVatInput.addEventListener('input', () => {
+    const v = myVatInput.value.replace(/\D/g, '').slice(0, 8);
+    if (v !== myVatInput.value) myVatInput.value = v;
+    _settings.my_company_vat = v;
+    // 8 位才送出（避免一邊打一邊驗錯）
+    if (v.length === 0 || v.length === 8) {
+      scheduleSettingsSave();
+    }
+  });
+}
 $('btnSettingsReset').addEventListener('click', async () => {
   if (!confirm('恢復欄位顯示為預設？')) return;
   try {
@@ -561,7 +878,11 @@ $('btnSettingsReset').addEventListener('click', async () => {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const j = await r.json();
     _settings = j.settings;
+    if (!_settings.field_formats) _settings.field_formats = {};
+    if (!_settings.my_company_vat) _settings.my_company_vat = '';
     renderSettingsPanel();
+    renderFormatsPanel();
+    if ($('myCompanyVat')) $('myCompanyVat').value = _settings.my_company_vat;
     renderBufferRows();
     showToast('已恢復預設', 'ok');
   } catch (e) {
@@ -586,6 +907,35 @@ async function loadBuffer() {
   }
 }
 
+// 檢查單張發票是否「報帳錯誤」(M3.5)
+// 規則：若 settings.my_company_vat 有值，invoice.buyer_vat 為空 或不符 = warn
+function _invoiceWarn(inv) {
+  const myVat = (_settings.my_company_vat || '').trim();
+  if (!myVat) return null;             // 沒設我方統編 → 不檢查
+  if (!inv.buyer_vat) return 'no-vat';                   // 沒買方統編 = 非報帳用
+  if (inv.buyer_vat !== myVat) return 'mismatch';        // 不符
+  return null;
+}
+
+function _selectedIds() {
+  return Array.from(document.querySelectorAll('#bufferTbody .sel-check:checked'))
+    .map(cb => cb.dataset.id);
+}
+
+function _updateSelectedUI() {
+  const n = _selectedIds().length;
+  const btn = $('btnDeleteSelected');
+  $('selectedCount').textContent = n;
+  btn.hidden = n === 0;
+  // 「全選」checkbox 同步 indeterminate / checked
+  const allCb = document.querySelector('#bufferThead .sel-check');
+  if (allCb) {
+    const total = document.querySelectorAll('#bufferTbody .sel-check').length;
+    allCb.checked = total > 0 && n === total;
+    allCb.indeterminate = n > 0 && n < total;
+  }
+}
+
 function renderBufferRows() {
   // 依 settings 動態產生 thead + tbody
   const visibleIds = _settings.column_order.filter(c => _settings.visible_columns.includes(c));
@@ -594,38 +944,119 @@ function renderBufferRows() {
   $('bufferInfo').innerHTML = `<b>${_cachedInvoices.length}</b> / ${_cachedInfo.limit || 1000} 張`;
 
   const thead = $('bufferThead');
-  thead.innerHTML = '<tr>' + visibleDefs.map(d => {
-    const cls = NUMERIC_FIELDS.has(d.id) ? ' class="num"' : '';
-    return `<th${cls}>${escapeHtml(d.label)}</th>`;
-  }).join('') + '<th></th></tr>';
+  // 多選 checkbox 在最前面
+  thead.innerHTML = '<tr><th><input type="checkbox" class="sel-check" id="selAll" title="全選"></th>' +
+    visibleDefs.map(d => {
+      const cls = NUMERIC_FIELDS.has(d.id) ? ' class="num"' : '';
+      return `<th${cls}>${escapeHtml(d.label)}</th>`;
+    }).join('') + '<th></th></tr>';
 
   const tbody = $('bufferTbody');
   if (!_cachedInvoices.length) {
-    tbody.innerHTML = `<tr><td colspan="${visibleDefs.length + 1}" class="es-empty">尚未掃描任何發票</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${visibleDefs.length + 2}" class="es-empty">尚未掃描任何發票</td></tr>`;
+    _updateSelectedUI();
     return;
   }
   const rows = _cachedInvoices.map((inv, i) => {
+    const warn = _invoiceWarn(inv);
+    const rowClass = warn ? ' class="warn-row"' : '';
+    // 警告 row 預設勾選
+    const selChecked = warn ? 'checked' : '';
     const cells = visibleDefs.map(d => {
-      const renderer = CELL_RENDERERS[d.id];
-      const val = renderer ? renderer(inv, i) : '';
-      const cls = NUMERIC_FIELDS.has(d.id) ? ' class="num"' : '';
+      let val = cellValue(inv, d.id, i);
+      let cls = NUMERIC_FIELDS.has(d.id) ? ' class="num"' : '';
+      // 警告標籤掛在買方統編欄位
+      if (d.id === 'buyer_vat' && warn) {
+        const tag = warn === 'no-vat' ? '無統編' : '統編不符';
+        val = (val || '<span style="color:#94a3b8">—</span>') + `<span class="warn-tag">${tag}</span>`;
+        return `<td>${val}</td>`;
+      }
       // note 欄位用可編輯 input
       if (d.id === 'note') {
         return `<td><input type="text" class="note-input" data-id="${escapeHtml(inv.id)}" value="${escapeHtml(val)}" maxlength="500" placeholder="—" style="width:100%; border:0; background:transparent; font-size:13px; padding:2px 4px;"></td>`;
       }
       return `<td${cls}>${escapeHtml(val)}</td>`;
     }).join('');
-    return `<tr>${cells}<td><button class="del-btn" data-id="${escapeHtml(inv.id)}" title="刪除">×</button></td></tr>`;
+    return `<tr${rowClass}>
+      <td><input type="checkbox" class="sel-check" data-id="${escapeHtml(inv.id)}" ${selChecked}></td>
+      ${cells}
+      <td style="white-space:nowrap;">
+        <button class="info-btn" data-id="${escapeHtml(inv.id)}" title="細節">{{ icon('info', size=14) }}</button>
+        <button class="del-btn" data-id="${escapeHtml(inv.id)}" title="刪除">×</button>
+      </td>
+    </tr>`;
   });
   tbody.innerHTML = rows.join('');
   tbody.querySelectorAll('.del-btn').forEach(b => {
     b.addEventListener('click', () => deleteInvoice(b.dataset.id));
   });
+  tbody.querySelectorAll('.info-btn').forEach(b => {
+    b.addEventListener('click', () => showDetail(b.dataset.id));
+  });
   tbody.querySelectorAll('.note-input').forEach(inp => {
     inp.addEventListener('change', () => saveNote(inp.dataset.id, inp.value));
     inp.addEventListener('blur', () => saveNote(inp.dataset.id, inp.value));
   });
+  // Per-row checkbox + 全選
+  tbody.querySelectorAll('.sel-check').forEach(cb => {
+    cb.addEventListener('change', _updateSelectedUI);
+  });
+  const selAll = $('selAll');
+  if (selAll) {
+    selAll.addEventListener('change', () => {
+      tbody.querySelectorAll('.sel-check').forEach(cb => { cb.checked = selAll.checked; });
+      _updateSelectedUI();
+    });
+  }
+  _updateSelectedUI();
 }
+
+// ─── 細節 modal ───
+function showDetail(id) {
+  const inv = _cachedInvoices.find(x => x.id === id);
+  if (!inv) return;
+  $('detailTitle').textContent = '發票 ' + (inv.invoice_number || '');
+  // 顯示所有欄位（依 FIELD_DEFINITIONS 順序），用使用者設定的格式
+  const rows = _fieldDefs.map(def => {
+    if (def.id === 'items') return '';  // items 走獨立區塊在下面
+    if (def.id === 'note') return '';   // note 也跳過（detail modal 不適合編輯）
+    let val;
+    if (def.id === 'seq') {
+      val = String(_cachedInvoices.indexOf(inv) + 1);
+    } else if (def.id === 'tax') {
+      if (inv.amount_total == null || inv.amount_untaxed == null) val = '';
+      else val = applyFormat('tax', inv.amount_total - inv.amount_untaxed);
+    } else {
+      val = applyFormat(def.id, inv[def.id]);
+    }
+    return `<div class="es-detail-row"><span class="label">${escapeHtml(def.label)}</span><span class="val">${escapeHtml(val) || '<span style="color:#94a3b8">—</span>'}</span></div>`;
+  }).join('');
+  // 品項區塊
+  let itemsHtml = '';
+  if (Array.isArray(inv.items) && inv.items.length) {
+    const lis = inv.items.map(it => `<li>${escapeHtml(it)}</li>`).join('');
+    itemsHtml = `<div class="es-detail-items"><div class="ttl">{{ icon('list', size=12) }} 品項（${inv.items.length}）</div><ul>${lis}</ul></div>`;
+  } else {
+    itemsHtml = `<div class="es-detail-items"><div class="ttl">品項</div><div class="empty">本張發票未掃到右側品項 QR Code 或品項已加密</div></div>`;
+  }
+  // 備註（show-only）
+  if (inv.note) {
+    itemsHtml += `<div class="es-detail-items"><div class="ttl">備註</div><div>${escapeHtml(inv.note)}</div></div>`;
+  }
+  $('detailBody').innerHTML = rows + itemsHtml;
+  $('detailModal').hidden = false;
+}
+
+$('detailClose').addEventListener('click', () => { $('detailModal').hidden = true; });
+$('detailModal').addEventListener('click', e => {
+  // 點 backdrop 也關
+  if (e.target.id === 'detailModal') $('detailModal').hidden = true;
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$('detailModal').hidden) {
+    $('detailModal').hidden = true;
+  }
+});
 
 let _noteSaveTimers = {};
 async function saveNote(id, note) {
@@ -661,6 +1092,72 @@ async function deleteInvoice(id) {
 }
 
 $('btnRefresh').addEventListener('click', () => loadBuffer());
+
+// 多選刪除
+$('btnDeleteSelected').addEventListener('click', async () => {
+  const ids = _selectedIds();
+  if (!ids.length) return;
+  if (!confirm(`確定刪除選取的 ${ids.length} 張發票？`)) return;
+  try {
+    const r = await fetch('/tools/einvoice-scan/buffer/delete-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    showToast(`已刪除 ${j.deleted} 張`, 'ok');
+    await loadBuffer();
+  } catch (e) {
+    showToast(`刪除失敗：${e.message}`, 'err');
+  }
+});
+
+// 匯出
+const exportMenu = $('exportMenu');
+$('btnExport').addEventListener('click', e => {
+  e.stopPropagation();
+  exportMenu.hidden = !exportMenu.hidden;
+});
+document.addEventListener('click', e => {
+  if (!exportMenu.contains(e.target) && e.target !== $('btnExport')) {
+    exportMenu.hidden = true;
+  }
+});
+exportMenu.querySelectorAll('button[data-fmt]').forEach(b => {
+  b.addEventListener('click', async () => {
+    const fmt = b.dataset.fmt;
+    const clearAfter = $('exportClearAfter').checked;
+    exportMenu.hidden = true;
+    showToast(`產生 ${fmt} 中…`);
+    try {
+      const r = await fetch('/tools/einvoice-scan/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format: fmt, clear_after: clearAfter }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.detail || `HTTP ${r.status}`);
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const cd = r.headers.get('Content-Disposition') || '';
+      const m = cd.match(/filename\*=UTF-8''([^;]+)/i) || cd.match(/filename="?([^";]+)"?/i);
+      a.download = m ? decodeURIComponent(m[1]) : `einvoices.${fmt}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast(`已下載 ${a.download}`, 'ok');
+      if (clearAfter) await loadBuffer();
+    } catch (e) {
+      showToast(`匯出失敗：${e.message}`, 'err');
+    }
+  });
+});
 
 $('btnClear').addEventListener('click', async () => {
   if (!confirm('確定要清空全部已掃描的發票？此動作不可復原。')) return;

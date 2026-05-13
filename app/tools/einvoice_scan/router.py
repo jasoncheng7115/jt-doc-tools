@@ -22,7 +22,12 @@ from typing import Optional
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from . import buffer, qr_decoder, settings as user_settings
+from datetime import datetime
+
+from . import buffer, exporter, qr_decoder, settings as user_settings
+from fastapi.responses import StreamingResponse
+import io
+from ...core.http_utils import content_disposition
 
 router = APIRouter()
 
@@ -229,6 +234,70 @@ async def update_invoice(invoice_id: str, request: Request):
     if not ok:
         raise HTTPException(404, "invoice not found in buffer")
     return {"ok": True}
+
+
+@router.post("/buffer/delete-batch")
+async def delete_batch(request: Request):
+    """批次刪除 — body {ids: [...]}"""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "invalid JSON body")
+    ids = body.get("ids", [])
+    if not isinstance(ids, list):
+        raise HTTPException(400, "ids 必須是陣列")
+    user = _request_user(request)
+    deleted = 0
+    for inv_id in ids:
+        if isinstance(inv_id, str) and len(inv_id) <= 64 and all(c in "0123456789abcdef" for c in inv_id):
+            if buffer.delete_invoice(user, inv_id):
+                deleted += 1
+    return {"deleted": deleted, "buffer": buffer.buffer_info(user)}
+
+
+@router.post("/export")
+async def export(request: Request):
+    """匯出 buffer — body {format: 'csv'|'xlsx'|'json', clear_after?: bool}.
+
+    visible_columns / column_order / field_formats 自動取使用者目前 settings.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "invalid JSON body")
+    fmt = body.get("format", "")
+    if fmt not in ("csv", "xlsx", "json"):
+        raise HTTPException(400, "format 必須是 csv / xlsx / json")
+    clear_after = bool(body.get("clear_after", False))
+
+    user = _request_user(request)
+    invoices = buffer.list_invoices(user)
+    if not invoices:
+        raise HTTPException(400, "buffer 為空，無資料可匯出")
+    settings = user_settings.get_settings(user)
+    try:
+        data, mimetype, suffix = exporter.build_export(
+            invoices,
+            settings["visible_columns"],
+            settings["column_order"],
+            settings.get("field_formats") or {},
+            fmt,
+        )
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    # 若 clear_after，匯出後清空 buffer
+    if clear_after:
+        buffer.clear_all(user)
+
+    filename = f"einvoices-{datetime.now().strftime('%Y%m%d-%H%M%S')}.{suffix}"
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type=mimetype,
+        headers={"Content-Disposition": content_disposition(filename)},
+    )
 
 
 @router.post("/api/einvoice-scan")
