@@ -19,11 +19,11 @@
 .tl-mini-btn:hover { background:#e2e8f0; }
 
 .tl-ops {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 8px;
+  /* 多欄 column-flow（類 masonry）— 每張卡片依自身內容自然高度排列，
+     不會像 grid 為了對齊把空白撐出來；視窗寬度變時 column-count 自動調 */
+  column-width: 240px;
+  column-gap: 8px;
   margin: 8px 0;
-  align-items: start;          /* 卡片不被拉伸，依內容自動高度 */
 }
 .tl-op {
   border: 1px solid #e5e7eb;
@@ -34,6 +34,11 @@
   flex-direction: column;
   gap: 6px;
   transition: background 0.12s, border-color 0.12s;
+  /* 防止單張卡片被斷在兩欄之間 */
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  page-break-inside: avoid;
+  margin-bottom: 8px;
 }
 .tl-op:hover { background: #f8fafc; }
 .tl-op.on {
