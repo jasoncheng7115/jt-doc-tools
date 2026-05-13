@@ -96,13 +96,36 @@
 </details>
 
 <details class="panel" id="resultPanel" hidden open>
-  <summary>
-    <span>2. 並排對照</span>
-    <span class="muted" id="resultMeta" style="font-size:12px; font-weight:normal;"></span>
+  <summary>2. 並排對照</summary>
+  <div class="trd-result-toolbar">
+    <span class="muted" id="resultMeta" style="font-size:12px;"></span>
     <span style="flex:1;"></span>
     <button class="btn btn-small" type="button" id="btnCopyTgt">{{ icon('paperclip', size=12) }} 複製譯文</button>
     <button class="btn btn-small" type="button" id="btnCopySxs">{{ icon('paperclip', size=12) }} 複製對照</button>
-  </summary>
+    <span class="trd-export-wrap">
+      <button class="btn btn-small trd-export-btn" type="button" data-export-group="text">{{ icon('download', size=12) }} 匯出文字檔 ▾</button>
+      <div class="trd-export-menu" data-export-menu="text" hidden>
+        <button type="button" data-format="txt">純文字 (.txt)</button>
+        <button type="button" data-format="md">Markdown (.md)</button>
+        <button type="button" data-format="csv">CSV (.csv)</button>
+      </div>
+    </span>
+    <span class="trd-export-wrap">
+      <button class="btn btn-small trd-export-btn" type="button" data-export-group="doc">{{ icon('download', size=12) }} 匯出文件檔 ▾</button>
+      <div class="trd-export-menu" data-export-menu="doc" hidden>
+        <button type="button" data-format="docx">Word (.docx)</button>
+        <button type="button" data-format="odt">OpenDocument (.odt)</button>
+        <button type="button" data-format="pdf">PDF (.pdf)</button>
+      </div>
+    </span>
+    <span class="trd-export-wrap">
+      <button class="btn btn-small trd-export-btn" type="button" data-export-group="sheet">{{ icon('download', size=12) }} 匯出試算表檔 ▾</button>
+      <div class="trd-export-menu" data-export-menu="sheet" hidden>
+        <button type="button" data-format="xlsx">Excel (.xlsx)</button>
+        <button type="button" data-format="ods">OpenDocument (.ods)</button>
+      </div>
+    </span>
+  </div>
   <div class="trd-progress-wrap" id="trdProgressWrap" hidden>
     <div class="trd-progress-bar" id="trdProgressBar"></div>
   </div>
@@ -114,6 +137,34 @@
 </details>
 
 <style>
+  /* === 結果面板內的工具列（v1.7.52）=== summary 只放標題，meta + 按鈕
+     全進這條 toolbar，跟既有的「面板內第一條 row」style 一致。 */
+  .trd-result-toolbar {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 8px 12px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+  }
+  .trd-result-toolbar .muted { color: #64748b; }
+
+  /* === 匯出按鈕的下拉選單（v1.7.51）=== */
+  .trd-export-wrap { position: relative; display: inline-block; }
+  .trd-export-menu {
+    position: absolute; top: calc(100% + 4px); right: 0;
+    background: #fff; border: 1px solid #cbd5e1; border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, .12);
+    min-width: 180px; z-index: 50;
+    padding: 4px;
+  }
+  .trd-export-menu[hidden] { display: none; }
+  .trd-export-menu button {
+    display: block; width: 100%; text-align: left;
+    padding: 6px 10px; font-size: 13px; color: #1f2937;
+    background: none; border: none; border-radius: 4px;
+    cursor: pointer; white-space: nowrap;
+  }
+  .trd-export-menu button:hover { background: #f1f5f9; }
+
   /* === 自製下拉（取代瀏覽器原生 select，視覺一致）=== */
   .jt-select { position: relative; width: 100%; }
   .jt-select-trigger {
@@ -205,7 +256,7 @@
     width: 0%; transition: width 0.3s ease;
   }
   .trd-progress-meta {
-    font-size: 11.5px; color: #64748b; margin-top: 4px;
+    font-size: 11.5px; color: #64748b; margin-top: 4px; margin-bottom: 14px;
     display: flex; gap: 12px; flex-wrap: wrap;
     font-variant-numeric: tabular-nums;
   }
@@ -517,6 +568,9 @@ const trdGrid = $('trdGrid');
 const charCounter = $('charCounter');
 
 let currentSentences = [];
+// v1.7.52：上傳檔名 + 翻譯完成時間，匯出文件 / 試算表時帶到頁首給使用者參考。
+let trdUploadedName = '';
+let trdTranslatedAt = '';
 
 // 與後端 _LIST_MARKER_RE 對齊。短到 ≤6 字元、長相像列表編號的 token，
 // 不該獨立成句 — 跟下一句合併。
@@ -560,6 +614,7 @@ refreshCounter();
 
 async function handleUploadedFile(f) {
   if (!f) return;
+  trdUploadedName = f.name;   // v1.7.52：記錄給匯出帶到頁首
   const fd = new FormData();
   fd.append('file', f);
   const dropZone = document.getElementById('dropZone');
@@ -765,9 +820,16 @@ trdGrid.addEventListener('click', async (e) => {
     clone.querySelectorAll('.cell-copy').forEach(b => b.remove());
     const text = (clone.textContent || '').trim();
     if (!text) return;
-    try { await navigator.clipboard.writeText(text); } catch (_) {}
+    let copyOk = true;
+    try { await navigator.clipboard.writeText(text); }
+    catch (_) { copyOk = false; }
     copyBtn.classList.add('is-copied');
     setTimeout(() => copyBtn.classList.remove('is-copied'), 900);
+    // v1.7.51：彈訊息告知 — 之前只有按鈕短暫變色，使用者不確定有沒有複製到。
+    const which = copyBtn.dataset.which;   // 'src' | 'tgt'
+    const label = which === 'src' ? '原文' : (which === 'tgt' ? '譯文' : '');
+    if (copyOk) showToast?.(`已複製${label}（${text.length} 字）`, 'ok');
+    else        showToast?.('複製失敗（瀏覽器不允許剪貼簿存取？）', 'err');
     return;
   }
   const btn = e.target.closest('button[data-act=retry]');
@@ -983,6 +1045,8 @@ btnTranslate.addEventListener('click', async () => {
       btnTranslate.innerHTML = btnTranslate.dataset.orig || '開始翻譯';
       $('btnStop').hidden = true;
       _translateAbortCtl = null;
+      // v1.7.52：記錄翻譯完成時間，匯出時帶到頁首
+      trdTranslatedAt = new Date().toISOString();
       // Keep progress bar visible at final state
     }
   }
@@ -1010,6 +1074,76 @@ $('btnCopySxs').addEventListener('click', (e) => {
   });
   navigator.clipboard.writeText(lines.join('\n'));
   showToast?.('已複製對照', 'ok');
+});
+
+// ============ 匯出檔案（v1.7.51）============
+// 三組按鈕（文字 / 文件 / 試算表），各自一個 dropdown menu。點 menu 內項目
+// 把所有翻譯對 POST 到 /tools/translate-doc/export，server 產對應檔丟回。
+function _trdGetPairs() {
+  const pairs = [];
+  trdGrid.querySelectorAll('.trd-row').forEach(row => {
+    const src = row.querySelector('.src')?.textContent || '';
+    const tgt = row.querySelector('.tgt')?.textContent || '';
+    pairs.push({source: src, target: tgt});
+  });
+  return pairs;
+}
+async function _trdExport(format) {
+  const pairs = _trdGetPairs();
+  if (!pairs.length) { showToast?.('沒有可匯出的內容', 'err'); return; }
+  showToast?.(`產生 ${format} 中…`, 'ok');
+  try {
+    const r = await fetch('/tools/translate-doc/export', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        format, pairs,
+        // v1.7.52：文件 / 試算表會放這兩項在頁首；文字檔（txt/md/csv）忽略。
+        source_filename: trdUploadedName || '',
+        translated_at: trdTranslatedAt || new Date().toISOString(),
+      }),
+    });
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error('HTTP ' + r.status + (txt ? ': ' + txt.slice(0, 200) : ''));
+    }
+    const blob = await r.blob();
+    const cd = r.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+    const fname = m ? decodeURIComponent(m[1]) : `translated.${format}`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+  } catch (e) {
+    showToast?.('匯出失敗：' + e.message, 'err');
+  }
+}
+
+// 按鈕 toggle dropdown，點選項目觸發 export。點外面收起。
+document.querySelectorAll('.trd-export-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const group = btn.dataset.exportGroup;
+    const menu = document.querySelector(`.trd-export-menu[data-export-menu="${group}"]`);
+    // 收起其他打開的
+    document.querySelectorAll('.trd-export-menu').forEach(m => {
+      if (m !== menu) m.hidden = true;
+    });
+    if (menu) menu.hidden = !menu.hidden;
+  });
+});
+document.querySelectorAll('.trd-export-menu button').forEach(opt => {
+  opt.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const fmt = opt.dataset.format;
+    opt.closest('.trd-export-menu').hidden = true;
+    _trdExport(fmt);
+  });
+});
+document.addEventListener('click', () => {
+  document.querySelectorAll('.trd-export-menu').forEach(m => { m.hidden = true; });
 });
 </script>
 {% endif %}{# end of {% if llm_enabled %} for scripts block #}
