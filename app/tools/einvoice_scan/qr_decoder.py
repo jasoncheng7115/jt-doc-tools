@@ -196,11 +196,56 @@ def parse_einvoice_qr(qr_text: str) -> Optional[dict]:
     }
 
 
+def parse_right_qr_items(text: str) -> Optional[list[str]]:
+    """從右 QR 字串解析品項清單 (best-effort).
+
+    台灣 B2C 電子發票右 QR 格式（明碼摘要式）：
+        **<二維碼種類>:<編碼方式>:<品項加密>:<品項數>:<本張品項數>:<中文編碼>:<品項1>:<品項2>:...
+
+    例：`**1:0:0:5:5:Big5:鉛筆:橡皮擦:文件夾:...`
+
+    本 parser 簡單版：
+    - 必須 `**` 開頭
+    - 用 `:` 分段
+    - 跳過前 6 個 metadata 欄位，剩下視為品項
+    - 品項加密 (第 3 欄 = '1') 時無法解（內建沒實作 AES）→ 回 None
+
+    Returns list of strings 或 None（不是右 QR / 加密 / 解析失敗）。
+    """
+    if not text or not text.startswith("**"):
+        return None
+    parts = text.split(":")
+    if len(parts) < 7:
+        return None
+    # 第 3 欄 (index 2) = 品項加密旗標 ('0' / '1')
+    if parts[2] == "1":
+        return None  # 加密，無法解
+    # 從 index 6 起為品項
+    items = [p.strip() for p in parts[6:] if p and p.strip() and not p.startswith("**")]
+    return items if items else None
+
+
 def parse_qr_list(qr_list: list[str]) -> list[dict]:
-    """把多筆 QR 字串 parse；自動跳過非 e-invoice。"""
-    out = []
+    """把多筆 QR 字串 parse；自動跳過非 e-invoice。
+
+    自動配對左 QR + 右 QR（同一影像中常一起出現）：
+    - 左 QR 解出來後，看清單中是否有 `**` 開頭的右 QR；如果有，把品項 attach 到 invoice
+    - 一張影像有多筆左 QR + 右 QR 時，按出現順序配對（zbar 已 sort by position）
+    """
+    invoices = []
+    items_lists = []  # 同步順序
     for qr in qr_list:
         parsed = parse_einvoice_qr(qr)
         if parsed:
-            out.append(parsed)
-    return out
+            invoices.append(parsed)
+        else:
+            items = parse_right_qr_items(qr)
+            if items is not None:
+                items_lists.append(items)
+
+    # Pair items 1:1（多餘的丟掉）
+    for i, items in enumerate(items_lists):
+        if i < len(invoices):
+            invoices[i]["items"] = items
+
+    return invoices

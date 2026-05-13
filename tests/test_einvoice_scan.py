@@ -384,6 +384,168 @@ def test_patch_invalid_id():
     assert r.status_code in (400, 404)
 
 
+# ─── HTTP: export endpoint ────────────────────────────────────────────
+
+def test_export_empty_buffer_400():
+    client.delete("/tools/einvoice-scan/buffer")  # ensure empty
+    r = client.post("/tools/einvoice-scan/export", json={"format": "csv"})
+    assert r.status_code == 400
+
+
+def test_export_invalid_format():
+    # 加一筆讓 buffer 非空，避開 400 empty
+    qr = _build_qr_text(invoice_number="EX12345678")
+    client.post("/tools/einvoice-scan/scan-text", json={"qr_texts": [qr]})
+    r = client.post("/tools/einvoice-scan/export", json={"format": "exe"})
+    assert r.status_code == 400
+    client.delete("/tools/einvoice-scan/buffer")
+
+
+def test_export_csv_has_bom():
+    qr = _build_qr_text(invoice_number="EX12345678")
+    client.post("/tools/einvoice-scan/scan-text", json={"qr_texts": [qr]})
+    r = client.post("/tools/einvoice-scan/export", json={"format": "csv"})
+    assert r.status_code == 200
+    assert r.content.startswith(b"\xef\xbb\xbf")
+    text = r.content.decode("utf-8-sig")
+    assert "EX-12345678" in text or "EX12345678" in text  # 預設 dash format
+    client.delete("/tools/einvoice-scan/buffer")
+
+
+def test_export_xlsx():
+    qr = _build_qr_text(invoice_number="EX12345678")
+    client.post("/tools/einvoice-scan/scan-text", json={"qr_texts": [qr]})
+    r = client.post("/tools/einvoice-scan/export", json={"format": "xlsx"})
+    assert r.status_code == 200
+    assert r.content.startswith(b"PK")  # zip = xlsx 的開頭
+    import openpyxl, io as _io
+    wb = openpyxl.load_workbook(_io.BytesIO(r.content))
+    ws = wb.active
+    assert ws["A1"].value is not None  # 標題列存在
+    client.delete("/tools/einvoice-scan/buffer")
+
+
+def test_export_json_uses_internal_format():
+    """JSON 永遠用 raw 內部格式（compact 號碼 / int 金額），ignore field_formats."""
+    qr = _build_qr_text(invoice_number="EX12345678")
+    client.post("/tools/einvoice-scan/scan-text", json={"qr_texts": [qr]})
+    # 故意設 field_formats 為 dash + currency — JSON 不該套用
+    client.put("/tools/einvoice-scan/settings", json={
+        "field_formats": {"invoice_number": "dash", "amount_total": "currency"},
+    })
+    r = client.post("/tools/einvoice-scan/export", json={"format": "json"})
+    assert r.status_code == 200
+    import json as _json
+    data = _json.loads(r.content)
+    invs = data["invoices"]
+    # 找這筆 EX12345678 — 應該是 compact 字串而非 'EX-12345678'
+    matched = [i for i in invs if i.get("invoice_number") == "EX12345678"]
+    assert matched, "EX12345678 未出現在 JSON 匯出 (應為 compact)"
+    # amount_total 應該是 int 不是 'NT$ 1,050'
+    assert isinstance(matched[0]["amount_total"], int)
+    client.delete("/tools/einvoice-scan/buffer")
+
+
+def test_export_clear_after():
+    qr = _build_qr_text(invoice_number="EX99999999")
+    client.post("/tools/einvoice-scan/scan-text", json={"qr_texts": [qr]})
+    r = client.post("/tools/einvoice-scan/export",
+                    json={"format": "csv", "clear_after": True})
+    assert r.status_code == 200
+    # buffer 應已清空
+    g = client.get("/tools/einvoice-scan/buffer").json()
+    assert g["info"]["count"] == 0
+
+
+# ─── HTTP: batch delete endpoint ──────────────────────────────────────
+
+def test_delete_batch():
+    # 加 3 筆
+    qrs = [_build_qr_text(invoice_number=f"BT{i:08d}") for i in range(3)]
+    r = client.post("/tools/einvoice-scan/scan-text", json={"qr_texts": qrs})
+    j = r.json()
+    ids = [a["id"] for a in j["added"]]
+    assert len(ids) == 3
+    # 刪兩筆
+    r = client.post("/tools/einvoice-scan/buffer/delete-batch",
+                    json={"ids": ids[:2]})
+    assert r.status_code == 200
+    assert r.json()["deleted"] == 2
+    # buffer 還剩 1
+    g = client.get("/tools/einvoice-scan/buffer").json()
+    remaining = [i for i in g["invoices"] if i["invoice_number"].startswith("BT")]
+    assert len(remaining) == 1
+    client.delete("/tools/einvoice-scan/buffer")
+
+
+def test_delete_batch_filters_invalid_ids():
+    """非 hex / 過長 id 自動 skip，不報錯。"""
+    qr = _build_qr_text(invoice_number="BT77777777")
+    r = client.post("/tools/einvoice-scan/scan-text", json={"qr_texts": [qr]})
+    valid_id = r.json()["added"][0]["id"]
+    r = client.post("/tools/einvoice-scan/buffer/delete-batch", json={
+        "ids": [valid_id, "../etc/passwd", "z" * 100, "non-hex-string"],
+    })
+    assert r.status_code == 200
+    assert r.json()["deleted"] == 1  # 只刪掉合法的那筆
+
+
+def test_delete_batch_invalid_body():
+    r = client.post("/tools/einvoice-scan/buffer/delete-batch",
+                    json={"ids": "not-a-list"})
+    assert r.status_code == 400
+
+
+# ─── HTTP: my_company_vat in settings ─────────────────────────────────
+
+def test_settings_my_company_vat():
+    r = client.put("/tools/einvoice-scan/settings",
+                   json={"my_company_vat": "12345678"})
+    assert r.status_code == 200
+    g = client.get("/tools/einvoice-scan/settings").json()
+    assert g["settings"]["my_company_vat"] == "12345678"
+
+
+def test_settings_my_company_vat_invalid_format():
+    r = client.put("/tools/einvoice-scan/settings",
+                   json={"my_company_vat": "abc"})
+    assert r.status_code == 400
+
+
+def test_settings_my_company_vat_empty_ok():
+    """空字串 = 不檢查，必須允許。"""
+    r = client.put("/tools/einvoice-scan/settings",
+                   json={"my_company_vat": ""})
+    assert r.status_code == 200
+
+
+# ─── Right QR items parsing ───────────────────────────────────────────
+
+def test_parse_right_qr_items_basic():
+    text = "**1:0:0:5:5:Big5:鉛筆:橡皮擦:文件夾:迴紋針:資料夾"
+    items = qr_decoder.parse_right_qr_items(text)
+    assert items == ["鉛筆", "橡皮擦", "文件夾", "迴紋針", "資料夾"]
+
+
+def test_parse_right_qr_items_encrypted_returns_none():
+    text = "**1:0:1:5:5:Big5:encrypted_blob"
+    assert qr_decoder.parse_right_qr_items(text) is None
+
+
+def test_parse_right_qr_not_starts_with_double_star():
+    assert qr_decoder.parse_right_qr_items("AB12345678...") is None
+
+
+def test_parse_qr_list_pairs_left_and_right():
+    """左 QR + 右 QR 同時傳入應該配對成 invoice + items。"""
+    left = _build_qr_text(invoice_number="MM12345678")
+    right = "**1:0:0:3:3:Big5:咖啡:三明治:可樂"
+    out = qr_decoder.parse_qr_list([left, right])
+    assert len(out) == 1
+    assert out[0]["invoice_number"] == "MM12345678"
+    assert out[0]["items"] == ["咖啡", "三明治", "可樂"]
+
+
 def test_scan_unsupported_format():
     r = client.post("/tools/einvoice-scan/scan",
                     files={"file": ("test.exe", b"\x00\x00", "application/octet-stream")})

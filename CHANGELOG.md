@@ -4,6 +4,55 @@
 
 ---
 
+## [1.7.75] - 2026-05-13
+
+### 新增（einvoice-scan M3 — 欄位格式系統 + 匯出 + 報帳檢查 + 細節 modal）
+
+- **欄位格式系統**：FIELD_DEFINITIONS 擴充加 `formats` 區塊，每欄位可選顯示樣式：
+  - 發票號碼：compact / dash / space（預設 dash）
+  - 開立日期：iso / slash / chinese / roc / roc_chinese（預設 slash）
+  - 金額（總計 / 銷售額 / 稅額共用）：plain / comma / currency（預設 comma）
+  - 掃描時間：iso / local / date_only / relative（預設 local）
+  - 設定立即套用到表格 + 匯出 (CSV / XLSX)；JSON 永遠用內部標準格式
+- **後端 formatters.py**：apply_format(field_id, value, field_formats) 統一入口；前後端邏輯對齊
+- **設定面板分 3 tab**：欄位顯示 / 欄位格式 / 報帳檢查
+- **匯出 CSV / XLSX / JSON**：
+  - CSV：UTF-8 BOM + apply field_formats
+  - XLSX：標題列藍底白字 + freeze + 欄寬 18 / 60（備註）/ 50（品項）+ apply field_formats
+  - JSON：raw 內部標準（compact 號碼 / int 金額 / ISO 日期）— ignore field_formats
+  - 「匯出後清空 buffer」勾選
+- **細節 modal**：每 row 新增「ⓘ」按鈕，點擊彈出 modal 顯示所有欄位（含品項清單）
+- **品項解析**：右 QR (`**` 開頭) 解析 items 清單；自動配對左 QR + 右 QR；表格新加「品項數」欄位（預設不顯示，可勾起）
+- **報帳檢查 + 多選刪除**：
+  - 設定面板「報帳檢查」tab 加「我方公司統編」輸入欄
+  - 表格 row 自動標註紅底警告（買方統編空 = 非報帳；統編不符 = 錯誤）+ 紅標籤
+  - 表格首欄加多選 checkbox（**警告 row 預設勾選**）+ 全選 checkbox
+  - 「刪除選取 (N)」按鈕一鍵清掉
+  - POST /buffer/delete-batch 後端
+
+### 新 endpoints
+
+- `POST /tools/einvoice-scan/export` — 三格式匯出
+- `POST /tools/einvoice-scan/buffer/delete-batch` — 多筆刪除
+
+### UX
+
+- 手機（< 720px）預設隱藏「上傳檔案 / 拖放」（手機沒拖放）
+- 細節 modal 支援 ESC / 點 backdrop 關閉
+
+### 安全
+
+- field_formats 嚴格驗證（白名單 + format ID 屬於該欄位）
+- my_company_vat 驗證 8 位數字 + 空字串 = 不檢查
+- delete-batch 自動 filter 非 hex / 過長 id（避免 path traversal）
+- export 前驗 buffer 非空（避免空檔案下載）
+
+### 測試
+
+- **70 個 pytest 全綠**（含 18 個 formatters unit + 11 個 export / batch / right-QR / vat 新測試）
+
+---
+
 ## [1.7.74] - 2026-05-13
 
 ### 新增（einvoice-scan M2 — 欄位顯示 / 排序 + 備註可編輯）
