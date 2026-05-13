@@ -14,7 +14,7 @@ metadata = ToolMetadata(
     id="text-list",
     name="清單處理",
     description="貼文字或上傳檔案，每行一筆。可排序 / 去重 / 篩選 / 大小寫 / 取頭尾，操作可組合。",
-    icon="paragraph",
+    icon="list",
     category="內容處理",
 )
 
