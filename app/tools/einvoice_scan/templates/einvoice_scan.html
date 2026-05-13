@@ -148,6 +148,47 @@
 .es-mini-btn.danger:hover { background: #fee2e2; }
 
 .es-table-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 6px; }
+
+/* 欄位設定面板 — 摺疊在表格上方 */
+.es-settings-panel {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin: 8px 0 12px;
+  font-size: 13px;
+}
+.es-settings-panel h3 {
+  margin: 0 0 8px; font-size: 13px; color: #1e293b;
+}
+.es-settings-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px;
+}
+.es-field-card {
+  display: flex; align-items: center; gap: 8px;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+}
+.es-field-card.dragging { opacity: 0.4; }
+.es-field-card.drop-before { box-shadow: -3px 0 0 #2563eb inset, 0 -3px 0 #2563eb; }
+.es-field-card.drop-after  { box-shadow: -3px 0 0 #2563eb inset, 0  3px 0 #2563eb; }
+.es-field-card .grab {
+  cursor: grab; color: #94a3b8; user-select: none;
+  padding: 0 2px;
+}
+.es-field-card .grab:active { cursor: grabbing; }
+.es-field-card label { flex: 1; cursor: pointer; }
+.es-settings-actions {
+  display: flex; gap: 8px; margin-top: 10px; align-items: center;
+}
+.es-settings-actions .saved {
+  margin-left: auto; font-size: 11.5px; color: #059669;
+  opacity: 0; transition: opacity 0.2s;
+}
+.es-settings-actions .saved.show { opacity: 1; }
 .es-table {
   width: 100%; border-collapse: collapse; font-size: 13px;
   font-variant-numeric: tabular-nums;
@@ -246,29 +287,27 @@
       <label style="font-size: 12px; color: #64748b; display: inline-flex; align-items: center; gap: 4px;">
         <input type="checkbox" id="autoRefresh" checked> 自動更新
       </label>
+      <button type="button" class="es-mini-btn" id="btnSettings" title="欄位顯示設定">{{ icon('gear', size=12) }} 欄位</button>
       <button type="button" class="es-mini-btn" id="btnRefresh">{{ icon('refresh', size=12) }} 重新整理</button>
       <button type="button" class="es-mini-btn danger" id="btnClear">{{ icon('trash', size=12) }} 全部清空</button>
     </div>
   </div>
+
+  <!-- 欄位設定面板（預設摺疊；按 ⚙️ 欄位 開啟） -->
+  <div class="es-settings-panel" id="settingsPanel" hidden>
+    <h3>{{ icon('gear', size=14) }} 欄位顯示設定</h3>
+    <p style="margin: 0 0 8px; font-size: 11.5px; color: #64748b;">勾選顯示哪些欄位；拖曳左側 ⋮⋮ 把手調整順序。設定變更立即套用，並同步到帳號（手機 / 電腦共用）。</p>
+    <div class="es-settings-fields" id="settingsFields"></div>
+    <div class="es-settings-actions">
+      <button type="button" class="es-mini-btn" id="btnSettingsReset">{{ icon('refresh', size=12) }} 恢復預設</button>
+      <span class="saved" id="settingsSaved">{{ icon('check', size=12) }} 已儲存</span>
+    </div>
+  </div>
+
   <div class="es-table-wrap">
     <table class="es-table" id="bufferTable">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>發票號碼</th>
-          <th>日期</th>
-          <th class="num">總計</th>
-          <th class="num">銷售額</th>
-          <th class="num">稅額</th>
-          <th>賣方統編</th>
-          <th>買方統編</th>
-          <th>掃描時間</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="bufferTbody">
-        <tr><td colspan="10" class="es-empty">尚未掃描任何發票</td></tr>
-      </tbody>
+      <thead id="bufferThead"></thead>
+      <tbody id="bufferTbody"></tbody>
     </table>
   </div>
 </div>
@@ -369,46 +408,244 @@ dropZone.addEventListener('drop', e => {
   if (e.dataTransfer && e.dataTransfer.files) uploadFiles(e.dataTransfer.files);
 });
 
+// ─── Settings (欄位顯示設定) ───
+let _fieldDefs = [];        // [{id, label, default_visible, default_order}, ...]
+let _settings = { visible_columns: [], column_order: [] };
+let _saveTimer = null;
+
+const NUMERIC_FIELDS = new Set(['amount_total', 'amount_untaxed', 'tax']);
+// 各欄位 cell 內容生成器（取一筆 invoice + 全表 index → cell HTML/text）
+const CELL_RENDERERS = {
+  seq:            (inv, i) => String(i + 1),
+  invoice_number: inv => inv.invoice_number || '',
+  date:           inv => fmtDate(inv.date),
+  amount_total:   inv => fmtAmount(inv.amount_total),
+  amount_untaxed: inv => fmtAmount(inv.amount_untaxed),
+  tax:            inv => {
+    if (inv.amount_total == null || inv.amount_untaxed == null) return '';
+    return fmtAmount(inv.amount_total - inv.amount_untaxed);
+  },
+  seller_vat:     inv => inv.seller_vat || '',
+  buyer_vat:      inv => inv.buyer_vat || '',
+  random_code:    inv => inv.random_code || '',
+  scanned_at:     inv => fmtScannedAt(inv.scanned_at),
+  note:           inv => inv.note || '',
+};
+
+async function loadSettings() {
+  try {
+    const r = await fetch('/tools/einvoice-scan/settings');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    _settings = j.settings;
+    _fieldDefs = j.field_definitions || [];
+    renderSettingsPanel();
+  } catch (e) {
+    console.error('loadSettings failed:', e);
+  }
+}
+
+function renderSettingsPanel() {
+  const container = $('settingsFields');
+  if (!container) return;
+  // 依 column_order 排序，每個欄位卡片 = 拖曳把手 + checkbox + label
+  const orderedDefs = _settings.column_order
+    .map(id => _fieldDefs.find(f => f.id === id))
+    .filter(Boolean);
+  container.innerHTML = orderedDefs.map(def => {
+    const checked = _settings.visible_columns.includes(def.id) ? 'checked' : '';
+    return `<div class="es-field-card" data-field="${escapeHtml(def.id)}" draggable="false">
+      <span class="grab" title="拖曳調整順序">⋮⋮</span>
+      <label><input type="checkbox" data-toggle ${checked}> ${escapeHtml(def.label)}</label>
+    </div>`;
+  }).join('');
+  // Wire toggle events
+  container.querySelectorAll('[data-toggle]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const fieldId = cb.closest('.es-field-card').dataset.field;
+      if (cb.checked) {
+        if (!_settings.visible_columns.includes(fieldId)) {
+          _settings.visible_columns.push(fieldId);
+        }
+      } else {
+        _settings.visible_columns = _settings.visible_columns.filter(c => c !== fieldId);
+      }
+      renderBufferRows();         // 立即更新表格
+      scheduleSettingsSave();
+    });
+  });
+  // Wire drag handles
+  wireSettingsDrag(container);
+}
+
+let _dragField = null;
+function wireSettingsDrag(container) {
+  container.querySelectorAll('.es-field-card').forEach(card => {
+    const handle = card.querySelector('.grab');
+    if (handle) {
+      handle.addEventListener('mousedown', () => card.setAttribute('draggable', 'true'));
+    }
+    card.addEventListener('mousedown', e => {
+      if (!handle || !handle.contains(e.target)) card.setAttribute('draggable', 'false');
+    });
+    card.addEventListener('dragstart', e => {
+      _dragField = card;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', card.dataset.field); } catch (err) {}
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      container.querySelectorAll('.drop-before, .drop-after').forEach(c => c.classList.remove('drop-before', 'drop-after'));
+      _dragField = null;
+      // 從 DOM 順序更新 column_order
+      _settings.column_order = Array.from(container.querySelectorAll('.es-field-card'))
+        .map(c => c.dataset.field);
+      renderBufferRows();
+      scheduleSettingsSave();
+    });
+    card.addEventListener('dragover', e => {
+      if (!_dragField || _dragField === card) return;
+      e.preventDefault();
+      const rect = card.getBoundingClientRect();
+      const after = (e.clientY - rect.top) > rect.height / 2;
+      container.querySelectorAll('.drop-before, .drop-after').forEach(c => c.classList.remove('drop-before', 'drop-after'));
+      card.classList.add(after ? 'drop-after' : 'drop-before');
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('drop-before', 'drop-after'));
+    card.addEventListener('drop', e => {
+      if (!_dragField || _dragField === card) return;
+      e.preventDefault();
+      const rect = card.getBoundingClientRect();
+      const after = (e.clientY - rect.top) > rect.height / 2;
+      const parent = card.parentNode;
+      if (after) parent.insertBefore(_dragField, card.nextSibling);
+      else parent.insertBefore(_dragField, card);
+      card.classList.remove('drop-before', 'drop-after');
+    });
+  });
+}
+
+function scheduleSettingsSave() {
+  // Debounce 500ms — 連續勾 / 拖時不要狂打 endpoint
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(saveSettings, 500);
+}
+
+async function saveSettings() {
+  try {
+    const r = await fetch('/tools/einvoice-scan/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        visible_columns: _settings.visible_columns,
+        column_order: _settings.column_order,
+      }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const saved = $('settingsSaved');
+    saved.classList.add('show');
+    setTimeout(() => saved.classList.remove('show'), 1500);
+  } catch (e) {
+    showToast('設定儲存失敗：' + e.message, 'err');
+  }
+}
+
+$('btnSettings').addEventListener('click', () => {
+  $('settingsPanel').hidden = !$('settingsPanel').hidden;
+});
+$('btnSettingsReset').addEventListener('click', async () => {
+  if (!confirm('恢復欄位顯示為預設？')) return;
+  try {
+    const r = await fetch('/tools/einvoice-scan/settings/reset', { method: 'POST' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    _settings = j.settings;
+    renderSettingsPanel();
+    renderBufferRows();
+    showToast('已恢復預設', 'ok');
+  } catch (e) {
+    showToast('恢復失敗：' + e.message, 'err');
+  }
+});
+
 // ─── Buffer 列表 ───
+let _cachedInvoices = [];
+let _cachedInfo = {};
+
 async function loadBuffer() {
   try {
     const r = await fetch('/tools/einvoice-scan/buffer');
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const j = await r.json();
-    renderBuffer(j.invoices || [], j.info || {});
+    _cachedInvoices = j.invoices || [];
+    _cachedInfo = j.info || {};
+    renderBufferRows();
   } catch (e) {
     console.error('loadBuffer failed:', e);
   }
 }
 
-function renderBuffer(invoices, info) {
-  $('bufferInfo').innerHTML = `<b>${invoices.length}</b> / ${info.limit || 1000} 張`;
+function renderBufferRows() {
+  // 依 settings 動態產生 thead + tbody
+  const visibleIds = _settings.column_order.filter(c => _settings.visible_columns.includes(c));
+  const visibleDefs = visibleIds.map(id => _fieldDefs.find(f => f.id === id)).filter(Boolean);
+
+  $('bufferInfo').innerHTML = `<b>${_cachedInvoices.length}</b> / ${_cachedInfo.limit || 1000} 張`;
+
+  const thead = $('bufferThead');
+  thead.innerHTML = '<tr>' + visibleDefs.map(d => {
+    const cls = NUMERIC_FIELDS.has(d.id) ? ' class="num"' : '';
+    return `<th${cls}>${escapeHtml(d.label)}</th>`;
+  }).join('') + '<th></th></tr>';
+
   const tbody = $('bufferTbody');
-  if (!invoices.length) {
-    tbody.innerHTML = '<tr><td colspan="10" class="es-empty">尚未掃描任何發票</td></tr>';
+  if (!_cachedInvoices.length) {
+    tbody.innerHTML = `<tr><td colspan="${visibleDefs.length + 1}" class="es-empty">尚未掃描任何發票</td></tr>`;
     return;
   }
-  const rows = invoices.map((inv, i) => {
-    const tax = (inv.amount_total != null && inv.amount_untaxed != null)
-      ? inv.amount_total - inv.amount_untaxed : null;
-    return `<tr>
-      <td>${i + 1}</td>
-      <td>${escapeHtml(inv.invoice_number || '')}</td>
-      <td>${escapeHtml(fmtDate(inv.date))}</td>
-      <td class="num">${escapeHtml(fmtAmount(inv.amount_total))}</td>
-      <td class="num">${escapeHtml(fmtAmount(inv.amount_untaxed))}</td>
-      <td class="num">${escapeHtml(fmtAmount(tax))}</td>
-      <td>${escapeHtml(inv.seller_vat || '')}</td>
-      <td>${escapeHtml(inv.buyer_vat || '')}</td>
-      <td>${escapeHtml(fmtScannedAt(inv.scanned_at))}</td>
-      <td><button class="del-btn" data-id="${escapeHtml(inv.id)}" title="刪除">×</button></td>
-    </tr>`;
+  const rows = _cachedInvoices.map((inv, i) => {
+    const cells = visibleDefs.map(d => {
+      const renderer = CELL_RENDERERS[d.id];
+      const val = renderer ? renderer(inv, i) : '';
+      const cls = NUMERIC_FIELDS.has(d.id) ? ' class="num"' : '';
+      // note 欄位用可編輯 input
+      if (d.id === 'note') {
+        return `<td><input type="text" class="note-input" data-id="${escapeHtml(inv.id)}" value="${escapeHtml(val)}" maxlength="500" placeholder="—" style="width:100%; border:0; background:transparent; font-size:13px; padding:2px 4px;"></td>`;
+      }
+      return `<td${cls}>${escapeHtml(val)}</td>`;
+    }).join('');
+    return `<tr>${cells}<td><button class="del-btn" data-id="${escapeHtml(inv.id)}" title="刪除">×</button></td></tr>`;
   });
   tbody.innerHTML = rows.join('');
-  // 綁刪除按鈕
   tbody.querySelectorAll('.del-btn').forEach(b => {
     b.addEventListener('click', () => deleteInvoice(b.dataset.id));
   });
+  tbody.querySelectorAll('.note-input').forEach(inp => {
+    inp.addEventListener('change', () => saveNote(inp.dataset.id, inp.value));
+    inp.addEventListener('blur', () => saveNote(inp.dataset.id, inp.value));
+  });
+}
+
+let _noteSaveTimers = {};
+async function saveNote(id, note) {
+  // Per-id debounce 300ms
+  clearTimeout(_noteSaveTimers[id]);
+  _noteSaveTimers[id] = setTimeout(async () => {
+    try {
+      const r = await fetch(`/tools/einvoice-scan/buffer/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      // 同步 cache，避免下次 polling 蓋掉使用者剛改的
+      const inv = _cachedInvoices.find(x => x.id === id);
+      if (inv) inv.note = note;
+    } catch (e) {
+      showToast('備註儲存失敗：' + e.message, 'err');
+    }
+  }, 300);
 }
 
 async function deleteInvoice(id) {
@@ -452,9 +689,12 @@ $('autoRefresh').addEventListener('change', e => {
   else stopPolling();
 });
 
-// 初始載入 + 開啟 polling
-loadBuffer();
-if ($('autoRefresh').checked) startPolling();
+// 初始載入：先 settings (定義表格欄位)，再 buffer
+(async () => {
+  await loadSettings();
+  await loadBuffer();
+  if ($('autoRefresh').checked) startPolling();
+})();
 
 // ─── 連續掃描（WebRTC + jsQR）───
 // 三種模式並列：(1) 連續掃描 (2) 拍照/相簿 (3) 拖放上傳

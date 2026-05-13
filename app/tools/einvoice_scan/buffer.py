@@ -196,6 +196,35 @@ def delete_invoice(user: Optional[Any], invoice_id: str) -> bool:
         return True
 
 
+def update_invoice_field(user: Optional[Any], invoice_id: str,
+                         field: str, value: Any) -> bool:
+    """更新一筆發票的單一欄位（給可編輯欄位用，例如 note）。
+
+    白名單：只允許 note。其他欄位（如金額 / 號碼）不可改 — 結構化資料只應從
+    QR 解碼進來，避免使用者誤改造成核帳對不上。
+    """
+    EDITABLE_FIELDS = {"note"}
+    if field not in EDITABLE_FIELDS:
+        return False
+    if not invoice_id:
+        return False
+    path = _buffer_path(user)
+    key = _user_key(user)
+    with _get_lock(key):
+        data = _read(path)
+        invoices = data.get("invoices", [])
+        found = False
+        for inv in invoices:
+            if inv.get("id") == invoice_id:
+                inv[field] = value
+                found = True
+                break
+        if found:
+            data["invoices"] = invoices
+            _write(path, data)
+        return found
+
+
 def clear_all(user: Optional[Any]) -> int:
     """清空該 user 全部 buffer；回原本筆數。"""
     path = _buffer_path(user)
