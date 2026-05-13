@@ -1,6 +1,6 @@
 [project]
 name = "jt-doc-tools"
-version = "1.7.69"
+version = "1.7.70"
 description = "Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台"
 authors = [{ name = "Jason Cheng (Jason Tools)", email = "jason@jason.tools" }]
 requires-python = ">=3.10"
@@ -59,6 +59,11 @@ dependencies = [
     # qrcode + Pillow (Pillow 已是依賴) 用來生 setup 頁面的 QR code PNG。
     "pyotp>=2.9,<3",
     "qrcode>=7.4,<9",
+    # einvoice-scan v1.7.70：解 QR Code 用 pyzbar (zbar Python wrapper)，
+    # 含 LGPL-2.1 zbar shared lib。Linux 需 apt install libzbar0；macOS
+    # brew install zbar；Windows wheel 已內含 dll。如果系統無 zbar binary
+    # tool 啟動仍 OK（_probe），只是 scan 端點會回 503 提示。
+    "pyzbar>=0.1.9,<0.2",
 ]
 
 [project.scripts]

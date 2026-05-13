@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.7.69"
+VERSION = "1.7.70"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -136,6 +136,7 @@ _TOOL_ALIASES = {
     "aes-zip":            "zip aes encrypt archive password email attachment winzip 7zip keka archive utility 加密 壓縮檔 密碼保護 AES 寄信 附件 打包",
     "pdf-nup":            "nup n-up multiple pages per sheet imposition 2up 4up 6up 8up tile tiled layout grid imposition 多頁合併 多合一 拼貼 省紙 N合一 2合1 4合1 講義 草稿 版面",
     "text-list":          "list lines line sort dedup deduplicate unique uniq filter grep head tail shuffle randomize trim case lower upper title prefix suffix paste txt csv xlsx ods docx odt pdf 清單 列表 行 排序 去重 去重複 重複 篩選 過濾 取頭 取尾 洗牌 隨機 大小寫 前綴 後綴 處理 整理 唯一 unique",
+    "einvoice-scan":      "einvoice e-invoice invoice scan qr qrcode receipt taiwan taipei vat tax 電子發票 發票 掃描 QR Code 條碼 二維碼 統編 統一發票 載具 銷售額 稅額 買方 賣方 報帳 記帳 對帳",
 }
 # Per-tool color class. Both home page and sidebar use the same palette
 # classes, so a given tool always shows the same colored tile regardless
