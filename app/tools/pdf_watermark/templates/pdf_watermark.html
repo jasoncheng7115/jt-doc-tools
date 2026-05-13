@@ -28,7 +28,7 @@
   <div id="asset-source" class="wm-source-block">
     <div class="wm-source-block-title">選擇浮水印圖片</div>
     {% if not assets %}
-      <div class="empty">還沒有共用浮水印資產。可請管理員到「<a href="/admin/assets">資產管理</a>」上傳（類型選「浮水印 watermark」），或使用下方「臨時上傳」自帶一張（僅本次有效，不存於伺服器），或切到「文字」模式。</div>
+      <div class="empty">還沒有共用浮水印資產。可請管理員到「<a href="/admin/assets">資產管理</a>」上傳（類型選「浮水印 watermark」），或使用下方「臨時上傳」一張（僅本次有效，不存於伺服器），或切到「文字」模式。</div>
     {% else %}
     <div class="wm-asset-grid">
       {% for s in assets %}
@@ -628,9 +628,9 @@ document.getElementById('wmTempAssetFile').addEventListener('change', (e) => {
   r.readAsDataURL(f);
   e.target.value = '';
 });
-document.getElementById('btnWmTempRemove').addEventListener('click', (e) => {
+document.getElementById('btnWmTempRemove').addEventListener('click', async (e) => {
   e.preventDefault(); e.stopPropagation();
-  if (!confirm('移除臨時資產？')) return;
+  if (!(await window.showConfirm('移除臨時資產？', { title: '移除', kind: 'danger', okText: '移除' }))) return;
   _wmTempSet(null);
 });
 </script>

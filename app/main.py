@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.7.77"
+VERSION = "1.8.18"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -137,6 +137,7 @@ _TOOL_ALIASES = {
     "pdf-nup":            "nup n-up multiple pages per sheet imposition 2up 4up 6up 8up tile tiled layout grid imposition 多頁合併 多合一 拼貼 省紙 N合一 2合1 4合1 講義 草稿 版面",
     "text-list":          "list lines line sort dedup deduplicate unique uniq filter grep head tail shuffle randomize trim case lower upper title prefix suffix paste txt csv xlsx ods docx odt pdf 清單 列表 行 排序 去重 去重複 重複 篩選 過濾 取頭 取尾 洗牌 隨機 大小寫 前綴 後綴 處理 整理 唯一 unique",
     "einvoice-scan":      "einvoice e-invoice invoice scan qr qrcode receipt taiwan taipei vat tax 電子發票 發票 掃描 QR Code 條碼 二維碼 統編 統一發票 載具 銷售額 稅額 買方 賣方 報帳 記帳 對帳",
+    "vat-lookup":         "vat lookup company business taiwan 統編 統一編號 查詢 反查 公司 行號 政府機關 學校 行業 名稱 地址 BGMOPEN 賣方 買方",
 }
 # Per-tool color class. Both home page and sidebar use the same palette
 # classes, so a given tool always shows the same colored tile regardless
@@ -235,9 +236,9 @@ templates.env.globals["nav_settings"] = [
     {"icon": "text", "name": "OCR 引擎", "description": "EasyOCR (主) + Tesseract (備) 雙 OCR 引擎切換與訓練檔管理",
      "url": "/admin/ocr-langs",
      "keywords": "ocr engine easyocr tesseract traineddata trained data lang language chi_tra chi_sim jpn kor 引擎 訓練檔 語言 安裝 中文 日文 韓文 繁中 簡中"},
-    {"icon": "id-card", "name": "統編資料庫", "description": "電子發票掃描用：反查賣方公司名稱（財政部 BGMOPEN 等）",
+    {"icon": "id-card", "name": "統編資料庫", "description": "公司 / 政府機關 / 學校統編反查（財政部 BGMOPEN + 補充來源）",
      "url": "/admin/vat-db",
-     "keywords": "vat tax id business registry company taiwan einvoice einvoice-scan bgmopen 統編 統一編號 公司 商業 登記 反查 賣方 發票 財政部"},
+     "keywords": "vat tax id business registry company taiwan einvoice einvoice-scan bgmopen vat-lookup 統編 統一編號 公司 商業 登記 反查 賣方 發票 財政部 行政院 地方政府 機關 學校"},
     # ---- v1.1.0 auth / perm / audit pages ----
     # 認證設定 always visible — that's where admin enables auth in the first place.
     {"icon": "lock", "name": "認證設定", "description": "啟用本機 / LDAP / AD 認證",
@@ -1052,6 +1053,12 @@ async def _startup():
         # Start retention sweeper (runs once now + every 6h).
         from .core import retention as _retention
         _retention.start_scheduler()
+        # Start vat-db schedule (weekly auto-update, default OFF).
+        try:
+            from .core import vat_db as _vatdb
+            _vatdb.start_scheduler()
+        except Exception:
+            logger.exception("vat_db scheduler start failed")
     except Exception as exc:
         logger.exception("auth/audit init failed: %s", exc)
     # Background sweeper for ephemeral uploads

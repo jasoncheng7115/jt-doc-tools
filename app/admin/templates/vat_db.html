@@ -5,24 +5,42 @@
 {% block head %}
 <style>
 .vd-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 4px 24px;
-  padding: 14px 18px; background: #f8fafc;
-  border: 1px solid #e2e8f0; border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 24px;
+  padding: 12px 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   margin-bottom: 16px;
 }
 .vd-stat {
-  display: flex; align-items: baseline; gap: 6px;
-  font-size: 12.5px; color: #64748b;
-  line-height: 1.5;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
 }
-.vd-stat b {
-  color: #0f172a; font-size: 16px; font-weight: 600;
+.vd-stat-label {
+  font-size: 13px;
+  color: #64748b;
+}
+.vd-stat-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
   font-variant-numeric: tabular-nums;
-  line-height: 1.5;
 }
-.vd-stat b.empty { color: #94a3b8; font-weight: 400; font-size: 13px; }
+.vd-stat-value.empty {
+  color: #94a3b8;
+  font-weight: 400;
+}
+.vd-stat + .vd-stat::before {
+  content: '·';
+  color: #cbd5e1;
+  margin-right: 16px;
+  font-weight: 400;
+}
 
 .vd-section {
   background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
@@ -34,6 +52,10 @@
 .vd-section p {
   margin: 0 0 10px; font-size: 12.5px; color: #64748b;
 }
+.vd-section.primary {
+  border-color: #93c5fd;
+  background: #f0f9ff;
+}
 
 .vd-actions {
   display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
@@ -42,6 +64,7 @@
   padding: 7px 14px; border-radius: 6px; font-size: 13px;
   cursor: pointer; border: 1px solid #cbd5e1; background: #fff;
   color: #1e293b; display: inline-flex; align-items: center; gap: 6px;
+  text-decoration: none;
 }
 .vd-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
 .vd-btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
@@ -54,6 +77,8 @@
   margin-top: 10px;
   font-size: 12px; color: #475569;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  list-style: none;
+  padding-left: 0;
 }
 .vd-sources li { padding: 3px 0; word-break: break-all; }
 .vd-sources li::before { content: '• '; color: #94a3b8; }
@@ -65,7 +90,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap; min-height: 20px;
   margin-bottom: 14px;
-  display: none;          /* 沒事不顯示 */
+  display: none;
 }
 .vd-status.show { display: block; }
 .vd-status.ok { background: #ecfdf5; color: #166534; border: 1px solid #86efac; }
@@ -74,6 +99,89 @@
 @keyframes vd-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
+}
+
+.vd-progress {
+  margin-top: 8px;
+}
+.vd-progress-bar {
+  width: 100%; height: 8px;
+  background: #dbeafe; border-radius: 4px; overflow: hidden;
+  position: relative;
+}
+.vd-progress-bar > .vd-progress-fill {
+  background: #2563eb;
+  height: 100%;
+  width: 0%;
+  transition: width 0.4s ease;
+}
+.vd-progress-bar.indeterminate > .vd-progress-fill {
+  width: 35%;
+  animation: vd-prog-march 1.4s ease-in-out infinite;
+}
+@keyframes vd-prog-march {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+.vd-progress-meta {
+  font-size: 11.5px; color: #475569;
+  margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  display: flex; align-items: center; gap: 8px;
+}
+
+.vd-spinner {
+  width: 14px; height: 14px; flex-shrink: 0;
+  border: 2px solid #cbd5e1; border-top-color: #2563eb;
+  border-radius: 50%; display: inline-block;
+  animation: vd-spin 0.9s linear infinite;
+  vertical-align: -2px;
+}
+.vd-spinner.sm { width: 12px; height: 12px; border-width: 2px; }
+@keyframes vd-spin {
+  to { transform: rotate(360deg); }
+}
+
+.vd-breakdown {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 12px 16px; margin-bottom: 12px;
+}
+.vd-breakdown h4 {
+  margin: 0 0 8px; font-size: 13px; color: #1e293b;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.vd-breakdown h4 .vd-bd-time {
+  font-size: 11px; color: #94a3b8; font-weight: 400;
+}
+.vd-bd-rows {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content max-content;
+  gap: 4px 16px;
+  font-size: 12.5px;
+  align-items: baseline;
+}
+.vd-bd-rows > * {
+  line-height: 1.6;
+  font-size: 12.5px;
+}
+.vd-bd-rows .vd-bd-label { color: #64748b; }
+.vd-bd-rows .vd-bd-name { color: #334155; }
+.vd-bd-rows .vd-bd-count {
+  color: #0f172a; font-variant-numeric: tabular-nums; font-weight: 600;
+  text-align: right; white-space: nowrap;
+}
+.vd-bd-rows .vd-bd-pct {
+  color: #64748b; font-variant-numeric: tabular-nums;
+  text-align: right; white-space: nowrap; min-width: 56px;
+}
+.vd-bd-rows .vd-bd-count.err {
+  color: #b91c1c; font-weight: 400; font-size: 11.5px;
+  grid-column: 3 / span 2;   /* 失敗訊息跨兩欄 */
+}
+.vd-bd-rows .vd-bd-total-label,
+.vd-bd-rows .vd-bd-total-count,
+.vd-bd-rows .vd-bd-total-pct {
+  border-top: 1px dashed #e2e8f0; padding-top: 6px; margin-top: 2px;
+  font-weight: 600; color: #0f172a;
 }
 
 .vd-test {
@@ -95,52 +203,122 @@
 .vd-test-result.show { display: block; }
 .vd-test-result.found { background: #ecfdf5; border-color: #86efac; }
 .vd-test-result.miss { background: #fef2f2; border-color: #fca5a5; }
+
+.vd-schedule-row {
+  display: flex; gap: 12px; align-items: center;
+  margin: 4px 0; font-size: 13px;
+}
+.vd-schedule-row label { color: #334155; min-width: 80px; }
+.vd-schedule-row select, .vd-schedule-row input[type=checkbox] {
+  border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 6px;
+  font-size: 13px; background: #fff;
+}
+.vd-schedule-last {
+  margin-top: 8px; padding: 8px 12px;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px;
+  font-size: 12px; color: #475569;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.vd-schedule-last.ok { background: #ecfdf5; border-color: #86efac; color: #166534; }
+.vd-schedule-last.err { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
+.vd-schedule-last.running { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
 </style>
 {% endblock %}
 
 {% block content %}
 <h1>{{ icon('id-card', size=22) }} 統編資料庫</h1>
-<p class="muted">電子發票掃描工具用此反查賣方公司名稱。資料來源：財政部「營業（稅籍）登記資料集」(BGMOPEN) 為主，可從備援 URL 自動下載或手動上傳 CSV / ZIP。</p>
+<p class="muted">電子發票處理 / 統編查詢工具用此反查公司、機關、學校。資料來源：財政部「營業（稅籍）登記資料集」(BGMOPEN 主檔) + 行政院 / 地方政府機關 + 全國學校統編（補充來源）。</p>
 
-<!-- 操作狀態 / 訊息 — 最頂端，狀態才顯示 -->
 <div class="vd-status" id="status"></div>
 
-<!-- 目前資料庫狀態 -->
-<div class="vd-summary" id="summary">
-  <div class="vd-stat">資料筆數 <b id="recordCount">{{ "{:,}".format(meta.record_count) if meta.record_count else 0 }}</b></div>
-  <div class="vd-stat">最後更新 <b id="lastUpdated" class="{% if not meta.last_updated %}empty{% endif %}">{{ meta.last_updated or '尚未匯入' }}</b></div>
-  <div class="vd-stat">資料來源 <b id="sourceUsed" class="{% if not meta.source %}empty{% endif %}">{{ meta.source or '—' }}</b></div>
+<div class="vd-progress" id="progressWrap" style="display:none;">
+  <div class="vd-progress-bar" id="progressBar"><div class="vd-progress-fill" id="progressFill"></div></div>
+  <div class="vd-progress-meta" id="progressMeta">準備中…</div>
 </div>
 
-<!-- 自動下載 -->
-<div class="vd-section">
-  <h3>自動下載並更新</h3>
-  <p>依下列備援 URL 順序試，第一個成功的用。下載 + 解析時間視資料量約 5-30 分鐘，期間請勿關閉頁面。</p>
+<div class="vd-breakdown" id="categoryStats" style="display:none;">
+  <h4>資料庫組成</h4>
+  <div class="vd-bd-rows" id="catRows"></div>
+</div>
+
+<div class="vd-breakdown" id="breakdown" style="display:none;">
+  <h4>上次更新明細 <span class="vd-bd-time" id="bdTime"></span></h4>
+  <div class="vd-bd-rows" id="bdRows"></div>
+</div>
+
+<div class="vd-summary" id="summary">
+  <div class="vd-stat">
+    <span class="vd-stat-label">資料筆數</span>
+    <span class="vd-stat-value" id="recordCount">{{ "{:,}".format(meta.record_count) if meta.record_count else 0 }}</span>
+  </div>
+  <div class="vd-stat">
+    <span class="vd-stat-label">最後更新</span>
+    <span class="vd-stat-value {% if not meta.last_updated %}empty{% endif %}" id="lastUpdated">{{ meta.last_updated or '尚未匯入' }}</span>
+  </div>
+</div>
+
+
+
+<div class="vd-section primary">
+  <h3>自動下載並更新（推薦）</h3>
+  <p>從財政部開放資料平台下載最新主檔（BGMOPEN1，~3M 筆營業人），再依序補充政府機關、學校等統編。下載 + 解析時間視網路 5 - 30 分鐘，期間請勿關閉頁面。</p>
   <div class="vd-actions">
     <button type="button" class="vd-btn primary" id="btnAutoDownload">
       {{ icon('download', size=14) }} 立即自動下載
     </button>
   </div>
   <ul class="vd-sources">
-    {% for src in sources %}
-    <li>{{ src.name }} — <code>{{ src.url }}</code></li>
-    {% endfor %}
+    <li><b>主檔</b>：全國營業(稅籍)登記資料集 — <code>eip.fia.gov.tw/data/BGMOPEN1.zip</code></li>
+    <li><b>補充</b>：行政院機關 + 地方政府機關 + 全國學校統編（INSERT OR IGNORE，主檔已有的不覆蓋）</li>
   </ul>
 </div>
 
-<!-- 手動上傳 -->
+<div class="vd-section">
+  <h3>每週自動排程</h3>
+  <p>啟用後每週自動更新一次。設定的星期 + 時段（local time）抵達且距上次成功運行超過 6 天就觸發；當下機器若關機，下次開機並達條件時自動補跑。預設關閉。</p>
+  <div class="vd-schedule-row">
+    <label for="schEnabled">啟用排程</label>
+    <input type="checkbox" id="schEnabled">
+  </div>
+  <div class="vd-schedule-row">
+    <label for="schWeekday">星期</label>
+    <select id="schWeekday">
+      <option value="0">週一</option>
+      <option value="1">週二</option>
+      <option value="2">週三</option>
+      <option value="3">週四</option>
+      <option value="4">週五</option>
+      <option value="5">週六</option>
+      <option value="6" selected>週日</option>
+    </select>
+    <label for="schHour" style="min-width:60px;">時段</label>
+    <select id="schHour">
+      {% for h in range(24) %}
+        <option value="{{ h }}"{% if h == 3 %} selected{% endif %}>{{ '%02d' % h }}:00 - {{ '%02d' % h }}:59</option>
+      {% endfor %}
+    </select>
+    <button type="button" class="vd-btn primary" id="btnSchSave">{{ icon('save', size=14) }} 儲存設定</button>
+  </div>
+  <div class="vd-schedule-last" id="schLast" style="display:none;"></div>
+</div>
+
 <div class="vd-section">
   <h3>手動上傳 CSV / ZIP</h3>
-  <p>當自動下載失敗或需要客製來源時用。支援 .csv (UTF-8 / Big5 自動偵測) 或 .zip (內含 .csv)。</p>
+  <p>當自動下載失敗或要客製來源時用。可從 data.gov.tw 開放資料平台手動下載後上傳。</p>
   <div class="vd-actions">
+    <a class="vd-btn" href="https://data.gov.tw/dataset/9400" target="_blank" rel="noopener">
+      {{ icon('external-link', size=14) }} 前往 data.gov.tw 下載 (主檔)
+    </a>
     <label class="vd-btn">
       {{ icon('paperclip', size=14) }} 選擇檔案上傳
       <input type="file" id="fileInput" accept=".csv,.zip" hidden>
     </label>
   </div>
+  <p style="margin-top: 10px; font-size: 11.5px; color: #94a3b8;">
+    支援 .csv（UTF-8 / Big5 自動偵測）或 .zip（內含 .csv）。手動上傳屬完整匯入會替換主檔，不會帶補充來源。
+  </p>
 </div>
 
-<!-- 反查測試 -->
 <div class="vd-section">
   <h3>反查測試</h3>
   <p>輸入 8 位統編快速驗證資料庫正確匯入。</p>
@@ -151,7 +329,6 @@
   <div class="vd-test-result" id="testResult"></div>
 </div>
 
-<!-- 危險操作 -->
 <div class="vd-section">
   <h3>清空資料庫</h3>
   <p>刪除所有匯入的統編資料；einvoice-scan 暫時失去反查能力但發票掃描仍可用。</p>
@@ -172,11 +349,7 @@ function setStatus(msg, kind) {
   const el = $('status');
   el.textContent = msg;
   el.className = 'vd-status show' + (kind ? ' ' + kind : '');
-  // 視覺即時可見 — 訊息 sticky 在頂端
-  if (kind === 'err') {
-    // 失敗訊息保留在頂端不自動消失
-  } else if (kind === 'ok') {
-    // 成功訊息 5 秒後淡出
+  if (kind === 'ok') {
     clearTimeout(setStatus._t);
     setStatus._t = setTimeout(() => el.classList.remove('show'), 5000);
   }
@@ -187,44 +360,375 @@ function escapeHtml(s) {
     ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+function _fmtTimestamp(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch (_) { return iso; }
+}
+
+function _mkCell(cls, text) {
+  const el = document.createElement('div');
+  el.className = cls;
+  el.textContent = text;
+  return el;
+}
+
+function renderCategoryStats(cats) {
+  const wrap = $('categoryStats');
+  const rows = $('catRows');
+  if (!cats || !cats.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  rows.innerHTML = '';
+  let total = 0;
+  for (const c of cats) total += (c.count || 0);
+  for (const c of cats) {
+    rows.appendChild(_mkCell('vd-bd-label', '類別'));
+    rows.appendChild(_mkCell('vd-bd-name', c.category));
+    rows.appendChild(_mkCell('vd-bd-count', (c.count || 0).toLocaleString('en-US') + ' 筆'));
+    const pct = total > 0 ? (c.count / total * 100).toFixed(1) + '%' : '';
+    rows.appendChild(_mkCell('vd-bd-pct', pct));
+  }
+  // 總計列（4 個 cell，含分隔線樣式）
+  rows.appendChild(_mkCell('vd-bd-label vd-bd-total-label', '總計'));
+  rows.appendChild(_mkCell('vd-bd-name vd-bd-total-label', '所有類別合計'));
+  rows.appendChild(_mkCell('vd-bd-count vd-bd-total-count',
+    total.toLocaleString('en-US') + ' 筆'));
+  rows.appendChild(_mkCell('vd-bd-pct vd-bd-total-pct', '100%'));
+}
+
+function renderBreakdown(lr) {
+  const wrap = $('breakdown');
+  if (!lr) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  $('bdTime').textContent = lr.ts ? `（${_fmtTimestamp(lr.ts)}）` : '';
+  const rows = $('bdRows');
+  rows.innerHTML = '';
+
+  const addRow = (label, name, count, errMsg) => {
+    rows.appendChild(_mkCell('vd-bd-label', label));
+    rows.appendChild(_mkCell('vd-bd-name', name));
+    if (errMsg) {
+      // 失敗訊息跨 count + pct 兩欄
+      rows.appendChild(_mkCell('vd-bd-count err', '失敗：' + errMsg));
+    } else {
+      rows.appendChild(_mkCell('vd-bd-count',
+        '+' + (count || 0).toLocaleString('en-US') + ' 筆'));
+      rows.appendChild(_mkCell('vd-bd-pct', ''));
+    }
+  };
+
+  addRow('主檔', lr.main_source_name || '(未知來源)', lr.main_records);
+  for (const s of (lr.supplements || [])) {
+    addRow('補充', s.name, s.added, s.error);
+  }
+  // 總計列
+  rows.appendChild(_mkCell('vd-bd-label vd-bd-total-label', '總計'));
+  rows.appendChild(_mkCell('vd-bd-name vd-bd-total-label', '資料庫合併後 (去重)'));
+  rows.appendChild(_mkCell('vd-bd-count vd-bd-total-count',
+    (lr.records || 0).toLocaleString('en-US') + ' 筆'));
+  rows.appendChild(_mkCell('vd-bd-pct vd-bd-total-pct', ''));
+}
+
 async function refreshInfo() {
   try {
     const r = await fetch('/admin/vat-db/info');
     const j = await r.json();
     $('recordCount').textContent = (j.meta.record_count || 0).toLocaleString('en-US');
     const lu = j.meta.last_updated;
-    $('lastUpdated').textContent = lu || '尚未匯入';
+    $('lastUpdated').textContent = lu ? _fmtTimestamp(lu) : '尚未匯入';
     $('lastUpdated').classList.toggle('empty', !lu);
-    const src = j.meta.source;
-    $('sourceUsed').textContent = src || '—';
-    $('sourceUsed').classList.toggle('empty', !src);
+    renderBreakdown(j.meta.last_result);
+    renderCategoryStats(j.categories);
   } catch (e) {
     setStatus('讀取資訊失敗：' + e.message, 'err');
   }
 }
 
-$('btnAutoDownload').addEventListener('click', async () => {
-  if (!confirm('將從備援 URL 下載最新統編資料（可能 5-30 分鐘）。確定？')) return;
-  $('btnAutoDownload').disabled = true;
-  setStatus('下載中…請耐心等待，視資料量可能 5-30 分鐘', '');
+// Initial render from server-side data so the breakdown shows immediately on
+// page load (no flash of empty / network round-trip)
+{% if meta.last_result %}
+renderBreakdown({{ meta.last_result | tojson }});
+{% endif %}
+{% if categories %}
+renderCategoryStats({{ categories | tojson }});
+{% endif %}
+
+// ===== Schedule (weekly auto-update) =====
+const WEEKDAY_LABEL = ['週一','週二','週三','週四','週五','週六','週日'];
+
+function _renderScheduleLast(sch) {
+  const el = $('schLast');
+  if (!sch.last_run_at) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = '';
+  let cls = '';
+  let text = `上次排程運行：${_fmtTimestamp(sch.last_run_at)}`;
+  if (sch.last_run_status === 'ok') {
+    cls = 'ok'; text += ' — 成功';
+  } else if (sch.last_run_status === 'running') {
+    cls = 'running'; text += ' — 進行中…';
+  } else if (sch.last_run_status === 'error') {
+    cls = 'err';
+    text += ' — 失敗：' + (sch.last_run_error || '(unknown)');
+  } else {
+    text += ' — ' + (sch.last_run_status || '');
+  }
+  el.className = 'vd-schedule-last' + (cls ? ' ' + cls : '');
+  el.textContent = text;
+}
+
+async function loadSchedule() {
   try {
-    const r = await fetch('/admin/vat-db/auto-download', { method: 'POST' });
+    const r = await fetch('/admin/vat-db/schedule');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    $('schEnabled').checked = !!j.enabled;
+    $('schWeekday').value = String(j.weekday);
+    $('schHour').value = String(j.hour);
+    _renderScheduleLast(j);
+  } catch (e) {
+    // silent
+  }
+}
+
+$('btnSchSave').addEventListener('click', async () => {
+  const btn = $('btnSchSave');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/admin/vat-db/schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enabled: $('schEnabled').checked,
+        weekday: parseInt($('schWeekday').value, 10),
+        hour: parseInt($('schHour').value, 10),
+      }),
+    });
     const j = await r.json();
     if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
-    setStatus(`✓ 已從「${j.source_used.name}」下載並匯入 ${j.records.toLocaleString('en-US')} 筆`, 'ok');
-    refreshInfo();
+    const tag = j.enabled
+      ? `每${WEEKDAY_LABEL[j.weekday]} ${String(j.hour).padStart(2,'0')}:00 自動更新`
+      : '排程已關閉';
+    setStatus('✓ 設定已儲存：' + tag, 'ok');
+    _renderScheduleLast(j);
   } catch (e) {
-    setStatus('自動下載失敗：' + e.message, 'err');
+    setStatus('儲存排程失敗：' + e.message, 'err');
   } finally {
-    $('btnAutoDownload').disabled = false;
+    btn.disabled = false;
   }
 });
+
+loadSchedule();
+
+// 防連按：sessionStorage 持久化冷卻結束時間，refresh 頁面也擋
+// 成功 5 分鐘冷卻、失敗 60 秒冷卻、進行中靠 inFlight + disabled
+const COOLDOWN_OK_MS = 5 * 60 * 1000;
+const COOLDOWN_ERR_MS = 60 * 1000;
+const COOLDOWN_KEY = 'vatdb_autodl_cooldown_until';
+let _autoDlInFlight = false;
+let _cooldownTimer = null;
+const _btnAutoDl = $('btnAutoDownload');
+const _btnAutoDlOrigHtml = _btnAutoDl.innerHTML;
+
+function _startCooldownCountdown() {
+  if (_cooldownTimer) clearInterval(_cooldownTimer);
+  const tick = () => {
+    const until = parseInt(sessionStorage.getItem(COOLDOWN_KEY) || '0', 10);
+    const remain = until - Date.now();
+    if (remain <= 0) {
+      sessionStorage.removeItem(COOLDOWN_KEY);
+      _btnAutoDl.disabled = false;
+      _btnAutoDl.innerHTML = _btnAutoDlOrigHtml;
+      clearInterval(_cooldownTimer);
+      _cooldownTimer = null;
+      return;
+    }
+    _btnAutoDl.disabled = true;
+    const sec = Math.ceil(remain / 1000);
+    const mm = Math.floor(sec / 60), ss = sec % 60;
+    const fmt = mm > 0 ? `${mm} 分 ${ss} 秒` : `${ss} 秒`;
+    _btnAutoDl.textContent = `冷卻中（${fmt}）`;
+  };
+  tick();
+  _cooldownTimer = setInterval(tick, 1000);
+}
+
+function _setCooldown(ms) {
+  sessionStorage.setItem(COOLDOWN_KEY, String(Date.now() + ms));
+  _startCooldownCountdown();
+}
+
+// 頁面載入時若冷卻仍未結束，恢復倒數
+(function _resumeCooldown() {
+  const until = parseInt(sessionStorage.getItem(COOLDOWN_KEY) || '0', 10);
+  if (until > Date.now()) _startCooldownCountdown();
+})();
+
+// ===== Progress bar polling =====
+const STAGE_TEXT = {
+  starting: '準備中',
+  downloading_main: '下載主檔',
+  parsing_main: '解析 + 寫入主檔',
+  downloading_supplement: '下載補充來源',
+  parsing_supplement: '寫入補充來源',
+  done: '完成',
+  error: '失敗',
+};
+
+function _fmtBytes(n) {
+  if (!n) return '0 B';
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+function _renderProgress(j) {
+  const wrap = $('progressWrap');
+  const bar = $('progressBar');
+  const fill = $('progressFill');
+  const meta = $('progressMeta');
+  if (!j || !j.stage || j.stage === 'idle' || j.stage === 'done' || j.stage === 'error') {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+  const total = j.bytes_total || 0;
+  const recv = j.bytes_received || 0;
+  if (total > 0 && (j.stage === 'downloading_main' || j.stage === 'downloading_supplement')) {
+    const pct = Math.min(100, (recv / total) * 100);
+    bar.classList.remove('indeterminate');
+    fill.style.width = pct.toFixed(1) + '%';
+  } else {
+    bar.classList.add('indeterminate');
+    fill.style.width = '35%';
+  }
+  const label = STAGE_TEXT[j.stage] || j.stage;
+  const parts = [label];
+  if (j.source_name) parts.push(j.source_name);
+  if (j.supplement_index && j.supplement_total) {
+    parts.push(`補充 ${j.supplement_index} / ${j.supplement_total}`);
+  }
+  if (total > 0 && (j.stage === 'downloading_main' || j.stage === 'downloading_supplement')) {
+    parts.push(`${_fmtBytes(recv)} / ${_fmtBytes(total)}`);
+  } else if (recv > 0) {
+    parts.push(`${_fmtBytes(recv)} 已下載`);
+  }
+  meta.textContent = parts.join(' · ');
+}
+
+let _progressPollTimer = null;
+function _startProgressPolling() {
+  if (_progressPollTimer) clearInterval(_progressPollTimer);
+  const poll = async () => {
+    try {
+      const r = await fetch('/admin/vat-db/progress');
+      if (!r.ok) return;
+      const j = await r.json();
+      _renderProgress(j);
+      // 下載完成 / 失敗 → 終結 inFlight、設冷卻
+      if ((j.stage === 'done' || j.stage === 'error') && _autoDlInFlight) {
+        _finalizeDownload(j);
+      }
+    } catch (_) { /* swallow */ }
+  };
+  poll();
+  _progressPollTimer = setInterval(poll, 2000);
+}
+function _stopProgressPolling() {
+  if (_progressPollTimer) {
+    clearInterval(_progressPollTimer);
+    _progressPollTimer = null;
+  }
+  $('progressWrap').style.display = 'none';
+}
+
+function _finalizeDownload(j) {
+  // 由 poll 在 stage = done/error 時呼叫；只跑一次
+  if (!_autoDlInFlight) return;
+  _autoDlInFlight = false;
+  if (j.stage === 'done') {
+    let msg = `✓ 主檔「${j.source_used_name || ''}」匯入 ${(j.main_records || 0).toLocaleString('en-US')} 筆`;
+    const supp = j.supplements_summary || [];
+    const okSupp = supp.filter(s => !s.error);
+    const failSupp = supp.filter(s => s.error);
+    if (okSupp.length) {
+      msg += '\n補充來源：' + okSupp.map(s =>
+        `${s.name} +${(s.added || 0).toLocaleString('en-US')}`
+      ).join(' / ');
+    }
+    if (failSupp.length) {
+      msg += '\n補充失敗：' + failSupp.map(s => `${s.name} (${s.error})`).join(' / ');
+    }
+    msg += `\n總計 ${(j.records || 0).toLocaleString('en-US')} 筆`;
+    setStatus(msg, 'ok');
+    refreshInfo();
+    _setCooldown(COOLDOWN_OK_MS);
+  } else {
+    setStatus('自動下載失敗：' + (j.error || '未知錯誤') + '\n建議改用下方手動上傳。', 'err');
+    _setCooldown(COOLDOWN_ERR_MS);
+  }
+  _stopProgressPolling();
+}
+
+_btnAutoDl.addEventListener('click', async () => {
+  if (_autoDlInFlight || _btnAutoDl.disabled) return;
+  const ok = await window.showConfirm(
+    '將從備援 URL 下載最新統編資料（可能 5 - 30 分鐘）。\n\n注意：開始下載後 5 分鐘內無法再次觸發。下載期間在背景跑，不影響此頁其他操作。',
+    { title: '自動下載', okText: '開始下載' }
+  );
+  if (!ok) return;
+  if (_autoDlInFlight) return;  // 雙保險：confirm 期間若被別處觸發
+  _autoDlInFlight = true;
+  _btnAutoDl.disabled = true;
+  _btnAutoDl.innerHTML = '<span class="vd-spinner sm"></span> 下載中…';
+  setStatus('下載中…在背景進行，本頁仍可操作；視資料量約 5 - 30 分鐘', 'busy');
+  // 立刻顯示 progress wrap，不等首次 poll
+  const wrap = $('progressWrap');
+  const bar = $('progressBar');
+  const meta = $('progressMeta');
+  wrap.style.display = 'block';
+  bar.classList.add('indeterminate');
+  $('progressFill').style.width = '35%';
+  meta.innerHTML = '<span class="vd-spinner sm"></span> 啟動中…';
+  _startProgressPolling();   // poll 偵測到 done/error 會自動呼叫 _finalizeDownload
+  try {
+    // POST 立刻 return（背景 thread 在跑），由 polling 處理後續
+    const r = await fetch('/admin/vat-db/auto-download', { method: 'POST' });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j.detail || `HTTP ${r.status}`);
+    }
+  } catch (e) {
+    _autoDlInFlight = false;
+    setStatus('啟動下載失敗：' + e.message, 'err');
+    _setCooldown(COOLDOWN_ERR_MS);
+    _stopProgressPolling();
+  }
+});
+
+// 頁面載入時若有別 tab / 別人觸發的下載仍在跑，自動顯示進度
+(function _detectOngoingProgress() {
+  fetch('/admin/vat-db/progress').then(r => r.ok ? r.json() : null).then(j => {
+    if (!j) return;
+    const live = ['downloading_main', 'parsing_main',
+                  'downloading_supplement', 'parsing_supplement', 'starting'];
+    if (live.includes(j.stage)) {
+      setStatus('偵測到下載進行中（可能由其他 admin 觸發）…', 'busy');
+      _startProgressPolling();
+    }
+  }).catch(() => {});
+})();
 
 $('fileInput').addEventListener('change', async e => {
   const f = e.target.files && e.target.files[0];
   if (!f) return;
   e.target.value = '';
-  setStatus(`上傳 ${f.name} 中…`);
+  setStatus(`上傳 ${f.name} 中…`, 'busy');
   const fd = new FormData();
   fd.append('file', f);
   try {
@@ -241,7 +745,7 @@ $('fileInput').addEventListener('change', async e => {
 $('btnTest').addEventListener('click', async () => {
   const vat = $('testVat').value.trim();
   if (!/^\d{8}$/.test(vat)) {
-    alert('請輸入 8 位數字統編');
+    await window.showAlert('請輸入 8 位數字統編', { title: '格式錯誤' });
     return;
   }
   const result = $('testResult');
@@ -265,7 +769,11 @@ $('btnTest').addEventListener('click', async () => {
 });
 
 $('btnClear').addEventListener('click', async () => {
-  if (!confirm('確定清空所有統編資料？此動作不可復原。')) return;
+  const ok = await window.showConfirm(
+    '確定清空所有統編資料？此動作不可復原。',
+    { title: '清空資料庫', kind: 'danger', okText: '清空' }
+  );
+  if (!ok) return;
   try {
     const r = await fetch('/admin/vat-db/clear', { method: 'POST' });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);

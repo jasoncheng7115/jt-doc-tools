@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Jason Tools 文件工具箱：整合式 PDF / Office 文件處理平台。34 個工具一站處理：表單填寫、用印簽名、浮水印、OCR 文字辨識、送件前檢核、敏感資料去識別化、PDF 加密、隱藏內容掃描、差異比對、逐句翻譯等。可選 LDAP / AD 認證、角色權限、稽核、記錄轉送。不上雲，資料留在自己手中。">
+<meta name="description" content="Jason Tools 文件工具箱：整合式 PDF / Office 文件處理平台。35 個工具一站處理：表單填寫、用印簽名、浮水印、OCR 文字辨識、送件前檢核、敏感資料去識別化、PDF 加密、隱藏內容掃描、差異比對、逐句翻譯、電子發票處理、統編查詢等。可選 LDAP / AD 認證、角色權限、稽核、記錄轉送。不上雲，資料留在自己手中。">
 <title>Jason Tools 文件工具箱 — PDF / Office 整合式文件處理平台</title>
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
@@ -50,7 +50,7 @@
     <div class="hero-eyebrow">開源 · 不上雲 · 跑在自己機房</div>
     <h1 class="hero-title">
       別再把公司文件丟到線上 PDF 工具<br>
-      <span class="hero-title-accent">這有 34 工具，自架、開源、可控</span>
+      <span class="hero-title-accent">這有 35 工具，自架、開源、可控</span>
     </h1>
     <p class="hero-lead">
       表單自動填寫、用印與簽名、浮水印、敏感資料去識別化、PDF 加密、中繼資料清除、隱藏內容掃描、差異比對、頁面編輯…
@@ -67,7 +67,7 @@
       </a>
     </div>
     <div class="hero-shot">
-      <img src="screenshots/index.png" alt="Jason Tools 文件工具箱主介面 — 34 個工具一覽" loading="lazy">
+      <img src="screenshots/index.png" alt="Jason Tools 文件工具箱主介面 — 35 個工具一覽" loading="lazy">
     </div>
   </div>
 </section>
@@ -120,7 +120,7 @@
 <section id="features" class="section section-light">
   <div class="container">
     <div class="section-eyebrow">核心功能</div>
-    <h2 class="section-title">34 個工具，分 6 大類</h2>
+    <h2 class="section-title">35 個工具，分 6 大類</h2>
     <p class="section-lead">每個工具都有獨立頁面，左側 sidebar 一鍵切換。所有處理結果可下載 PDF 或圖片。</p>
     <div class="ofc-callout">
       <span class="ofc-callout-ic">
@@ -226,7 +226,11 @@
           </li>
           <li>
             <span class="fl-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="14.01"/><line x1="17" y1="14" x2="17" y2="14.01"/><line x1="20" y1="14" x2="20" y2="14.01"/><line x1="14" y1="17" x2="17" y2="17"/><line x1="20" y1="17" x2="20" y2="17.01"/><line x1="14" y1="20" x2="14" y2="20.01"/><line x1="17" y1="20" x2="20" y2="20"/></svg></span>
-            <div class="fl-text"><span class="fn">電子發票掃描</span><span class="fd">上傳台灣電子發票照片或 PDF，自動掃 QR Code 解出發票號碼 / 日期 / 金額 / 統編。手機可直接拍照，掃完自動同步到電腦端列表（同帳號跨裝置共用）</span></div>
+            <div class="fl-text"><span class="fn">電子發票處理</span><span class="fd">掃台灣電子發票 QR Code 解出發票號碼 / 日期 / 金額 / 統編，自動帶賣方公司名、行業、會計科目（規則 + 可選 LLM 判讀），支援報帳檢查 + 當期發票檢查，匯出 .xlsx / .ods / .csv / .json / .xml / .txt / .md</span></div>
+          </li>
+          <li>
+            <span class="fl-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+            <div class="fl-text"><span class="fn">統編查詢</span><span class="fd">輸入 8 位統一編號反查，或公司 / 機關 / 學校名稱、地址、行業關鍵字模糊搜尋（高亮命中字）；含類別篩選 + 批次查詢 + CSV 匯出。資料源：財政部 BGMOPEN + 行政院 / 地方政府機關 + 全國學校</span></div>
           </li>
           <li>
             <span class="fl-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>

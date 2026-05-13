@@ -1244,12 +1244,17 @@ def build_router(templates) -> APIRouter:
             "request": request,
             "meta": _vatdb.get_meta(),
             "sources": _vatdb.SOURCE_URLS,
+            "categories": _vatdb.get_category_stats(),
         })
 
     @router.get("/vat-db/info")
     async def vat_db_info():
         from ..core import vat_db as _vatdb
-        return {"meta": _vatdb.get_meta(), "sources": _vatdb.SOURCE_URLS}
+        return {
+            "meta": _vatdb.get_meta(),
+            "sources": _vatdb.SOURCE_URLS,
+            "categories": _vatdb.get_category_stats(),
+        }
 
     @router.post("/vat-db/upload")
     async def vat_db_upload(file: UploadFile = File(...)):
@@ -1272,19 +1277,43 @@ def build_router(templates) -> APIRouter:
 
     @router.post("/vat-db/auto-download")
     async def vat_db_auto_download():
-        """從備援 URL list 試下載 — 第一個成功的用。"""
+        """啟動背景下載執行緒，立刻 return。下載 5-30 分鐘期間，前端透過
+        `/vat-db/progress` polling 看進度。完成 / 失敗時 progress.stage
+        會變 'done' / 'error'，前端就從那邊讀最終結果。
+        絕不在 event loop 內跑同步下載 — 會卡死整站。"""
+        from ..core import vat_db as _vatdb
+        status = _vatdb.trigger_download_async()
+        return {
+            "ok": True,
+            "status": status,             # 'started' or 'already_running'
+            "started": status == "started",
+        }
+
+    @router.get("/vat-db/progress")
+    async def vat_db_progress():
+        """回目前下載 / 解析進度 — 前端 polling 用。
+        stage 可能值：idle / starting / downloading_main / parsing_main /
+        downloading_supplement / parsing_supplement / done / error"""
+        from ..core import vat_db as _vatdb
+        return _vatdb.read_progress()
+
+    @router.get("/vat-db/schedule")
+    async def vat_db_schedule_get():
+        from ..core import vat_db as _vatdb
+        return _vatdb.get_schedule()
+
+    @router.post("/vat-db/schedule")
+    async def vat_db_schedule_set(payload: dict):
         from ..core import vat_db as _vatdb
         try:
-            data, src = _vatdb.download_from_sources()
-        except RuntimeError as e:
-            raise HTTPException(503, str(e))
-        try:
-            result = _vatdb.ingest_archive_or_csv(
-                data, source=f"auto:{src['name']}",
+            _vatdb.set_schedule(
+                enabled=bool(payload.get("enabled", False)),
+                weekday=int(payload.get("weekday", 6)),
+                hour=int(payload.get("hour", 3)),
             )
-        except ValueError as e:
-            raise HTTPException(400, f"來源 {src['name']} 資料格式錯誤：{e}")
-        return {"ok": True, "source_used": src, **result}
+        except (ValueError, TypeError) as e:
+            raise HTTPException(400, f"參數錯誤：{e}")
+        return {"ok": True, **_vatdb.get_schedule()}
 
     @router.post("/vat-db/clear")
     async def vat_db_clear():

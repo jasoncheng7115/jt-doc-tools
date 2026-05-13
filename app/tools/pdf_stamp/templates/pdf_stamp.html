@@ -8,7 +8,7 @@
 <div class="panel">
   <h2 style="margin-top:0;">1. 選擇要蓋的圖片（印章 / 簽名 / Logo）</h2>
   {% if not stamps %}
-    <div class="empty">還沒有共用印章 / 簽名 / Logo，可請管理員到「<a href="/admin/assets">資產管理</a>」上傳，或使用下方「臨時上傳」自帶一張（僅本次有效，不存於伺服器）。</div>
+    <div class="empty">還沒有共用印章 / 簽名 / Logo，可請管理員到「<a href="/admin/assets">資產管理</a>」上傳，或使用下方「臨時上傳」一張（僅本次有效，不存於伺服器）。</div>
   {% else %}
   <div class="asset-list" id="stampAssetList" style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));">
     {% for s in stamps %}
@@ -504,8 +504,8 @@ document.getElementById('tempAssetFile').addEventListener('change', (e) => {
   e.target.value = '';
 });
 
-document.getElementById('btnTempRemove').addEventListener('click', () => {
-  if (!confirm('移除臨時資產？')) return;
+document.getElementById('btnTempRemove').addEventListener('click', async () => {
+  if (!(await window.showConfirm('移除臨時資產？', { title: '移除', kind: 'danger', okText: '移除' }))) return;
   _tempAssetSet(null);
 });
 

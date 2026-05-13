@@ -130,6 +130,46 @@ def list_invoices(user: Optional[Any]) -> list[dict]:
     return sorted(invoices, key=lambda x: x.get("scanned_at", ""), reverse=True)
 
 
+def _enrich_entry_from_vat(entry: dict, vat_lookup_fn,
+                           custom_rules: Optional[list] = None) -> dict:
+    """從 vat_db 反查賣方完整資訊 + 跑會計科目分類器，原地更新 entry。
+    custom_rules：使用者自訂規則，傳給 classifier（優先級高於內建）。"""
+    seller_vat = entry.get("seller_vat")
+    if not seller_vat:
+        return entry
+    try:
+        info = vat_lookup_fn(seller_vat)
+    except Exception:
+        info = None
+    if info:
+        entry["seller_name"] = info.get("name") or entry.get("seller_name")
+        entry["seller_address"] = info.get("address")
+        entry["seller_industries"] = info.get("industries")
+        entry["seller_org_type"] = info.get("org_type")
+        entry["seller_category"] = info.get("category")
+    try:
+        from . import accounting_classifier
+        cls = accounting_classifier.classify(
+            seller_name=entry.get("seller_name") or "",
+            industries=entry.get("seller_industries") or "",
+            custom_rules=custom_rules,
+        )
+        entry["accounting_subject"] = cls.get("name") if cls else None
+        entry["accounting_source"] = cls.get("source") if cls else None
+    except Exception:
+        pass
+    return entry
+
+
+def _load_user_accounting_rules(user) -> list:
+    """讀使用者自訂規則（無 / 失敗 → 空 list）。"""
+    try:
+        from . import settings as _s
+        return _s.get_settings(user).get("accounting_rules") or []
+    except Exception:
+        return []
+
+
 def add_invoices(user: Optional[Any], parsed: list[dict]) -> dict:
     """加入新 invoices，自動去重 + 上限檢查。
 
@@ -141,7 +181,7 @@ def add_invoices(user: Optional[Any], parsed: list[dict]) -> dict:
     if not parsed:
         return {"added": [], "duplicates": [], "cap_reached": False}
 
-    # M4: VAT 資料庫反查 — 把 seller_name 填進 entry（找不到 = 留 None，不爆炸）
+    # M4: VAT 資料庫反查 + 會計科目分類器
     try:
         from ...core import vat_db
         _vat_lookup = vat_db.lookup_vat
@@ -168,22 +208,12 @@ def add_invoices(user: Optional[Any], parsed: list[dict]) -> dict:
             if len(invoices) + len(added) >= _MAX_INVOICES_PER_USER:
                 cap_reached = True
                 break
-            # 反查賣方名稱
-            seller_vat = p.get("seller_vat")
-            seller_name = None
-            if seller_vat:
-                try:
-                    info = _vat_lookup(seller_vat)
-                    if info:
-                        seller_name = info.get("name")
-                except Exception:
-                    pass  # lookup 失敗不影響主流程
             entry = {
                 "id": secrets.token_hex(8),
                 "scanned_at": now,
-                "seller_name": seller_name,
                 **p,
             }
+            _enrich_entry_from_vat(entry, _vat_lookup, custom_rules=_custom_rules)
             added.append(entry)
             if num:
                 existing_numbers.add(num)
@@ -195,6 +225,184 @@ def add_invoices(user: Optional[Any], parsed: list[dict]) -> dict:
             _write(path, data)
 
     return {"added": added, "duplicates": duplicates, "cap_reached": cap_reached}
+
+
+def llm_classify_buffer(user: Optional[Any]) -> dict:
+    """批次送 LLM 判讀 buffer 內所有發票的會計科目。
+
+    LLM 取得使用者設定的「einvoice-scan」LLM client + model（admin/llm 設定）。
+    Batch size 預設 20 張，token 容量考量。失敗 batch 跳過不影響其他。
+
+    Returns: {total: int, batches: int, updated: int, errors: list[str]}
+    """
+    try:
+        from ...core import llm_settings as _ls
+    except Exception as e:
+        raise RuntimeError(f"LLM module 載入失敗：{e}")
+    if not _ls.llm_settings.is_enabled():
+        raise RuntimeError("LLM 功能未啟用，請到 /admin/llm 設定")
+    client = _ls.llm_settings.make_client()
+    if not client:
+        raise RuntimeError("LLM client 建立失敗（檢查 base_url / api_key）")
+    model = _ls.llm_settings.get_model_for("einvoice-scan")
+    if not model:
+        raise RuntimeError("未設定 einvoice-scan 的 LLM 模型，請到 /admin/llm")
+
+    from . import accounting_classifier
+    valid_subjects = list(accounting_classifier.ALL_SUBJECTS)
+    custom_rules = _load_user_accounting_rules(user)
+    for r in custom_rules:
+        sub = r.get("subject")
+        if sub and sub not in valid_subjects:
+            valid_subjects.append(sub)
+    subjects_str = "、".join(valid_subjects)
+
+    path = _buffer_path(user)
+    key = _user_key(user)
+    BATCH_SIZE = 20
+    import re as _re
+    import json as _json
+    import logging
+    log = logging.getLogger("einvoice_scan.llm_classify")
+
+    with _get_lock(key):
+        data = _read(path)
+        invoices = data.get("invoices", [])
+        if not invoices:
+            return {"total": 0, "batches": 0, "updated": 0, "errors": []}
+
+        updated = 0
+        batches_done = 0
+        errors = []
+        for i in range(0, len(invoices), BATCH_SIZE):
+            batch = invoices[i:i + BATCH_SIZE]
+            items_str = "\n".join(
+                f"{j+1}. 統編={inv.get('seller_vat') or '(無)'} "
+                f"名稱={inv.get('seller_name') or '(無)'} "
+                f"行業={inv.get('seller_industries') or '(無)'}"
+                for j, inv in enumerate(batch)
+            )
+            prompt = (
+                "你是台灣會計分類助手。以下是電子發票賣方資料，請依「行業 + 名稱」"
+                "判斷每張發票對應的「會計科目」。\n\n"
+                f"可用科目（必須從這裡選）：{subjects_str}\n\n"
+                "判斷不出來 → 回空字串 \"\"，不要硬猜或創造新科目。\n\n"
+                f"發票清單（共 {len(batch)} 張）：\n{items_str}\n\n"
+                "請只回傳 JSON 陣列，順序對應上面 1~N，不要任何解釋。格式：\n"
+                '[{"i":1,"s":"科目"},{"i":2,"s":""}, ...]'
+            )
+            try:
+                resp = client.text_query(prompt, model=model, temperature=0.0)
+                # 容錯：抓第一個 JSON array
+                m = _re.search(r'\[[\s\S]*\]', resp or "")
+                if not m:
+                    errors.append(f"batch {i // BATCH_SIZE + 1}: LLM 回應非 JSON")
+                    continue
+                results = _json.loads(m.group(0))
+                if not isinstance(results, list):
+                    errors.append(f"batch {i // BATCH_SIZE + 1}: 結果非陣列")
+                    continue
+                for r in results:
+                    if not isinstance(r, dict):
+                        continue
+                    idx = r.get("i") or r.get("index")
+                    subject = (r.get("s") or r.get("subject") or "").strip()
+                    if not isinstance(idx, int) or idx < 1 or idx > len(batch):
+                        continue
+                    if not subject:
+                        continue
+                    inv = batch[idx - 1]
+                    old = inv.get("accounting_subject")
+                    inv["accounting_subject"] = subject
+                    inv["accounting_source"] = "llm"
+                    if old != subject:
+                        updated += 1
+                batches_done += 1
+            except Exception as e:
+                log.exception("LLM batch %s failed", i // BATCH_SIZE + 1)
+                errors.append(f"batch {i // BATCH_SIZE + 1}: {type(e).__name__}: {e}")
+                continue
+
+        data["invoices"] = invoices
+        _write(path, data)
+        return {
+            "total": len(invoices),
+            "batches": batches_done,
+            "updated": updated,
+            "errors": errors[:5],  # 最多回 5 個錯誤
+        }
+
+
+def reclassify_all_accounting(user: Optional[Any]) -> dict:
+    """對 buffer 內所有 invoice 重新跑「賣方反查 + 會計科目分類」。
+    用在使用者按「重抓科目」時 — 套用最新的 vat_db 內容（剛 import 新資料）
+    或最新的規則（更版後）。
+
+    Returns: {total: int, classified: int, updated: int}
+    """
+    try:
+        from ...core import vat_db
+        _vat_lookup = vat_db.lookup_vat
+    except Exception:
+        _vat_lookup = lambda v: None
+    _custom_rules = _load_user_accounting_rules(user)
+
+    path = _buffer_path(user)
+    key = _user_key(user)
+    with _get_lock(key):
+        data = _read(path)
+        invoices = data.get("invoices", [])
+        if not invoices:
+            return {"total": 0, "classified": 0, "updated": 0}
+        classified = 0
+        updated = 0
+        for inv in invoices:
+            old_subject = inv.get("accounting_subject")
+            _enrich_entry_from_vat(inv, _vat_lookup, custom_rules=_custom_rules)
+            new_subject = inv.get("accounting_subject")
+            if new_subject:
+                classified += 1
+            if old_subject != new_subject:
+                updated += 1
+        data["invoices"] = invoices
+        _write(path, data)
+        return {"total": len(invoices), "classified": classified, "updated": updated}
+
+
+def attach_items_to_latest(user: Optional[Any], items: list[str]) -> Optional[dict]:
+    """把右 QR 解出來的品項 attach 到使用者「最近一筆」invoice。
+    用於連續掃描：使用者先掃左 QR (invoice 已 add)，再掃右 QR (本函式 attach)。
+
+    最近 = scanned_at 最大的那筆。已經有 items 就 merge（去重後 append）。
+
+    Returns: 更新後的 invoice dict，或 None 若 buffer 為空。
+    """
+    if not items:
+        return None
+    path = _buffer_path(user)
+    key = _user_key(user)
+    with _get_lock(key):
+        data = _read(path)
+        invoices = data.get("invoices", [])
+        if not invoices:
+            return None
+        # 找 scanned_at 最大者；同 ts 多筆 → 取 list 中最後（add 順序）
+        latest_idx = max(range(len(invoices)),
+                         key=lambda i: invoices[i].get("scanned_at", ""))
+        latest = invoices[latest_idx]
+        existing = latest.get("items") or []
+        # merge 去重保留順序：既有先，新加的接在後
+        seen = set(existing)
+        new_items = list(existing)
+        for it in items:
+            if it not in seen:
+                new_items.append(it)
+                seen.add(it)
+        latest["items"] = new_items
+        invoices[latest_idx] = latest
+        data["invoices"] = invoices
+        _write(path, data)
+        return latest
 
 
 def delete_invoice(user: Optional[Any], invoice_id: str) -> bool:

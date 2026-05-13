@@ -511,6 +511,46 @@ install_tesseract() {
     return 0
 }
 
+# --------------------------------------------------------------------- zbar
+
+# zbar shared lib — pyzbar (einvoice-scan QR code 解析) 的 native 依賴。
+# Windows pyzbar wheel 內建 DLL 不需安裝；Linux/macOS 必須額外裝。
+# 缺則 einvoice-scan QR 掃描功能會在啟動時 503，其餘工具不受影響。
+install_zbar() {
+    if [ "$PLATFORM" = "linux" ]; then
+        if ldconfig -p 2>/dev/null | grep -q libzbar; then
+            ok "zbar 已安裝 (einvoice-scan QR 解析)"
+            return 0
+        fi
+        log "安裝 zbar (einvoice-scan QR code 解析)..."
+        if command -v apt-get >/dev/null 2>&1; then
+            DEBIAN_FRONTEND=noninteractive apt-get install -y libzbar0 \
+                || { warn "zbar 自動安裝失敗 — einvoice-scan QR 掃描功能會停用"; return 0; }
+        elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y zbar \
+                || { warn "zbar 自動安裝失敗 — einvoice-scan QR 掃描功能會停用"; return 0; }
+        else
+            warn "未支援的 Linux 發行版，請手動裝 zbar (libzbar0)"
+            return 0
+        fi
+        ok "zbar 安裝完成"
+    elif [ "$PLATFORM" = "macos" ]; then
+        if [ -e /opt/homebrew/lib/libzbar.dylib ] || [ -e /usr/local/lib/libzbar.dylib ]; then
+            ok "zbar 已安裝 (einvoice-scan QR 解析)"
+            return 0
+        fi
+        log "安裝 zbar (einvoice-scan QR code 解析)..."
+        if command -v brew >/dev/null 2>&1; then
+            brew install zbar \
+                || { warn "zbar 自動安裝失敗 — einvoice-scan QR 掃描功能會停用"; return 0; }
+            ok "zbar 安裝完成"
+        else
+            warn "未安裝 Homebrew，請手動 brew install zbar"
+        fi
+    fi
+    return 0
+}
+
 # --------------------------------------------------------------------- uv
 
 install_uv() {
@@ -579,13 +619,20 @@ setup_python() {
     [ -x "$INSTALL_DIR/.venv/bin/python" ] || die "Python venv 建立失敗"
     log "驗證關鍵依賴可正常 import ..."
     "$INSTALL_DIR/.venv/bin/python" -c \
-        "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx, psutil, pyotp, qrcode" \
+        "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, openpyxl, pyzipper, httpx, psutil, pyotp, qrcode" \
         || die "依賴 import 失敗 — 安裝不完整，請查看上方錯誤"
     # easyocr 是 v1.7.2 新加的主 OCR 引擎；deps 重（PyTorch ~700MB），import
     # 失敗不致命（會自動 fallback tesseract）— warn 不 die
     if ! "$INSTALL_DIR/.venv/bin/python" -c "import easyocr" 2>/dev/null; then
         warn "EasyOCR 未裝成（OCR 會自動 fallback tesseract，識別率較弱）"
         warn "  可手動補裝: $INSTALL_DIR/bin/uv sync  或  $INSTALL_DIR/.venv/bin/pip install easyocr"
+    fi
+    # pyzbar import 需要 zbar shared lib（已在 install_zbar 階段裝）
+    # 失敗 = einvoice-scan QR 掃描在 _probe 階段拒絕；不致命
+    if ! "$INSTALL_DIR/.venv/bin/python" -c "import pyzbar.pyzbar" 2>/dev/null; then
+        warn "pyzbar import 失敗（zbar shared lib 缺）— einvoice-scan QR 掃描會停用"
+        warn "  Linux 補裝: sudo apt install libzbar0"
+        warn "  macOS 補裝: brew install zbar"
     fi
     # PDF.js vendor 完整性（pdf-ocr 內嵌 viewer 用）— 隨 git 來，缺檔 = git clone 異常
     pdfjs_missing=""
@@ -843,6 +890,7 @@ main() {
     install_oxoffice_x11_runtime_libs_linux
     ensure_office
     install_tesseract
+    install_zbar
     fetch_code
     install_uv
     setup_python
