@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import re
@@ -916,12 +917,30 @@ def build_router(templates) -> APIRouter:
             },
         )
 
+    # v1.7.48：probe 結果記憶體快取，60s TTL。慢機器（單一 probe 5-10s）
+    # 開頁多次 refresh / admin 在不同 tab 開不會重跑全套 probe。「重新檢查」
+    # 按鈕會帶 ?force=1 強制重跑。
+    _sys_deps_cache: dict = {"ts": 0.0, "data": None}
+
     @router.get("/api/sys-deps")
-    async def sys_deps_api():
-        """JSON 版本，給外部監控 / API token 呼叫者用 (符合「所有功能須有 API」規範)。"""
+    async def sys_deps_api(request: Request):
+        """JSON 版本，給外部監控 / API token 呼叫者用 (符合「所有功能須有 API」規範)。
+
+        Query string `?force=1` 跳過快取，強制重跑 probes。
+        """
         from ..core.sys_deps import collect_sys_deps
+        import time as _time
+        force = request.query_params.get("force") in ("1", "true", "yes")
+        now = _time.time()
+        cache_age = now - _sys_deps_cache["ts"]
+        if not force and _sys_deps_cache["data"] is not None and cache_age < 60.0:
+            return {"deps": _sys_deps_cache["data"], "cached": True,
+                    "cache_age": round(cache_age, 1)}
         try:
-            return {"deps": collect_sys_deps()}
+            data = await asyncio.to_thread(collect_sys_deps)
+            _sys_deps_cache["data"] = data
+            _sys_deps_cache["ts"] = now
+            return {"deps": data, "cached": False}
         except Exception:
             # v1.5.8: 不漏 stack trace（CodeQL py/stack-trace-exposure）
             import logging as _lg

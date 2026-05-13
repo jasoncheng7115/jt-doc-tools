@@ -4,6 +4,34 @@
 
 ---
 
+## [1.7.49] - 2026-05-13
+
+### 修正
+
+- **Win11 winget 裝完 Java 後 admin 仍報「找不到 java 執行檔」**：根因兩件事 ① service process 啟動時繼承 PATH，winget 裝完 Java 改了系統 PATH 但**舊 process 還是舊 env**，`shutil.which("java")` 找不到；②Eclipse Temurin / Microsoft OpenJDK / Zulu / Corretto 等發行版預設裝在 `C:\Program Files\Eclipse Adoptium\jre-21.x\bin\java.exe` 之類路徑，沒 PATH 也應該能偵測到。修法：跟 tesseract issue #4 同模式，新增 `_find_java_binary()` helper：先 `shutil.which`，找不到就 glob `C:\Program Files\Eclipse Adoptium\*\bin\java.exe` / `Microsoft\jdk-*` / `Java\*` / `Zulu\zulu-*` / `AdoptOpenJDK\*` / `BellSoft\LibericaJDK-*` / `Amazon Corretto\*` 等常見位置；macOS / Linux 也順手加 fallback。客戶 winget 裝完不用重啟服務也能立刻偵測到。
+
+---
+
+## [1.7.48] - 2026-05-13
+
+### 改進
+
+接續 v1.7.47 issue #17 修復的三道防禦，涵蓋更慢機器：
+
+- **Frontend `/admin/api/sys-deps` 拉長 timeout 90s + 顯示等待秒數**：之前用瀏覽器預設 fetch timeout（各家不一），慢機器 5-10s 可能撐不到。改用 `AbortController` 顯式 90s 上限，loading 文案多一個秒數計時 → 使用者知道後端還在跑沒當掉。錯誤訊息也分流：AbortError → 「檢查逾時」、Failed to fetch → 「無法連到後端」、其他 → 顯示 status code。
+- **Backend probe 結果記憶體快取（60s TTL）**：`/admin/api/sys-deps` 回應加入 cache 機制，慢機器多 tab 開或頁面 refresh 不重跑全套 5-10s 的 probe。`?force=1` 跳過快取（重新檢查按鈕用）。回應多 `cached` / `cache_age` 欄位給除錯用。
+- **`collect_sys_deps` 包 `asyncio.to_thread`**：之前 sync function 直接 await 會阻塞 event loop（FastAPI workers 共用 loop，此期間其他 request 無法處理）。改丟到 worker thread 跑，不阻塞主 loop。
+
+---
+
+## [1.7.47] - 2026-05-13
+
+### 修正
+
+- **Win11 相依套件檢查「Failed to fetch」**（issue #17）：實測 Win11 上 `/admin/api/sys-deps` 響應 23.6 秒，瀏覽器 fetch 撐不到。雙重根因：①`_probe_python_pkg("easyocr")` 直接 `__import__("easyocr")` 會觸發 PyTorch 載入（~700MB，5-15 秒），CLAUDE.md 早就警告過；②所有 9 個 probe 串行跑，office (5s) + java (5s) + tesseract (3s) 累計 13s+。修法：①`_probe_python_pkg` 加 `heavy=True` 模式，用 `importlib.util.find_spec` 純檔案系統判定 + `importlib.metadata.version` 讀 distribution metadata（不執行 module）；easyocr probe 套用；②`collect_sys_deps` 改用 `ThreadPoolExecutor(max_workers=8)` 平行跑 probes，總時間 = max(probe time) 而非 sum，預期從 23s → ~5s。
+
+---
+
 ## [1.7.46] - 2026-05-13
 
 ### 改進

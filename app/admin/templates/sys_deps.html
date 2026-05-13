@@ -324,20 +324,51 @@
     $('statWarnCard').classList.toggle('is-zero', warnN === 0);
   }
 
-  async function loadDeps() {
+  async function loadDeps(force) {
     const tbody = document.getElementById('dep-tbody');
-    tbody.innerHTML = '<tr><td colspan="5" style="padding:40px; text-align:center; color:#64748b;">' +
-      '<span class="dep-spinner" aria-hidden="true"></span>' +
-      '<span style="margin-left:10px; font-size:13px;">正在檢查系統相依套件…</span></td></tr>';
+    // v1.7.48：顯示「已等 N 秒」計時器，讓使用者知道後端還在跑（部分
+    // 慢機器 office/java probe 真要 5-10 秒）。AbortController 90s 上限
+    // 涵蓋極端慢機器（issue #17 後續：避免「Failed to fetch」復發）。
+    const startedAt = Date.now();
+    const renderWaiting = () => {
+      const sec = Math.floor((Date.now() - startedAt) / 1000);
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:40px; text-align:center; color:#64748b;">' +
+        '<span class="dep-spinner" aria-hidden="true"></span>' +
+        '<span style="margin-left:10px; font-size:13px;">正在檢查系統相依套件…（已等 ' + sec + ' 秒，慢機器最多 60 秒）</span></td></tr>';
+    };
+    renderWaiting();
+    const tickerId = setInterval(renderWaiting, 1000);
+    const ctrl = new AbortController();
+    const timeoutId = setTimeout(() => ctrl.abort(), 90000);  // 90s 上限
     try {
-      const r = await fetch('/admin/api/sys-deps');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const url = '/admin/api/sys-deps' + (force ? '?force=1' : '');
+      const r = await fetch(url, { signal: ctrl.signal });
+      if (!r.ok) {
+        // 5xx / 4xx：後端有回應但失敗
+        let detail = '';
+        try {
+          const j = await r.json();
+          detail = j.error || j.detail || '';
+        } catch (_) {}
+        throw new Error('HTTP ' + r.status + (detail ? '：' + detail : ''));
+      }
       const j = await r.json();
       const deps = j.deps || [];
       renderRows(deps);
       renderSummary(deps);
     } catch (e) {
-      tbody.innerHTML = '<tr><td colspan="5" style="padding:30px; text-align:center; color:#ef4444;">檢查失敗：' + escapeHtml(e.message) + '</td></tr>';
+      let msg;
+      if (e.name === 'AbortError') {
+        msg = '檢查逾時（超過 90 秒）— 系統 probe 可能卡住。請看 server log 排查 office/java/tesseract 是否回應極慢。';
+      } else if (/Failed to fetch|NetworkError|Load failed/i.test(e.message)) {
+        msg = '無法連到後端（' + escapeHtml(e.message) + '）。可能服務未啟動、被反向代理截斷、或 CORS 問題。請看 server log。';
+      } else {
+        msg = '檢查失敗：' + escapeHtml(e.message);
+      }
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:30px; text-align:center; color:#ef4444;">' + msg + '</td></tr>';
+    } finally {
+      clearInterval(tickerId);
+      clearTimeout(timeoutId);
     }
   }
 
@@ -347,7 +378,8 @@
     const orig = btn.innerHTML;
     btn.innerHTML = '檢查中…';
     try {
-      await loadDeps();
+      // 重新檢查按鈕跳過快取，強制重跑（v1.7.48）
+      await loadDeps(true);
     } finally {
       btn.innerHTML = orig;
       btn.disabled = false;
