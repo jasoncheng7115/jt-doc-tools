@@ -24,7 +24,7 @@
      自身短高度（不會被拉伸）。比 masonry 更整齊好讀 */
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 8px;
+  gap: 14px 16px;           /* row gap 14px 給 SVG L 線轉折空間，col gap 16px 給三角箭頭 */
   margin: 8px 0;
   align-items: start;
   position: relative;       /* 給 .tl-connectors SVG overlay 定位用 */
@@ -629,22 +629,18 @@ function drawWrapConnectors() {
     if (Math.abs(a.top - b.top) < 5) continue;  // 同列由 CSS ::after 三角形處理
 
     // 座標轉成相對 wrap
-    const aR = a.right - wrapRect.left + 1;
-    const aT = a.top - wrapRect.top + 18;          // head row 高度
-    const aB = a.bottom - wrapRect.top;
-    const bL = b.left - wrapRect.left;
-    const bT = b.top - wrapRect.top + 18;
-    const wallR = wrapRect.width - 1;
-    const gapMidY = (aB + (b.top - wrapRect.top)) / 2;
-    const targetX = bL + 18;                        // 對齊 next card 內 checkbox 中心
+    const aBottomY = a.bottom - wrapRect.top;
+    const aMidX = a.left - wrapRect.left + a.width / 2;
+    const bTopY = b.top - wrapRect.top;
+    const bMidX = b.left - wrapRect.left + b.width / 2;
+    const turnY = aBottomY + 4;                    // 出卡片底部 4px 開始轉折
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    // 出 cur 右邊 → 牆 → 下 → 左移到 next 上方 → 進 next 頂端
-    const d = `M ${aR} ${aT}
-               L ${wallR} ${aT}
-               L ${wallR} ${gapMidY}
-               L ${targetX} ${gapMidY}
-               L ${targetX} ${bT - 8}`;
+    // 從 cur 卡片底部正中 → 往下一點點 → 往左到 next 卡片正上方 → 往下進 next 頂端
+    const d = `M ${aMidX} ${aBottomY}
+               L ${aMidX} ${turnY}
+               L ${bMidX} ${turnY}
+               L ${bMidX} ${bTopY - 6}`;
     path.setAttribute('d', d);
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke', '#2563eb');
