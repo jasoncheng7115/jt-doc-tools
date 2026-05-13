@@ -556,19 +556,36 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
     if (!summaryEl) return;
     if (items.length === 0) {
       summaryEl.className = 'po-langs-summary is-empty';
-      summaryEl.innerHTML = '尚未選擇任何語言（至少要選一種才能 OCR）';
+      summaryEl.textContent = '尚未選擇任何語言（至少要選一種才能 OCR）';
     } else {
       summaryEl.className = 'po-langs-summary';
-      const list = items.map(it => {
-        let badge = '';
-        if (it.variant === 'best') {
-          badge = ' <span style="background:#dcfce7; color:#166534; padding:1px 6px; border-radius:3px; font-size:11px;">best</span>';
-        } else if (it.variant === 'fast') {
-          badge = ' <span style="background:#e0e7ff; color:#3730a3; padding:1px 6px; border-radius:3px; font-size:11px;">fast</span>';
+      // v1.7.50：避免 innerHTML 拼 DOM textContent 來源（CodeQL js/xss-through-dom），
+      // 改用 DOM API 一個 node 一個 node append。it.name / it.displayCode 來自
+      // chip 內 textContent，理論上 server-rendered 信任，但用 textContent 設值
+      // 是 defense in depth + 過 codeQL static analysis。
+      summaryEl.replaceChildren();
+      summaryEl.appendChild(document.createTextNode('將使用 '));
+      const cnt = document.createElement('b');
+      cnt.textContent = String(items.length);
+      summaryEl.appendChild(cnt);
+      summaryEl.appendChild(document.createTextNode(' 種語言：'));
+      items.forEach((it, idx) => {
+        if (idx > 0) summaryEl.appendChild(document.createTextNode('、'));
+        summaryEl.appendChild(document.createTextNode(it.name + ' '));
+        const c = document.createElement('code');
+        c.textContent = it.displayCode;
+        summaryEl.appendChild(c);
+        if (it.variant === 'best' || it.variant === 'fast') {
+          const isBest = it.variant === 'best';
+          summaryEl.appendChild(document.createTextNode(' '));
+          const badge = document.createElement('span');
+          badge.style.cssText = isBest
+            ? 'background:#dcfce7; color:#166534; padding:1px 6px; border-radius:3px; font-size:11px;'
+            : 'background:#e0e7ff; color:#3730a3; padding:1px 6px; border-radius:3px; font-size:11px;';
+          badge.textContent = isBest ? 'best' : 'fast';
+          summaryEl.appendChild(badge);
         }
-        return it.name + ' <code>' + it.displayCode + '</code>' + badge;
-      }).join('、');
-      summaryEl.innerHTML = '將使用 <b>' + items.length + '</b> 種語言：' + list;
+      });
     }
   }
   // Chip 點擊切換
