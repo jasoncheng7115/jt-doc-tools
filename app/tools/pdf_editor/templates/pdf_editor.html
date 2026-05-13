@@ -1219,6 +1219,45 @@ function applyZoom() {
 }
 
 // ============ Object creation ============
+// v1.7.46：把「拖動 / 修改物件後加 OLD 位置 cover」抽出讓 object:modified
+// 跟屬性面板 rerender() 都能呼叫。
+//   opts.force=true（屬性面板用）→ 跳過 dx/dy 移動門檻；改字型 / 字級
+//   原地不動但需要 cover 蓋掉 BG 舊樣式。
+//   opts.force=false（拖曳用）→ 仍套 >2px 過濾單擊微震。
+function addModifyCover(o, fc, opts) {
+  opts = opts || {};
+  if (!fc || !o || !o._peId) return;
+  const oldBb = o._lastFlattenedBbox || (o._origBbox ? {
+    left: o._origBbox[0] * PT2PX, top: o._origBbox[1] * PT2PX,
+    width: (o._origBbox[2] - o._origBbox[0]) * PT2PX,
+    height: (o._origBbox[3] - o._origBbox[1]) * PT2PX,
+  } : null);
+  if (!oldBb) return;
+  if (!opts.force) {
+    const dx = Math.abs((o.left||0) - oldBb.left);
+    const dy = Math.abs((o.top||0) - oldBb.top);
+    if (dx <= 2 && dy <= 2) return;
+  }
+  // per-obj 1:1 — remove existing cover for this obj first
+  fc.getObjects().filter(x => x._peCover && x._coverFor === o._peId)
+    .forEach(x => fc.remove(x));
+  const cover = new fabric.Rect({
+    left: oldBb.left - 1, top: oldBb.top - 1,
+    width: oldBb.width + 2, height: oldBb.height + 2,
+    fill: 'rgba(255,255,255,0.7)', stroke: null, strokeWidth: 0,
+    selectable: false, evented: false, hoverCursor: 'default',
+  });
+  cover._peCover = true;
+  cover._peMarker = true;
+  cover._coverFor = o._peId;
+  fc.add(cover);
+  fc.sendToBack(cover);
+  // 防呆：清孤兒 cover（owner obj 已不存在）
+  const ownerIds = new Set(fc.getObjects().filter(x => x._peId && !x._peCover).map(x => x._peId));
+  fc.getObjects().filter(x => x._peCover && !ownerIds.has(x._coverFor))
+    .forEach(x => fc.remove(x));
+}
+
 function attachPageHandlers(fc) {
   // Hover frame：select 模式 hover 在 Fabric overlay 物件上 / pick 模式
   // hover 在 PDF 既有物件上 → 浮現選取框
@@ -1384,12 +1423,19 @@ function attachPageHandlers(fc) {
       const pfSize = document.getElementById('pfSize');
       if (pfSize && getActiveObject() === o) pfSize.value = Math.round(o.fontSize);
     }
-    // 防呆：清掉任何遺留的 _peCover（之前版本可能留下，避免永久蓋住 PDF）
-    const stale = fc.getObjects().filter(x => x._peCover);
-    if (stale.length) {
-      stale.forEach(x => fc.remove(x));
+    // v1.7.44：拖曳/縮放完成後立刻把 IText 還原 opacity 1，使用者立刻看到
+    // 文字「跑到新位置」，不用等 ~2 秒 BG 重畫完才看到變化。BG 重畫完後
+    // savePdf 會再淡回 0.01（時間點延後到 bgLoadedPromises resolve 後 — 見
+    // savePdf 內 finally 邏輯），整個過渡無雙影也無延遲感。
+    if ((o.opacity || 0) < 0.5 && !o._peMarker) {
+      o.set('opacity', 1);
       fc.requestRenderAll();
     }
+    // v1.7.45：拖動後原位置 BG 還沒重繪前，加一個半透明白色 cover 蓋在
+    // OLD 位置，讓使用者視覺上立即感覺「OLD 位置淡化了」。BG 載入完
+    // savePdf 會清掉所有 _peCover。
+    addModifyCover(o, fc);
+    fc.requestRenderAll();
   });
   // 在原物件擷取的 IText 內直接編輯文字（雙擊進編輯模式 → 鍵盤輸入 → blur）後，
   // Fabric IText 內部 dirty 旗標 + width 沒主動 recompute，造成 background image
@@ -1780,9 +1826,17 @@ async function pickExistingObject(fc, p) {
       });
       obj._peType = 'text';
       obj._origBbox = bb.slice();
+      // v1.7.42：IText 一建出來就 opacity 0.01 隱藏 — 原 PDF 文字仍在 BG，
+      // Fabric overlay 同位置同內容會「兩層疊」(視覺雙影)。隱藏 IText
+      // 後使用者只看到 BG（內容相同），但 Fabric selection handles 仍可見
+      // 不丟選取狀態，立刻就能拖 / 編輯。雙擊進文字編輯模式
+      // (text:editing:entered) 會自動還原 opacity 1 給使用者看打字。
+      obj.set('opacity', 0.01);
+      // 不呼叫 lockUntilMouseUp — 它假設 click → 同步建物件 → 同次 mouse:up
+      // 解鎖。但 pick 是 async，IText 建好時原 click 早就 mouse:up 過了 →
+      // 鎖會延後到「使用者下次拖完放開」才解，整段拖曳被鎖（v1.7.42 修）。
       fc.add(obj);
       addRedactMarker(fc, bb, obj);
-      lockUntilMouseUp(fc, obj);
       fc.setActiveObject(obj); fc.requestRenderAll();
       if (data.ocr_used) {
         setStatus('已用 OCR 自動辨識既有文字（此 PDF 字型缺 Unicode 對應表）。請檢查辨識結果是否正確。');
@@ -1793,8 +1847,15 @@ async function pickExistingObject(fc, p) {
       // object:added 的 1500ms debounce — 否則 user 看到原 PDF 文字 +
       // Fabric IText 兩層疊在同位置 1.5 秒（明顯雙影）。150ms 內 BG 套上
       // redact、IText 淡到 0.01，視覺只剩一份 BG 文字。
-      // v1.7.40：BG 真正重畫完前，loading overlay 繼續顯示避免使用者誤觸。
-      if (pickOverlayShown) _keepLoadingUntilBgReady = true;
+      // v1.7.41：不論有沒有 OCR，pick 成功一律顯示 overlay 直到 BG 重畫
+      // 完成。原 v1.7.40 只在 pickOverlayShown=true（OCR 過 500ms 才顯示
+      // overlay）才保留 — 但無 OCR 情境（字型 Unicode 對應表完整）detect
+      // 100ms 內就回，pickOverlayShown 還沒被 timer 設 true → overlay 沒
+      // 顯示也不會保留 → 雙影 1-2 秒視覺很差。改為 IText 成功建出後直接
+      // showLoading 並 set flag，savePdf BG load 完才 hideLoading。
+      showLoading('重繪中…');
+      pickOverlayShown = true;
+      _keepLoadingUntilBgReady = true;
       triggerPickSave();
     } else if (data.kind === 'image') {
       if (!data.thumb_url) {
@@ -1812,13 +1873,18 @@ async function pickExistingObject(fc, p) {
         img._peType = 'image';
         img._origBbox = bb.slice();
         img._existingSrc = data.thumb_url;
+        // v1.7.42：同 text — 隱藏 Fabric image 避免跟 BG 圖雙影；
+        // 不呼叫 lockUntilMouseUp 避免 async pick 把拖曳鎖死。
+        img.set('opacity', 0.01);
         fc.add(img);
         addRedactMarker(fc, bb, img);
-        lockUntilMouseUp(fc, img);
         fc.setActiveObject(img); fc.requestRenderAll();
         setStatus(`已擷取圖片。原位置有虛線框表示儲存時會被真刪除。`);
-        if (pickOverlayShown) _keepLoadingUntilBgReady = true;  // v1.7.40
-        triggerPickSave();   // 同 text pick：壓制 BG 與 Fabric overlay 雙影 (v1.7.38)
+        // v1.7.41：圖片 pick 同 text — 一律 overlay 到 BG 重畫完
+        showLoading('重繪中…');
+        pickOverlayShown = true;
+        _keepLoadingUntilBgReady = true;
+        triggerPickSave();
       }, { crossOrigin: 'anonymous' });
     }
   } catch (e) {
@@ -1984,6 +2050,10 @@ function wirePropsPanel(active) {
       active._peSaved = false;
       active.set('opacity', 1);
     }
+    // v1.7.46：屬性面板改 font / size / color 時也加 cover 蓋掉 BG 舊樣式 →
+    // 使用者在 IText 上看到新字型立刻生效（不用等 BG 重畫舊字型「殘影」）。
+    // force=true 跳過 dx/dy 門檻（原地修改沒有位置變動）。
+    addModifyCover(active, c, { force: true });
     c.renderAll();
     if (!suppressHistory) snapshotHistory();
     scheduleAutoSave();
@@ -3210,14 +3280,18 @@ async function savePdf(isAuto, opts) {
           left: o.left, top: o.top,
           width: o.getScaledWidth(), height: o.getScaledHeight(),
         };
-        if (o._peId) flattenedOwnerIds.add(o._peId);
-        // v1.7.27：選中物件也要淡掉 — 之前保留 opacity:1 給「使用者
-        // 還在編輯/選中」的物件，但 BG 已平面化該物件 → Fabric overlay 與
-        // BG 兩層同位置 → 視覺重疊。Fabric selection 控制把手 (handles)
-        // 仍會獨立繪製不受 obj.opacity 影響，使用者選取狀態不會丟失。
-        // 真要編輯文字內容雙擊進 editing 模式 → text:editing:entered
-        // 自動 set opacity=1 還原視覺。
-        o.set('opacity', 0.01);
+        // v1.7.45：確保 _peId 一律存在（picked 物件 addRedactMarker 已給；
+        // 新建物件第一次 save 時補上），給 _peCover 對應 obj 用。
+        if (!o._peId) {
+          o._peId = 'auto_' + Math.random().toString(36).slice(2, 10);
+        }
+        flattenedOwnerIds.add(o._peId);
+        // v1.7.44：opacity 淡化「延後到 BG 真的載完才做」 — 之前 set 0.01
+        // 太早，會在 BG 還沒換上前就讓 IText 不可見 → 使用者看到 OLD BG
+        // 文字 + 隱形新位置 → 拖完 1-2 秒看不到變化。改成在下方
+        // bgLoadedPromises resolve 那層才淡，當 BG 真的有新位置文字了，
+        // IText 才隱形交棒給 BG。
+        // （仍記錄為 _peSaved，opacity 標記稍後設）
       });
       // v1.7.27：marker 已平面化 → 直接 remove（之前只清 fill 留紅虛線框，
       // 但使用者覺得殘留紅框視覺干擾）。OLD 位置原內容已被 redact 進 BG，
@@ -3242,6 +3316,17 @@ async function savePdf(isAuto, opts) {
       Promise.all(bgLoadedPromises).then(() => {
         pageCanvases.forEach(fc => {
           fc.getObjects().filter(o => o._peCover).forEach(o => fc.remove(o));
+          // v1.7.44：BG 真的載入後，把所有已平面化的 IText / 圖片淡到 0.01
+          // — 此時 BG 已有新位置內容，Fabric overlay 隱形交棒，無雙影也無
+          // 「拖完看不到變化」延遲感。期間 (drag → BG ready) 物件保持 opacity 1
+          // 給使用者看見「跑到新位置了」。
+          fc.getObjects().forEach(o => {
+            if (o._peMarker || o._peCover) return;
+            if (!o._peSaved) return;
+            // 雙擊進文字編輯模式中的物件保持可見（不淡）
+            if (o.isEditing) return;
+            o.set('opacity', 0.01);
+          });
           if (opts.includeActive) {
             const a = fc.getActiveObject();
             if (a && !a._peMarker) {
