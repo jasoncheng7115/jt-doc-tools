@@ -4,6 +4,14 @@
 
 ---
 
+## [1.7.61] - 2026-05-13
+
+### 改進
+
+- **`text-list` 卡片內子選項字體放大**：v1.7.60 子選項字體 11.5px、padding 1px 太小，select 下拉跟 input 字幾乎看不清楚。改 12.5px、padding 3px 6px、checkbox 14×14、input 加 focus ring，整體行距 8px×10px 更舒服。
+
+---
+
 ## [1.7.60] - 2026-05-13
 
 ### 修正
