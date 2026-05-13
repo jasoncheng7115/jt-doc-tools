@@ -27,6 +27,14 @@ from pathlib import Path
 
 import httpx
 
+# Windows cp950 console 不能印 ✓ ✗ → reconfigure stdout/stderr 為 utf-8
+# (Python 3.7+ 支援 reconfigure；exception 容忍即可)
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 SAMPLE_DIR = Path(__file__).parent / "samples"
 
 # 每個 scenario 是 dict: {name, method, path, file_field?, sample_key?, form?, json?, weight?}

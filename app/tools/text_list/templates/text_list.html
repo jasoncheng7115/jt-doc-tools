@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}清單處理 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.tl-input-area { width: 100%; min-height: 220px; max-height: 480px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.45;
+  border: 1px solid #cbd5e1; border-radius: 8px;
+  padding: 10px 12px; resize: vertical; box-sizing: border-box; }
+.tl-input-area:focus { outline: 2px solid #93c5fd; outline-offset: 1px; }
+.tl-input-area.drop-hover { outline: 2px dashed #2563eb; outline-offset: -2px;
+  background: #eff6ff; }
+.tl-meta { font-size: 11.5px; color:#64748b; margin-top: 4px;
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.tl-meta .err { color:#b91c1c; }
+.tl-mini-btn { font-size: 11.5px; padding: 3px 8px; background:#f1f5f9;
+  border:1px solid #e2e8f0; border-radius: 4px; color:#475569; cursor: pointer; }
+.tl-mini-btn:hover { background:#e2e8f0; }
+
+.tl-ops {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+.tl-op {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tl-op.on {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+.tl-op label.head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  color: #1e293b;
+}
+.tl-op .sub {
+  display: flex; gap: 6px; flex-wrap: wrap; font-size: 11.5px;
+  color: #475569; margin-top: 2px;
+}
+.tl-op .sub label { display: inline-flex; gap: 3px; align-items: center; cursor: pointer; }
+.tl-op .sub select, .tl-op .sub input[type="text"], .tl-op .sub input[type="number"] {
+  font-size: 11.5px; padding: 1px 4px;
+  border: 1px solid #cbd5e1; border-radius: 3px;
+}
+.tl-op .sub input[type="number"] { width: 70px; }
+.tl-op .sub input[type="text"] { width: 140px; }
+
+.tl-result-toolbar {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin: 6px 0 10px;
+}
+.tl-result-toolbar .stats {
+  font-size: 12px; color:#64748b;
+  font-variant-numeric: tabular-nums;
+}
+.tl-result-toolbar .stats b { color:#1e293b; }
+.tl-result-toolbar .right { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+
+.tl-output {
+  width: 100%; min-height: 240px; max-height: 520px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.5;
+  border: 1px solid #cbd5e1; border-radius: 8px;
+  padding: 10px 12px; resize: vertical; box-sizing: border-box;
+  background: #fafbfc;
+}
+
+.tl-copy-big {
+  background: #2563eb; color: #fff; border: 0;
+  padding: 8px 16px; font-size: 13.5px; font-weight: 600;
+  border-radius: 6px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tl-copy-big:hover { background: #1d4ed8; }
+.tl-copy-big:disabled { background: #94a3b8; cursor: wait; }
+.tl-copy-big.ok { background: #059669; }
+
+.tl-toast {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+  background: #1e293b; color: #fff; padding: 8px 14px; border-radius: 6px;
+  font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  z-index: 9999;
+}
+.tl-toast.show { opacity: 1; }
+
+.tl-export-wrap { position: relative; display: inline-block; }
+.tl-export-menu {
+  position: absolute; top: 100%; right: 0; margin-top: 2px;
+  background: #fff; border: 1px solid #e5e7eb;
+  border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  min-width: 130px; padding: 4px 0; z-index: 100;
+}
+.tl-export-menu button {
+  display: block; width: 100%; text-align: left; padding: 6px 12px;
+  background: none; border: 0; font-size: 12.5px; cursor: pointer;
+  color: #1e293b;
+}
+.tl-export-menu button:hover { background: #f1f5f9; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>{{ icon('paragraph', size=22) }} 清單處理</h1>
+<p class="muted">把每行文字當一筆資料。可貼上文字或上傳 .txt / .csv / .xlsx / .docx / .pdf 等檔案，依序套用排序 / 去重 / 篩選等操作。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">1. 輸入清單</h2>
+  <textarea class="tl-input-area" id="inputArea" spellcheck="false"
+    placeholder="貼上文字（每行一筆），或把檔案拖進來 .txt .csv .tsv .md .log .xlsx .ods .docx .odt .pdf …"></textarea>
+  <div class="tl-meta">
+    <span id="inputMeta">0 行 · 0 字</span>
+    <span id="loadedFile" style="color:#059669;"></span>
+    <span style="display:flex; gap:6px; margin-left:auto;">
+      <label class="tl-mini-btn" style="cursor:pointer;">
+        {{ icon('paperclip', size=12) }} 上傳檔案
+        <input type="file" id="filePicker" hidden
+          accept=".txt,.csv,.tsv,.md,.markdown,.log,.json,.yaml,.yml,.ini,.conf,.xlsx,.ods,.docx,.odt,.pdf">
+      </label>
+      <button type="button" class="tl-mini-btn" id="btnClearInput">清空</button>
+    </span>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">2. 操作（勾選會依序套用）</h2>
+  <div class="tl-ops">
+    <div class="tl-op" data-op="trim">
+      <label class="head"><input type="checkbox" data-op-toggle> Trim 前後空白</label>
+    </div>
+    <div class="tl-op" data-op="drop_empty">
+      <label class="head"><input type="checkbox" data-op-toggle checked> 移除空行</label>
+    </div>
+    <div class="tl-op" data-op="dedup">
+      <label class="head"><input type="checkbox" data-op-toggle> 去重複</label>
+      <div class="sub">
+        <select data-param="keep">
+          <option value="first">保留首次出現</option>
+          <option value="last">保留最後出現</option>
+          <option value="count">改列出次數</option>
+        </select>
+        <label><input type="checkbox" data-param="case_insensitive"> 不分大小寫</label>
+      </div>
+    </div>
+    <div class="tl-op" data-op="sort">
+      <label class="head"><input type="checkbox" data-op-toggle> 排序</label>
+      <div class="sub">
+        <select data-param="order">
+          <option value="asc">升序 A→Z</option>
+          <option value="desc">降序 Z→A</option>
+        </select>
+        <label><input type="checkbox" data-param="natural" checked> 數字感知</label>
+        <label><input type="checkbox" data-param="case_insensitive"> 不分大小寫</label>
+      </div>
+    </div>
+    <div class="tl-op" data-op="reverse">
+      <label class="head"><input type="checkbox" data-op-toggle> 反轉順序</label>
+    </div>
+    <div class="tl-op" data-op="shuffle">
+      <label class="head"><input type="checkbox" data-op-toggle> 隨機洗牌</label>
+    </div>
+    <div class="tl-op" data-op="case">
+      <label class="head"><input type="checkbox" data-op-toggle> 大小寫轉換</label>
+      <div class="sub">
+        <select data-param="mode">
+          <option value="lower">全部小寫</option>
+          <option value="upper">全部大寫</option>
+          <option value="title">每字首大寫</option>
+        </select>
+      </div>
+    </div>
+    <div class="tl-op" data-op="filter">
+      <label class="head"><input type="checkbox" data-op-toggle> 篩選</label>
+      <div class="sub">
+        <select data-param="mode">
+          <option value="include">包含</option>
+          <option value="exclude">不包含</option>
+        </select>
+        <input type="text" data-param="pattern" placeholder="關鍵字 / regex">
+        <label><input type="checkbox" data-param="regex"> regex</label>
+        <label><input type="checkbox" data-param="case_insensitive"> 不分大小寫</label>
+      </div>
+    </div>
+    <div class="tl-op" data-op="head">
+      <label class="head"><input type="checkbox" data-op-toggle> 取前 N 筆</label>
+      <div class="sub">
+        <input type="number" data-param="n" value="100" min="0">
+      </div>
+    </div>
+    <div class="tl-op" data-op="tail">
+      <label class="head"><input type="checkbox" data-op-toggle> 取後 N 筆</label>
+      <div class="sub">
+        <input type="number" data-param="n" value="100" min="0">
+      </div>
+    </div>
+    <div class="tl-op" data-op="wrap">
+      <label class="head"><input type="checkbox" data-op-toggle> 加前 / 後綴</label>
+      <div class="sub">
+        <input type="text" data-param="prefix" placeholder="前綴" style="width:80px;">
+        <input type="text" data-param="suffix" placeholder="後綴" style="width:80px;">
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:10px;">
+    <button class="btn btn-primary" id="btnRun">{{ icon('play', size=14) }} 執行</button>
+    <span id="status" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
+  </div>
+</div>
+
+<div class="panel" id="resultPanel" hidden>
+  <h2 style="margin-top:0;">3. 結果</h2>
+  <div class="tl-result-toolbar">
+    <div class="stats" id="resultStats">—</div>
+    <div class="right">
+      <button type="button" class="tl-copy-big" id="btnCopyAll">{{ icon('copy', size=14) }} 全部複製</button>
+      <span class="tl-export-wrap">
+        <button type="button" class="tl-mini-btn" id="btnExport" style="padding:7px 12px; font-size:12.5px;">
+          {{ icon('download', size=12) }} 下載 ▾
+        </button>
+        <span class="tl-export-menu" id="exportMenu" hidden>
+          <button data-fmt="txt">.txt 純文字</button>
+          <button data-fmt="csv">.csv 試算表</button>
+          <button data-fmt="xlsx">.xlsx Excel</button>
+        </span>
+      </span>
+    </div>
+  </div>
+  <textarea class="tl-output" id="outputArea" spellcheck="false" readonly></textarea>
+</div>
+
+<div class="tl-toast" id="toast"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = id => document.getElementById(id);
+
+// ─────────── 輸入區 ───────────
+let _loadedFilename = "";
+
+function updateInputMeta() {
+  const v = $('inputArea').value || "";
+  const lines = v ? v.split(/\r?\n/).length : 0;
+  $('inputMeta').textContent = `${lines.toLocaleString()} 行 · ${v.length.toLocaleString()} 字`;
+}
+$('inputArea').addEventListener('input', () => {
+  updateInputMeta();
+  // 手改內容後標記不再來自上傳檔
+  if (_loadedFilename) {
+    _loadedFilename = "";
+    $('loadedFile').textContent = "";
+  }
+});
+$('btnClearInput').addEventListener('click', () => {
+  $('inputArea').value = "";
+  _loadedFilename = "";
+  $('loadedFile').textContent = "";
+  updateInputMeta();
+});
+
+// 上傳檔案 — 走 /upload 直接萃取後填回 input area（不套 ops，給 user 看到原文）
+async function _uploadFile(f) {
+  if (!f) return;
+  $('status').textContent = `讀取 ${f.name}…`;
+  const fd = new FormData();
+  fd.append("file", f);
+  fd.append("ops", "[]");
+  try {
+    const r = await fetch("/tools/text-list/upload", { method: "POST", body: fd });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+    $('inputArea').value = j.lines.join("\n");
+    _loadedFilename = f.name;
+    $('loadedFile').textContent = `已載入：${f.name}（${j.count.toLocaleString()} 行）`;
+    updateInputMeta();
+    $('status').textContent = "";
+  } catch (e) {
+    $('status').innerHTML = `<span style="color:#b91c1c;">錯誤：${escapeHtml(e.message)}</span>`;
+  }
+}
+
+$('filePicker').addEventListener('change', e => {
+  if (e.target.files && e.target.files[0]) _uploadFile(e.target.files[0]);
+  e.target.value = "";
+});
+
+// 拖檔
+const ta = $('inputArea');
+let _dragDepth = 0;
+ta.addEventListener('dragenter', e => {
+  e.preventDefault();
+  _dragDepth++;
+  ta.classList.add('drop-hover');
+});
+ta.addEventListener('dragleave', () => {
+  _dragDepth--;
+  if (_dragDepth <= 0) { _dragDepth = 0; ta.classList.remove('drop-hover'); }
+});
+ta.addEventListener('dragover', e => e.preventDefault());
+ta.addEventListener('drop', e => {
+  e.preventDefault();
+  _dragDepth = 0;
+  ta.classList.remove('drop-hover');
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) _uploadFile(f);
+});
+
+// ─────────── ops 收集 ───────────
+function collectOps() {
+  const ops = [];
+  document.querySelectorAll('.tl-op').forEach(el => {
+    const toggle = el.querySelector('[data-op-toggle]');
+    if (!toggle || !toggle.checked) {
+      el.classList.remove('on');
+      return;
+    }
+    el.classList.add('on');
+    const op = { op: el.dataset.op };
+    el.querySelectorAll('[data-param]').forEach(inp => {
+      const k = inp.dataset.param;
+      if (inp.type === 'checkbox') op[k] = inp.checked;
+      else if (inp.type === 'number') op[k] = parseInt(inp.value, 10);
+      else op[k] = inp.value;
+    });
+    ops.push(op);
+  });
+  return ops;
+}
+
+// 勾選後改 .on 高亮
+document.querySelectorAll('[data-op-toggle]').forEach(t => {
+  t.addEventListener('change', () => {
+    const card = t.closest('.tl-op');
+    if (card) card.classList.toggle('on', t.checked);
+  });
+  // 初始 sync
+  if (t.checked) t.closest('.tl-op').classList.add('on');
+});
+
+// ─────────── 執行 ───────────
+let _resultLines = [];
+
+function setStats(j) {
+  const dropped = j.original_count - j.count;
+  const parts = [
+    `輸入 <b>${j.original_count.toLocaleString()}</b> 行`,
+    `輸出 <b>${j.count.toLocaleString()}</b> 行`,
+  ];
+  if (dropped > 0) parts.push(`減少 <b>${dropped.toLocaleString()}</b> 行`);
+  else if (dropped < 0) parts.push(`增加 <b>${(-dropped).toLocaleString()}</b> 行`);
+  if (j.ops_applied && j.ops_applied.length) {
+    parts.push(`套用：${j.ops_applied.join(' → ')}`);
+  }
+  $('resultStats').innerHTML = parts.join(' · ');
+}
+
+$('btnRun').addEventListener('click', async () => {
+  const text = $('inputArea').value || "";
+  if (!text.trim()) {
+    $('status').innerHTML = '<span style="color:#b91c1c;">請先輸入或上傳清單</span>';
+    return;
+  }
+  const ops = collectOps();
+  $('btnRun').disabled = true;
+  $('status').textContent = "處理中…";
+  try {
+    const r = await fetch("/tools/text-list/process", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, ops }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+    _resultLines = j.lines;
+    $('outputArea').value = j.lines.join("\n");
+    setStats(j);
+    $('resultPanel').hidden = false;
+    $('status').textContent = "";
+    // scroll to result
+    $('resultPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (e) {
+    $('status').innerHTML = `<span style="color:#b91c1c;">錯誤：${escapeHtml(e.message)}</span>`;
+  } finally {
+    $('btnRun').disabled = false;
+  }
+});
+
+// ─────────── 全部複製 ───────────
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._h);
+  showToast._h = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+$('btnCopyAll').addEventListener('click', async () => {
+  const text = $('outputArea').value || "";
+  if (!text) { showToast('沒有可複製的內容'); return; }
+  const btn = $('btnCopyAll');
+  const orig = btn.innerHTML;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      // fallback for non-https / 老瀏覽器
+      $('outputArea').select();
+      document.execCommand('copy');
+      window.getSelection().removeAllRanges();
+    }
+    btn.classList.add('ok');
+    btn.innerHTML = '已複製 ✓';
+    showToast(`已複製 ${_resultLines.length.toLocaleString()} 行（${text.length.toLocaleString()} 字）`);
+    setTimeout(() => { btn.classList.remove('ok'); btn.innerHTML = orig; }, 1500);
+  } catch (e) {
+    showToast(`複製失敗：${e.message}`);
+  }
+});
+
+// ─────────── 下載 ───────────
+const exportMenu = $('exportMenu');
+$('btnExport').addEventListener('click', e => {
+  e.stopPropagation();
+  exportMenu.hidden = !exportMenu.hidden;
+});
+document.addEventListener('click', e => {
+  if (!exportMenu.contains(e.target) && e.target !== $('btnExport')) {
+    exportMenu.hidden = true;
+  }
+});
+exportMenu.querySelectorAll('button[data-fmt]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const fmt = btn.dataset.fmt;
+    exportMenu.hidden = true;
+    if (!_resultLines.length) { showToast('沒有可下載的內容'); return; }
+    showToast(`產生 ${fmt} 中…`);
+    try {
+      const r = await fetch(`/tools/text-list/export/${fmt}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lines: _resultLines, filename: _loadedFilename || "list" }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.detail || `HTTP ${r.status}`);
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // 從 Content-Disposition 抓檔名
+      const cd = r.headers.get('Content-Disposition') || "";
+      let fname = `list.${fmt}`;
+      const m = cd.match(/filename\*=UTF-8''([^;]+)/i) || cd.match(/filename="?([^";]+)"?/i);
+      if (m) fname = decodeURIComponent(m[1]);
+      a.download = fname;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast(`已下載 ${fname}`);
+    } catch (e) {
+      showToast(`下載失敗：${e.message}`);
+    }
+  });
+});
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[<>&"']/g, c =>
+    ({"<":"&lt;",">":"&gt;","&":"&amp;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+updateInputMeta();
+</script>
+{% endblock %}
