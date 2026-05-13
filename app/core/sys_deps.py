@@ -183,7 +183,34 @@ def _probe_office() -> dict:
     }
 
 
-def _probe_python_pkg(import_name: str) -> dict:
+def _probe_python_pkg(import_name: str, heavy: bool = False, dist_name: str = "") -> dict:
+    """探 Python package 是否已裝。
+
+    heavy=True：絕不 __import__（如 easyocr → 觸發 PyTorch 載入 ~700MB ~5-15 sec
+    讓 admin /sys-deps 整段卡到 fetch timeout，issue #17 客戶踩到）。改用
+    importlib.util.find_spec 純檔案系統判定，再用 importlib.metadata.version
+    讀 distribution metadata 取版本（不執行 module）。
+
+    dist_name：當 import name 跟 distribution name 不同時指定（如 PIL → Pillow）。
+    """
+    if heavy:
+        import importlib.util as _iu
+        try:
+            spec = _iu.find_spec(import_name)
+            if spec is None:
+                return {"installed": False, "version": "", "extra": "未安裝", "ok": False}
+            version = ""
+            try:
+                from importlib.metadata import version as _meta_version, PackageNotFoundError
+                try:
+                    version = _meta_version(dist_name or import_name)
+                except PackageNotFoundError:
+                    version = ""
+            except Exception:
+                pass
+            return {"installed": True, "version": str(version), "extra": "", "ok": True}
+        except Exception as e:
+            return {"installed": False, "version": "", "extra": str(e), "ok": False}
     try:
         mod = __import__(import_name)
         version = getattr(mod, "__version__", "")
@@ -326,11 +353,64 @@ def _probe_oxoffice_x11_libs() -> dict:
     }
 
 
+def _find_java_binary() -> str:
+    """跨平台找 java executable。先 PATH，再標準安裝位置。
+    Windows winget 裝 Eclipse Temurin / Microsoft OpenJDK / Oracle JDK 後
+    PATH 可能要重啟 process 才生效（issue #17 同模式：Java 已裝但 service
+    process 用舊 env，shutil.which 找不到）。fallback 直接掃常見位置。"""
+    binary = shutil.which("java")
+    if binary:
+        return binary
+    if _is_windows():
+        import glob as _glob
+        prog = os.environ.get("ProgramFiles", r"C:\Program Files")
+        prog86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        # Eclipse Temurin (winget EclipseAdoptium.Temurin.*) 預設位置：
+        #   C:\Program Files\Eclipse Adoptium\jdk-21.0.11.10-hotspot\bin\java.exe
+        #   C:\Program Files\Eclipse Adoptium\jre-21.0.11.10-hotspot\bin\java.exe
+        # 各家發行版命名都不同，用 glob 處理版本號 wildcard。
+        patterns = [
+            rf"{prog}\Eclipse Adoptium\*\bin\java.exe",
+            rf"{prog}\Microsoft\jdk-*\bin\java.exe",
+            rf"{prog}\Java\*\bin\java.exe",
+            rf"{prog}\Zulu\zulu-*\bin\java.exe",
+            rf"{prog}\AdoptOpenJDK\*\bin\java.exe",
+            rf"{prog}\BellSoft\LibericaJDK-*\bin\java.exe",
+            rf"{prog}\Amazon Corretto\*\bin\java.exe",
+            rf"{prog86}\Java\*\bin\java.exe",
+        ]
+        for pat in patterns:
+            matches = _glob.glob(pat)
+            if matches:
+                # 多個版本就挑路徑字串最新（lexicographic 通常 = 最新版）
+                return sorted(matches, reverse=True)[0]
+    elif _is_macos():
+        # macOS 用 /usr/libexec/java_home 處理多版本，但這需要 java 已被
+        # /usr/bin/java shim 識別。直接掃 JavaVirtualMachines。
+        candidates = [
+            "/usr/bin/java",
+            "/Library/Internet Plug-Ins/JavaAppletPlugin.plugin/Contents/Home/bin/java",
+        ]
+        import glob as _glob
+        candidates += sorted(
+            _glob.glob("/Library/Java/JavaVirtualMachines/*/Contents/Home/bin/java"),
+            reverse=True,
+        )
+        for c in candidates:
+            if os.path.exists(c):
+                return c
+    elif _is_linux():
+        for c in ["/usr/bin/java", "/usr/lib/jvm/default-java/bin/java"]:
+            if os.path.exists(c):
+                return c
+    return ""
+
+
 def _probe_java_runtime() -> dict:
     """Detect a Java Runtime — needed by OxOffice/LibreOffice for some
     legacy doc/odf operations. Tries `java -version` (writes to stderr)
     and parses the version line."""
-    java_bin = shutil.which("java")
+    java_bin = _find_java_binary()
     if not java_bin:
         return {
             "installed": False, "version": "", "extra": "找不到 java 執行檔",
@@ -486,7 +566,7 @@ _DEPS = [
         "impact": "v1.7.2 起的主 OCR 引擎，中日韓辨識準確度明顯優於 tesseract（per-line bbox + LSTM-based）。沒裝會自動降回 tesseract。重型依賴：pulls in PyTorch (~700MB)。",
         "impact_en": "Primary OCR engine since v1.7.2 (CJK accuracy >> tesseract). Falls back to tesseract if missing.",
         "soft": True,
-        "probe": lambda: _probe_python_pkg("easyocr"),
+        "probe": lambda: _probe_python_pkg("easyocr", heavy=True),
         "install_cmd": {
             "linux": f"{shutil.which('uv') or 'uv'} pip install easyocr  (auto-installs PyTorch ~700MB)",
             "macos": "uv pip install easyocr",
@@ -529,14 +609,27 @@ def collect_sys_deps(lang: str = "zh") -> list[dict]:
     page / JSON API. ``lang='en'`` swaps impact text to English (used by the
     CLI summary because Windows console can't always render CJK reliably).
     Never throws even if probe crashes.
+
+    v1.7.47：probes 改用 ThreadPoolExecutor 平行跑，總時間 = max(probe time)
+    而非 sum。office (5s) + java (5s) + tesseract (3s) + ... 之前要 13-23s
+    （issue #17 客戶 Win11 上 fetch timeout 看到「Failed to fetch」），
+    平行後 ~5s。順序維持原 _DEPS 列表順序給 UI 一致。
     """
     plat = _platform_key()
-    out = []
-    for dep in _DEPS:
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _run_one(dep):
         try:
-            probe = dep["probe"]()
+            return dep["probe"]()
         except Exception as e:
-            probe = {"installed": False, "version": "", "extra": f"probe error: {e}", "ok": False}
+            return {"installed": False, "version": "", "extra": f"probe error: {e}", "ok": False}
+
+    out = []
+    # 8 個 worker 對應 ~9 個 deps；I/O bound (subprocess.run / file checks) 走
+    # threading 沒 GIL 問題。
+    with ThreadPoolExecutor(max_workers=8, thread_name_prefix="sysdep-probe") as ex:
+        results = list(ex.map(_run_one, _DEPS))
+    for dep, probe in zip(_DEPS, results):
         ok = bool(probe.get("ok", probe.get("installed")))
         impact = dep.get("impact_en") if lang == "en" else dep["impact"]
         out.append({
