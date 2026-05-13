@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
-{% block title %}電子發票掃描 · {{ app_name }}{% endblock %}
+{% block title %}電子發票處理 · {{ app_name }}{% endblock %}
 {% block head %}
 <style>
 .es-warn {
@@ -143,17 +143,54 @@
   font-variant-numeric: tabular-nums;
 }
 .es-buffer-toolbar .info b { color: #1e293b; }
-.es-buffer-toolbar .right { margin-left: auto; display: flex; gap: 6px; }
+.es-buffer-toolbar .right {
+  margin-left: auto; display: flex; gap: 6px;
+  flex-wrap: wrap;  /* 手機按鈕擠時自動換行，不要垂直擠掉每顆按鈕的文字 */
+}
 .es-mini-btn {
   font-size: 12px; padding: 4px 10px; background: #f1f5f9;
   border: 1px solid #e2e8f0; border-radius: 4px; color: #475569;
   cursor: pointer;
+  white-space: nowrap;  /* 按鈕內文字一律單行；toolbar 換行而不是按鈕內文字換行 */
+  display: inline-flex; align-items: center; gap: 4px;
 }
 .es-mini-btn:hover { background: #e2e8f0; }
 .es-mini-btn.danger { color: #b91c1c; }
 .es-mini-btn.danger:hover { background: #fee2e2; }
 
-.es-table-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 6px; }
+/* 手機版：隱藏「設定」「匯出」「重抓科目」 — 這幾個操作桌面做就好
+   （設定存在 server / per user，手機與桌面共用）。手機只留掃描需要
+   的：自動更新 / 重新整理 / 刪除選取 / 全部清空。 */
+@media (max-width: 640px) {
+  .es-buffer-toolbar #btnSettings,
+  .es-buffer-toolbar .es-export-wrap,
+  .es-buffer-toolbar .es-desktop-only { display: none !important; }
+}
+
+.es-table-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-radius: 6px; position: relative; }
+/* LLM 判讀進行中：半透遮罩 + 中央 spinner，鎖定整個表格不能誤觸 */
+.es-busy-overlay {
+  position: absolute; inset: 0; z-index: 50;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.75); backdrop-filter: blur(1px);
+  pointer-events: all;  /* 攔截所有點擊 */
+  user-select: none;
+}
+.es-busy-spinner {
+  width: 36px; height: 36px;
+  border: 4px solid #cbd5e1; border-top-color: #2563eb;
+  border-radius: 50%; animation: es-spin 0.9s linear infinite;
+  margin-bottom: 12px;
+}
+.es-busy-text {
+  font-size: 14px; color: #1e293b; font-weight: 600;
+  background: rgba(255,255,255,0.9); padding: 6px 14px; border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.es-busy-sub {
+  font-size: 11.5px; color: #64748b; margin-top: 4px;
+}
+@keyframes es-spin { to { transform: rotate(360deg); } }
 
 /* 欄位設定面板 — 摺疊在表格上方 */
 .es-settings-panel {
@@ -167,26 +204,47 @@
 .es-settings-panel h3 {
   margin: 0 0 8px; font-size: 13px; color: #1e293b;
 }
-.es-settings-fields {
+.es-fc-hdr {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 6px;
+  grid-template-columns: 18px 140px 1fr;
+  align-items: center; gap: 10px;
+  padding: 4px 10px; margin-bottom: 4px;
+  font-size: 11.5px; color: #64748b; font-weight: 600;
+  background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px;
+}
+.es-fc-hdr .hdr-export {
+  font-weight: 600;
+}
+.es-settings-fields {
+  display: flex; flex-direction: column; gap: 4px;
 }
 .es-field-card {
-  display: flex; align-items: center; gap: 8px;
+  display: grid;
+  grid-template-columns: 18px 140px 1fr;
+  align-items: center; gap: 10px;
   background: #fff; border: 1px solid #e5e7eb; border-radius: 4px;
-  padding: 6px 10px;
+  padding: 5px 10px;
   font-size: 12.5px;
 }
 .es-field-card.dragging { opacity: 0.4; }
-.es-field-card.drop-before { box-shadow: -3px 0 0 #2563eb inset, 0 -3px 0 #2563eb; }
-.es-field-card.drop-after  { box-shadow: -3px 0 0 #2563eb inset, 0  3px 0 #2563eb; }
+.es-field-card.drop-before { box-shadow: 0 -3px 0 #2563eb inset; }
+.es-field-card.drop-after  { box-shadow: 0  3px 0 #2563eb inset; }
 .es-field-card .grab {
   cursor: grab; color: #94a3b8; user-select: none;
-  padding: 0 2px;
+  padding: 0 2px; text-align: center;
 }
 .es-field-card .grab:active { cursor: grabbing; }
-.es-field-card label { flex: 1; cursor: pointer; }
+.es-field-card .fc-toggle {
+  cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.es-field-card .fc-export-label {
+  width: 100%; box-sizing: border-box;
+  font-size: 12px; padding: 4px 8px;
+  border: 1px solid #cbd5e1; border-radius: 4px;
+  font-family: inherit;
+}
+.es-field-card .fc-export-label:focus { outline: 2px solid #93c5fd; outline-offset: 0; border-color: #2563eb; }
 .es-settings-actions {
   display: flex; gap: 8px; margin-top: 10px; align-items: center;
 }
@@ -205,7 +263,9 @@
   background: none; border: 0; padding: 8px 14px; cursor: pointer;
   font-size: 13px; color: #64748b; font-weight: 500;
   border-bottom: 2px solid transparent; margin-bottom: -1px;
+  display: inline-flex; align-items: center; gap: 6px;
 }
+.es-tabs button .ic { stroke: currentColor; }
 .es-tabs button:hover { color: #1e293b; }
 .es-tabs button.active {
   color: #1d4ed8; border-bottom-color: #2563eb; font-weight: 600;
@@ -251,6 +311,88 @@
 }
 .es-my-vat-row input:focus { outline: 2px solid #93c5fd; outline-offset: 0; }
 .es-my-vat-row .hint { font-size: 11.5px; color: #94a3b8; }
+
+/* 當期發票檢查 panel */
+.es-period-block {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;
+  padding: 10px 14px;
+}
+.es-period-title {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  font-size: 13px;
+}
+.es-period-panel {
+  margin-top: 10px;
+  transition: opacity 0.15s;
+}
+.es-period-panel.disabled {
+  opacity: 0.5; pointer-events: none;
+}
+.es-period-modetabs {
+  display: inline-flex; gap: 0;
+  border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden;
+  margin-bottom: 8px;
+}
+.es-period-modetabs button {
+  padding: 5px 12px; font-size: 12px;
+  background: #f8fafc; border: 0; color: #64748b; cursor: pointer;
+  border-right: 1px solid #e2e8f0;
+}
+.es-period-modetabs button:last-child { border-right: 0; }
+.es-period-modetabs button.active {
+  background: #2563eb; color: #fff;
+}
+.es-period-modetabs button:hover:not(.active) { background: #f1f5f9; color: #1e293b; }
+
+.es-period-panel .hint {
+  font-size: 11.5px; color: #64748b; margin: 0 0 8px;
+}
+.es-period-chips {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.es-period-chip {
+  padding: 6px 10px; border-radius: 6px;
+  background: #fff; border: 1px solid #cbd5e1; color: #475569;
+  font-size: 12px; cursor: pointer; user-select: none;
+  font-variant-numeric: tabular-nums;
+  display: flex; flex-direction: column; gap: 2px;
+  text-align: center;
+}
+.es-period-chip:hover { background: #f1f5f9; border-color: #94a3b8; }
+.es-period-chip.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+.es-period-chip .label-main { font-weight: 600; }
+.es-period-chip .range {
+  font-size: 10.5px; opacity: 0.75;
+}
+@media (max-width: 720px) {
+  .es-period-chips { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .es-period-chips { grid-template-columns: 1fr; }
+}
+.es-period-custom {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 12.5px; color: #475569;
+}
+.es-period-custom input[type=date] {
+  font-size: 13px; padding: 4px 8px;
+  border: 1px solid #cbd5e1; border-radius: 4px;
+  font-family: inherit;
+}
+.es-period-custom input[type=date]:focus {
+  outline: 2px solid #93c5fd; outline-offset: 0; border-color: #2563eb;
+}
+.es-period-preview {
+  margin-top: 10px; padding: 8px 12px;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px;
+  font-size: 12px; color: #475569;
+}
+.es-period-preview.active {
+  background: #ecfdf5; border-color: #86efac; color: #166534;
+}
+.es-period-preview.empty { color: #94a3b8; }
 
 /* 細節 modal */
 .es-modal-backdrop {
@@ -331,9 +473,18 @@
   width: 14px; height: 14px; cursor: pointer;
 }
 .es-table .num { text-align: right; }
+/* 表尾總計列 */
+.es-table tfoot tr.es-foot-row td {
+  background: #f8fafc;
+  border-top: 2px solid #cbd5e1;
+  font-size: 13px; padding: 8px;
+  position: sticky; bottom: 0;
+}
+.es-table tfoot tr.es-foot-row:hover td { background: #f8fafc; }
 .es-table .del-btn {
   background: none; border: 0; color: #94a3b8; cursor: pointer;
-  padding: 2px 6px; font-size: 16px; line-height: 1;
+  padding: 4px 6px; line-height: 0;
+  display: inline-flex; align-items: center;
 }
 .es-table .del-btn:hover { color: #b91c1c; }
 .es-empty {
@@ -350,11 +501,62 @@
 .es-toast.show { opacity: 1; }
 .es-toast.ok { background: #059669; }
 .es-toast.err { background: #b91c1c; }
+
+/* 手機掃描 QR Modal — 桌面顯示，手機通常用不到（但不擋） */
+.es-handoff-fab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: 999px;
+  background: rgba(255,255,255,0.95); color: #1f2937;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 8px rgba(15,23,42,0.08);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  font-family: inherit;
+}
+.es-handoff-fab:hover { background: #f3f4f6; box-shadow: 0 4px 14px rgba(15,23,42,0.12); }
+.es-handoff-fab .ic { stroke: currentColor; }
+@media (max-width: 640px) {
+  /* 手機本來就在手機上，沒必要再給自己手機掃描 */
+  .es-handoff-fab { display: none; }
+}
+.es-handoff-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(15,23,42,0.55); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center;
+}
+.es-handoff-card {
+  background: #fff; border-radius: 12px; padding: 24px 28px;
+  max-width: 360px; box-shadow: 0 16px 48px rgba(0,0,0,0.35);
+  text-align: center;
+}
+.es-handoff-card h3 { margin: 0 0 8px; font-size: 16px; color: #0f172a; }
+.es-handoff-card p { font-size: 13px; color: #475569; margin: 0 0 14px; line-height: 1.5; }
+.es-handoff-card img {
+  display: block; margin: 0 auto 14px; width: 240px; height: 240px;
+  border: 1px solid #e2e8f0; border-radius: 6px; background: #fff;
+}
+.es-handoff-card .url {
+  font-size: 11px; color: #64748b; word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: #f8fafc; padding: 6px 10px; border-radius: 4px;
+  margin-bottom: 14px;
+}
+.es-handoff-card button {
+  padding: 7px 18px; font-size: 13px; border-radius: 6px;
+  background: #2563eb; color: #fff; border: 0; cursor: pointer;
+}
+.es-handoff-card button:hover { background: #1d4ed8; }
 </style>
 {% endblock %}
 
+{% block right_fab %}
+<button type="button" class="es-handoff-fab" id="esHandoffFab"
+        title="顯示 QR Code 用手機接續掃描" aria-label="手機掃描">
+  {{ icon('qr', size=16) }}<span>手機掃描</span>
+</button>
+{% endblock %}
+
 {% block content %}
-<h1>{{ icon('qr', size=22) }} 電子發票掃描</h1>
+<h1>{{ icon('qr', size=22) }} 電子發票處理</h1>
 <p class="muted">上傳發票照片或 PDF，自動掃描 QR Code 解出發票號碼 / 日期 / 金額 / 統編。手機可直接拍照，掃完的資料會即時同步到電腦端的列表（同一帳號跨裝置共用）。</p>
 
 {% if not qr_backend_available %}
@@ -423,22 +625,34 @@
     <h2 style="margin: 0;">2. 已掃描清單</h2>
     <div class="info" id="bufferInfo">— / 1000</div>
     <div class="right">
-      <label style="font-size: 12px; color: #64748b; display: inline-flex; align-items: center; gap: 4px;">
+      <label style="font-size: 12px; color: #64748b; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;">
         <input type="checkbox" id="autoRefresh" checked> 自動更新
       </label>
       <button type="button" class="es-mini-btn" id="btnSettings" title="欄位顯示設定">{{ icon('gear', size=12) }} 設定</button>
       <span class="es-export-wrap" style="position:relative; display:inline-block;">
         <button type="button" class="es-mini-btn" id="btnExport">{{ icon('download', size=12) }} 匯出 ▾</button>
-        <span id="exportMenu" hidden style="position:absolute; top:100%; right:0; margin-top:2px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.1); min-width:160px; padding:4px 0; z-index:100;">
-          <button type="button" data-fmt="csv" style="display:block; width:100%; text-align:left; padding:6px 12px; background:none; border:0; font-size:12.5px; cursor:pointer; color:#1e293b;">.csv (Excel)</button>
-          <button type="button" data-fmt="xlsx" style="display:block; width:100%; text-align:left; padding:6px 12px; background:none; border:0; font-size:12.5px; cursor:pointer; color:#1e293b;">.xlsx 試算表</button>
-          <button type="button" data-fmt="json" style="display:block; width:100%; text-align:left; padding:6px 12px; background:none; border:0; font-size:12.5px; cursor:pointer; color:#1e293b;">.json (raw)</button>
-          <label style="display:flex; align-items:center; gap:4px; padding:6px 12px; border-top:1px solid #f1f5f9; font-size:11.5px; color:#64748b;">
-            <input type="checkbox" id="exportClearAfter"> 匯出後清空 buffer
-          </label>
+        <span id="exportMenu" hidden style="position:absolute; top:100%; right:0; margin-top:2px; background:#fff; border:1px solid #e5e7eb; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.1); padding:4px 0; z-index:100;">
+          <button type="button" data-fmt="xlsx" style="display:block; width:100%; text-align:left; padding:6px 12px; background:none; border:0; font-size:12.5px; cursor:pointer; color:#1e293b;">.xlsx</button>
+          <button type="button" data-fmt="ods"  style="display:block; width:100%; text-align:left; padding:6px 12px; background:none; border:0; font-size:12.5px; cursor:pointer; color:#1e293b;">.ods</button>
+          <button type="button" data-fmt="csv"  style="display:block; width:100%; text-align:left; padding:6px 12px; background:none; border:0; font-size:12.5px; cursor:pointer; color:#1e293b;">.csv</button>
+          <button type="button" data-fmt="json" style="display:block; width:100%; text-align:left; padding:6px 12px; background:none; border:0; font-size:12.5px; cursor:pointer; color:#1e293b;">.json</button>
+          <button type="button" data-fmt="xml"  style="display:block; width:100%; text-align:left; padding:6px 12px; background:none; border:0; font-size:12.5px; cursor:pointer; color:#1e293b;">.xml</button>
+          <button type="button" data-fmt="txt"  style="display:block; width:100%; text-align:left; padding:6px 12px; background:none; border:0; font-size:12.5px; cursor:pointer; color:#1e293b;">.txt</button>
+          <button type="button" data-fmt="md"   style="display:block; width:100%; text-align:left; padding:6px 12px; background:none; border:0; font-size:12.5px; cursor:pointer; color:#1e293b;">.md</button>
         </span>
       </span>
       <button type="button" class="es-mini-btn" id="btnRefresh">{{ icon('refresh', size=12) }} 重新整理</button>
+      <button type="button" class="es-mini-btn es-desktop-only" id="btnReclassify"
+              title="對 buffer 內所有發票重新跑「賣方反查 + 會計科目分類」（不影響掃描資料，只更新自動帶入的賣方名稱 / 行業 / 科目）">
+        {{ icon('refresh', size=12) }} 重抓科目
+      </button>
+      <button type="button" class="es-mini-btn es-desktop-only" id="btnLlmClassify"
+              {% if not llm_enabled %}disabled
+              title="LLM 功能未啟用 — 請到 /admin/llm 設定"
+              {% else %}title="批次送 LLM 判讀所有發票科目（依據賣方統編 / 名稱 / 行業）"
+              {% endif %}>
+        {{ icon('sparkles', size=12) }} LLM 判讀科目
+      </button>
       <button type="button" class="es-mini-btn danger" id="btnDeleteSelected" hidden>{{ icon('trash', size=12) }} 刪除選取 (<span id="selectedCount">0</span>)</button>
       <button type="button" class="es-mini-btn danger" id="btnClear">{{ icon('trash', size=12) }} 全部清空</button>
     </div>
@@ -447,14 +661,20 @@
   <!-- 設定面板（預設摺疊；按 ⚙️ 欄位 開啟） -->
   <div class="es-settings-panel" id="settingsPanel" hidden>
     <div class="es-tabs">
-      <button type="button" data-tab="display" class="active">欄位顯示</button>
-      <button type="button" data-tab="format">欄位格式</button>
-      <button type="button" data-tab="check">報帳檢查</button>
+      <button type="button" data-tab="display" class="active">{{ icon('columns', size=14) }} 欄位顯示</button>
+      <button type="button" data-tab="format">{{ icon('edit', size=14) }} 欄位格式</button>
+      <button type="button" data-tab="check">{{ icon('shield', size=14) }} 報帳檢查</button>
+      <button type="button" data-tab="rules">{{ icon('gear', size=14) }} 會計科目規則</button>
     </div>
 
     <!-- Tab 1：欄位顯示 / 排序 -->
     <div data-tab-pane="display">
       <p style="margin: 0 0 8px; font-size: 11.5px; color: #64748b;">勾選顯示哪些欄位；拖曳左側 ⋮⋮ 把手調整順序。設定變更立即套用，並同步到帳號（手機 / 電腦共用）。</p>
+      <div class="es-fc-hdr">
+        <span class="hdr-grab"></span>
+        <span class="hdr-name">顯示欄位</span>
+        <span class="hdr-export">匯出欄位標題（CSV / XLSX / ODS / TXT / MD 用；留空 = 同左）</span>
+      </div>
       <div class="es-settings-fields" id="settingsFields"></div>
     </div>
 
@@ -472,6 +692,56 @@
         <input type="text" id="myCompanyVat" maxlength="8" placeholder="8 位數字 / 留空關閉檢查">
         <span class="hint">必須是 8 位數字。空白 = 不檢查</span>
       </div>
+
+      <hr style="margin:14px 0; border:0; border-top:1px solid #e2e8f0;">
+
+      <div class="es-period-block">
+        <div class="es-period-title">
+          <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+            <input type="checkbox" id="periodCheckEnabled">
+            <span><b>當期發票檢查</b></span>
+          </label>
+          <span style="font-size:11.5px; color:#64748b; margin-left:10px;">
+            開立日期不在期內 → 表格中標警告
+          </span>
+        </div>
+
+        <div id="periodPanel" class="es-period-panel">
+          <div class="es-period-modetabs">
+            <button type="button" data-period-mode="auto" class="active">自動 / 選期</button>
+            <button type="button" data-period-mode="custom">自訂日期範圍</button>
+          </div>
+
+          <div data-period-pane="auto">
+            <p class="hint">系統依今日自動推算「現在要報的這一期」（4/28 / 5/10 都報 3-4 月期）。若需指定別期請點 chip 切換。</p>
+            <div id="periodChips" class="es-period-chips"></div>
+          </div>
+
+          <div data-period-pane="custom" hidden>
+            <p class="hint">自行指定日期區間（不限期別格式）。</p>
+            <div class="es-period-custom">
+              <label>起始 <input type="date" id="periodCustomStart"></label>
+              <span style="color:#94a3b8;">～</span>
+              <label>結束 <input type="date" id="periodCustomEnd"></label>
+            </div>
+          </div>
+
+          <div id="periodPreview" class="es-period-preview">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 4：會計科目自訂規則 -->
+    <div data-tab-pane="rules" hidden>
+      <p style="margin: 0 0 8px; font-size: 11.5px; color: #64748b;">
+        加自訂規則：賣方<b>行業</b>或<b>名稱</b>包含 keyword 時，自動指定該會計科目。<b>自訂規則優先級高於內建</b>，可用來覆寫或補強。每筆規則可填多個 keyword（逗號分隔）。
+      </p>
+      <div id="rulesList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;"></div>
+      <button type="button" class="es-mini-btn" id="btnAddRule">{{ icon('plus', size=12) }} 新增規則</button>
+      <details style="margin-top:14px;">
+        <summary style="font-size:12px; color:#64748b; cursor:pointer;">查看內建規則（共 <span id="builtinRuleCount">…</span> 條）</summary>
+        <div id="builtinRules" style="margin-top:8px; max-height:300px; overflow:auto; font-size:11.5px; color:#475569; border:1px solid #e2e8f0; border-radius:4px; padding:8px;"></div>
+      </details>
     </div>
 
     <div class="es-settings-actions">
@@ -484,7 +754,13 @@
     <table class="es-table" id="bufferTable">
       <thead id="bufferThead"></thead>
       <tbody id="bufferTbody"></tbody>
+      <tfoot id="bufferTfoot"></tfoot>
     </table>
+    <div class="es-busy-overlay" id="tableBusyOverlay" hidden>
+      <div class="es-busy-spinner"></div>
+      <div class="es-busy-text" id="tableBusyText">處理中…</div>
+      <div class="es-busy-sub" id="tableBusySub"></div>
+    </div>
   </div>
 </div>
 
@@ -595,11 +871,8 @@ function cellValue(invoice, fieldId, rowIndex) {
     return applyFormat('tax', invoice.amount_total - invoice.amount_untaxed);
   }
   if (fieldId === 'note') return invoice.note || '';
-  if (fieldId === 'items') {
-    if (Array.isArray(invoice.items)) return `${invoice.items.length} 項`;
-    return '';
-  }
   if (fieldId === 'seller_name') return invoice.seller_name || '';
+  if (fieldId === 'accounting_subject') return invoice.accounting_subject || '';
   return applyFormat(fieldId, invoice[fieldId]);
 }
 
@@ -609,6 +882,7 @@ async function uploadFiles(files) {
   const arr = Array.from(files);
   $('status').innerHTML = `<span>掃描中…(${arr.length} 張)</span>`;
   let totalAdded = 0, totalDup = 0, totalErr = 0;
+  let totalRightOnly = 0;  // 影像只掃到右側 QR (沒主 QR) 的張數
   for (const f of arr) {
     const fd = new FormData();
     fd.append('file', f);
@@ -618,6 +892,9 @@ async function uploadFiles(files) {
       if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
       totalAdded += j.added_count || 0;
       totalDup += (j.duplicates || []).length;
+      if ((j.parsed_count || 0) === 0 && (j.right_qr_count || 0) > 0) {
+        totalRightOnly++;
+      }
     } catch (e) {
       totalErr++;
       console.error(`Failed to scan ${f.name}:`, e);
@@ -626,6 +903,7 @@ async function uploadFiles(files) {
   let msg = `掃描完成：新增 ${totalAdded} 張`;
   if (totalDup) msg += `，跳過重複 ${totalDup} 張`;
   if (totalErr) msg += `，${totalErr} 張失敗`;
+  if (totalRightOnly) msg += `，${totalRightOnly} 張只掃到右側品項 QR（需含發票左側主 QR）`;
   $('status').innerHTML = `<span class="ok">${escapeHtml(msg)}</span>`;
   showToast(msg, totalAdded ? 'ok' : (totalErr ? 'err' : ''));
   await loadBuffer();
@@ -671,8 +949,12 @@ async function loadSettings() {
     // 初始 settings 缺欄位 fallback 空物件
     if (!_settings.field_formats) _settings.field_formats = {};
     if (!_settings.my_company_vat) _settings.my_company_vat = '';
+    if (!Array.isArray(_settings.accounting_rules)) _settings.accounting_rules = [];
+    if (!_settings.period_check) _settings.period_check = {enabled:false, mode:'auto', custom_start:'', custom_end:''};
     renderSettingsPanel();
     renderFormatsPanel();
+    renderRulesPanel();
+    await renderPeriodCheck();
     if ($('myCompanyVat')) $('myCompanyVat').value = _settings.my_company_vat;
   } catch (e) {
     console.error('loadSettings failed:', e);
@@ -686,13 +968,30 @@ function renderSettingsPanel() {
   const orderedDefs = _settings.column_order
     .map(id => _fieldDefs.find(f => f.id === id))
     .filter(Boolean);
+  if (!_settings.export_labels) _settings.export_labels = {};
+  // 必選欄位（永遠顯示，使用者不能拿掉）
+  const REQUIRED_FIELDS = new Set(['invoice_number']);
   container.innerHTML = orderedDefs.map(def => {
-    const checked = _settings.visible_columns.includes(def.id) ? 'checked' : '';
+    const isReq = REQUIRED_FIELDS.has(def.id);
+    const checked = (isReq || _settings.visible_columns.includes(def.id)) ? 'checked' : '';
+    const disabled = isReq ? 'disabled' : '';
+    const reqMark = isReq ? '<span style="color:#94a3b8; font-size:11px; margin-left:4px;" title="必選欄位">（必選）</span>' : '';
+    const customLabel = _settings.export_labels[def.id] || '';
     return `<div class="es-field-card" data-field="${escapeHtml(def.id)}" draggable="false">
       <span class="grab" title="拖曳調整順序">⋮⋮</span>
-      <label><input type="checkbox" data-toggle ${checked}> ${escapeHtml(def.label)}</label>
+      <label class="fc-toggle"><input type="checkbox" data-toggle ${checked} ${disabled}> ${escapeHtml(def.label)}${reqMark}</label>
+      <input type="text" data-export-label class="fc-export-label"
+             placeholder="${escapeHtml(def.label)}" value="${escapeHtml(customLabel)}"
+             maxlength="64"
+             title="自訂匯出時的欄位標題（留空 = 用內建「${escapeHtml(def.label)}」）">
     </div>`;
   }).join('');
+  // 保證必選欄位在 visible_columns 內
+  for (const id of REQUIRED_FIELDS) {
+    if (!_settings.visible_columns.includes(id)) {
+      _settings.visible_columns.push(id);
+    }
+  }
   // Wire toggle events
   container.querySelectorAll('[data-toggle]').forEach(cb => {
     cb.addEventListener('change', () => {
@@ -705,6 +1004,16 @@ function renderSettingsPanel() {
         _settings.visible_columns = _settings.visible_columns.filter(c => c !== fieldId);
       }
       renderBufferRows();         // 立即更新表格
+      scheduleSettingsSave();
+    });
+  });
+  // Wire export label inputs
+  container.querySelectorAll('[data-export-label]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const fieldId = inp.closest('.es-field-card').dataset.field;
+      const v = inp.value.trim();
+      if (v) _settings.export_labels[fieldId] = v;
+      else delete _settings.export_labels[fieldId];
       scheduleSettingsSave();
     });
   });
@@ -776,6 +1085,7 @@ async function saveSettings() {
         column_order: _settings.column_order,
         field_formats: _settings.field_formats,
         my_company_vat: _settings.my_company_vat,
+        accounting_rules: _settings.accounting_rules,
       }),
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -803,6 +1113,282 @@ document.querySelectorAll('.es-tabs button').forEach(btn => {
 });
 
 // 格式設定面板渲染：把同 group (amount) 的欄位合併顯示一個 group
+// ── 會計科目自訂規則 ──
+// ── 當期發票檢查 ──
+let _periodInfo = null;   // {latest, recent}
+let _activePeriod = null; // 計算後實際 effective {start, end} 給 row 警告用
+
+async function renderPeriodCheck() {
+  const enabledCb = $('periodCheckEnabled');
+  if (!enabledCb) return;
+  try {
+    const r = await fetch('/tools/einvoice-scan/period-info');
+    if (r.ok) _periodInfo = await r.json();
+  } catch (_) {}
+  const pc = _settings.period_check || {};
+  enabledCb.checked = !!pc.enabled;
+  // mode tabs
+  document.querySelectorAll('[data-period-mode]').forEach(b => {
+    b.classList.toggle('active', b.dataset.periodMode === (pc.mode || 'auto'));
+  });
+  document.querySelectorAll('[data-period-pane]').forEach(p => {
+    p.hidden = p.dataset.periodPane !== (pc.mode || 'auto');
+  });
+  // chips
+  _renderPeriodChips();
+  // custom dates
+  if ($('periodCustomStart')) $('periodCustomStart').value = pc.custom_start || '';
+  if ($('periodCustomEnd'))   $('periodCustomEnd').value = pc.custom_end || '';
+  // panel enabled/disabled
+  $('periodPanel').classList.toggle('disabled', !pc.enabled);
+  _updateActivePeriod();
+  _renderPeriodPreview();
+}
+
+function _renderPeriodChips() {
+  const wrap = $('periodChips');
+  if (!wrap || !_periodInfo) return;
+  const pc = _settings.period_check || {};
+  // 選定的 chip：若 pc.custom_start/end 是某 period 的就標 active；
+  // 否則預設 latest
+  let activeKey = null;
+  if (pc.mode === 'auto') {
+    if (pc.custom_start && pc.custom_end) {
+      activeKey = pc.custom_start + '|' + pc.custom_end;
+    } else if (_periodInfo.latest) {
+      activeKey = _periodInfo.latest.start + '|' + _periodInfo.latest.end;
+    }
+  }
+  wrap.innerHTML = _periodInfo.recent.map(p => {
+    const key = p.start + '|' + p.end;
+    const active = key === activeKey ? ' active' : '';
+    return `<div class="es-period-chip${active}" data-key="${escapeHtml(key)}" data-start="${escapeHtml(p.start)}" data-end="${escapeHtml(p.end)}">
+      <span class="label-main">${escapeHtml(p.label)}</span>
+      <span class="range">${escapeHtml(p.start)} ~ ${escapeHtml(p.end)}</span>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('.es-period-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      if (!_settings.period_check) _settings.period_check = {};
+      _settings.period_check.custom_start = chip.dataset.start;
+      _settings.period_check.custom_end = chip.dataset.end;
+      wrap.querySelectorAll('.es-period-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      _updateActivePeriod();
+      _renderPeriodPreview();
+      renderBufferRows();
+      scheduleSettingsSave();
+    });
+  });
+}
+
+function _updateActivePeriod() {
+  const pc = _settings.period_check || {};
+  if (!pc.enabled) { _activePeriod = null; return; }
+  if (pc.mode === 'custom') {
+    if (pc.custom_start && pc.custom_end) {
+      _activePeriod = {start: pc.custom_start, end: pc.custom_end, label: '自訂日期範圍'};
+    } else {
+      _activePeriod = null;
+    }
+  } else {
+    // auto: 用 chip 選的；若 settings 沒值就用 latest
+    if (pc.custom_start && pc.custom_end) {
+      const matched = _periodInfo && _periodInfo.recent.find(p =>
+        p.start === pc.custom_start && p.end === pc.custom_end);
+      _activePeriod = {
+        start: pc.custom_start, end: pc.custom_end,
+        label: matched ? matched.label : '指定期',
+      };
+    } else if (_periodInfo && _periodInfo.latest) {
+      _activePeriod = {
+        start: _periodInfo.latest.start,
+        end: _periodInfo.latest.end,
+        label: _periodInfo.latest.label,
+      };
+    }
+  }
+}
+
+function _renderPeriodPreview() {
+  const pv = $('periodPreview');
+  if (!pv) return;
+  const pc = _settings.period_check || {};
+  pv.className = 'es-period-preview';
+  if (!pc.enabled) {
+    pv.classList.add('empty');
+    pv.textContent = '（未啟用 — 啟用後表格內不在期內的發票會標警告）';
+    return;
+  }
+  if (!_activePeriod) {
+    pv.classList.add('empty');
+    pv.textContent = '請選擇期間或自訂日期範圍';
+    return;
+  }
+  pv.classList.add('active');
+  pv.innerHTML = `套用期間：<b>${escapeHtml(_activePeriod.label)}</b> · ${escapeHtml(_activePeriod.start)} ~ ${escapeHtml(_activePeriod.end)}`;
+}
+
+// 啟用開關
+$('periodCheckEnabled').addEventListener('change', () => {
+  if (!_settings.period_check) _settings.period_check = {mode:'auto', custom_start:'', custom_end:''};
+  _settings.period_check.enabled = $('periodCheckEnabled').checked;
+  $('periodPanel').classList.toggle('disabled', !_settings.period_check.enabled);
+  _updateActivePeriod();
+  _renderPeriodPreview();
+  renderBufferRows();
+  scheduleSettingsSave();
+});
+
+// Mode tabs
+document.querySelectorAll('[data-period-mode]').forEach(b => {
+  b.addEventListener('click', () => {
+    const mode = b.dataset.periodMode;
+    if (!_settings.period_check) _settings.period_check = {};
+    _settings.period_check.mode = mode;
+    document.querySelectorAll('[data-period-mode]').forEach(x =>
+      x.classList.toggle('active', x === b));
+    document.querySelectorAll('[data-period-pane]').forEach(p =>
+      p.hidden = p.dataset.periodPane !== mode);
+    // 切到 auto 時：若無 chip 選擇，預設 latest
+    if (mode === 'auto' && (!_settings.period_check.custom_start) && _periodInfo) {
+      _settings.period_check.custom_start = _periodInfo.latest.start;
+      _settings.period_check.custom_end = _periodInfo.latest.end;
+      _renderPeriodChips();
+    }
+    _updateActivePeriod();
+    _renderPeriodPreview();
+    renderBufferRows();
+    scheduleSettingsSave();
+  });
+});
+
+// 自訂日期 inputs
+['periodCustomStart', 'periodCustomEnd'].forEach(id => {
+  const el = $(id);
+  if (!el) return;
+  el.addEventListener('change', () => {
+    if (!_settings.period_check) _settings.period_check = {};
+    _settings.period_check.custom_start = $('periodCustomStart').value || '';
+    _settings.period_check.custom_end = $('periodCustomEnd').value || '';
+    _updateActivePeriod();
+    _renderPeriodPreview();
+    renderBufferRows();
+    scheduleSettingsSave();
+  });
+});
+
+function _isInActivePeriod(invDateStr) {
+  if (!_activePeriod || !invDateStr) return true;
+  // 嘗試多種日期格式 (ISO / 民國)
+  const d = _parseDateLoose(invDateStr);
+  if (!d) return true;  // 解析不出來 = 不警告
+  const s = _parseDateLoose(_activePeriod.start);
+  const e = _parseDateLoose(_activePeriod.end);
+  if (!s || !e) return true;
+  return d >= s && d <= e;
+}
+
+function _parseDateLoose(s) {
+  if (!s) return null;
+  s = String(s).trim();
+  for (const sep of ['-', '/']) {
+    const parts = s.split(sep);
+    if (parts.length === 3) {
+      let y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+      if (isNaN(y) || isNaN(m) || isNaN(d)) continue;
+      if (y < 1911) y += 1911;
+      return new Date(y, m - 1, d);
+    }
+  }
+  return null;
+}
+
+function renderRulesPanel() {
+  const wrap = $('rulesList');
+  if (!wrap) return;
+  const rules = _settings.accounting_rules || [];
+  if (!rules.length) {
+    wrap.innerHTML = '<div style="font-size:11.5px; color:#94a3b8; padding:6px;">尚無自訂規則。內建規則已涵蓋常見公司類型；自訂規則優先級更高，可用於覆寫或補強。</div>';
+    return;
+  }
+  wrap.innerHTML = rules.map((r, idx) => `
+    <div class="es-rule-row" data-idx="${idx}" style="display:grid; grid-template-columns: 80px 1fr 1fr 24px; gap:6px; align-items:center; padding:6px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px;">
+      <select class="rule-match" data-idx="${idx}" style="font-size:12px; padding:3px;">
+        <option value="any"${r.match==='any'?' selected':''}>任一</option>
+        <option value="industries"${r.match==='industries'?' selected':''}>僅行業</option>
+        <option value="name"${r.match==='name'?' selected':''}>僅名稱</option>
+      </select>
+      <input type="text" class="rule-keywords" data-idx="${idx}" value="${escapeHtml((r.keywords||[]).join(', '))}" placeholder="keyword1, keyword2, ..." style="font-size:12px; padding:4px 6px;">
+      <input type="text" class="rule-subject" data-idx="${idx}" value="${escapeHtml(r.subject||'')}" placeholder="科目名稱 (例 油料費)" style="font-size:12px; padding:4px 6px;">
+      <button type="button" class="rule-del" data-idx="${idx}" title="刪除" style="background:none; border:0; color:#ef4444; cursor:pointer; font-size:16px;">×</button>
+    </div>`).join('');
+  // 事件
+  wrap.querySelectorAll('.rule-match, .rule-keywords, .rule-subject').forEach(el => {
+    el.addEventListener('input', _onRuleEdit);
+    el.addEventListener('change', _onRuleEdit);
+  });
+  wrap.querySelectorAll('.rule-del').forEach(el => {
+    el.addEventListener('click', () => {
+      const i = parseInt(el.dataset.idx, 10);
+      _settings.accounting_rules.splice(i, 1);
+      renderRulesPanel();
+      scheduleSettingsSave();
+    });
+  });
+}
+
+function _onRuleEdit(e) {
+  const idx = parseInt(e.target.dataset.idx, 10);
+  const r = _settings.accounting_rules[idx];
+  if (!r) return;
+  if (e.target.classList.contains('rule-keywords')) {
+    r.keywords = e.target.value.split(/[,、、,]/).map(s => s.trim()).filter(Boolean);
+  } else if (e.target.classList.contains('rule-subject')) {
+    r.subject = e.target.value.trim();
+  } else if (e.target.classList.contains('rule-match')) {
+    r.match = e.target.value;
+  }
+  scheduleSettingsSave();
+}
+
+// Add 規則按鈕
+const _btnAddRule = $('btnAddRule');
+if (_btnAddRule) {
+  _btnAddRule.addEventListener('click', () => {
+    if (!_settings.accounting_rules) _settings.accounting_rules = [];
+    if (_settings.accounting_rules.length >= 200) {
+      showToast('規則數已達上限 200 條', 'err');
+      return;
+    }
+    _settings.accounting_rules.push({ keywords: [], subject: '', match: 'any' });
+    renderRulesPanel();
+  });
+}
+
+// 載入內建規則作 reference
+(async function _loadBuiltinRules() {
+  const wrap = $('builtinRules');
+  const count = $('builtinRuleCount');
+  if (!wrap) return;
+  try {
+    const r = await fetch('/tools/einvoice-scan/accounting-rules/builtin');
+    if (!r.ok) return;
+    const j = await r.json();
+    if (count) count.textContent = j.rules.length;
+    wrap.innerHTML = j.rules.map(rule => {
+      const matchLabel = rule.match === 'industries' ? '行業' : '名稱';
+      return `<div style="padding:4px 0; border-bottom:1px solid #f1f5f9; display:grid; grid-template-columns:50px 1fr 100px; gap:8px;">
+        <span style="color:#94a3b8;">[${matchLabel}]</span>
+        <span style="word-break:break-all;">${escapeHtml((rule.keywords||[]).join(' / '))}</span>
+        <span style="color:#2563eb; font-weight:600;">→ ${escapeHtml(rule.subject)}</span>
+      </div>`;
+    }).join('');
+  } catch (_) {}
+})();
+
 function renderFormatsPanel() {
   const container = $('settingsFormats');
   if (!container) return;
@@ -871,9 +1457,19 @@ if (myVatInput) {
       scheduleSettingsSave();
     }
   });
+  // 離開焦點 / 關頁面前再保險一次 — 即時 force-save 避免 debounce 還在等
+  const forceSave = () => {
+    const v = myVatInput.value.replace(/\D/g, '').slice(0, 8);
+    if (v.length === 0 || v.length === 8) {
+      clearTimeout(_saveTimer);
+      saveSettings();  // 不等 debounce 直接送
+    }
+  };
+  myVatInput.addEventListener('blur', forceSave);
+  window.addEventListener('beforeunload', forceSave);
 }
 $('btnSettingsReset').addEventListener('click', async () => {
-  if (!confirm('恢復欄位顯示為預設？')) return;
+  if (!(await window.showConfirm('恢復欄位顯示為預設？', { title: '重設欄位' }))) return;
   try {
     const r = await fetch('/tools/einvoice-scan/settings/reset', { method: 'POST' });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -881,6 +1477,7 @@ $('btnSettingsReset').addEventListener('click', async () => {
     _settings = j.settings;
     if (!_settings.field_formats) _settings.field_formats = {};
     if (!_settings.my_company_vat) _settings.my_company_vat = '';
+    if (!Array.isArray(_settings.accounting_rules)) _settings.accounting_rules = [];
     renderSettingsPanel();
     renderFormatsPanel();
     if ($('myCompanyVat')) $('myCompanyVat').value = _settings.my_company_vat;
@@ -912,9 +1509,16 @@ async function loadBuffer() {
 // 規則：若 settings.my_company_vat 有值，invoice.buyer_vat 為空 或不符 = warn
 function _invoiceWarn(inv) {
   const myVat = (_settings.my_company_vat || '').trim();
-  if (!myVat) return null;             // 沒設我方統編 → 不檢查
-  if (!inv.buyer_vat) return 'no-vat';                   // 沒買方統編 = 非報帳用
-  if (inv.buyer_vat !== myVat) return 'mismatch';        // 不符
+  // 1) 我方統編檢查
+  if (myVat) {
+    if (!inv.buyer_vat) return 'no-vat';
+    if (inv.buyer_vat !== myVat) return 'mismatch';
+  }
+  // 2) 當期發票檢查
+  const pc = _settings.period_check || {};
+  if (pc.enabled && _activePeriod && !_isInActivePeriod(inv.date)) {
+    return 'out-of-period';
+  }
   return null;
 }
 
@@ -953,8 +1557,10 @@ function renderBufferRows() {
     }).join('') + '<th></th></tr>';
 
   const tbody = $('bufferTbody');
+  const tfoot = $('bufferTfoot');
   if (!_cachedInvoices.length) {
     tbody.innerHTML = `<tr><td colspan="${visibleDefs.length + 2}" class="es-empty">尚未掃描任何發票</td></tr>`;
+    if (tfoot) tfoot.innerHTML = '';
     _updateSelectedUI();
     return;
   }
@@ -966,10 +1572,14 @@ function renderBufferRows() {
     const cells = visibleDefs.map(d => {
       let val = cellValue(inv, d.id, i);
       let cls = NUMERIC_FIELDS.has(d.id) ? ' class="num"' : '';
-      // 警告標籤掛在買方統編欄位
-      if (d.id === 'buyer_vat' && warn) {
+      // 警告標籤：統編問題掛 buyer_vat 欄、不在期內掛 date 欄
+      if (d.id === 'buyer_vat' && (warn === 'no-vat' || warn === 'mismatch')) {
         const tag = warn === 'no-vat' ? '無統編' : '統編不符';
         val = (val || '<span style="color:#94a3b8">—</span>') + `<span class="warn-tag">${tag}</span>`;
+        return `<td>${val}</td>`;
+      }
+      if (d.id === 'date' && warn === 'out-of-period') {
+        val = (val || '<span style="color:#94a3b8">—</span>') + `<span class="warn-tag">不在期內</span>`;
         return `<td>${val}</td>`;
       }
       // note 欄位用可編輯 input
@@ -982,12 +1592,42 @@ function renderBufferRows() {
       <td><input type="checkbox" class="sel-check" data-id="${escapeHtml(inv.id)}" ${selChecked}></td>
       ${cells}
       <td style="white-space:nowrap;">
-        <button class="info-btn" data-id="${escapeHtml(inv.id)}" title="細節">{{ icon('info', size=14) }}</button>
-        <button class="del-btn" data-id="${escapeHtml(inv.id)}" title="刪除">×</button>
+        <button class="info-btn" data-id="${escapeHtml(inv.id)}" title="詳細資訊">{{ icon('info', size=14) }}</button>
+        <button class="del-btn" data-id="${escapeHtml(inv.id)}" title="刪除">{{ icon('trash', size=14) }}</button>
       </td>
     </tr>`;
   });
   tbody.innerHTML = rows.join('');
+  // 表尾總計：對 amount_total / amount_untaxed / tax 加總
+  if (tfoot) {
+    const sums = {};
+    for (const inv of _cachedInvoices) {
+      for (const fid of ['amount_total', 'amount_untaxed', 'tax']) {
+        let v;
+        if (fid === 'tax') {
+          if (inv.amount_total != null && inv.amount_untaxed != null) {
+            v = inv.amount_total - inv.amount_untaxed;
+          }
+        } else {
+          v = inv[fid];
+        }
+        if (typeof v === 'number' && isFinite(v)) {
+          sums[fid] = (sums[fid] || 0) + v;
+        }
+      }
+    }
+    // 表尾：只在 seq 欄顯示張數；其他非數字欄留空；數字欄顯示加總
+    const footCells = visibleDefs.map(d => {
+      if (NUMERIC_FIELDS.has(d.id) && sums[d.id] != null) {
+        return `<td class="num"><b>${escapeHtml(applyFormat(d.id, sums[d.id]))}</b></td>`;
+      }
+      if (d.id === 'seq') {
+        return `<td><b>${_cachedInvoices.length}</b></td>`;
+      }
+      return '<td></td>';
+    }).join('');
+    tfoot.innerHTML = `<tr class="es-foot-row"><td></td>${footCells}<td></td></tr>`;
+  }
   tbody.querySelectorAll('.del-btn').forEach(b => {
     b.addEventListener('click', () => deleteInvoice(b.dataset.id));
   });
@@ -1017,10 +1657,11 @@ function showDetail(id) {
   const inv = _cachedInvoices.find(x => x.id === id);
   if (!inv) return;
   $('detailTitle').textContent = '發票 ' + (inv.invoice_number || '');
-  // 顯示所有欄位（依 FIELD_DEFINITIONS 順序），用使用者設定的格式
-  const rows = _fieldDefs.map(def => {
-    if (def.id === 'items') return '';  // items 走獨立區塊在下面
-    if (def.id === 'note') return '';   // note 也跳過（detail modal 不適合編輯）
+  const out = [];
+  // 顯示所有欄位（依 FIELD_DEFINITIONS 順序），用使用者設定的格式。
+  // 在 seller_vat 之後插入「賣方反查」補充欄位（行業 / 組織別 / 地址 / 類別）
+  _fieldDefs.forEach(def => {
+    if (def.id === 'note') return;
     let val;
     if (def.id === 'seq') {
       val = String(_cachedInvoices.indexOf(inv) + 1);
@@ -1030,21 +1671,27 @@ function showDetail(id) {
     } else {
       val = applyFormat(def.id, inv[def.id]);
     }
-    return `<div class="es-detail-row"><span class="label">${escapeHtml(def.label)}</span><span class="val">${escapeHtml(val) || '<span style="color:#94a3b8">—</span>'}</span></div>`;
-  }).join('');
-  // 品項區塊
-  let itemsHtml = '';
-  if (Array.isArray(inv.items) && inv.items.length) {
-    const lis = inv.items.map(it => `<li>${escapeHtml(it)}</li>`).join('');
-    itemsHtml = `<div class="es-detail-items"><div class="ttl">{{ icon('list', size=12) }} 品項（${inv.items.length}）</div><ul>${lis}</ul></div>`;
-  } else {
-    itemsHtml = `<div class="es-detail-items"><div class="ttl">品項</div><div class="empty">本張發票未掃到右側品項 QR Code 或品項已加密</div></div>`;
-  }
-  // 備註（show-only）
+    out.push(`<div class="es-detail-row"><span class="label">${escapeHtml(def.label)}</span><span class="val">${escapeHtml(val) || '<span style="color:#94a3b8">—</span>'}</span></div>`);
+    // 在 seller_vat 之後插入反查到的補充欄
+    if (def.id === 'seller_vat') {
+      const supplemental = [
+        ['seller_category', '類別'],
+        ['seller_industries', '行業'],
+        ['seller_org_type', '組織別'],
+        ['seller_address', '賣方地址'],
+      ];
+      for (const [fid, lbl] of supplemental) {
+        const v = inv[fid];
+        if (!v) continue;
+        out.push(`<div class="es-detail-row"><span class="label">${escapeHtml(lbl)}</span><span class="val" style="color:#475569; font-size:12.5px;">${escapeHtml(v)}</span></div>`);
+      }
+    }
+  });
+  let extraHtml = '';
   if (inv.note) {
-    itemsHtml += `<div class="es-detail-items"><div class="ttl">備註</div><div>${escapeHtml(inv.note)}</div></div>`;
+    extraHtml = `<div class="es-detail-items"><div class="ttl">備註</div><div>${escapeHtml(inv.note)}</div></div>`;
   }
-  $('detailBody').innerHTML = rows + itemsHtml;
+  $('detailBody').innerHTML = out.join('') + extraHtml;
   $('detailModal').hidden = false;
 }
 
@@ -1082,6 +1729,13 @@ async function saveNote(id, note) {
 
 async function deleteInvoice(id) {
   if (!id) return;
+  const inv = _cachedInvoices.find(x => x.id === id);
+  const label = inv
+    ? `${inv.invoice_number || '(無號碼)'}${inv.seller_name ? '（' + inv.seller_name + '）' : ''}`
+    : '此筆發票';
+  if (!(await window.showConfirm(
+        `確定刪除 ${label}？`,
+        { title: '刪除發票', kind: 'danger', okText: '刪除' }))) return;
   try {
     const r = await fetch(`/tools/einvoice-scan/buffer/${id}`, { method: 'DELETE' });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -1094,11 +1748,99 @@ async function deleteInvoice(id) {
 
 $('btnRefresh').addEventListener('click', () => loadBuffer());
 
+// LLM 判讀 — 批次送所有 invoice 給 LLM 判斷科目
+const _btnLlmClassify = $('btnLlmClassify');
+if (_btnLlmClassify) {
+  _btnLlmClassify.addEventListener('click', async () => {
+    if (!_cachedInvoices.length) {
+      showToast('buffer 內沒有發票可分類', 'err');
+      return;
+    }
+    const ok = await window.showConfirm(
+      `將送 ${_cachedInvoices.length} 張發票給 LLM 判讀會計科目。\n\n` +
+      '會用賣方統編 / 名稱 / 行業批次送（每批 20 張），\n' +
+      '視 LLM 速度與發票量約需 1 ~ 10 分鐘。\n' +
+      '結果會覆寫目前的「科目」欄位（標示 source=llm）。',
+      { title: 'LLM 判讀科目', okText: '開始' });
+    if (!ok) return;
+    const orig = _btnLlmClassify.innerHTML;
+    _btnLlmClassify.disabled = true;
+    _btnLlmClassify.textContent = 'LLM 處理中…';
+    // 鎖整個表格 + spinner
+    const overlay = $('tableBusyOverlay');
+    const textEl = $('tableBusyText');
+    const subEl = $('tableBusySub');
+    if (overlay) {
+      textEl.textContent = 'LLM 判讀中…';
+      subEl.textContent = `共 ${_cachedInvoices.length} 張，每批 20 張處理中，請勿關閉頁面`;
+      overlay.hidden = false;
+    }
+    try {
+      const r = await fetch('/tools/einvoice-scan/buffer/llm-classify',
+        { method: 'POST' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+      let msg = `LLM 判讀完成：${j.batches} 批 / ${j.total} 張，更新 ${j.updated} 筆`;
+      if ((j.errors || []).length) {
+        msg += `（含 ${j.errors.length} 批失敗）`;
+      }
+      showToast(msg, 'ok');
+      await loadBuffer();
+    } catch (e) {
+      showToast('LLM 判讀失敗：' + e.message, 'err');
+    } finally {
+      _btnLlmClassify.disabled = false;
+      _btnLlmClassify.innerHTML = orig;
+      if (overlay) overlay.hidden = true;
+    }
+  });
+}
+
+// 重抓科目 — 對所有 buffer 內 invoice 重跑賣方反查 + 分類器
+const _btnReclassify = $('btnReclassify');
+if (_btnReclassify) {
+  _btnReclassify.addEventListener('click', async () => {
+    if (!(await window.showConfirm(
+          '對 buffer 內所有發票重新跑「賣方反查 + 會計科目分類」？\n' +
+          '會更新賣方名稱 / 行業 / 科目，但不影響原始掃描資料（發票號碼 / 金額等）。',
+          { title: '重抓科目', okText: '開始' }))) return;
+    const orig = _btnReclassify.innerHTML;
+    _btnReclassify.disabled = true;
+    _btnReclassify.textContent = '處理中…';
+    const overlay = $('tableBusyOverlay');
+    const textEl = $('tableBusyText');
+    const subEl = $('tableBusySub');
+    if (overlay) {
+      textEl.textContent = '重抓科目中…';
+      subEl.textContent = `共 ${_cachedInvoices.length} 張，請稍候`;
+      overlay.hidden = false;
+    }
+    try {
+      const r = await fetch('/tools/einvoice-scan/buffer/reclassify-accounting',
+        { method: 'POST' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+      showToast(
+        `已重抓：${j.classified} / ${j.total} 張有科目（更新 ${j.updated} 筆）`,
+        'ok');
+      await loadBuffer();
+    } catch (e) {
+      showToast('重抓失敗：' + e.message, 'err');
+    } finally {
+      _btnReclassify.disabled = false;
+      _btnReclassify.innerHTML = orig;
+      if (overlay) overlay.hidden = true;
+    }
+  });
+}
+
 // 多選刪除
 $('btnDeleteSelected').addEventListener('click', async () => {
   const ids = _selectedIds();
   if (!ids.length) return;
-  if (!confirm(`確定刪除選取的 ${ids.length} 張發票？`)) return;
+  if (!(await window.showConfirm(
+        `確定刪除選取的 ${ids.length} 張發票？`,
+        { title: '刪除選取', kind: 'danger', okText: '刪除' }))) return;
   try {
     const r = await fetch('/tools/einvoice-scan/buffer/delete-batch', {
       method: 'POST',
@@ -1128,14 +1870,13 @@ document.addEventListener('click', e => {
 exportMenu.querySelectorAll('button[data-fmt]').forEach(b => {
   b.addEventListener('click', async () => {
     const fmt = b.dataset.fmt;
-    const clearAfter = $('exportClearAfter').checked;
     exportMenu.hidden = true;
     showToast(`產生 ${fmt} 中…`);
     try {
       const r = await fetch('/tools/einvoice-scan/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ format: fmt, clear_after: clearAfter }),
+        body: JSON.stringify({ format: fmt }),
       });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
@@ -1161,7 +1902,9 @@ exportMenu.querySelectorAll('button[data-fmt]').forEach(b => {
 });
 
 $('btnClear').addEventListener('click', async () => {
-  if (!confirm('確定要清空全部已掃描的發票？此動作不可復原。')) return;
+  if (!(await window.showConfirm(
+        '確定要清空全部已掃描的發票？此動作不可復原。',
+        { title: '全部清空', kind: 'danger', okText: '清空' }))) return;
   try {
     const r = await fetch('/tools/einvoice-scan/buffer', { method: 'DELETE' });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -1416,7 +2159,13 @@ async function handleLiveScanResult(qrText) {
     } else if ((j.duplicates || []).length > 0) {
       liveStatusEl.textContent = `已存在 ${j.duplicates.join(', ')} — 跳過`;
     } else if (j.parsed_count === 0) {
-      liveStatusEl.textContent = '不是電子發票 QR — 跳過';
+      if (j.right_qr_count > 0) {
+        // 右 QR 報帳沒幫助，廠商實作差異大不可靠 — 直接告知改掃左 QR
+        liveStatusEl.textContent =
+          '這是發票右側 QR（廠商選用補充欄，報帳不需要）— 請改掃左側主 QR';
+      } else {
+        liveStatusEl.textContent = '不是電子發票 QR — 跳過';
+      }
     }
   } catch (e) {
     liveStatusEl.innerHTML = `<span style="color:#fca5a5;">送出失敗：${escapeHtml(e.message)}</span>`;
@@ -1425,5 +2174,40 @@ async function handleLiveScanResult(qrText) {
 
 // 離開頁面前確保關掉相機（避免相機燈一直亮）
 window.addEventListener('beforeunload', stopLiveScan);
+
+// ===== 手機掃描接續 =====
+// 桌面點按鈕 → 顯示 QR Code → 手機掃 → 帶到同一頁（未登入會先轉去登入）
+(function setupHandoff() {
+  const fab = document.getElementById('esHandoffFab');
+  if (!fab) return;
+  fab.addEventListener('click', async () => {
+    // Build full URL from current page (browser knows the real public host)
+    const url = `${location.origin}/tools/einvoice-scan`;
+    // 用 image endpoint，順便讓 backend 用同樣的 host 做 URL（內容塞在 X-Handoff-Url）
+    const overlay = document.createElement('div');
+    overlay.className = 'es-handoff-overlay';
+    overlay.innerHTML = `
+      <div class="es-handoff-card">
+        <h3>用手機接續掃描</h3>
+        <p>用手機相機掃下方 QR Code，直接帶到電子發票處理頁。
+           若手機未登入會先要求登入，登入後自動回到此頁。</p>
+        <img id="esHandoffImg" alt="QR Code">
+        <div class="url" id="esHandoffUrl"></div>
+        <button type="button" id="esHandoffClose">關閉</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const img = overlay.querySelector('#esHandoffImg');
+    const urlEl = overlay.querySelector('#esHandoffUrl');
+    img.src = '/tools/einvoice-scan/handoff-qr?_t=' + Date.now();
+    urlEl.textContent = url;
+    const close = () => overlay.remove();
+    overlay.querySelector('#esHandoffClose').addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', function onKey(e) {
+      if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); }
+    });
+  });
+})();
 </script>
 {% endblock %}

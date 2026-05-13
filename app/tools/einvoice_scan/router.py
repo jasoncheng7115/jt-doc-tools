@@ -1,4 +1,4 @@
-"""電子發票掃描 endpoints — scan + buffer CRUD.
+"""電子發票處理 endpoints — scan + buffer CRUD.
 
 API 設計：
 - POST /scan          multipart 上傳圖片或 PDF → 解 QR → 加進 buffer → 回結果
@@ -44,16 +44,52 @@ def _request_user(request: Request) -> Optional[dict]:
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     templates = request.app.state.templates
+    llm_enabled = False
+    try:
+        from ...core import llm_settings as _ls
+        llm_enabled = bool(_ls.llm_settings.is_enabled())
+    except Exception:
+        pass
     return templates.TemplateResponse("einvoice_scan.html", {
         "request": request,
         "qr_backend_available": qr_decoder.is_qr_backend_available(),
+        "llm_enabled": llm_enabled,
     })
+
+
+@router.get("/handoff-qr")
+async def handoff_qr(request: Request):
+    """產生一個 QR Code PNG，內容是 einvoice-scan 頁的完整 URL。
+    使用者用桌面開此頁 → 點「手機掃描」→ 出現此 QR → 手機掃一下直接帶到同一頁。
+    未登入 → 認證 middleware 會自動 redirect 去 /login?next=...，登入後回到此頁。"""
+    import qrcode
+    # 完整 URL：以 request 本身的 host 為準，這樣不論本機 / 內網 / 反代都會帶對 host
+    # 反向代理時前端送的 X-Forwarded-Proto/Host 已由 uvicorn proxy_headers
+    # 處理（main.py 內 uvicorn.Config 預設 proxy_headers=True 應該有設）
+    target = f"{request.url.scheme}://{request.url.netloc}/tools/einvoice-scan"
+    img = qrcode.make(target, box_size=10, border=2)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(
+        buf, media_type="image/png",
+        headers={"X-Handoff-Url": target, "Cache-Control": "no-store"},
+    )
 
 
 @router.get("/api/backend-status")
 async def backend_status():
-    """讓前端知道 QR 後端是否可用（pyzbar）。"""
-    return {"available": qr_decoder.is_qr_backend_available()}
+    """讓前端知道 QR 後端 / LLM 是否可用。"""
+    llm_enabled = False
+    try:
+        from ...core import llm_settings as _ls
+        llm_enabled = bool(_ls.llm_settings.is_enabled())
+    except Exception:
+        pass
+    return {
+        "available": qr_decoder.is_qr_backend_available(),
+        "llm_enabled": llm_enabled,
+    }
 
 
 @router.post("/scan")
@@ -86,7 +122,7 @@ async def scan(request: Request, file: UploadFile = File(...)):
         raise HTTPException(400, str(e))
 
     # Parse 為 e-invoice 結構（不是 e-invoice 的 QR 自動跳過）
-    parsed = qr_decoder.parse_qr_list(qr_strings)
+    parsed, stats = qr_decoder.parse_qr_list_with_stats(qr_strings)
 
     # 加進 buffer（去重 + 上限）
     user = _request_user(request)
@@ -96,6 +132,8 @@ async def scan(request: Request, file: UploadFile = File(...)):
     return JSONResponse({
         "scanned_qr_count": len(qr_strings),       # 影像中總共幾個 QR
         "parsed_count": len(parsed),                # 其中幾個是 e-invoice
+        "right_qr_count": stats["right_qr_count"],  # 右側品項 QR 個數
+        "unknown_count": stats["unknown_count"],    # 完全不認得的 QR 個數
         "added_count": len(add_result["added"]),
         "duplicates": add_result["duplicates"],     # 重複的 invoice_number list
         "cap_reached": add_result["cap_reached"],
@@ -166,18 +204,36 @@ async def scan_text(request: Request):
         if len(s) > 4096:
             raise HTTPException(413, "單一 QR 字串過長")
 
-    parsed = qr_decoder.parse_qr_list(qr_texts)
+    parsed, stats = qr_decoder.parse_qr_list_with_stats(qr_texts)
     user = _request_user(request)
     add_result = buffer.add_invoices(user, parsed)
-    info = buffer.buffer_info(user)
 
+    # 連續掃描特例：本批沒有新 invoice，但有右 QR 品項 → attach 到最近一筆
+    # 場景：使用者先掃左 QR (那筆 invoice 已加入)，再單獨掃右 QR (要把品項補上)
+    attached_to = None
+    unpaired = stats.get("unpaired_items_lists", []) or []
+    if not add_result["added"] and unpaired:
+        # 合併所有 unpaired items 一次 attach
+        all_items = [it for items in unpaired for it in items]
+        latest = buffer.attach_items_to_latest(user, all_items)
+        if latest:
+            attached_to = {
+                "invoice_number": latest.get("invoice_number"),
+                "item_count": len(latest.get("items") or []),
+            }
+
+    info = buffer.buffer_info(user)
     return JSONResponse({
         "scanned_qr_count": len(qr_texts),
         "parsed_count": len(parsed),
+        "right_qr_count": stats["right_qr_count"],
+        "unknown_count": stats["unknown_count"],
+        "unknown_samples": stats.get("unknown_samples", []),
         "added_count": len(add_result["added"]),
         "duplicates": add_result["duplicates"],
         "cap_reached": add_result["cap_reached"],
         "added": add_result["added"],
+        "items_attached_to": attached_to,
         "buffer": info,
     })
 
@@ -236,6 +292,45 @@ async def update_invoice(invoice_id: str, request: Request):
     return {"ok": True}
 
 
+@router.get("/period-info")
+def period_info():
+    """回「最近一期」+ 最近 6 期清單（給 UI 預覽 + 下拉選別期用）。"""
+    from . import period_calc
+    return {
+        "latest": period_calc.latest_filing_period(),
+        "recent": period_calc.all_recent_periods(n=6),
+    }
+
+
+@router.get("/accounting-rules/builtin")
+def get_builtin_accounting_rules():
+    """回內建會計科目規則（給 UI 顯示參考用）。"""
+    from . import accounting_classifier
+    return {"rules": accounting_classifier.get_builtin_rules()}
+
+
+@router.post("/buffer/reclassify-accounting")
+async def reclassify_accounting(request: Request):
+    """重跑全 buffer 的賣方反查 + 會計科目分類。
+    用在剛 import 新統編資料後，或更新分類規則後想套到舊資料上。"""
+    user = _request_user(request)
+    result = buffer.reclassify_all_accounting(user)
+    return {"ok": True, **result}
+
+
+@router.post("/buffer/llm-classify")
+def llm_classify_endpoint(request: Request):
+    """批次送 LLM 判讀 buffer 內所有發票的會計科目。
+    `def`（非 async）讓 FastAPI 自動 run in threadpool，避免 LLM 呼叫
+    （可能數十秒到分鐘級）阻塞 event loop。"""
+    user = _request_user(request)
+    try:
+        result = buffer.llm_classify_buffer(user)
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+    return {"ok": True, **result}
+
+
 @router.post("/buffer/delete-batch")
 async def delete_batch(request: Request):
     """批次刪除 — body {ids: [...]}"""
@@ -282,6 +377,7 @@ async def export(request: Request):
             settings["column_order"],
             settings.get("field_formats") or {},
             fmt,
+            export_labels=settings.get("export_labels") or {},
         )
     except RuntimeError as e:
         raise HTTPException(500, str(e))

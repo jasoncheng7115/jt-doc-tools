@@ -162,6 +162,12 @@
 <path d="M7 4l-4 4 4 4" /><path d="M3 8h14" /><path d="M17 12l4 4-4 4" /><path d="M21 16H7" />
 {%- elif name == 'home' -%}
 <path d="M3 12l9-9 9 9" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" />
+{%- elif name == 'sparkles' -%}
+<path d="M11 3l1.7 4.3L17 9l-4.3 1.7L11 15l-1.7-4.3L5 9l4.3-1.7z" fill="currentColor" stroke="none"/>
+<path d="M18 14l0.7 1.8L20.5 16.5l-1.8 0.7L18 19l-0.7-1.8L15.5 16.5l1.8-0.7z" fill="currentColor" stroke="none"/>
+<path d="M17 3l0.4 1.2L18.6 4.6l-1.2 0.4L17 6.2l-0.4-1.2L15.4 4.6l1.2-0.4z" fill="currentColor" stroke="none"/>
+{%- elif name == 'columns' -%}
+<rect x="3" y="3" width="7" height="18" rx="1" /><rect x="14" y="3" width="7" height="18" rx="1" />
 {%- else -%}
 <circle cx="12" cy="12" r="9" />
 {%- endif -%}

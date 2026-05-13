@@ -437,6 +437,29 @@ def _probe_java_runtime() -> dict:
         }
 
 
+def _probe_zbar() -> dict:
+    """zbar shared lib — pyzbar (einvoice-scan QR code 解析) 的 native 依賴。
+    Windows pyzbar wheel 內建 DLL → 永遠視為已裝。
+    Linux/macOS 透過 import pyzbar.pyzbar 偵測（ctypes load 失敗會 raise）。"""
+    if _is_windows():
+        return {
+            "installed": True, "version": "(bundled in pyzbar wheel)",
+            "extra": "", "ok": True, "binary": "",
+        }
+    try:
+        import importlib
+        importlib.import_module("pyzbar.pyzbar")
+        return {
+            "installed": True, "version": "available",
+            "extra": "", "ok": True, "binary": "",
+        }
+    except Exception as e:
+        return {
+            "installed": False, "version": "",
+            "extra": f"pyzbar import failed: {e}", "ok": False, "binary": "",
+        }
+
+
 def _probe_cjk_fonts() -> dict:
     """Look for at least one CJK font file in standard locations."""
     candidates = []
@@ -585,6 +608,20 @@ _DEPS = [
             "linux": "uv sync  (normally auto-installed)",
             "macos": "uv sync",
             "windows": "uv sync",
+        },
+    },
+    {
+        "key": "zbar",
+        "label": "zbar (libzbar)",
+        "category": "QR / 條碼",
+        "impact": "einvoice-scan 工具用 pyzbar 解析發票 QR Code 的 native 依賴。Linux/macOS 缺則啟動時 _probe 失敗、QR 掃描功能停用；Windows pyzbar wheel 內建 DLL 不需另裝。",
+        "impact_en": "Native dep of pyzbar used by einvoice-scan to decode QR codes. Linux/macOS only — Windows wheel bundles DLL.",
+        "soft": True,
+        "probe": _probe_zbar,
+        "install_cmd": {
+            "linux": "sudo apt install libzbar0  (or: sudo dnf install zbar)",
+            "macos": "brew install zbar",
+            "windows": "(bundled in pyzbar wheel — nothing to do)",
         },
     },
     {

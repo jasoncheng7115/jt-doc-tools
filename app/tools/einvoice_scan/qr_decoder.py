@@ -199,30 +199,62 @@ def parse_einvoice_qr(qr_text: str) -> Optional[dict]:
 def parse_right_qr_items(text: str) -> Optional[list[str]]:
     """從右 QR 字串解析品項清單 (best-effort).
 
-    台灣 B2C 電子發票右 QR 格式（明碼摘要式）：
+    台灣 B2C 電子發票右 QR 實務上有兩種常見格式：
+
+    Format A — MOF 官方規格（明碼摘要式）：
         **<二維碼種類>:<編碼方式>:<品項加密>:<品項數>:<本張品項數>:<中文編碼>:<品項1>:<品項2>:...
+        例：`**1:0:0:5:5:Big5:鉛筆:橡皮擦:文件夾:...`
 
-    例：`**1:0:0:5:5:Big5:鉛筆:橡皮擦:文件夾:...`
+    Format B — 廠商常見簡化版（name/qty/price 三元組）：
+        **:<品名1>:<數量1>:<單價1>:<品名2>:<數量2>:<單價2>:...
+        例：`**:Synology D4ES04-4G:1:7875.000`
 
-    本 parser 簡單版：
-    - 必須 `**` 開頭
-    - 用 `:` 分段
-    - 跳過前 6 個 metadata 欄位，剩下視為品項
-    - 品項加密 (第 3 欄 = '1') 時無法解（內建沒實作 AES）→ 回 None
-
-    Returns list of strings 或 None（不是右 QR / 加密 / 解析失敗）。
+    Returns list of item names 或 None（不是右 QR / 加密 / 解析失敗）。
     """
     if not text or not text.startswith("**"):
         return None
     parts = text.split(":")
-    if len(parts) < 7:
+    if len(parts) < 2:
         return None
-    # 第 3 欄 (index 2) = 品項加密旗標 ('0' / '1')
-    if parts[2] == "1":
-        return None  # 加密，無法解
-    # 從 index 6 起為品項
-    items = [p.strip() for p in parts[6:] if p and p.strip() and not p.startswith("**")]
-    return items if items else None
+
+    # Format A 偵測：MOF 規格 `**<種類>:<編碼>:<加密>:<總品項>:<本張>:<中文編碼>:<item>...`
+    # parts[0] 像 `**1` (`**` + 數字)
+    if (len(parts[0]) > 2 and parts[0][2:].isdigit()
+            and len(parts) >= 7
+            and parts[1].isdigit() and parts[2] in ("0", "1")):
+        # parts[2] = 品項加密旗標
+        if parts[2] == "1":
+            return None  # 加密無法解
+        items = [p.strip() for p in parts[6:]
+                 if p and p.strip() and not p.startswith("**")]
+        if items:
+            return items
+
+    # Format B 偵測：簡化版 `**:<name>:<qty>:<price>:...`
+    # parts[0] 必須剛好是 `**`，後面以 3 個一組
+    if parts[0] == "**":
+        rest = parts[1:]
+        if len(rest) >= 3 and len(rest) % 3 == 0:
+            names = []
+            valid = True
+            for i in range(0, len(rest), 3):
+                name = rest[i].strip()
+                qty = rest[i + 1].strip()
+                price = rest[i + 2].strip()
+                if not name:
+                    valid = False
+                    break
+                try:
+                    float(qty)
+                    float(price)
+                except ValueError:
+                    valid = False
+                    break
+                names.append(name)
+            if valid and names:
+                return names
+
+    return None
 
 
 def parse_qr_list(qr_list: list[str]) -> list[dict]:
@@ -232,20 +264,46 @@ def parse_qr_list(qr_list: list[str]) -> list[dict]:
     - 左 QR 解出來後，看清單中是否有 `**` 開頭的右 QR；如果有，把品項 attach 到 invoice
     - 一張影像有多筆左 QR + 右 QR 時，按出現順序配對（zbar 已 sort by position）
     """
+    invoices, _ = parse_qr_list_with_stats(qr_list)
+    return invoices
+
+
+def parse_qr_list_with_stats(qr_list: list[str]) -> tuple[list[dict], dict]:
+    """同 parse_qr_list 但同時回 stats dict 給 UI 顯示用：
+       {right_qr_count: 右側品項 QR 個數,
+        unknown_count: 完全不認得的 QR 個數,
+        unknown_samples: 認不出的 QR 字串前 200 字 (給 debug 用)}"""
     invoices = []
-    items_lists = []  # 同步順序
+    items_lists = []
+    right_qr_count = 0
+    unknown_count = 0
+    unknown_samples = []
     for qr in qr_list:
         parsed = parse_einvoice_qr(qr)
         if parsed:
             invoices.append(parsed)
+            continue
+        items = parse_right_qr_items(qr)
+        if items is not None:
+            items_lists.append(items)
+            right_qr_count += 1
         else:
-            items = parse_right_qr_items(qr)
-            if items is not None:
-                items_lists.append(items)
+            unknown_count += 1
+            # 留前 200 字當 debug sample（最多保留 3 個樣本，避免 response 過大）
+            if len(unknown_samples) < 3:
+                unknown_samples.append(qr[:200] if qr else "(empty)")
 
-    # Pair items 1:1（多餘的丟掉）
+    # Pair items 1:1 同批內（多餘的留給 unpaired_items_lists 給 caller 處理）
+    unpaired_items = []
     for i, items in enumerate(items_lists):
         if i < len(invoices):
             invoices[i]["items"] = items
+        else:
+            unpaired_items.append(items)
 
-    return invoices
+    return invoices, {
+        "right_qr_count": right_qr_count,
+        "unknown_count": unknown_count,
+        "unpaired_items_lists": unpaired_items,
+        "unknown_samples": unknown_samples,
+    }

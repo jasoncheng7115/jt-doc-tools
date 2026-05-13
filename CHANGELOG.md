@@ -4,6 +4,225 @@
 
 ---
 
+## [1.8.18] - 2026-05-14
+
+### 新增
+
+- **新工具：統編查詢（vat-lookup）** — 輸入 8 位統一編號反查，或公司 / 機關 / 學校名稱、地址、行業關鍵字模糊搜尋（高亮命中字）；含類別 chip 篩選（可單可複選）+ 批次查詢（最多 200 筆）+ CSV 匯出。資料來源：財政部 BGMOPEN + 行政院 / 地方政府機關 + 全國學校
+- **統編資料庫管理（admin/vat-db）**：
+  - 自動下載並更新（背景 thread 不阻塞 event loop，下載期間網站完全不卡）+ 進度條（流量 / 階段即時顯示）
+  - 每週自動排程（預設關閉；可設星期 + 時段；catchup logic）
+  - 補充來源整合：行政院機關（44806）+ 地方政府機關（166161）+ 全國學校（75136）
+  - 行業欄位 (industries) — 解析 BGMOPEN 最多 4 個行業合併
+  - 資料庫組成 panel：顯示各類別筆數 + 比例
+  - 上次更新明細 panel：永久保留主檔 / 補充來源各別匯入筆數
+  - 修正：補充來源 CSV header 欄位 alias 補完（機關單位名稱 / 單位名稱）
+  - 修正：dataset 9210 已被政府重新分配 → 改用正確的 9400
+- **電子發票處理**（原 einvoice-scan 改名「電子發票掃描」→「電子發票處理」）：
+  - 賣方統編反查整合 vat-db，自動帶名稱 / 地址 / 行業
+  - 會計科目自動分類器（內建規則 + 使用者自訂規則 + 可選 LLM 批次判讀）；admin/llm 加 einvoice-scan model 設定
+  - 報帳檢查擴充：當期發票檢查（依今日自動推算「正在收的這一期」，可手動切別期）
+  - 表格新增：表尾總計、批次 LLM 判讀按鈕（disabled 當 LLM 未啟用，處理中半透遮罩 + spinner 鎖住表格）
+  - 匯出格式擴充：原 csv / xlsx / json → 加 ods / xml / txt / md（共 7 種）
+  - 自訂匯出欄位標題（per-field）
+  - 手機掃描 QR 接續：桌面點按鈕顯示 QR Code 給手機掃，未登入會先去 /login 然後回到此頁
+  - 連續掃描右 QR 智慧處理（不再誤判為「不是電子發票」）
+  - 刪除按鈕加確認 dialog；右側按鈕改 icon 不用文字
+  - 編輯欄位 + 拖曳排序面板加表頭明示「匯出標題」用途
+- **zbar shared lib 自動安裝**（einvoice-scan QR 解析依賴）：Linux apt / macOS brew / Windows wheel 內建 DLL
+
+### 修正
+
+- 統編查詢搜尋的下載 URL：dataset id `9210` 被政府重分配給其他資料集，更新到 `9400` 正確的「全國營業(稅籍)登記資料集」
+- 電子發票處理「總計」改顯示張數；序號欄位預設不顯示；發票號碼必選不能拿掉
+- text-list 跨列箭頭多次調整：最終版「cur 右出 → 下到 cur 底下 12px → 橫向左到 next 正中 → 下進 next 頂端」，最後段垂直 16+ px 給三角箭頭足夠空間；防最左欄 stub 算到負值
+
+### 工具總數
+
+34 → **35**（加入 vat-lookup）
+
+---
+
+## [1.7.89] - 2026-05-13
+
+### 修正（einvoice-scan 手機版工具列）
+
+- 手機版（max-width 640px）隱藏「設定」「匯出」按鈕 — 設定存在 server (per user)，桌面跟手機共用同一份，手機現場掃描不需這兩個進階操作
+- 手機版工具列剩下：自動更新 / 重新整理 / 刪除選取 / 全部清空，一列排得下不再換行
+
+---
+
+## [1.7.88] - 2026-05-13
+
+### 新增（einvoice-scan 連續掃描兩段式 — 先左後右）
+
+- 使用者習慣：先把左側主 QR 對著鏡頭掃 → invoice 加入；再對右側品項 QR 掃 → 品項 attach 到剛剛那筆
+- 新 `buffer.attach_items_to_latest()`：把右 QR 解出的品項 merge 到 user buffer 中最近一筆 invoice（去重、保持順序）
+- `parse_qr_list_with_stats()` 多回 `unpaired_items_lists`：同批沒配對到左 QR 的右 QR 品項
+- `scan-text` router 端：若本批 `added == 0` 且有 unpaired items → 自動 attach 到 latest 並回 `items_attached_to: {invoice_number, item_count}`
+- 前端 status box：attach 成功顯示「✓ 品項已加入到 AB12345678（共 N 項）」+ 閃光彈 + beep
+- 「先掃右後沒掃左」情境（buffer 內沒 invoice 可 attach）：訊息改成「請先掃發票左側主 QR（含發票號碼...）」
+
+### 修正（einvoice-scan 對話框）
+
+- einvoice-scan 三個 `confirm()`（清空 / 刪除選取 / 重設欄位）改用本專案 `window.showConfirm()`。其他工具還有 7 個 native `confirm()` 待下版補完（pdf-stamp / pdf-watermark / image-to-pdf / pdf-annotations-strip / pdf-rotate / pdf-annotations-flatten / asset-list / templates-list / api-tokens）
+
+---
+
+## [1.7.87] - 2026-05-13
+
+### 修正（einvoice-scan 右側 QR 訊息）
+
+- 之前掃到右側品項 QR 時前端顯示「不是電子發票 QR — 跳過」誤導使用者；現改顯示「掃到的是右側品項 QR — 請改掃發票左側主 QR（含發票號碼 / 日期 / 金額）」
+- 新增 `parse_qr_list_with_stats()` 同步回傳 `right_qr_count` / `unknown_count`，router 回應內帶這兩個欄位
+- `/tools/einvoice-scan/scan-text`（連續掃描）與 `/tools/einvoice-scan/scan`（拍照）兩條路徑都更新
+- 拍照上傳一批檔案若整張只掃到右側 QR 也會在 toast 訊息提示「N 張只掃到右側品項 QR」
+
+---
+
+## [1.7.86] - 2026-05-13
+
+### 修正（einvoice-scan 手機版按鈕文字斷字）
+
+- `.es-mini-btn` 加 `white-space: nowrap`，按鈕內文字（自動更新 / 設定 / 匯出 / 重新整理 / 全部清空）強制單行
+- `.es-buffer-toolbar .right` 加 `flex-wrap: wrap`，5 顆按鈕在手機螢幕擠不下時整顆換行排列（不要每顆按鈕的文字直立硬擠）
+- 「自動更新」label 同步加 `white-space: nowrap`
+
+---
+
+## [1.7.85] - 2026-05-13
+
+### 修正（vat-db 排版 + 動畫）
+
+- 「資料庫組成」/「上次更新明細」改用 4-col grid（標籤 / 名稱 / 筆數 / 比例），筆數和比例各自獨立 column 右對齊，不再因不同寬度錯位
+- 下載按鈕點下後立刻顯示 spinner 動畫（不等首次 progress poll）
+- 「準備中…」階段在 progress meta 也加 spinner，比單純文字更明顯資料正在處理
+- 新 CSS class `.vd-spinner` / `.vd-spinner.sm`（藍邊白底旋轉，0.9s linear infinite）
+
+---
+
+## [1.7.84] - 2026-05-13
+
+### 新增（vat-db 資料庫組成 panel）
+
+- `vat_registry` schema 加 `category` 欄位（idempotent migration）+ `idx_vat_category` index
+- 自動依來源標註：BGMOPEN 主檔 → 企業；行政院 → 中央政府機關；地方政府 → 地方政府機關；學校 → 學校
+- 補充 `append_csv()` 改用 `INSERT ... ON CONFLICT(vat) DO UPDATE SET category = excluded.category`，已存在於主檔的政府 / 學校統編也會被正確分類
+- 新 endpoint `GET /admin/vat-db/info` 內回 `categories: [{category, count}]`
+- UI 加「資料庫組成」panel：列出各類別筆數 + 百分比 + 總計，永久顯示
+- **舊資料說明**：升級後既有 1.7M 筆全標為「未分類」，請點一次「立即自動下載」重新匯入即可套用分類
+
+### 文案
+
+- 「每週自動排程」section 描述改清楚：強調「每週一次」是更新頻率，「每 5 分鐘 check」改寫不出現避免誤解
+
+---
+
+## [1.7.83] - 2026-05-13
+
+### 新增（vat-db 每週自動排程）
+
+- 新增「每週自動排程」section：開關 + 星期 / 時段下拉，預設關閉
+- 排程器 `vat_db.start_scheduler()` 在 app startup 啟動，每 5 分鐘 tick 一次檢查
+- 觸發條件：enabled=True + 今天 weekday 匹配 + now.hour >= 設定時段 + 距上次運行 >= 6 天
+- 上次運行狀態（成功 / 失敗 / 進行中）即時顯示在 UI（綠 / 紅 / 藍背景）
+- 新 endpoint `GET/POST /admin/vat-db/schedule`
+- 預設 Sunday 03:00（local time，離峰時段）
+
+---
+
+## [1.7.82] - 2026-05-13
+
+### 新增（vat-db 上次更新明細永久顯示）
+
+- 自動下載完成後把結果存進 `vat_meta.last_result_json`，新增「上次更新明細」panel 永久顯示在頁面（之前 status box 5 秒後自動消失，使用者看不到主檔 / 補充各別匯入筆數）
+- panel 用 3-col grid 列出：標籤 / 來源名稱 / 筆數（補充失敗顯示紅字錯誤訊息），末列加總計
+- 時間戳格式化為「YYYY-MM-DD HH:MM」（之前的 ISO 8601 太冗長）
+- 「最後更新」同步改用本地時間格式
+- 修「自動下載並更新」段落內 `<ul>` 雙 bullet 問題（瀏覽器原生 list-style + CSS `::before` 重複顯示）
+
+---
+
+## [1.7.81] - 2026-05-13
+
+### 修正（vat-db 補充來源沒匯入）
+
+- 行政院機關 / 地方政府機關用「機關單位名稱」、學校 BGMOPEN99X 用「單位名稱」，與主檔的「營業人名稱」不同
+- `_COLUMN_ALIASES["name"]` 加入「機關單位名稱 / 單位名稱 / 機關名稱」，address 加「機關所在縣市」
+- 驗證解析筆數：行政院 610 / 地方政府 1,843 / 學校 12,134
+- 重跑「立即自動下載」即可補進 ~14,587 筆政府 / 學校統編
+
+### 新增（vat-db 下載進度條）
+
+- 後端 `_write_progress()` / `_reset_progress()` 寫入 `data/vat_db_progress.json`（atomic tmp+rename，30 分過期 stale）
+- `download_from_sources()` 改用 `httpx.stream()` 邊下載邊每 512 KB emit 一次進度
+- `download_and_ingest_all()` 各階段標記 stage（starting / downloading_main / parsing_main / downloading_supplement N/M / parsing_supplement / done / error）
+- 新 endpoint `GET /admin/vat-db/progress`
+- 前端進度條（藍色 fill bar）+ 階段文字 + 已下載 / 總大小，每 2 秒 poll
+- 已知總大小時走 determinate %，未知時走 indeterminate animation
+- 頁面載入時偵測進行中下載自動接續顯示（多 admin tab / 排程觸發都看得到）
+
+---
+
+## [1.7.80] - 2026-05-13
+
+### 修正（vat-db UI）
+
+- **summary 改單行 inline 排版**：3 個 stat (資料筆數 / 最後更新 / 資料來源) 改成同一行 baseline 對齊，中間以 `·` 分隔，empty 值不再因字級差異跳行 / 不對齊
+- **「自動下載」按鈕加冷卻機制防連按**：成功 5 分鐘冷卻、失敗 60 秒冷卻、進行中靠 inFlight 旗標雙保險。冷卻期間按鈕變灰並顯示「冷卻中（X 分 Y 秒）」倒數，sessionStorage 持久化避免 refresh 頁面繞過
+
+---
+
+## [1.7.79] - 2026-05-13
+
+### 修正（vat-db 自動下載）
+
+- **修正錯誤的資料集 URL**：dataset id `9210` 已被政府重新分配給「紅外線彩色衛星雲圖」，改用正確的 `9400`「全國營業(稅籍)登記資料集」
+- 主檔來源換成 `https://eip.fia.gov.tw/data/BGMOPEN1.zip`（驗證 200 OK，~65MB zip）
+- 移除舊的 4 個失效 URL（`service.mof.gov.tw/.../BGMOPEN1.*`、`data.gov.tw/dataset/9210/...`、`9911`）
+
+### 新增（vat-db 補充來源）
+
+- 自動下載流程加入 3 個政府 / 學校統編補充來源（INSERT OR IGNORE，不覆蓋主檔）：
+  - 行政院所屬各機關統編（dataset 44806）
+  - 地方政府各機關統編（dataset 166161）
+  - 全國各級學校統編 BGMOPEN99X（dataset 75136）
+- 新 `vat_db.append_csv()` / `download_and_ingest_all()` API 支援多來源合併
+- UI 顯示主檔筆數 + 各補充來源新增筆數 + 總計
+
+### UI
+
+- vat-db 頁主動作改回「自動下載並更新」（藍底突顯），手動上傳改為次要選項
+- 「前往 data.gov.tw 下載」連結改指向正確的 `/dataset/9400`
+
+---
+
+## [1.7.78] - 2026-05-13
+
+### 修正（vat-db）
+
+- **對話框改用本專案 `showConfirm` / `showAlert`**：自動下載確認、清空資料庫確認、反查格式錯誤提示，全部改走 `static/js/modal.js` 的統一 modal，不再使用瀏覽器原生 `confirm()` / `alert()`
+- **summary 三個 stat 重新排版**：標籤改放上方（小字灰），值改放下方（大字粗體），固定每格寬度 140px，左對齊不再大空隙
+- **UX 主軸改為「手動上傳優先」**：
+  - 「手動上傳 CSV / ZIP」section 改藍底突顯，加「前往 data.gov.tw 下載」按鈕直接開啟資料來源頁
+  - 「自動下載」section 降為實驗性，並標明官方資料來源 URL 不時變動，失敗請改用手動上傳
+  - 自動下載失敗訊息加「建議改用上方手動上傳」提示
+
+### 新增
+
+- **zbar shared lib 自動安裝**（einvoice-scan QR Code 解析的 native 依賴）：
+  - `install.sh` Linux 加 `apt install libzbar0` / `dnf install zbar`，macOS 加 `brew install zbar`
+  - `install.sh` 末段 import smoke test 加 `pyzbar.pyzbar` 驗證
+  - `jtdt update` 流程透過 `_ensure_zbar()` 自動補裝缺漏 zbar
+  - `/admin/sys-deps` 加 zbar probe（key=`zbar`，category=「QR / 條碼」），狀態與安裝指令一覽
+  - Windows pyzbar wheel 內建 DLL 不需另裝 → install.ps1 不動（保 BOM 完整）
+
+### 文案
+
+- 全代碼庫「自帶」一律改「內建」/「預載」（台灣慣用語）
+
+---
+
 ## [1.7.77] - 2026-05-13
 
 ### 改進
@@ -548,7 +767,7 @@
 
 ### 修正
 
-- **`pdf-editor` 選既有文字框誤觸發 OCR 跑超久**：客戶踩到 ── 高解析 CJK PDF 上點純文字標題（如「○○○○○○○○」、「○○發展歷程」、「○○○○○○○○」），明明 PyMuPDF 可以直接抽出文字，卻跑了 5-15 秒 OCR。根因：`_looks_garbled()` 內 signal b) 「`cjk_count >= 8 AND common_hits == 0`」太激進 ── 真標題很常 8+ 字但完全沒 common particle（的 / 是 / 在 / 了 / 一），全被誤判 garbled 丟去 OCR。修法：撤回 signal b)，靠剩下三條（suspicious 符號、長字元重複、短週期模式）即可可靠偵測 Identity-H ToUnicode 壞掉的 garbage。
+- **`pdf-editor` 選既有文字框誤觸發 OCR 跑超久**：客戶踩到 ── 高解析 CJK PDF 上點純文字標題（如「○○○○○○○○」、「公司發展歷程」、「○○○○○○○○」），明明 PyMuPDF 可以直接抽出文字，卻跑了 5-15 秒 OCR。根因：`_looks_garbled()` 內 signal b) 「`cjk_count >= 8 AND common_hits == 0`」太激進 ── 真標題很常 8+ 字但完全沒 common particle（的 / 是 / 在 / 了 / 一），全被誤判 garbled 丟去 OCR。修法：撤回 signal b)，靠剩下三條（suspicious 符號、長字元重複、短週期模式）即可可靠偵測 Identity-H ToUnicode 壞掉的 garbage。
 - **`pdf-editor` 工具列按鈕縮小省空間**：左排 V/S/T/I/W/R/L/A/O/P/H/N + 快捷鍵的圓鈕原本 40×40 / icon 22×22，改成 30×30 / icon 18×18，gap 從 4→3、padding 6/8 → 4/6。整條工具列高度省約 12px 給 canvas 用。
 
 ---

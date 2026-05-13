@@ -687,6 +687,16 @@ def _print_system_deps_summary() -> None:
                 "windows": "winget install TheDocumentFoundation.LibreOffice",
             },
         ),
+        (
+            "zbar (libzbar)",
+            _zbar_present,
+            "einvoice-scan QR code parsing (Windows wheel bundles DLL — N/A there)",
+            {
+                "linux": "sudo apt install libzbar0",
+                "macos": "brew install zbar",
+                "windows": "(bundled in pyzbar wheel)",
+            },
+        ),
     ]
     missing = [d for d in deps if not d[1]()]
     if not missing:
@@ -771,6 +781,19 @@ def _office_present() -> bool:
     return bool(shutil.which("soffice") or shutil.which("libreoffice"))
 
 
+def _zbar_present() -> bool:
+    """zbar shared lib 是否可用。Windows pyzbar wheel 內建 DLL → 永遠 True。
+    Linux/macOS 透過 import pyzbar.pyzbar 偵測 (ctypes load 失敗會 raise)。"""
+    if _is_windows():
+        return True
+    try:
+        import importlib
+        importlib.import_module("pyzbar.pyzbar")
+        return True
+    except Exception:
+        return False
+
+
 def _ensure_system_deps_for_update() -> None:
     """在 jtdt update 流程中自動補裝新版需要的系統套件。
 
@@ -784,6 +807,8 @@ def _ensure_system_deps_for_update() -> None:
     _ensure_tesseract()
     # OxOffice / LibreOffice X11 runtime libs — Linux only (自 v1.3.15 起)
     _ensure_oxoffice_x11_libs()
+    # zbar — pyzbar (einvoice-scan QR code 解析) 的 native 依賴 (自 v1.7.78 起)
+    _ensure_zbar()
     # Java JRE — OxOffice/LibreOffice 部分匯入需要 (自 v1.4.40 起，客戶 v1.4.39 踩到)
     _ensure_java_runtime()
     # NSSM → WinSW 移轉 — Windows only (自 v1.4.44 起)
@@ -890,7 +915,7 @@ def _ensure_tesseract_core_langs(binary: str) -> bool:
                     print(f"    note: {result.error}")
             else:
                 print(f"    WARNING: {code} install failed: {result.error}", file=sys.stderr)
-                # eng 在 chi_tra 之外通常已是 tesseract 自帶 — 失敗不要 abort
+                # eng 在 chi_tra 之外通常已是 tesseract 內建 — 失敗不要 abort
                 if code == "chi_tra":
                     overall_ok = False
         except Exception as e:
@@ -1038,6 +1063,55 @@ def _ensure_oxoffice_x11_libs() -> None:
         print("  WARNING: X11 libs install failed  "
               "(office-to-pdf may fail until installed manually)",
               file=sys.stderr)
+
+
+def _ensure_zbar() -> None:
+    """zbar shared lib — pyzbar (einvoice-scan QR code 解析) 的 native 依賴。
+    Windows pyzbar wheel 內建 DLL 不需安裝；Linux/macOS 需額外裝。
+    缺則 einvoice-scan QR 掃描功能會在啟動時 503，其餘工具不受影響。"""
+    if _is_windows():
+        return
+    # 已裝就跳過
+    try:
+        import importlib
+        importlib.import_module("pyzbar.pyzbar")
+        return  # import 成功 = zbar 可用
+    except Exception:
+        pass
+    if _is_linux():
+        if shutil.which("apt-get"):
+            print("Installing zbar (libzbar0) for einvoice-scan QR scanning ...")
+            env = os.environ.copy()
+            env["DEBIAN_FRONTEND"] = "noninteractive"
+            rc = subprocess.call(["apt-get", "install", "-y", "libzbar0"], env=env)
+            if rc == 0:
+                print("  OK: zbar installed")
+            else:
+                print("  WARNING: zbar install failed — einvoice-scan QR scanning disabled",
+                      file=sys.stderr)
+        elif shutil.which("dnf"):
+            print("Installing zbar for einvoice-scan QR scanning ...")
+            rc = subprocess.call(["dnf", "install", "-y", "zbar"])
+            if rc == 0:
+                print("  OK: zbar installed")
+            else:
+                print("  WARNING: zbar install failed — einvoice-scan QR scanning disabled",
+                      file=sys.stderr)
+        else:
+            print("  WARNING: no apt-get/dnf — install zbar (libzbar0) manually",
+                  file=sys.stderr)
+    elif _is_macos():
+        if shutil.which("brew"):
+            print("Installing zbar via Homebrew for einvoice-scan QR scanning ...")
+            rc = subprocess.call(["brew", "install", "zbar"])
+            if rc == 0:
+                print("  OK: zbar installed")
+            else:
+                print("  WARNING: zbar install failed — einvoice-scan QR scanning disabled",
+                      file=sys.stderr)
+        else:
+            print("  WARNING: Homebrew not found — install zbar manually: brew install zbar",
+                  file=sys.stderr)
 
 
 def _ensure_java_runtime() -> None:

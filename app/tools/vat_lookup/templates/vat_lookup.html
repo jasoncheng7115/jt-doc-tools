@@ -1,0 +1,568 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}統編查詢 · {{ app_name }}{% endblock %}
+
+{% block head %}
+<style>
+.vl-wrap { max-width: 900px; }
+
+.vl-search-bar {
+  display: flex; gap: 8px; align-items: stretch;
+  padding: 6px;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+  margin-bottom: 8px;
+}
+.vl-search-bar input {
+  flex: 1; min-width: 0;
+  font-size: 15px; padding: 9px 12px;
+  border: 1px solid transparent; outline: 0; border-radius: 6px;
+  background: #fff;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+.vl-search-bar input:focus { border-color: #93c5fd; }
+.vl-search-bar input::placeholder { color: #94a3b8; }
+.vl-search-bar button {
+  padding: 9px 20px; font-size: 14px; font-weight: 500;
+  background: #2563eb; color: #fff; border: 0; border-radius: 6px;
+  cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.vl-search-bar button:hover { background: #1d4ed8; }
+.vl-search-bar button:disabled { opacity: 0.5; cursor: wait; }
+.vl-search-hint {
+  margin-bottom: 14px;
+  font-size: 12px; color: #64748b;
+  display: flex; flex-wrap: wrap; gap: 4px 14px;
+}
+.vl-search-hint .key {
+  background: #f1f5f9; padding: 1px 7px; border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px; color: #334155;
+}
+
+.vl-db-info {
+  display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center;
+  padding: 8px 14px; margin-bottom: 16px;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+  font-size: 12.5px; color: #475569;
+}
+.vl-db-info > .label { margin-right: 6px; }
+.vl-db-info b { color: #0f172a; font-variant-numeric: tabular-nums; }
+.vl-db-info .meta-right { margin-left: auto; font-size: 11.5px; color: #94a3b8; }
+/* 可點選的類別篩選 chip */
+.vl-cat-filter {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 999px;
+  background: #fff; border: 1px solid #e2e8f0; color: #475569;
+  font-size: 12px; cursor: pointer; user-select: none;
+  transition: background 0.1s, border-color 0.1s;
+}
+.vl-cat-filter:hover { background: #f1f5f9; border-color: #94a3b8; }
+.vl-cat-filter.active {
+  background: #2563eb; border-color: #2563eb; color: #fff;
+}
+.vl-cat-filter.active b { color: #fff; }
+.vl-cat-filter b { color: #0f172a; font-variant-numeric: tabular-nums; }
+.vl-db-info .clear-filter {
+  font-size: 11px; padding: 3px 8px; border-radius: 4px;
+  background: none; border: 1px solid #e2e8f0;
+  color: #94a3b8; cursor: pointer;
+}
+.vl-db-info .clear-filter:hover { color: #1e293b; border-color: #94a3b8; }
+.vl-db-empty {
+  background: #fef3c7; border-color: #fde68a; color: #92400e;
+}
+
+/* 螢光黃高亮 */
+mark.vl-hl {
+  background: #fef08a; color: #422006; padding: 0 1px; border-radius: 2px;
+}
+
+.vl-tabs {
+  display: flex; gap: 0; border-bottom: 1px solid #e2e8f0; margin-bottom: 14px;
+}
+.vl-tabs button {
+  background: none; border: 0; padding: 9px 18px;
+  cursor: pointer; font-size: 13.5px; color: #64748b;
+  border-bottom: 2px solid transparent;
+}
+.vl-tabs button.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+.vl-tabs button:hover:not(.active) { color: #334155; background: #f8fafc; }
+
+/* === 結果區 === */
+.vl-result-empty {
+  text-align: center; padding: 40px 20px;
+  color: #94a3b8; font-size: 13px;
+}
+.vl-result-empty .ic { stroke: currentColor; opacity: 0.5; margin-bottom: 8px; }
+
+.vl-card {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 16px 18px; margin-bottom: 8px;
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+  transition: box-shadow 0.15s;
+}
+.vl-card:hover { box-shadow: 0 4px 12px rgba(15,23,42,0.08); }
+.vl-card.found { border-left: 3px solid #22c55e; }
+.vl-card.miss { border-left: 3px solid #ef4444; background: #fef2f2; }
+.vl-card-head {
+  display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap;
+}
+.vl-card-vat {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px; color: #475569; font-variant-numeric: tabular-nums;
+}
+.vl-card-name {
+  font-size: 17px; font-weight: 600; color: #0f172a;
+  flex: 1; min-width: 0; word-break: break-all;
+}
+.vl-card-meta {
+  display: grid; grid-template-columns: 70px 1fr;
+  gap: 3px 12px; font-size: 13px;
+}
+.vl-card-meta .label { color: #64748b; }
+.vl-card-meta .val { color: #334155; word-break: break-all; }
+
+.vl-cat-chip {
+  display: inline-block; padding: 1px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; vertical-align: middle;
+  background: #dbeafe; color: #1e40af;
+}
+.vl-cat-chip.gov { background: #ede9fe; color: #6d28d9; }
+.vl-cat-chip.school { background: #fef3c7; color: #92400e; }
+.vl-cat-chip.unknown { background: #f1f5f9; color: #64748b; }
+
+.vl-results-hdr {
+  font-size: 12.5px; color: #475569; margin: 4px 0 10px;
+  display: flex; align-items: center; gap: 12px;
+}
+.vl-results-hdr .count b { color: #0f172a; }
+.vl-results-hdr .actions { margin-left: auto; display: flex; gap: 6px; }
+.vl-btn-sm {
+  font-size: 12px; padding: 4px 10px;
+  background: #fff; border: 1px solid #cbd5e1; border-radius: 4px;
+  color: #475569; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.vl-btn-sm:hover { background: #f1f5f9; }
+
+/* 批次模式 */
+.vl-batch-textarea {
+  width: 100%; min-height: 160px; padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px;
+  resize: vertical; box-sizing: border-box;
+}
+.vl-batch-table {
+  margin-top: 14px;
+  width: 100%; border-collapse: collapse; font-size: 12.5px;
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
+  overflow: hidden;
+}
+.vl-batch-table th, .vl-batch-table td {
+  padding: 7px 10px; border-bottom: 1px solid #e5e7eb; text-align: left;
+}
+.vl-batch-table th { background: #f8fafc; color: #475569; font-weight: 600; font-size: 12px; }
+.vl-batch-table tr.miss td { background: #fef2f2; color: #991b1b; }
+.vl-batch-table tr:last-child td { border-bottom: 0; }
+.vl-batch-table .vat-cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums; color: #475569;
+}
+
+.vl-spinner {
+  width: 16px; height: 16px;
+  border: 2px solid #cbd5e1; border-top-color: #2563eb;
+  border-radius: 50%; display: inline-block;
+  animation: vl-spin 0.9s linear infinite;
+  vertical-align: -3px;
+}
+@keyframes vl-spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="vl-wrap">
+
+<h1>{{ icon('search', size=22) }} 統編查詢</h1>
+<p class="muted">輸入 8 位統一編號反查，或輸入公司 / 機關名稱、地址、行業關鍵字搜尋。資料來源：<a href="/admin/vat-db">統編資料庫</a>（財政部 BGMOPEN + 行政院 / 地方政府機關 + 學校）。</p>
+
+<div class="vl-search-bar">
+  <input type="text" id="qInput" placeholder="輸入統編 (8 位數字) 或公司名稱、地址、行業關鍵字…"
+         autocomplete="off" autofocus>
+  <button type="button" id="btnSearch">
+    {{ icon('search', size=14) }} <span id="btnSearchText">查詢</span>
+  </button>
+</div>
+<div class="vl-search-hint">
+  <span><span class="key">12345678</span> 8 位數字 → 統編反查</span>
+  <span><span class="key">有限公司</span> 關鍵字 → 模糊搜尋</span>
+  <span><span class="key">Enter</span> 送出</span>
+</div>
+
+{% if meta.record_count %}
+<div class="vl-db-info" id="dbInfoBar">
+  <span class="label">資料庫含 <b>{{ "{:,}".format(meta.record_count) }}</b> 筆 · 點分類縮小搜尋範圍：</span>
+  {% for c in categories %}
+    <span class="vl-cat-filter" data-cat="{{ c.category }}">
+      {{ c.category }} <b>{{ "{:,}".format(c.count) }}</b>
+    </span>
+  {% endfor %}
+  <button type="button" class="clear-filter" id="btnClearFilter" hidden>清除篩選</button>
+  {% if meta.last_updated %}
+    <span class="meta-right">最後更新 {{ meta.last_updated[:10] }}</span>
+  {% endif %}
+</div>
+{% else %}
+<div class="vl-db-info vl-db-empty">
+  ⚠ 統編資料庫尚未匯入任何資料。請先到 <a href="/admin/vat-db">/admin/vat-db</a> 自動下載 BGMOPEN 主檔（約 65 MB）。
+</div>
+{% endif %}
+
+<div class="vl-tabs">
+  <button type="button" data-tab="search" class="active">查詢 / 搜尋</button>
+  <button type="button" data-tab="batch">批次查詢</button>
+</div>
+
+<!-- 查詢 / 搜尋（合併模式：自動辨識 8 位 vs 名稱） -->
+<div data-pane="search">
+  <div id="results">
+    <div class="vl-result-empty">
+      {{ icon('search', size=32) }}
+      <div>輸入統編、公司名稱、或地址、行業關鍵字開始查詢</div>
+    </div>
+  </div>
+</div>
+
+<!-- 批次查詢（多筆統編） -->
+<div data-pane="batch" hidden>
+  <p style="font-size:12.5px; color:#64748b; margin: 0 0 6px;">
+    每行一個 8 位統編，最多 200 筆。可貼上 Excel 一整欄。
+  </p>
+  <textarea class="vl-batch-textarea" id="batchInput"
+            placeholder="12345678&#10;87654321&#10;11223344&#10;..."></textarea>
+  <div style="display:flex; gap:8px; margin-top:8px;">
+    <button type="button" id="btnBatch"
+            style="padding:8px 18px; background:#2563eb; color:#fff; border:0; border-radius:6px; cursor:pointer; font-size:13px;">
+      {{ icon('search', size=14) }} 批次查詢
+    </button>
+    <button type="button" id="btnBatchExport" hidden
+            style="padding:8px 18px; background:#fff; color:#1e293b; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer; font-size:13px;">
+      {{ icon('download', size=14) }} 下載 .csv
+    </button>
+  </div>
+  <div id="batchResult"></div>
+</div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = id => document.getElementById(id);
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[<>&"']/g, c =>
+    ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+const CAT_CLASS = {
+  '企業': '',
+  '中央政府機關': 'gov',
+  '地方政府機關': 'gov',
+  '學校': 'school',
+};
+
+function _catChip(cat) {
+  cat = cat || '未分類';
+  const cls = CAT_CLASS[cat] || 'unknown';
+  return `<span class="vl-cat-chip ${cls}">${escapeHtml(cat)}</span>`;
+}
+
+// 螢光黃高亮：escape HTML 後把 query substring 用 <mark> 包起來。
+// 比較字串時兩邊都先 escape，避免 escaped char (& → &amp;) 比對不到。
+function _highlight(text, query) {
+  if (!text) return '';
+  const escapedText = escapeHtml(text);
+  if (!query) return escapedText;
+  const escapedQuery = escapeHtml(query);
+  // 跳過 regex 特殊字元
+  const reEsc = escapedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return escapedText.replace(new RegExp(reEsc, 'gi'),
+    m => `<mark class="vl-hl">${m}</mark>`);
+}
+
+function _renderCard(r, isMiss, query) {
+  if (isMiss) {
+    return `<div class="vl-card miss">
+      <div class="vl-card-head">
+        <span class="vl-card-vat">${escapeHtml(r.vat)}</span>
+        <span style="color:#991b1b; font-size:14px;">✗ ${escapeHtml(r.error || '查無此統編')}</span>
+      </div>
+    </div>`;
+  }
+  const hl = s => _highlight(s, query);
+  let metaRows = '';
+  if (r.address)    metaRows += `<span class="label">地址</span><span class="val">${hl(r.address)}</span>`;
+  if (r.owner)      metaRows += `<span class="label">負責人</span><span class="val">${hl(r.owner)}</span>`;
+  if (r.org_type)   metaRows += `<span class="label">組織別</span><span class="val">${hl(r.org_type)}</span>`;
+  if (r.industries) metaRows += `<span class="label">行業</span><span class="val">${hl(r.industries)}</span>`;
+  if (r.status)     metaRows += `<span class="label">狀態</span><span class="val">${hl(r.status)}</span>`;
+  return `<div class="vl-card found">
+    <div class="vl-card-head">
+      <span class="vl-card-vat">${hl(r.vat)}</span>
+      <span class="vl-card-name">${hl(r.name)}</span>
+      ${_catChip(r.category)}
+    </div>
+    ${metaRows ? `<div class="vl-card-meta">${metaRows}</div>` : ''}
+  </div>`;
+}
+
+function _showResultsEmpty() {
+  $('results').innerHTML = `<div class="vl-result-empty">
+    {{ icon('search', size=32) }}
+    <div>輸入統編、公司名稱、或地址、行業關鍵字開始查詢</div>
+  </div>`;
+}
+
+// 類別篩選狀態（multi-select）
+const _activeCategories = new Set();
+
+function _updateClearFilterBtn() {
+  const btn = $('btnClearFilter');
+  if (btn) btn.hidden = _activeCategories.size === 0;
+}
+
+async function smartQuery() {
+  const q = $('qInput').value.trim();
+  if (!q) {
+    _showResultsEmpty();
+    return;
+  }
+  const btn = $('btnSearch');
+  const btnText = $('btnSearchText');
+  btn.disabled = true;
+  btnText.innerHTML = '<span class="vl-spinner"></span> 查詢中…';
+  $('results').innerHTML = '<div class="vl-result-empty">查詢中…</div>';
+  try {
+    // 8 位數字 + 沒有類別篩選 → 直接 vat lookup
+    if (/^\d{8}$/.test(q) && _activeCategories.size === 0) {
+      const r = await fetch('/tools/vat-lookup/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vat: q }),
+      });
+      if (r.status === 404) {
+        $('results').innerHTML = _renderCard({vat: q, error: '資料庫中找不到此統編'}, true);
+        return;
+      }
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.detail || `HTTP ${r.status}`);
+      }
+      const j = await r.json();
+      $('results').innerHTML = _renderCard(j, false, q);
+    } else {
+      // 文字 OR (8 位數字 + 有篩選) → 模糊搜尋
+      if (q.length < 2) {
+        $('results').innerHTML = `<div class="vl-result-empty">關鍵字至少 2 個字元</div>`;
+        return;
+      }
+      const payload = { query: q, field: 'any', limit: 50 };
+      if (_activeCategories.size > 0) {
+        payload.categories = Array.from(_activeCategories);
+      }
+      const r = await fetch('/tools/vat-lookup/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.detail || `HTTP ${r.status}`);
+      }
+      const j = await r.json();
+      const catNote = _activeCategories.size
+        ? `（篩選類別：${Array.from(_activeCategories).join(' / ')}）`
+        : '';
+      if (!j.results.length) {
+        $('results').innerHTML = `<div class="vl-result-empty">
+          {{ icon('search', size=32) }}
+          <div>找不到符合「${escapeHtml(q)}」${escapeHtml(catNote)}的資料</div>
+        </div>`;
+        return;
+      }
+      const hdr = `<div class="vl-results-hdr">
+        <span class="count">找到 <b>${j.count}</b> 筆${j.count >= 50 ? '（最多顯示 50 筆，可加更具體關鍵字縮小範圍）' : ''}${escapeHtml(catNote)}</span>
+        <span class="actions"><button class="vl-btn-sm" onclick="exportResultsCsv()">{{ icon('download', size=12) }} 下載 .csv</button></span>
+      </div>`;
+      _lastSearchResults = j.results;
+      $('results').innerHTML = hdr + j.results.map(r => _renderCard(r, false, q)).join('');
+    }
+  } catch (e) {
+    $('results').innerHTML = `<div class="vl-card miss"><div class="vl-card-head"><span style="color:#991b1b;">查詢失敗：${escapeHtml(e.message)}</span></div></div>`;
+  } finally {
+    btn.disabled = false;
+    btnText.textContent = '查詢';
+  }
+}
+
+// 類別篩選 chip：可單可複選
+document.querySelectorAll('.vl-cat-filter').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const cat = chip.dataset.cat;
+    if (_activeCategories.has(cat)) {
+      _activeCategories.delete(cat);
+      chip.classList.remove('active');
+    } else {
+      _activeCategories.add(cat);
+      chip.classList.add('active');
+    }
+    _updateClearFilterBtn();
+    // 若已有搜尋字 → 立刻重搜
+    if ($('qInput').value.trim()) smartQuery();
+  });
+});
+
+const _btnClearFilter = $('btnClearFilter');
+if (_btnClearFilter) {
+  _btnClearFilter.addEventListener('click', () => {
+    _activeCategories.clear();
+    document.querySelectorAll('.vl-cat-filter.active').forEach(c => c.classList.remove('active'));
+    _updateClearFilterBtn();
+    if ($('qInput').value.trim()) smartQuery();
+  });
+}
+
+let _lastSearchResults = [];
+
+function exportResultsCsv() {
+  if (!_lastSearchResults.length) return;
+  const rows = [['統編', '名稱', '類別', '行業', '地址', '負責人', '組織別', '狀態']];
+  for (const r of _lastSearchResults) {
+    rows.push([r.vat, r.name || '', r.category || '', r.industries || '',
+               r.address || '', r.owner || '', r.org_type || '', r.status || '']);
+  }
+  _downloadCsv(rows, 'vat-search');
+}
+
+function _downloadCsv(rows, prefix) {
+  const csv = '﻿' + rows.map(r => r.map(cell => {
+    const s = String(cell == null ? '' : cell);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${prefix}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+$('btnSearch').addEventListener('click', smartQuery);
+$('qInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); smartQuery(); }
+});
+
+// === Tabs ===
+document.querySelectorAll('.vl-tabs button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.vl-tabs button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    document.querySelectorAll('[data-pane]').forEach(p => p.hidden = true);
+    document.querySelector(`[data-pane="${b.dataset.tab}"]`).hidden = false;
+  });
+});
+
+// === 批次查詢 ===
+let _lastBatchResults = [];
+
+async function doBatch() {
+  const raw = $('batchInput').value.trim();
+  if (!raw) {
+    await window.showAlert('請貼上至少一個統編', { title: '空輸入' });
+    return;
+  }
+  const matches = raw.match(/\d{8}/g) || [];
+  const seen = new Set();
+  const vats = matches.filter(v => seen.has(v) ? false : (seen.add(v), true));
+  if (!vats.length) {
+    await window.showAlert('找不到任何 8 位數字統編', { title: '無有效統編' });
+    return;
+  }
+  if (vats.length > 200) {
+    await window.showAlert(`一次最多查 200 筆，目前 ${vats.length} 筆`, { title: '過多' });
+    return;
+  }
+  const btn = $('btnBatch');
+  btn.disabled = true;
+  $('batchResult').innerHTML = '<div class="vl-result-empty">查詢中…</div>';
+  try {
+    const r = await fetch('/tools/vat-lookup/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vats }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j.detail || `HTTP ${r.status}`);
+    }
+    const j = await r.json();
+    _lastBatchResults = j.results;
+    _renderBatch(j);
+    $('btnBatchExport').hidden = false;
+  } catch (e) {
+    $('batchResult').innerHTML = `<div class="vl-card miss" style="margin-top:10px;"><div class="vl-card-head"><span style="color:#991b1b;">批次查詢失敗：${escapeHtml(e.message)}</span></div></div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function _renderBatch(j) {
+  const wrap = $('batchResult');
+  let html = `<p style="font-size:12.5px; color:#475569; margin:14px 0 6px;">
+    共 ${j.count} 筆 · 查到 <b>${j.found_count}</b> · 查無 <b>${j.count - j.found_count}</b>
+  </p>`;
+  html += `<table class="vl-batch-table"><thead><tr>
+    <th>統編</th><th>名稱</th><th>類別</th><th>行業</th><th>地址</th>
+  </tr></thead><tbody>`;
+  for (const r of j.results) {
+    if (r.found) {
+      html += `<tr>
+        <td class="vat-cell">${escapeHtml(r.vat)}</td>
+        <td>${escapeHtml(r.name)}</td>
+        <td>${_catChip(r.category)}</td>
+        <td>${escapeHtml(r.industries || '')}</td>
+        <td>${escapeHtml(r.address || '')}</td>
+      </tr>`;
+    } else {
+      html += `<tr class="miss">
+        <td class="vat-cell">${escapeHtml(r.vat)}</td>
+        <td colspan="4">${escapeHtml(r.error || '查無')}</td>
+      </tr>`;
+    }
+  }
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function exportBatchCsv() {
+  if (!_lastBatchResults.length) return;
+  const rows = [['統編', '名稱', '類別', '行業', '地址', '負責人', '組織別', '狀態', '結果']];
+  for (const r of _lastBatchResults) {
+    if (r.found) {
+      rows.push([r.vat, r.name || '', r.category || '', r.industries || '',
+                 r.address || '', r.owner || '', r.org_type || '', r.status || '', '✓']);
+    } else {
+      rows.push([r.vat, '', '', '', '', '', '', '', r.error || '查無']);
+    }
+  }
+  _downloadCsv(rows, 'vat-batch');
+}
+
+$('btnBatch').addEventListener('click', doBatch);
+$('btnBatchExport').addEventListener('click', exportBatchCsv);
+</script>
+{% endblock %}

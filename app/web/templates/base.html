@@ -365,15 +365,25 @@
   </aside>
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <main class="container with-sidebar">
-    {# 右上「回首頁」浮動按鈕 — 任何非首頁的頁面都顯示，方便快速回到工具總覽 #}
-    <a class="home-fab" id="homeFab" href="/" title="回首頁" aria-label="回首頁">
-      {{ icon('home', size=18) }}<span class="home-fab-text">首頁</span>
-    </a>
+    {# 右上浮動按鈕區 — flex 容器讓多個 fab 自動排好不重疊 #}
+    <div class="fab-row" id="fabRow">
+      {# 工具頁可在此 block 加自己的右上 fab（顯示在首頁鈕左邊） #}
+      {% block right_fab %}{% endblock %}
+      {# 「回首頁」按鈕 — 任何非首頁的頁面都顯示 #}
+      <a class="home-fab" id="homeFab" href="/" title="回首頁" aria-label="回首頁">
+        {{ icon('home', size=18) }}<span class="home-fab-text">首頁</span>
+      </a>
+    </div>
     {% block content %}{% endblock %}
   </main>
   <style>
-    .home-fab {
+    .fab-row {
       position: fixed; top: 14px; right: 18px; z-index: 800;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      justify-content: flex-end;
+      max-width: calc(100vw - 36px);
+    }
+    .home-fab {
       display: inline-flex; align-items: center; gap: 6px;
       padding: 7px 12px; border-radius: 999px;
       background: rgba(255,255,255,0.95); color: #1f2937;
