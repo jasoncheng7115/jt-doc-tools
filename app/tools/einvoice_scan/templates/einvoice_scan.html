@@ -35,12 +35,38 @@
   border-radius: 10px; padding: 18px;
   display: flex; flex-direction: column; gap: 10px;
   align-items: center;
+  scroll-margin-top: 16px;       /* scrollIntoView 時在頂部留 16px 邊 */
+}
+.es-live .video-wrap {
+  position: relative;
+  width: 100%; max-width: 480px;
+  border-radius: 8px; background: #000;
+  overflow: hidden;
 }
 .es-live video {
-  width: 100%; max-width: 480px; max-height: 360px;
-  border-radius: 8px; background: #000;
+  width: 100%; max-height: 360px;
+  display: block;
+  background: #000;
   object-fit: cover;
 }
+/* 中央紅框：QR 只能在這個範圍內才會被處理。
+   尺寸 = video 區的 60% × 60% 居中 */
+.es-live .scan-box {
+  position: absolute;
+  top: 20%; left: 20%; width: 60%; height: 60%;
+  border: 3px solid #ef4444;
+  border-radius: 6px;
+  pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);   /* 框外淡黑遮罩，提示「對到框內」 */
+}
+.es-live .scan-box .corner {
+  position: absolute; width: 16px; height: 16px;
+  border: 4px solid #fbbf24;
+}
+.es-live .scan-box .corner.tl { top:-4px; left:-4px; border-right:0; border-bottom:0; }
+.es-live .scan-box .corner.tr { top:-4px; right:-4px; border-left:0; border-bottom:0; }
+.es-live .scan-box .corner.bl { bottom:-4px; left:-4px; border-right:0; border-top:0; }
+.es-live .scan-box .corner.br { bottom:-4px; right:-4px; border-left:0; border-top:0; }
 .es-live .live-status {
   font-size: 13px; opacity: 0.85; min-height: 18px;
 }
@@ -65,6 +91,17 @@
   outline: 4px solid #34d399;
   outline-offset: -4px;
 }
+
+/* 全螢幕閃光彈效果 */
+.es-flashbang {
+  position: fixed; inset: 0;
+  background: #ffffff;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 99999;
+  transition: opacity 0.18s ease-out;
+}
+.es-flashbang.fire { opacity: 0.85; transition: none; }
 
 .es-drop {
   border: 2px dashed #cbd5e1;
@@ -185,12 +222,21 @@
 
   <!-- 連續掃描的 live preview 區，預設隱藏 -->
   <div class="es-live" id="liveBox" hidden style="margin-top: 14px;">
-    <video id="liveVideo" autoplay playsinline muted></video>
+    <div class="video-wrap">
+      <video id="liveVideo" autoplay playsinline muted></video>
+      <div class="scan-box">
+        <span class="corner tl"></span><span class="corner tr"></span>
+        <span class="corner bl"></span><span class="corner br"></span>
+      </div>
+    </div>
     <div class="live-counter">本次已掃描：<b id="liveCount">0</b> 張</div>
-    <div class="live-status" id="liveStatus">對準發票 QR Code…</div>
+    <div class="live-status" id="liveStatus">把發票 QR 對到中央紅框內…</div>
     <button type="button" id="liveStop">停止掃描</button>
   </div>
 </div>
+
+<!-- 全螢幕閃光彈 overlay -->
+<div class="es-flashbang" id="flashbang"></div>
 
 <div class="panel">
   <div class="es-buffer-toolbar">
@@ -465,6 +511,8 @@ async function startLiveScan() {
   liveBox.hidden = false;
   _liveScannedThisSession = 0;
   liveCount.textContent = '0';
+  // 顯示 live box 後立刻 scroll 到該位置（手機跟 PC 都好用）
+  liveBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   try {
     _liveStream = await navigator.mediaDevices.getUserMedia({
@@ -482,7 +530,9 @@ async function startLiveScan() {
 
   _liveCanvas = document.createElement('canvas');
   _liveCtx = _liveCanvas.getContext('2d', { willReadFrequently: true });
-  liveStatusEl.textContent = '對準發票 QR Code…';
+  liveStatusEl.textContent = '把發票 QR 對到中央紅框內…';
+  // 預先初始化 AudioContext（required user gesture，這裡的 click 算）
+  _ensureAudioContext();
   scanLoop();
 }
 
@@ -506,6 +556,25 @@ function stopLiveScan() {
 
 liveStop.addEventListener('click', stopLiveScan);
 
+// QR 中央 60% 範圍 = 紅框內
+const _SCAN_BOX_MARGIN = 0.20;
+
+function _isQrInsideBox(location, width, height) {
+  if (!location) return true;  // 沒位置資訊就不過濾
+  // location.{topLeftCorner, topRightCorner, bottomLeftCorner, bottomRightCorner}.{x,y}
+  const corners = [
+    location.topLeftCorner, location.topRightCorner,
+    location.bottomLeftCorner, location.bottomRightCorner,
+  ];
+  const cx = corners.reduce((s, p) => s + p.x, 0) / 4;
+  const cy = corners.reduce((s, p) => s + p.y, 0) / 4;
+  const minX = width * _SCAN_BOX_MARGIN;
+  const maxX = width * (1 - _SCAN_BOX_MARGIN);
+  const minY = height * _SCAN_BOX_MARGIN;
+  const maxY = height * (1 - _SCAN_BOX_MARGIN);
+  return cx >= minX && cx <= maxX && cy >= minY && cy <= maxY;
+}
+
 function scanLoop() {
   if (!_liveStream) return;
   if (liveVideo.readyState !== liveVideo.HAVE_ENOUGH_DATA) {
@@ -520,17 +589,60 @@ function scanLoop() {
   try {
     imgData = _liveCtx.getImageData(0, 0, _liveCanvas.width, _liveCanvas.height);
   } catch (e) {
-    // canvas tainted? 不太會發生，但保險
     _liveAnimFrame = requestAnimationFrame(scanLoop);
     return;
   }
   const code = jsQR(imgData.data, imgData.width, imgData.height, {
-    inversionAttempts: 'dontInvert',  // 一般 QR 黑底白方塊不需反相，省 CPU
+    inversionAttempts: 'dontInvert',
   });
   if (code && code.data) {
-    handleLiveScanResult(code.data);
+    // 只接受 QR 中心落在紅框內的，框外的當沒掃到（避免桌上其他發票被誤掃）
+    if (_isQrInsideBox(code.location, _liveCanvas.width, _liveCanvas.height)) {
+      handleLiveScanResult(code.data);
+    }
   }
   _liveAnimFrame = requestAnimationFrame(scanLoop);
+}
+
+// ─── 全螢幕閃光 + 嗶聲 ───
+const flashbang = $('flashbang');
+function fireFlashbang() {
+  flashbang.classList.add('fire');
+  // 一個 frame 後移除 fire（轉到 .es-flashbang 預設 transition 0.18s ease-out fade out）
+  requestAnimationFrame(() => {
+    flashbang.classList.remove('fire');
+  });
+}
+
+let _audioCtx = null;
+function _ensureAudioContext() {
+  if (_audioCtx) return _audioCtx;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (Ctx) _audioCtx = new Ctx();
+  } catch (e) { _audioCtx = null; }
+  return _audioCtx;
+}
+function beep() {
+  // Web Audio 合成短促兩段嗶聲（模擬條碼掃描器音效）
+  const ctx = _ensureAudioContext();
+  if (!ctx) return;
+  try {
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    const t0 = ctx.currentTime;
+    [880, 1320].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, t0 + i * 0.07);
+      gain.gain.setValueAtTime(0.0001, t0 + i * 0.07);
+      gain.gain.exponentialRampToValueAtTime(0.18, t0 + i * 0.07 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + i * 0.07 + 0.06);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t0 + i * 0.07);
+      osc.stop(t0 + i * 0.07 + 0.07);
+    });
+  } catch (e) { /* 靜默失敗，UI 不能因為 audio 卡住 */ }
 }
 
 async function handleLiveScanResult(qrText) {
@@ -560,6 +672,9 @@ async function handleLiveScanResult(qrText) {
       liveCount.textContent = String(_liveScannedThisSession);
       const last = j.added[0];
       liveStatusEl.textContent = `已加入 ${last.invoice_number}（${j.buffer.count} / ${j.buffer.limit}）`;
+      // 成功才放閃光彈 + 嗶聲（duplicate 或非 e-invoice 不打擾）
+      fireFlashbang();
+      beep();
     } else if ((j.duplicates || []).length > 0) {
       liveStatusEl.textContent = `已存在 ${j.duplicates.join(', ')} — 跳過`;
     } else if (j.parsed_count === 0) {
