@@ -23,50 +23,31 @@
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 8px;
   margin: 8px 0;
+  align-items: start;          /* 卡片不被拉伸，依內容自動高度 */
 }
 .tl-op {
   border: 1px solid #e5e7eb;
-  border-left: 4px solid var(--tl-accent, #94a3b8);
   border-radius: 6px;
   padding: 8px 10px;
   background: #fff;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  transition: background 0.15s, border-color 0.15s;
+  gap: 6px;
+  transition: background 0.12s, border-color 0.12s;
 }
 .tl-op:hover { background: #f8fafc; }
 .tl-op.on {
-  background: var(--tl-bg, #eff6ff);
-  border-color: var(--tl-accent, #2563eb);
+  background: #eff6ff;
+  border-color: #93c5fd;
 }
 .tl-op label.head {
   display: flex; align-items: center; gap: 6px;
-  font-size: 13px; font-weight: 600; cursor: pointer;
-  color: #1e293b;
+  font-size: 13px; cursor: pointer;
+  color: #334155;
 }
-.tl-op .ic {
-  display: inline-flex;
-  width: 22px; height: 22px;
-  border-radius: 50%;
-  background: var(--tl-bg, #eff6ff);
-  color: var(--tl-accent, #2563eb);
-  align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.tl-op .ic svg { width: 13px; height: 13px; }
-/* 七色 — 同類操作同色，避免一片藍 */
-.tl-op[data-op="trim"]       { --tl-accent:#64748b; --tl-bg:#f1f5f9; }
-.tl-op[data-op="drop_empty"] { --tl-accent:#64748b; --tl-bg:#f1f5f9; }
-.tl-op[data-op="dedup"]      { --tl-accent:#059669; --tl-bg:#ecfdf5; }
-.tl-op[data-op="sort"]       { --tl-accent:#2563eb; --tl-bg:#eff6ff; }
-.tl-op[data-op="reverse"]    { --tl-accent:#2563eb; --tl-bg:#eff6ff; }
-.tl-op[data-op="shuffle"]    { --tl-accent:#7c3aed; --tl-bg:#f5f3ff; }
-.tl-op[data-op="case"]       { --tl-accent:#db2777; --tl-bg:#fdf2f8; }
-.tl-op[data-op="filter"]     { --tl-accent:#ea580c; --tl-bg:#fff7ed; }
-.tl-op[data-op="head"]       { --tl-accent:#0891b2; --tl-bg:#ecfeff; }
-.tl-op[data-op="tail"]       { --tl-accent:#0891b2; --tl-bg:#ecfeff; }
-.tl-op[data-op="wrap"]       { --tl-accent:#ca8a04; --tl-bg:#fefce8; }
+.tl-op.on label.head { color: #1e293b; font-weight: 600; }
+.tl-op label.head svg { color: #94a3b8; flex-shrink: 0; }
+.tl-op.on label.head svg { color: #2563eb; }
 .tl-op .sub {
   display: flex; gap: 6px; flex-wrap: wrap; font-size: 11.5px;
   color: #475569; margin-top: 2px;
@@ -162,22 +143,19 @@
     <div class="tl-op" data-op="trim">
       <label class="head">
         <input type="checkbox" data-op-toggle>
-        <span class="ic">{{ icon('crop', size=13) }}</span>
-        Trim 前後空白
+        {{ icon('crop', size=14) }} Trim 前後空白
       </label>
     </div>
     <div class="tl-op" data-op="drop_empty">
       <label class="head">
         <input type="checkbox" data-op-toggle checked>
-        <span class="ic">{{ icon('trash', size=13) }}</span>
-        移除空行
+        {{ icon('trash', size= 14) }} 移除空行
       </label>
     </div>
     <div class="tl-op" data-op="dedup">
       <label class="head">
         <input type="checkbox" data-op-toggle>
-        <span class="ic">{{ icon('layers', size=13) }}</span>
-        去重複
+        {{ icon('layers', size= 14) }} 去重複
       </label>
       <div class="sub">
         <select data-param="keep">
@@ -191,8 +169,7 @@
     <div class="tl-op" data-op="sort">
       <label class="head">
         <input type="checkbox" data-op-toggle>
-        <span class="ic">{{ icon('chart-bar', size=13) }}</span>
-        排序
+        {{ icon('chart-bar', size= 14) }} 排序
       </label>
       <div class="sub">
         <select data-param="order">
@@ -206,22 +183,19 @@
     <div class="tl-op" data-op="reverse">
       <label class="head">
         <input type="checkbox" data-op-toggle>
-        <span class="ic">{{ icon('rotate-180', size=13) }}</span>
-        反轉順序
+        {{ icon('rotate-180', size= 14) }} 反轉順序
       </label>
     </div>
     <div class="tl-op" data-op="shuffle">
       <label class="head">
         <input type="checkbox" data-op-toggle>
-        <span class="ic">{{ icon('dice', size=13) }}</span>
-        隨機洗牌
+        {{ icon('dice', size= 14) }} 隨機洗牌
       </label>
     </div>
     <div class="tl-op" data-op="case">
       <label class="head">
         <input type="checkbox" data-op-toggle>
-        <span class="ic">{{ icon('text', size=13) }}</span>
-        大小寫轉換
+        {{ icon('text', size= 14) }} 大小寫轉換
       </label>
       <div class="sub">
         <select data-param="mode">
@@ -234,8 +208,7 @@
     <div class="tl-op" data-op="filter">
       <label class="head">
         <input type="checkbox" data-op-toggle>
-        <span class="ic">{{ icon('search', size=13) }}</span>
-        篩選
+        {{ icon('search', size= 14) }} 篩選
       </label>
       <div class="sub">
         <select data-param="mode">
@@ -250,8 +223,7 @@
     <div class="tl-op" data-op="head">
       <label class="head">
         <input type="checkbox" data-op-toggle>
-        <span class="ic">{{ icon('align-tl', size=13) }}</span>
-        取前 N 筆
+        {{ icon('align-tl', size= 14) }} 取前 N 筆
       </label>
       <div class="sub">
         <input type="number" data-param="n" value="100" min="0">
@@ -260,8 +232,7 @@
     <div class="tl-op" data-op="tail">
       <label class="head">
         <input type="checkbox" data-op-toggle>
-        <span class="ic">{{ icon('align-bl', size=13) }}</span>
-        取後 N 筆
+        {{ icon('align-bl', size= 14) }} 取後 N 筆
       </label>
       <div class="sub">
         <input type="number" data-param="n" value="100" min="0">
@@ -270,8 +241,7 @@
     <div class="tl-op" data-op="wrap">
       <label class="head">
         <input type="checkbox" data-op-toggle>
-        <span class="ic">{{ icon('paragraph', size=13) }}</span>
-        加前 / 後綴
+        {{ icon('paragraph', size= 14) }} 加前 / 後綴
       </label>
       <div class="sub">
         <input type="text" data-param="prefix" placeholder="前綴" style="width:80px;">
