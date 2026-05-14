@@ -440,11 +440,30 @@ def _probe_java_runtime() -> dict:
 def _probe_zbar() -> dict:
     """zbar shared lib — pyzbar (einvoice-scan QR code 解析) 的 native 依賴。
     Windows pyzbar wheel 內建 DLL → 永遠視為已裝。
-    Linux/macOS 透過 import pyzbar.pyzbar 偵測（ctypes load 失敗會 raise）。"""
+    macOS 直接看 brew 安裝路徑（避免 sudo / root context import 誤判）。
+    Linux 透過 import pyzbar.pyzbar 偵測（ctypes load 失敗會 raise）。"""
     if _is_windows():
         return {
             "installed": True, "version": "(bundled in pyzbar wheel)",
             "extra": "", "ok": True, "binary": "",
+        }
+    if _is_macos():
+        import os as _os
+        for p in (
+            "/opt/homebrew/lib/libzbar.dylib",
+            "/opt/homebrew/lib/libzbar.0.dylib",
+            "/usr/local/lib/libzbar.dylib",
+            "/usr/local/lib/libzbar.0.dylib",
+        ):
+            if _os.path.exists(p):
+                return {
+                    "installed": True, "version": "available",
+                    "extra": f"libzbar @ {p}", "ok": True, "binary": p,
+                }
+        return {
+            "installed": False, "version": "",
+            "extra": "未在 /opt/homebrew/lib 或 /usr/local/lib 找到 libzbar.dylib（請 brew install zbar）",
+            "ok": False, "binary": "",
         }
     try:
         import importlib

@@ -781,11 +781,23 @@ def _office_present() -> bool:
     return bool(shutil.which("soffice") or shutil.which("libreoffice"))
 
 
+_MACOS_LIBZBAR_PATHS = (
+    "/opt/homebrew/lib/libzbar.dylib",
+    "/opt/homebrew/lib/libzbar.0.dylib",
+    "/usr/local/lib/libzbar.dylib",
+    "/usr/local/lib/libzbar.0.dylib",
+)
+
+
 def _zbar_present() -> bool:
     """zbar shared lib 是否可用。Windows pyzbar wheel 內建 DLL → 永遠 True。
-    Linux/macOS 透過 import pyzbar.pyzbar 偵測 (ctypes load 失敗會 raise)。"""
+    macOS 直接看 brew 安裝路徑（root context import 不到也算數）。
+    Linux 透過 import pyzbar.pyzbar 偵測 (ctypes load 失敗會 raise)。"""
     if _is_windows():
         return True
+    if _is_macos():
+        # 不能用 import — sudo / root context 下 ctypes 找不到 brew lib 即使已裝
+        return any(os.path.exists(p) for p in _MACOS_LIBZBAR_PATHS)
     try:
         import importlib
         importlib.import_module("pyzbar.pyzbar")
@@ -1071,7 +1083,38 @@ def _ensure_zbar() -> None:
     缺則 einvoice-scan QR 掃描功能會在啟動時 503，其餘工具不受影響。"""
     if _is_windows():
         return
-    # 已裝就跳過
+    # macOS 用檔案檢查（不能用 import — sudo / root 下 ctypes 找不到 brew 路徑會誤判
+    # 然後跑 brew install 又會被 Homebrew 拒絕 root → 卡死）
+    if _is_macos():
+        existing = [p for p in _MACOS_LIBZBAR_PATHS if os.path.exists(p)]
+        if existing:
+            # 已裝；補 /usr/local/lib 內 symlink 讓 service 啟動時 ctypes 找得到
+            _ensure_macos_zbar_symlink(existing[0])
+            return
+        # 沒裝 — 嘗試 brew install（注意：brew 在 root 下會拒絕）
+        if os.geteuid() == 0:
+            print("  WARNING: zbar 未安裝；Homebrew 在 root 下無法執行。",
+                  file=sys.stderr)
+            print("           請以一般帳號跑：brew install zbar", file=sys.stderr)
+            return
+        if shutil.which("brew"):
+            print("Installing zbar via Homebrew for einvoice-scan QR scanning ...")
+            rc = subprocess.call(["brew", "install", "zbar"])
+            if rc == 0:
+                # 補 symlink 給未來 service 啟動用
+                for p in _MACOS_LIBZBAR_PATHS:
+                    if os.path.exists(p):
+                        _ensure_macos_zbar_symlink(p)
+                        break
+                print("  OK: zbar installed")
+            else:
+                print("  WARNING: zbar install failed — einvoice-scan QR scanning disabled",
+                      file=sys.stderr)
+        else:
+            print("  WARNING: Homebrew not found — install zbar manually: brew install zbar",
+                  file=sys.stderr)
+        return
+    # Linux：原本邏輯（import 偵測 + apt/dnf 安裝）
     try:
         import importlib
         importlib.import_module("pyzbar.pyzbar")
@@ -1100,18 +1143,29 @@ def _ensure_zbar() -> None:
         else:
             print("  WARNING: no apt-get/dnf — install zbar (libzbar0) manually",
                   file=sys.stderr)
-    elif _is_macos():
-        if shutil.which("brew"):
-            print("Installing zbar via Homebrew for einvoice-scan QR scanning ...")
-            rc = subprocess.call(["brew", "install", "zbar"])
-            if rc == 0:
-                print("  OK: zbar installed")
-            else:
-                print("  WARNING: zbar install failed — einvoice-scan QR scanning disabled",
-                      file=sys.stderr)
-        else:
-            print("  WARNING: Homebrew not found — install zbar manually: brew install zbar",
-                  file=sys.stderr)
+
+
+def _ensure_macos_zbar_symlink(src: str) -> None:
+    """確保 /usr/local/lib/libzbar.dylib symlink 存在，讓 service 啟動時 ctypes 找得到。
+    Apple Silicon brew 裝在 /opt/homebrew，預設 dyld search path 沒含；symlink 一份到
+    /usr/local/lib（在預設搜尋內）就解決。已存在或建立失敗都靜默 — 不影響主流程。"""
+    target_dir = "/usr/local/lib"
+    target = os.path.join(target_dir, "libzbar.dylib")
+    if os.path.exists(target) or os.path.islink(target):
+        return
+    try:
+        if not os.path.isdir(target_dir):
+            os.makedirs(target_dir, exist_ok=True)
+        os.symlink(src, target)
+        # 順便建一個 .0.dylib 給有些 ctypes 版本找
+        target0 = os.path.join(target_dir, "libzbar.0.dylib")
+        if not os.path.exists(target0) and not os.path.islink(target0):
+            os.symlink(src, target0)
+        print(f"  OK: linked {src} → {target}")
+    except (OSError, PermissionError):
+        # /usr/local/lib 需要 root；非 root 跑 jtdt update 時略過 (qr_decoder 的
+        # ctypes pre-load shim 會兜底)
+        pass
 
 
 def _ensure_java_runtime() -> None:

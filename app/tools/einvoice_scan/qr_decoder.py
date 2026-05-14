@@ -27,13 +27,46 @@
 from __future__ import annotations
 
 import io
+import os
 import re
+import sys
 from datetime import datetime
 from typing import Optional
 
 
 class QRBackendUnavailable(Exception):
     """pyzbar / zbar binary 沒裝。"""
+
+
+def _preload_libzbar_macos() -> None:
+    """macOS Apple Silicon brew 裝在 /opt/homebrew/lib，預設 dyld search path 沒含
+    （只看 /usr/lib /usr/local/lib），導致 ctypes find_library('zbar') 找不到 →
+    `from pyzbar import pyzbar` ImportError。
+
+    解法：先用 ctypes.CDLL 帶完整路徑載入，pyzbar 後續呼叫 find_library 找不到沒關係，
+    libzbar.dylib 已在 process address space 裡。
+
+    一律 best-effort，找不到不 raise（pyzbar import 時自然會炸出原本的錯）。"""
+    if sys.platform != "darwin":
+        return
+    candidates = [
+        "/opt/homebrew/lib/libzbar.0.dylib",   # Apple Silicon brew
+        "/opt/homebrew/lib/libzbar.dylib",
+        "/usr/local/lib/libzbar.0.dylib",      # Intel brew
+        "/usr/local/lib/libzbar.dylib",
+        "/usr/local/Cellar/zbar/0.23.93/lib/libzbar.0.dylib",  # 舊式 keg-only path
+    ]
+    import ctypes
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
+                return
+            except OSError:
+                continue
+
+
+_preload_libzbar_macos()
 
 
 def is_qr_backend_available() -> bool:
