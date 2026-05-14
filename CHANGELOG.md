@@ -4,6 +4,16 @@
 
 ---
 
+## [1.8.23] - 2026-05-14
+
+### 修復
+
+- **macOS sudo / root 下 `jtdt update` 卡 `brew install zbar`**：原本 `_ensure_zbar()` 用 `import pyzbar.pyzbar` 偵測 zbar 是否已裝，但 root context 下 ctypes 找不到 brew 路徑（Apple Silicon 在 `/opt/homebrew/lib`，預設 dyld search 沒含），即使使用者已 `brew install zbar` 也誤判為未裝 → 又跑 `brew install zbar` → Homebrew 拒絕 root 執行 → 卡死無法啟動。修法三層：
+  - `_ensure_zbar()` macOS 改用檔案存在檢查（與 `install.sh` 一致）；root 下不再嘗試呼叫 brew，改印提示請用一般帳號裝。
+  - 安裝 zbar 後自動建 `/usr/local/lib/libzbar.dylib` symlink，讓 service 啟動時 ctypes 找得到 Apple Silicon brew 路徑。
+  - `qr_decoder.py` 加 ctypes pre-load shim — `import pyzbar` 之前先用完整路徑載入 `libzbar.0.dylib`，無 symlink 時也能 import 成功。
+- 連帶修 `_zbar_present()` 與 `sys_deps._probe_zbar()` macOS 偵測（同樣改用檔案檢查避免 root 誤判）。
+
 ## [1.8.22] - 2026-05-14
 
 ### 修復
