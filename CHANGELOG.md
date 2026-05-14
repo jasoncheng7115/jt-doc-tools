@@ -4,6 +4,33 @@
 
 ---
 
+## [1.8.22] - 2026-05-14
+
+### 修復
+
+- **HOTFIX**：`einvoice-scan` 的 `add_invoices()` 引用未定義變數 `_custom_rules` 導致所有掃描入口（手機 QR 接續 / scan-text / 連續掃描）回 500「The string did not match the expected pattern」。補回 `_custom_rules = _load_user_accounting_rules(user)` 一行。
+
+## [1.8.21] - 2026-05-14
+
+### 安全
+
+- **CodeQL #88 / #89**（log injection）：`translate_doc/router.py` 兩處 `_lg.exception()` 拿 `%s` 帶使用者輸入入訊息 → 改成純字面訊息，user 輸入不再進 log format。
+- **CodeQL #90**（weak hash 用於非安全目的被誤判）：`einvoice_scan/buffer.py` 的 `_user_key()` 對 sha1 加 `usedforsecurity=False` flag 明示意圖。
+
+## [1.8.13 ~ 1.8.20] - 2026-05-14
+
+### 修正
+
+- **text-list pipeline 跨列箭頭**多輪迭代修正：起點改 cur 卡片底部正中、橫向 traverse 時靠近 cur 卡片下緣 12px、進入下一列卡片頂端正中；左邊界 stub 14px 內縮防貼邊；最左欄不再算到負 X 座標。
+- text-list 操作清單標題補註「拖曳可改變順序」提示。
+- einvoice-scan 期別 chip 改 3-col grid 等寬整齊 + 標籤 / 日期分行。
+
+### 安全
+
+- **CodeQL #91**（SQL injection）：`vat_db.search_companies()` 動態 ORDER BY field 改用 static `_FIELD_WHERE` 白名單 map，user 輸入不再進 SQL fragment。
+
+---
+
 ## [1.8.18] - 2026-05-14
 
 ### 新增

@@ -190,6 +190,7 @@ def add_invoices(user: Optional[Any], parsed: list[dict]) -> dict:
         _vat_lookup = vat_db.lookup_vat
     except Exception:
         _vat_lookup = lambda v: None
+    _custom_rules = _load_user_accounting_rules(user)
 
     path = _buffer_path(user)
     key = _user_key(user)
