@@ -62,7 +62,10 @@ def _user_key(user: Optional[Any]) -> str:
     if not username:
         return "default"
     raw = f"{username}|{realm}".encode("utf-8")
-    return hashlib.sha1(raw).hexdigest()[:16]
+    # sha1 在這只用於 derive 檔名 prefix，非密碼學用途；usedforsecurity=False
+    # 明示 CodeQL「weak hashing」掃描不再誤判。改用其他 hash 會讓既有使用者
+    # 的 buffer 檔名變動 → 設定 / 發票全找不到 → 不能改 algo。
+    return hashlib.sha1(raw, usedforsecurity=False).hexdigest()[:16]
 
 
 def _buffer_dir() -> Path:

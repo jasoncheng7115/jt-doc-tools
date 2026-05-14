@@ -1033,6 +1033,9 @@ async def export_translations(request: Request):
     translated_at = str(body.get("translated_at") or "").strip()[:64]
     meta = {"source_filename": source_filename, "translated_at": translated_at}
 
+    # 日誌中 fmt 是 user input；雖然 _TEXT_FORMATS / _BUILDERS_RICH 是
+    # whitelist 過的 enum，CodeQL 仍會旗 log injection。日誌只描述「哪個
+    # builder 失敗」，不直接帶 fmt — exception() 已含完整 stack trace。
     import asyncio as _asyncio
     if fmt in _TEXT_FORMATS:
         builder = _BUILDERS_TEXT[fmt]
@@ -1040,7 +1043,7 @@ async def export_translations(request: Request):
             data = await _asyncio.to_thread(builder, cleaned)
         except Exception as e:
             import logging as _lg
-            _lg.getLogger("app.translate_doc").exception("export %s failed", fmt)
+            _lg.getLogger("app.translate_doc").exception("text-format export builder failed")
             raise HTTPException(500, f"匯出 {fmt} 失敗：{e}")
     else:
         builder = _BUILDERS_RICH[fmt]
@@ -1048,7 +1051,7 @@ async def export_translations(request: Request):
             data = await _asyncio.to_thread(builder, cleaned, meta)
         except Exception as e:
             import logging as _lg
-            _lg.getLogger("app.translate_doc").exception("export %s failed", fmt)
+            _lg.getLogger("app.translate_doc").exception("rich-format export builder failed")
             raise HTTPException(500, f"匯出 {fmt} 失敗：{e}")
 
     from app.core.http_utils import content_disposition
