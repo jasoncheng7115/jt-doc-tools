@@ -10,6 +10,10 @@
 
 - **HOTFIX**：`einvoice-scan` 的 `add_invoices()` 引用未定義變數 `_custom_rules` 導致所有掃描入口（手機 QR 接續 / scan-text / 連續掃描）回 500「The string did not match the expected pattern」。補回 `_custom_rules = _load_user_accounting_rules(user)` 一行。
 
+### 文件
+
+- `docs/index.html` 實際畫面新增 #13「電子發票處理（桌機 + 手機協同掃描）」，含手機掃 QR 即時推回桌機表格示意圖與功能說明。
+
 ## [1.8.21] - 2026-05-14
 
 ### 安全
