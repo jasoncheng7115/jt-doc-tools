@@ -72,7 +72,7 @@ OS="$(uname -s)"
 case "$OS" in
     Linux)   PLATFORM=linux ;;
     Darwin)  PLATFORM=macos ;;
-    *)       die "不支援的作業系統：$OS（本程式只支援 Linux 與 macOS，Windows 請改用 install.ps1）" ;;
+    *)       die "不支援的作業系統：${OS}（本程式只支援 Linux 與 macOS，Windows 請改用 install.ps1）" ;;
 esac
 
 ARCH="$(uname -m)"
@@ -126,7 +126,7 @@ else
         # 從 /dev/console 取得目前登入桌面的使用者
         CONSOLE_USER=$(stat -f "%Su" /dev/console 2>/dev/null || true)
         if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
-            warn "偵測到 root 直接執行，將以桌面登入的 user『$CONSOLE_USER』做為 .app 擁有者。"
+            warn "偵測到 root 直接執行，將以桌面登入的 user『${CONSOLE_USER}』做為 .app 擁有者。"
             warn "（建議下次改用：sudo bash install.sh，避免猜測使用者）"
             REAL_USER="$CONSOLE_USER"
         else
@@ -422,7 +422,7 @@ ensure_office() {
     fi
 
     if [ -n "$PRE" ]; then
-        log "已偵測到 $PRE，但 OxOffice (OSSII 台灣 fork) CJK 支援更好，嘗試補裝 ..."
+        log "已偵測到 ${PRE}，但 OxOffice (OSSII 台灣 fork) CJK 支援更好，嘗試補裝 ..."
     else
         log "未偵測到任何 Office 引擎"
     fi
@@ -494,8 +494,24 @@ install_tesseract() {
             return 0
         fi
     elif [ "$PLATFORM" = "macos" ]; then
-        if command -v brew >/dev/null 2>&1; then
-            brew install tesseract tesseract-lang \
+        # brew 拒絕在 root 下執行，掉到 console user 身分跑
+        # Apple Silicon Mac 優先用 ARM brew (/opt/homebrew/bin/brew)，避免裝出 x86_64 dylib
+        # ARM Python venv 載不起來。Intel Mac 走 /usr/local。
+        if [ "$ARCH" = "arm64" ] && [ -x /opt/homebrew/bin/brew ]; then
+            BREW_BIN=/opt/homebrew/bin/brew
+        elif [ -x /usr/local/bin/brew ]; then
+            BREW_BIN=/usr/local/bin/brew
+        elif command -v brew >/dev/null 2>&1; then
+            BREW_BIN="$(command -v brew)"
+        else
+            BREW_BIN=""
+        fi
+        BREW_AS_USER="$BREW_BIN"
+        if [ -n "$BREW_BIN" ] && [ "$(id -u)" -eq 0 ] && [ -n "${REAL_USER:-}" ] && [ "${REAL_USER}" != "root" ]; then
+            BREW_AS_USER="sudo -u ${REAL_USER} $BREW_BIN"
+        fi
+        if [ -n "$BREW_BIN" ]; then
+            $BREW_AS_USER install tesseract tesseract-lang \
                 || { warn "tesseract 自動安裝失敗 — pdf-editor OCR 功能會停用，其餘功能正常"; return 0; }
         else
             warn "未安裝 Homebrew，請手動 brew install tesseract tesseract-lang"
@@ -540,8 +556,23 @@ install_zbar() {
             return 0
         fi
         log "安裝 zbar (einvoice-scan QR code 解析)..."
-        if command -v brew >/dev/null 2>&1; then
-            brew install zbar \
+        # Apple Silicon Mac 優先用 ARM brew (/opt/homebrew/bin/brew)，避免裝出 x86_64 dylib
+        # ARM Python venv 載不起來。Intel Mac 走 /usr/local。
+        if [ "$ARCH" = "arm64" ] && [ -x /opt/homebrew/bin/brew ]; then
+            BREW_BIN=/opt/homebrew/bin/brew
+        elif [ -x /usr/local/bin/brew ]; then
+            BREW_BIN=/usr/local/bin/brew
+        elif command -v brew >/dev/null 2>&1; then
+            BREW_BIN="$(command -v brew)"
+        else
+            BREW_BIN=""
+        fi
+        BREW_AS_USER="$BREW_BIN"
+        if [ -n "$BREW_BIN" ] && [ "$(id -u)" -eq 0 ] && [ -n "${REAL_USER:-}" ] && [ "${REAL_USER}" != "root" ]; then
+            BREW_AS_USER="sudo -u ${REAL_USER} $BREW_BIN"
+        fi
+        if [ -n "$BREW_BIN" ]; then
+            $BREW_AS_USER install zbar \
                 || { warn "zbar 自動安裝失敗 — einvoice-scan QR 掃描功能會停用"; return 0; }
             ok "zbar 安裝完成"
         else
@@ -611,11 +642,29 @@ fetch_code() {
 setup_python() {
     log "建立獨立 Python 環境並安裝依賴 (uv sync) ..."
     cd "$INSTALL_DIR"
+    # macOS Apple Silicon 上若有兩套 brew（/opt/homebrew + /usr/local），uv 預設會
+    # 抓 PATH 上第一個 python。如果 Intel brew 在前，uv 會用 Intel python（在 ARM
+    # Mac 上跑 Rosetta，sys.platform 報 macosx_x86_64），torch 等 ARM-only wheel
+    # 對不上 → uv sync 失敗。強制 prefer ARM brew python。
+    UV_EXTRA_ARGS=""
+    if [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "arm64" ]; then
+        for py in /opt/homebrew/opt/python@3.14/bin/python3.14 \
+                  /opt/homebrew/opt/python@3.13/bin/python3.13 \
+                  /opt/homebrew/opt/python@3.12/bin/python3.12 \
+                  /opt/homebrew/opt/python@3.11/bin/python3.11 \
+                  /opt/homebrew/bin/python3; do
+            if [ -x "$py" ]; then
+                log "  Apple Silicon 強制用 ARM brew python: $py"
+                UV_EXTRA_ARGS="--python $py"
+                break
+            fi
+        done
+    fi
     # 注意：絕不能用 --frozen — 那會盲信 uv.lock，若 lockfile 漏了某個 dep
     # （v1.1.66 之前的 uv.lock 漏 ldap3 就是這樣），uv 會「成功」回傳但實際
     # 少裝套件，最後使用者啟認證後 ldap3 import 失敗無法登入。
     # 一律走完整 reconcile，與 pyproject.toml 比對後實際補裝。
-    "$INSTALL_DIR/bin/uv" sync || die "uv sync 失敗"
+    "$INSTALL_DIR/bin/uv" sync $UV_EXTRA_ARGS || die "uv sync 失敗"
     [ -x "$INSTALL_DIR/.venv/bin/python" ] || die "Python venv 建立失敗"
     log "驗證關鍵依賴可正常 import ..."
     "$INSTALL_DIR/.venv/bin/python" -c \
@@ -629,10 +678,15 @@ setup_python() {
     fi
     # pyzbar import 需要 zbar shared lib（已在 install_zbar 階段裝）
     # 失敗 = einvoice-scan QR 掃描在 _probe 階段拒絕；不致命
-    if ! "$INSTALL_DIR/.venv/bin/python" -c "import pyzbar.pyzbar" 2>/dev/null; then
+    # 走 qr_decoder shim 讓 macOS Apple Silicon 的 find_library patch 先生效，
+    # 避免 ARM Python 直接 import pyzbar 找不到 /opt/homebrew/lib/libzbar 的 false negative
+    if ! ( cd "$INSTALL_DIR" && "$INSTALL_DIR/.venv/bin/python" -c \
+        "from app.tools.einvoice_scan.qr_decoder import is_qr_backend_available; raise SystemExit(0 if is_qr_backend_available() else 1)" \
+        2>/dev/null ); then
         warn "pyzbar import 失敗（zbar shared lib 缺）— einvoice-scan QR 掃描會停用"
         warn "  Linux 補裝: sudo apt install libzbar0"
-        warn "  macOS 補裝: brew install zbar"
+        warn "  macOS Intel: brew install zbar"
+        warn "  macOS Apple Silicon: /opt/homebrew/bin/brew install zbar"
     fi
     # PDF.js vendor 完整性（pdf-ocr 內嵌 viewer 用）— 隨 git 來，缺檔 = git clone 異常
     pdfjs_missing=""
