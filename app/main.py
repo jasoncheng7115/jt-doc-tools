@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.8.26"
+VERSION = "1.8.27"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -224,7 +224,7 @@ templates.env.globals["nav_settings"] = [
     {"icon": "gear", "name": "轉檔設定", "description": "LibreOffice / OxOffice 路徑與順序",
      "url": "/admin/conversion",
      "keywords": "conversion office libreoffice oxoffice path 轉檔 路徑"},
-    {"icon": "gear", "name": "LLM 設定", "description": "視覺 LLM 校驗（附加功能，預設關閉）",
+    {"icon": "gear", "name": "LLM 設定", "description": "10 個工具的 LLM AI 加值（附加功能，預設關閉）",
      "url": "/admin/llm-settings",
      "keywords": "llm ai ollama qwen vision review 校驗 模型 大語言模型"},
     {"icon": "gear", "name": "API Token", "description": "對外呼叫 /api/* 的認證 token",

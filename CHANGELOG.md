@@ -4,6 +4,12 @@
 
 ---
 
+## [1.8.27] - 2026-05-14
+
+### 文案修正
+
+- **admin/llm-settings 描述「視覺 LLM 校驗」過時**：LLM 已不只用在視覺校驗，現在涵蓋 10 個工具的 AI 加值（pdf-fill 視覺、doc-deident / text-deident 智慧分類、doc-diff / pdf-extract-text / pdf-wordcount / pdf-annotations 內容摘要、pdf-ocr 文字校正、submission-check 送件檢核、translate-doc 逐句翻譯）。改成「10 個工具的 LLM AI 加值（附加功能，預設關閉）」 + admin 內頁說明同步擴寫，列出涵蓋的工具。
+
 ## [1.8.26] - 2026-05-14
 
 ### 修復

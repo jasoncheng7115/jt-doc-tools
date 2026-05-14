@@ -5,8 +5,10 @@
 <div class="llm-page">
 <h1>{{ icon('gear', size=22) }} LLM 設定 <span class="addon-badge">附加功能</span></h1>
 <p class="muted">
-  視覺 LLM 校驗是<strong>附加功能</strong>，預設關閉。啟用後 pdf-fill 等工具可選擇性地把
-  填寫結果送給本地或 LAN 上的 LLM server (OpenAI-compat) 做品質檢查與學習。
+  LLM AI 加值是<strong>附加功能</strong>，預設關閉。啟用後共 10 個工具（pdf-fill 視覺校驗、
+  doc-deident / text-deident 智慧分類、doc-diff / pdf-extract-text / pdf-wordcount /
+  pdf-annotations 內容摘要、pdf-ocr 文字校正、submission-check 送件檢核、translate-doc
+  逐句翻譯）可選擇性地把資料送給本機或 LAN 上的 LLM server (OpenAI-compat) 處理。
   本機 / LAN 上需有運行中的 LLM backend (Ollama / vLLM / LM Studio / jan.ai 皆可)。
 </p>
 
@@ -17,10 +19,10 @@
     <div class="field">
       <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; font-weight:500;">
         <input type="checkbox" id="enabled" {% if settings.enabled %}checked{% endif %}>
-        啟用 LLM 校驗
+        啟用 LLM AI 加值
       </label>
       <div class="muted" style="font-size:12px; margin-top:4px;">
-        關閉時，所有 LLM 邏輯不會執行，pdf-fill 等工具行為等同於沒裝這個功能。
+        關閉時，所有 LLM 邏輯不會執行，pdf-fill / doc-deident / translate-doc 等 10 個工具的 AI 加值會自動隱藏，純規則處理不受影響。
       </div>
     </div>
   </div>
