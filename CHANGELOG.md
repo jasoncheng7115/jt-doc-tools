@@ -4,6 +4,14 @@
 
 ---
 
+## [1.8.26] - 2026-05-14
+
+### 修復
+
+- **macOS jtdt update 印「chi_tra install errored: 400: path escape blocked」**：brew tesseract-lang 把 `/usr/local/share/tessdata/chi_tra.traineddata` 裝成 symlink 指向 Cellar；`tessdata_manager._safe_tessdata_path()` 走 `safe_join` 的 `.resolve()` 會跟著 symlink 出 tessdata 外，containment check 拒絕 → fast/best 變體下載失敗、active 也設不了。修法：
+  - `_safe_tessdata_path` 改用 `sanitize_filename`（強制 `[A-Za-z0-9._-]` 白名單）+ 直接 join，不再 resolve symlink。lang code / variant 已在外層 `_LANG_CODE_RE` + `_VARIANT_WHITELIST` 過濾，這裡只防 filename traversal 已足。
+  - `_set_active_variant` 偵測 active 檔為 symlink 時先 `unlink()` 再 `copy2`，避免污染 brew Cellar（沒權限會 PermissionError）。
+
 ## [1.8.25] - 2026-05-14
 
 ### 修復

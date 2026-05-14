@@ -64,9 +64,19 @@ _VARIANT_WHITELIST = frozenset({"fast", "best"})
 
 
 def _safe_tessdata_path(tessdata: Path, filename: str) -> Path:
-    """組成 tessdata/<filename> 並驗證落在 tessdata 內（防 traversal）。"""
-    from app.core.safe_paths import safe_join
-    return safe_join(tessdata, filename)
+    """組成 tessdata/<filename> 並驗證 filename 安全（防 ../ traversal）。
+
+    注意：**不**用 `safe_join`（會 resolve symlink 後驗 containment）。原因：
+    macOS brew tesseract-lang 把 `/usr/local/share/tessdata/chi_tra.traineddata`
+    裝成 symlink 指向 `Cellar/tesseract-lang/.../tessdata/`。safe_join 跟著 symlink
+    後就在 tessdata 外，containment check 就拒了。
+
+    我們的真正威脅模型是：filename 來自外部輸入時不可含 `../` 或絕對路徑。
+    code/variant 上層已用 `_LANG_CODE_RE` + `_VARIANT_WHITELIST` 白名單過濾，
+    這裡只需驗 filename 不逃出再 join 即可。"""
+    from app.core.safe_paths import sanitize_filename  # 強制 [A-Za-z0-9._-] 白名單
+    safe = sanitize_filename(filename)  # 不安全直接 raise HTTPException
+    return tessdata / safe
 
 
 def _variant_path(tessdata: Path, code: str, variant: str) -> Path:
@@ -79,7 +89,7 @@ def _variant_path(tessdata: Path, code: str, variant: str) -> Path:
 
 
 def _active_path(tessdata: Path, code: str) -> Path:
-    """e.g. chi_tra.traineddata (tesseract 真正讀的檔)"""
+    """e.g. chi_tra.traineddata (tesseract 真正讀的檔)。可能是 brew symlink。"""
     if not _LANG_CODE_RE.match(code or ""):
         raise ValueError(f"invalid lang code: {code!r}")
     return _safe_tessdata_path(tessdata, f"{code}.traineddata")
@@ -298,12 +308,18 @@ def _download_variant(code: str, variant: str, tessdata: Path) -> tuple[bool, in
 
 def _set_active_variant(code: str, variant: str, tessdata: Path) -> bool:
     """把 <code>.<variant>.traineddata 內容複製到 <code>.traineddata（active 檔）。
-    tesseract 統一用 lang code 找 active 檔，這層讓我們可隨時 swap variant。"""
+    tesseract 統一用 lang code 找 active 檔，這層讓我們可隨時 swap variant。
+
+    若 active 檔現為 symlink（macOS brew tesseract-lang 預設裝法），先 unlink
+    再寫 — 不然 copy2 會跟著 symlink 寫進 brew Cellar（破壞 brew 管理 + 沒權限）。"""
     src = _variant_path(tessdata, code, variant)
     dst = _active_path(tessdata, code)
     if not src.exists():
         return False
     try:
+        # brew 把 active 檔裝成 symlink 指 Cellar — 先移除避免污染 Cellar
+        if dst.is_symlink():
+            dst.unlink()
         import shutil
         shutil.copy2(str(src), str(dst))
         return True
