@@ -38,15 +38,16 @@ class QRBackendUnavailable(Exception):
     """pyzbar / zbar binary 沒裝。"""
 
 
-def _preload_libzbar_macos() -> None:
+def _patch_find_library_for_zbar_macos() -> None:
     """macOS Apple Silicon brew 裝在 /opt/homebrew/lib，預設 dyld search path 沒含
-    （只看 /usr/lib /usr/local/lib），導致 ctypes find_library('zbar') 找不到 →
-    `from pyzbar import pyzbar` ImportError。
+    （只看 /usr/lib /usr/local/lib），導致 `ctypes.util.find_library('zbar')` 回 None →
+    pyzbar 自己 raise ImportError('Unable to find zbar shared library')。
 
-    解法：先用 ctypes.CDLL 帶完整路徑載入，pyzbar 後續呼叫 find_library 找不到沒關係，
-    libzbar.dylib 已在 process address space 裡。
+    解法：monkey-patch `ctypes.util.find_library`，攔截 'zbar' query 並回完整路徑。
+    其他 lib query 走原 find_library，行為不變。
 
-    一律 best-effort，找不到不 raise（pyzbar import 時自然會炸出原本的錯）。"""
+    必須在 `from pyzbar import pyzbar` 之前執行 — pyzbar 在 import 時就呼叫
+    find_library，patch 太晚就沒用。"""
     if sys.platform != "darwin":
         return
     candidates = [
@@ -54,19 +55,22 @@ def _preload_libzbar_macos() -> None:
         "/opt/homebrew/lib/libzbar.dylib",
         "/usr/local/lib/libzbar.0.dylib",      # Intel brew
         "/usr/local/lib/libzbar.dylib",
-        "/usr/local/Cellar/zbar/0.23.93/lib/libzbar.0.dylib",  # 舊式 keg-only path
     ]
-    import ctypes
-    for path in candidates:
-        if os.path.exists(path):
-            try:
-                ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
-                return
-            except OSError:
-                continue
+    found = next((p for p in candidates if os.path.exists(p)), None)
+    if not found:
+        return  # 真的沒裝；讓 pyzbar 走原本錯誤路徑
+    import ctypes.util
+    _orig = ctypes.util.find_library
+
+    def _patched(name):
+        if name == "zbar":
+            return found
+        return _orig(name)
+
+    ctypes.util.find_library = _patched
 
 
-_preload_libzbar_macos()
+_patch_find_library_for_zbar_macos()
 
 
 def is_qr_backend_available() -> bool:

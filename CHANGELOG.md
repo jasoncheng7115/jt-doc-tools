@@ -4,6 +4,12 @@
 
 ---
 
+## [1.8.24] - 2026-05-14
+
+### 修復
+
+- **macOS Apple Silicon `from pyzbar import pyzbar` 仍 ImportError**：v1.8.23 加的 `ctypes.CDLL` pre-load shim 沒效，因為 pyzbar 自己用 `ctypes.util.find_library('zbar')` 找 lib，回 None 就獨立 raise（pre-load 進程記憶體不算數）。改成 monkey-patch `ctypes.util.find_library` — 攔截 `'zbar'` query 直接回 `/opt/homebrew/lib/libzbar.dylib`（或 `/usr/local/lib`）完整路徑，pyzbar 拿到正確路徑就成功 import。其他 lib query 走原 `find_library` 行為不變。
+
 ## [1.8.23] - 2026-05-14
 
 ### 修復
