@@ -39,26 +39,37 @@ class QRBackendUnavailable(Exception):
 
 
 def _patch_find_library_for_zbar_macos() -> None:
-    """macOS Apple Silicon brew 裝在 /opt/homebrew/lib，預設 dyld search path 沒含
-    （只看 /usr/lib /usr/local/lib），導致 `ctypes.util.find_library('zbar')` 回 None →
-    pyzbar 自己 raise ImportError('Unable to find zbar shared library')。
+    """macOS brew 裝的 libzbar.dylib 不一定在 dyld 預設 search path（Apple Silicon
+    brew 在 /opt/homebrew/lib，預設只搜 /usr/lib /usr/local/lib），導致
+    `ctypes.util.find_library('zbar')` 回 None → pyzbar 自己 raise ImportError。
 
-    解法：monkey-patch `ctypes.util.find_library`，攔截 'zbar' query 並回完整路徑。
-    其他 lib query 走原 find_library，行為不變。
+    解法：monkey-patch find_library 攔截 'zbar' query 直接回完整路徑。
 
-    必須在 `from pyzbar import pyzbar` 之前執行 — pyzbar 在 import 時就呼叫
-    find_library，patch 太晚就沒用。"""
+    **架構檢查**：Apple Silicon Mac 若同時裝 Intel brew + ARM brew，/usr/local/lib
+    可能是 x86_64 dylib，ARM Python venv dlopen 會撞 'incompatible architecture'。所以
+    根據 `platform.machine()` 過濾：arm64 只認 /opt/homebrew，x86_64 只認 /usr/local。
+
+    必須在 `from pyzbar import pyzbar` 之前執行 — pyzbar import 時就呼叫
+    find_library。"""
     if sys.platform != "darwin":
         return
-    candidates = [
-        "/opt/homebrew/lib/libzbar.0.dylib",   # Apple Silicon brew
-        "/opt/homebrew/lib/libzbar.dylib",
-        "/usr/local/lib/libzbar.0.dylib",      # Intel brew
-        "/usr/local/lib/libzbar.dylib",
-    ]
+    import platform
+    machine = platform.machine()
+    if machine == "arm64":
+        # Apple Silicon — 只認 ARM brew 路徑，避免吃到 Intel /usr/local 的 x86_64 dylib
+        candidates = [
+            "/opt/homebrew/lib/libzbar.0.dylib",
+            "/opt/homebrew/lib/libzbar.dylib",
+        ]
+    else:
+        # Intel / Rosetta — 只認 /usr/local
+        candidates = [
+            "/usr/local/lib/libzbar.0.dylib",
+            "/usr/local/lib/libzbar.dylib",
+        ]
     found = next((p for p in candidates if os.path.exists(p)), None)
     if not found:
-        return  # 真的沒裝；讓 pyzbar 走原本錯誤路徑
+        return  # 真的沒裝（或裝在錯架構的 brew）；讓 pyzbar 走原本錯誤路徑
     import ctypes.util
     _orig = ctypes.util.find_library
 

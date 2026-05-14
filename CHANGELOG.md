@@ -4,6 +4,17 @@
 
 ---
 
+## [1.8.25] - 2026-05-14
+
+### 修復
+
+- **macOS arm64 完整修法（zbar / tesseract）**：v1.8.24 在 Apple Silicon Mac 同時裝 Intel + ARM brew 的情境下 zbar 仍會失敗（find_library 抓到 /usr/local/lib 的 x86_64 dylib，ARM Python 無法 dlopen）。本版三層補強：
+  - `qr_decoder.py` find_library shim 改 arch-aware：arm64 只認 /opt/homebrew/lib，x86_64 只認 /usr/local/lib，避免跨架構 dylib 誤用。
+  - `install.sh` macOS install_zbar / install_tesseract 改用 ARH brew (`/opt/homebrew/bin/brew`) on arm64，避免裝出 x86_64 binary；root context 下 `sudo -u <real_user> brew install` drop-priv（Homebrew 拒絕 root 直接執行）。
+  - `app/cli.py:_ensure_tesseract` macOS 同樣套用 arm64 brew + drop-priv 邏輯，讓 `jtdt update` 內 system deps 補裝不再卡 brew。
+- **install.sh chinese punctuation 後接變數展開**（`set -u` unbound variable）：`$CONSOLE_USER』` `$OS（` `$PRE，` 三處 bash 把高位 byte 算進變數名。改用 `${VAR}` 大括號隔開。
+- **install.sh pyzbar 驗證 false negative**：原本 bare `import pyzbar.pyzbar` 沒走 qr_decoder 的 find_library patch，Apple Silicon 上會誤報「pyzbar import 失敗」即使 service 實際 OK。改成 `from app.tools.einvoice_scan.qr_decoder import is_qr_backend_available` 走完整 shim。
+
 ## [1.8.24] - 2026-05-14
 
 ### 修復

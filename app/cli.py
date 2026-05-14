@@ -995,9 +995,28 @@ def _ensure_tesseract() -> None:
                      "tesseract", "tesseract-langpack-chi_tra", "tesseract-langpack-eng"],
                 )
         elif _is_macos():
-            brew = shutil.which("brew")
+            # Apple Silicon 優先用 ARM brew，避免裝出 x86_64 binary
+            arch = platform.machine()
+            if arch == "arm64" and os.path.exists("/opt/homebrew/bin/brew"):
+                brew = "/opt/homebrew/bin/brew"
+            elif os.path.exists("/usr/local/bin/brew"):
+                brew = "/usr/local/bin/brew"
+            else:
+                brew = shutil.which("brew")
             if brew:
-                rc = subprocess.call([brew, "install", "tesseract", "tesseract-lang"])
+                # brew 拒絕 root 執行 — root context 下要 drop 到 console user
+                cmd = [brew, "install", "tesseract", "tesseract-lang"]
+                if os.geteuid() == 0:
+                    real_user = _real_user()
+                    if real_user and real_user != "root":
+                        cmd = ["sudo", "-u", real_user] + cmd
+                    else:
+                        print("  WARNING: tesseract 未安裝；Homebrew 在 root 下無法執行。",
+                              file=sys.stderr)
+                        print("           請以一般帳號跑：brew install tesseract tesseract-lang",
+                              file=sys.stderr)
+                        return
+                rc = subprocess.call(cmd)
         elif _is_windows():
             winget = shutil.which("winget")
             if winget:
