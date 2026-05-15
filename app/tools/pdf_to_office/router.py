@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse
 
 from ...config import settings
 from ...core import upload_owner as _uo
@@ -42,6 +43,15 @@ def _orig_name(uid: str) -> str:
         except Exception:
             return "document.pdf"
     return "document.pdf"
+
+
+@router.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "pdf_to_office.html",
+        {"request": request},
+    )
 
 
 @router.post("/upload")

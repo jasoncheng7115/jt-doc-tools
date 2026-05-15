@@ -10,10 +10,10 @@ from .router import router
 
 metadata = ToolMetadata(
     id="pdf-to-office",
-    name="PDF 轉文書檔",
-    description="PDF 轉 Word (.docx) 或 OpenDocument (.odt)，含字型 / 段落 / 雜訊智慧校正。",
+    name="PDF 轉文書檔（Beta）",
+    description="PDF 轉 Word (.docx) 或 OpenDocument (.odt)，含字型 / 段落 / 雜訊智慧校正。Beta：複雜版面（Invoice、多欄申請表）還原效果有限。",
     icon="file-text",
-    category="檔案編輯",
+    category="格式轉換",
 )
 
 tool = ToolModule(

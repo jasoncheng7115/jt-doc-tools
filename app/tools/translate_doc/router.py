@@ -344,6 +344,24 @@ def _translate_one(client, model: str, src: str,
         return {"src": src, "translated": "", "error": f"LLM 失敗：{e}"}
 
 
+def _warmup_llm(client, model: str) -> None:
+    """送一句極短 ping 強制 Ollama 把 model load 進記憶體。
+
+    Ollama 第一次呼叫某個模型時會先從 disk 載入到 VRAM（26B 模型常 30-90 秒）。
+    平行送 batch 時，4 個 worker 同時等 cold load，httpx 預設 60s timeout 會通通
+    一起 fire → 整個 batch 失敗。先送一個 sync warm-up call 阻塞等模型 ready，
+    後續 batch 就跑 hot path 不會 timeout。
+
+    失敗不 raise — 只是 best-effort 預熱；真翻譯還是會跑，最壞回到原本行為。
+    """
+    try:
+        client.text_query(prompt="hi", model=model, temperature=0.0,
+                          max_tokens=4, think=False)
+    except Exception:
+        # 預熱失敗就放行，讓真翻譯自己處理錯誤（user 看得到具體 error）
+        pass
+
+
 def _translate_sentences(
     sentences: list[str], source_lang: str, target_lang: str,
     domain: str = "",
@@ -357,6 +375,10 @@ def _translate_sentences(
     conf = llm_settings.get()
     # 並行數 — admin 在 LLM 設定可調，預設 4。對 1-句 case 退化成同步呼叫。
     concurrency = max(1, min(16, int(conf.get("translate_concurrency", 4))))
+    # **預熱 Ollama** — 先送一個 sync 短 ping 強制 model load 進 VRAM，避免 4 個
+    # 平行 worker 一起卡 cold load → httpx 60s timeout 全部 fire 整個 batch 死。
+    # 客戶 v1.8.31 回報的「卡住」根因。
+    _warmup_llm(client, model)
     n = len(sentences)
     if n <= 1 or concurrency == 1:
         return [_translate_one(client, model, src, source_lang, target_lang, domain=domain)

@@ -4,6 +4,24 @@
 
 ---
 
+## [1.8.34] - 2026-05-15
+
+### 修復
+
+- **translate-doc 對 Ollama 26B 模型 cold load 卡住**（客戶 v1.8.31 回報）：Ollama 第一次呼叫某模型時要從 disk 載入到 VRAM（gemma4:26b 通常 30-90 秒），httpx 預設 60s timeout 在這段期間會 fire；4 個平行 worker 同時撞 → 整個 batch 失敗。修法：在 ThreadPoolExecutor batch 之前先送一個 sync 短 ping（`hi` + max_tokens=4）強制 Ollama 把 model 載入；warm-up 完成後再開平行 batch，後續走 hot path 不會再 timeout。
+
+### 變更
+
+- **pdf-to-office 工具名稱加 Beta**（`PDF 轉文書檔（Beta）`）+ 描述補上「Beta：複雜版面（Invoice、多欄申請表）還原效果有限」。
+- **pdf-to-office 分類從「檔案編輯」改到「格式轉換」**（與 office-to-pdf / image-to-pdf 同一類）。
+- **pdf-to-office 加 `fake_table_remove` fixer**（從 Sprint 2 提前借過來救 invoice 類 PDF）：偵測 1×1 / 1-row 短文 假表格 → 還原成普通段落。實測 invoice 範例從 10 個 table（8 假）降到 2 個（全真）。
+
+## [1.8.33] - 2026-05-15
+
+### 修復
+
+- **pdf-to-office 開啟頁面回 404**：v1.8.32 漏了 `@router.get("/")` index handler，瀏覽器進 `/tools/pdf-to-office/` 撞 `{"detail":"Not Found"}`。補上 index 渲染 HTML 模板。
+
 ## [1.8.32] - 2026-05-15
 
 ### 新增

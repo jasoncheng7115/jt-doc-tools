@@ -673,7 +673,7 @@ wheels = [
 
 [[package]]
 name = "jt-doc-tools"
-version = "1.8.32"
+version = "1.8.34"
 source = { editable = "." }
 dependencies = [
     { name = "easyocr" },

@@ -9,7 +9,7 @@ from docx import Document
 from ..pdf_truth import PDFTruth, extract_pdf_truth
 from ..pdf_truth.aligner import align_docx_to_pdf
 from .diagnose import diagnose
-from .fixers import fix_cleanup, fix_font_normalize, fix_paragraph_merge
+from .fixers import fix_cleanup, fix_fake_table_remove, fix_font_normalize, fix_paragraph_merge
 from .style_apply import apply_styles
 
 log = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ def run_postprocess(
     enable_paragraph_merge: bool = True,
     enable_cleanup: bool = True,
     enable_style_apply: bool = True,
+    enable_fake_table_remove: bool = True,
 ) -> dict:
     """主入口。讀 PDF + docx → 跑 fixer → 寫到 docx_output。
 
@@ -99,6 +100,9 @@ def run_postprocess(
 
     # ------ Step 5: fixers ------
     fixer_specs = []
+    # 順序重要：先把假表格還原成段落（不然後面 fixer 看不到 cell 內段落）→ 字型 → 合併 → 雜訊
+    if enable_fake_table_remove:
+        fixer_specs.append(("fake_table_remove", fix_fake_table_remove))
     if enable_font_normalize:
         fixer_specs.append(("font_normalize", fix_font_normalize))
     if enable_paragraph_merge:
