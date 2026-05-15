@@ -1,7 +1,7 @@
 // JobProgress: polls /api/jobs/{id} and shows status bar + download link(s).
 (function () {
   class JobProgress {
-    constructor(root, { downloadUrl, downloadPngUrl, onReset, onDone } = {}) {
+    constructor(root, { downloadUrl, downloadPngUrl, onReset, onDone, onError } = {}) {
       this.root = root;
       this.bar = root.querySelector('.job-bar-inner');
       this.status = root.querySelector('.job-status');
@@ -12,6 +12,7 @@
       this.downloadPngUrl = downloadPngUrl || ((jid) => `/api/jobs/${jid}/download-png`);
       this.onReset = onReset || (() => {});
       this.onDone = onDone || (() => {});
+      this.onError = onError || (() => {});
       this._timer = null;
       this.resetBtn.addEventListener('click', () => { this.hide(); this.onReset(); });
     }
@@ -53,10 +54,12 @@
             this.status.textContent = '失敗：' + (j.error || '未知錯誤');
             this.bar.style.background = '#dc2626';
             this._stop();
+            try { this.onError(j); } catch (_) {}
           }
         } catch (e) {
           this.status.textContent = '查詢狀態失敗';
           this._stop();
+          try { this.onError({ error: e.message }); } catch (_) {}
         }
       };
       this._timer = setInterval(tick, 800);

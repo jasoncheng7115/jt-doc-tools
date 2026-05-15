@@ -69,6 +69,13 @@
 .cmp-result .bar > div {
   height: 100%; background: linear-gradient(90deg, #34d399, #059669);
 }
+/* spinner used while a button is processing */
+@keyframes cmp-spin { to { transform: rotate(360deg); } }
+.cmp-spinner { display:inline-block; width:14px; height:14px;
+  border:2px solid currentColor; border-right-color: transparent;
+  border-radius:50%; animation: cmp-spin 0.7s linear infinite;
+  vertical-align: -3px; margin-right: 6px; }
+.btn:disabled, .btn[disabled] { opacity: 0.6; cursor: not-allowed; pointer-events: none; }
 </style>
 {% endblock %}
 {% block content %}
@@ -237,8 +244,20 @@ $('advDpi').addEventListener('input', (e) => {
 });
 $('advJpeg').addEventListener('input', (e) => { $('advJpegVal').textContent = e.target.value; });
 
+function _setBtnBusy(btn, busy, busyLabel) {
+  if (busy) {
+    btn.dataset.origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="cmp-spinner"></span>${busyLabel}`;
+  } else {
+    btn.disabled = false;
+    if (btn.dataset.origHtml) btn.innerHTML = btn.dataset.origHtml;
+  }
+}
+
 const jp = new JobProgress($('cmpJob'), {
   onDone: (jobData) => {
+    _setBtnBusy($('btnCompress'), false);
     const meta = jobData.meta || {};
     const sm = meta.summary;
     if (!sm) return;
@@ -250,11 +269,17 @@ const jp = new JobProgress($('cmpJob'), {
     $('resultPanel').hidden = false;
     $('resultPanel').scrollIntoView({behavior:'smooth', block:'end'});
   },
-  onReset: () => { $('resultPanel').hidden = true; },
+  onError: () => { _setBtnBusy($('btnCompress'), false); },
+  onReset: () => {
+    _setBtnBusy($('btnCompress'), false);
+    $('resultPanel').hidden = true;
+  },
 });
 
 $('btnCompress').addEventListener('click', async () => {
   if (!uploadId) return alert('請先上傳 PDF');
+  const btn = $('btnCompress');
+  if (btn.disabled) return;  // 防止連點
   const payload = {
     upload_id: uploadId,
     preset: currentPreset,
@@ -278,11 +303,21 @@ $('btnCompress').addEventListener('click', async () => {
   }
   {% endif %}
   $('resultPanel').hidden = true;
-  const r = await fetch('/tools/pdf-compress/submit', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(payload),
-  });
-  if (!r.ok) return alert('送出失敗：' + await r.text());
+  _setBtnBusy(btn, true, '壓縮中…');
+  let r;
+  try {
+    r = await fetch('/tools/pdf-compress/submit', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    _setBtnBusy(btn, false);
+    return alert('送出失敗：' + e.message);
+  }
+  if (!r.ok) {
+    _setBtnBusy(btn, false);
+    return alert('送出失敗：' + await r.text());
+  }
   const j = await r.json();
   jp.track(j.job_id);
 });

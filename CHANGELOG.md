@@ -4,6 +4,16 @@
 
 ---
 
+## [1.8.30] - 2026-05-15
+
+### UX 修正
+
+- **pdf-compress「開始壓縮」按鈕長壓縮中可重複點擊**：壓縮 100+ 頁 PDF 通常 30 秒以上，按鈕沒 disable 容易誤觸送出多次重複 job。修法：
+  - 點擊瞬間 `disabled = true` + 顯示 spinner（CSS keyframe rotation）+ 文字改「壓縮中…」
+  - `JobProgress` `onDone` / `onError` / `onReset` 三個 callback 都還原按鈕（成功 / 失敗 / 使用者點「處理新檔案」都恢復可點）
+  - 連點防護：disabled 狀態 click handler 直接 return
+- 順手擴充 `static/js/job_progress.js` 加 `onError` callback（原本只有 onDone / onReset），未來其他長 job 工具也能用同樣 pattern 處理錯誤後 UI 還原。
+
 ## [1.8.29] - 2026-05-15
 
 ### 修復
