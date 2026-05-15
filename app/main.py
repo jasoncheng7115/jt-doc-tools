@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.8.31"
+VERSION = "1.8.32"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -138,6 +138,7 @@ _TOOL_ALIASES = {
     "text-list":          "list lines line sort dedup deduplicate unique uniq filter grep head tail shuffle randomize trim case lower upper title prefix suffix paste txt csv xlsx ods docx odt pdf 清單 列表 行 排序 去重 去重複 重複 篩選 過濾 取頭 取尾 洗牌 隨機 大小寫 前綴 後綴 處理 整理 唯一 unique",
     "einvoice-scan":      "einvoice e-invoice invoice scan qr qrcode receipt taiwan taipei vat tax 電子發票 發票 掃描 QR Code 條碼 二維碼 統編 統一發票 載具 銷售額 稅額 買方 賣方 報帳 記帳 對帳",
     "vat-lookup":         "vat lookup company business taiwan 統編 統一編號 查詢 反查 公司 行號 政府機關 學校 行業 名稱 地址 BGMOPEN 賣方 買方",
+    "pdf-to-office":      "pdf2docx pdf-to-docx pdf-to-word pdf-to-odt convert reverse word document docx odt openoffice libreoffice oxoffice pdf word 轉 word 轉檔 反轉 反向 轉文書 轉成 word 轉成 odt PDF轉文書檔 PDF轉Word PDF轉ODT 文字方塊 可編輯",
 }
 # Per-tool color class. Both home page and sidebar use the same palette
 # classes, so a given tool always shows the same colored tile regardless

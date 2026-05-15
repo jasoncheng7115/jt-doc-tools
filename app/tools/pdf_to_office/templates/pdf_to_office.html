@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}PDF 轉文書檔 · {{ app_name }}{% endblock %}
+{% block head %}
+<style>
+.p2o-stat { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:10px; margin:10px 0; }
+.p2o-stat .item { background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px;
+  padding:10px 12px; }
+.p2o-stat .lbl { font-size:11.5px; color:#64748b; }
+.p2o-stat .val { font-size:18px; font-weight:700; color:#0f172a; margin-top:2px; }
+
+.p2o-fmt { display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; }
+.p2o-fmt label {
+  flex:1; min-width:200px; cursor:pointer;
+  border:1.5px solid #e5e7eb; border-radius:10px; padding:14px;
+  display:flex; flex-direction:column; gap:4px; transition:all .12s;
+  background:#fff;
+}
+.p2o-fmt label:hover { border-color:#93c5fd; background:#eff6ff; }
+.p2o-fmt input[type=radio] { display:none; }
+.p2o-fmt input[type=radio]:checked + label,
+.p2o-fmt label.active { border-color:#2563eb; background:#dbeafe; }
+.p2o-fmt .ttl { font-weight:600; font-size:14px; color:#0f172a; }
+.p2o-fmt .desc { font-size:12px; color:#475569; line-height:1.5; }
+
+.p2o-warn {
+  background:#fef2f2; border:1px solid #fca5a5; border-radius:8px;
+  padding:10px 12px; margin-top:10px; color:#991b1b; font-size:13px;
+}
+
+.p2o-result { background:#ecfdf5; border:1px solid #86efac; border-radius:10px;
+  padding:14px 16px; margin-top:12px; }
+.p2o-result h3 { margin:0 0 8px; color:#064e3b; font-size:15px; }
+.p2o-result .meta { font-size:13px; color:#065f46; line-height:1.6; }
+.p2o-result .meta b { color:#064e3b; }
+
+.p2o-report { background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px;
+  padding:10px 12px; margin-top:10px; }
+.p2o-report summary { cursor:pointer; font-weight:600; font-size:13px; color:#334155; }
+.p2o-report pre { background:#f1f5f9; padding:10px; border-radius:6px;
+  font-size:11px; overflow-x:auto; max-height:300px; margin-top:8px; }
+
+@keyframes p2o-spin { to { transform: rotate(360deg); } }
+.p2o-spinner { display:inline-block; width:14px; height:14px;
+  border:2px solid currentColor; border-right-color:transparent;
+  border-radius:50%; animation:p2o-spin .7s linear infinite;
+  vertical-align:-3px; margin-right:6px; }
+.btn:disabled, .btn[disabled] { opacity:.6; cursor:not-allowed; pointer-events:none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>{{ icon('file-text', size=22) }} PDF 轉文書檔</h1>
+<p class="muted">把 PDF 轉成 <b>Word (.docx)</b> 或 <b>OpenDocument (.odt)</b>，內含字型 / 段落 / 雜訊智慧校正。
+<br><span style="color:#94a3b8; font-size:12.5px;">⚠ 不會 100% 還原原 PDF 排版（這是 PDF 流式轉換的本質限制）；掃描檔請先用「OCR 文字辨識」工具轉成可選取文字 PDF 再來。</span></p>
+
+<div class="panel">
+  <h2>1. 上傳 PDF</h2>
+  <input type="file" id="fileInput" accept=".pdf">
+  <div id="warnZone"></div>
+  <div id="statBox" hidden>
+    <div class="p2o-stat">
+      <div class="item"><div class="lbl">檔案</div><div class="val" id="sName">-</div></div>
+      <div class="item"><div class="lbl">頁數</div><div class="val" id="sPages">-</div></div>
+      <div class="item"><div class="lbl">大小</div><div class="val" id="sSize">-</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="optsPanel" hidden>
+  <h2>2. 選擇輸出格式</h2>
+  <div class="p2o-fmt">
+    <input type="radio" name="fmt" id="fmtDocx" value="docx" checked>
+    <label for="fmtDocx" data-fmt="docx">
+      <div class="ttl">{{ icon('file-text', size=14) }} Word (.docx)</div>
+      <div class="desc">Microsoft Word 原生格式，最廣相容。</div>
+    </label>
+    <input type="radio" name="fmt" id="fmtOdt" value="odt">
+    <label for="fmtOdt" data-fmt="odt">
+      <div class="ttl">{{ icon('file-text', size=14) }} OpenDocument (.odt)</div>
+      <div class="desc">LibreOffice / OxOffice 原生格式，開源開放。</div>
+    </label>
+  </div>
+
+  <h2 style="margin-top:14px;">3. 進階選項</h2>
+  <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13.5px;">
+    <input type="checkbox" id="enablePost" checked>
+    啟用智慧後處理（字型正規化 / 段落合併 / 雜訊清理）— 建議開啟
+  </label>
+
+  <div style="margin-top:14px;">
+    <button class="btn btn-primary" id="btnConvert">{{ icon('file-text', size=14) }} 開始轉換</button>
+  </div>
+</div>
+
+{% with progress_id='p2oJob' %}{% include "components/job_progress.html" %}{% endwith %}
+
+<div class="panel p2o-result" id="resultPanel" hidden>
+  <h3>{{ icon('check', size=15) }} 轉換完成</h3>
+  <div class="meta" id="rMeta"></div>
+  <div style="margin-top:10px;">
+    <a class="btn btn-primary" id="rDownload" download>{{ icon('download', size=14) }} 下載</a>
+  </div>
+  <details class="p2o-report" id="rReportWrap" hidden>
+    <summary>檢視後處理報告（給工程師除錯用）</summary>
+    <pre id="rReport"></pre>
+  </details>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/job_progress.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let uploadId = null;
+
+function fmtBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/1024/1024).toFixed(1) + ' MB';
+}
+
+function setBtnBusy(btn, busy, label) {
+  if (busy) {
+    btn.dataset.origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="p2o-spinner"></span>${label}`;
+  } else {
+    btn.disabled = false;
+    if (btn.dataset.origHtml) btn.innerHTML = btn.dataset.origHtml;
+  }
+}
+
+$('fileInput').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  $('warnZone').innerHTML = '';
+  $('statBox').hidden = true;
+  $('optsPanel').hidden = true;
+  $('resultPanel').hidden = true;
+  const fd = new FormData();
+  fd.append('file', f);
+  const r = await fetch('/tools/pdf-to-office/upload', {method:'POST', body: fd});
+  if (!r.ok) {
+    alert('上傳失敗：' + await r.text());
+    return;
+  }
+  const j = await r.json();
+  uploadId = j.upload_id;
+  $('sName').textContent = j.filename;
+  $('sPages').textContent = j.pages;
+  $('sSize').textContent = fmtBytes(j.size);
+  $('statBox').hidden = false;
+  if (j.is_scanned_likely) {
+    $('warnZone').innerHTML = `<div class="p2o-warn">⚠ 偵測到此 PDF 沒有文字層（多半是掃描檔）。轉檔結果會是空白的，請先用「OCR 文字辨識」工具把它變成可選取文字 PDF 後再回來。</div>`;
+  }
+  $('optsPanel').hidden = false;
+});
+
+$('btnConvert').addEventListener('click', async () => {
+  if (!uploadId) return alert('請先上傳 PDF');
+  const btn = $('btnConvert');
+  if (btn.disabled) return;
+  const fmt = document.querySelector('input[name=fmt]:checked').value;
+  const enablePost = $('enablePost').checked;
+  $('resultPanel').hidden = true;
+  setBtnBusy(btn, true, '轉換中…');
+  let r;
+  try {
+    r = await fetch('/tools/pdf-to-office/submit', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({upload_id: uploadId, output_format: fmt, enable_postprocess: enablePost}),
+    });
+  } catch (e) {
+    setBtnBusy(btn, false);
+    return alert('送出失敗：' + e.message);
+  }
+  if (!r.ok) {
+    setBtnBusy(btn, false);
+    return alert('送出失敗：' + await r.text());
+  }
+  const j = await r.json();
+  jp.track(j.job_id);
+});
+
+const jp = new JobProgress($('p2oJob'), {
+  onDone: (jobData) => {
+    setBtnBusy($('btnConvert'), false);
+    const meta = jobData.meta || {};
+    const sm = meta.summary || {};
+    const rep = sm.report || {};
+    $('rDownload').href = `/api/jobs/${jobData.id}/download`;
+    let html = '';
+    html += `引擎：<b>${sm.engine || '-'}</b>　|　格式：<b>${(sm.output_format||'').toUpperCase()}</b>　|　後處理：<b>${sm.postprocess_done ? '是' : '否'}</b><br>`;
+    if (rep.diagnosis && rep.diagnosis.summary) {
+      const ds = rep.diagnosis.summary;
+      html += `語言：${ds.language_guess || '-'}　|　頁數：${ds.page_count}　|　內文字型：${ds.primary_body_font_pdf || '-'} ${ds.primary_body_font_size_pdf}pt<br>`;
+    }
+    if (rep.alignment) {
+      html += `對齊率：<b>${(rep.alignment.match_rate*100).toFixed(0)}%</b>　|　已對齊段落：${rep.alignment.matched}<br>`;
+    }
+    if (rep.fixers && rep.fixers.length) {
+      const summary = rep.fixers.map(f => {
+        if (f.fixer === 'font_normalize') return `字型正規化 ${f.changes}`;
+        if (f.fixer === 'paragraph_merge') return `合併段落 ${f.merged}`;
+        if (f.fixer === 'cleanup') return `清雜訊 ${(f.removed_empty_paragraphs||0) + (f.removed_tiny_images||0)}`;
+        return f.fixer;
+      });
+      html += `修正：${summary.join('、')}<br>`;
+    }
+    $('rMeta').innerHTML = html;
+    $('rReport').textContent = JSON.stringify(rep, null, 2);
+    $('rReportWrap').hidden = false;
+    $('resultPanel').hidden = false;
+    $('resultPanel').scrollIntoView({behavior:'smooth', block:'end'});
+  },
+  onError: () => { setBtnBusy($('btnConvert'), false); },
+  onReset: () => {
+    setBtnBusy($('btnConvert'), false);
+    $('resultPanel').hidden = true;
+  },
+});
+</script>
+{% endblock %}

@@ -38,7 +38,7 @@ _NON_ADMIN_TOOL_IDS = [
     "pdf-encrypt", "pdf-decrypt", "pdf-metadata",
     "pdf-hidden-scan", "doc-diff", "text-diff", "doc-deident", "text-deident",
     "pdf-editor", "translate-doc", "pdf-ocr", "text-list", "einvoice-scan",
-    "vat-lookup",
+    "vat-lookup", "pdf-to-office",
     # Sensitive — not in default-user; granted explicitly by finance/sales.
     # "pdf-fill", "pdf-stamp",
 ]
@@ -71,7 +71,7 @@ SEED_ROLES: list[dict] = [
             "pdf-extract-text", "pdf-extract-images", "pdf-attachments",
             "pdf-merge", "pdf-split", "pdf-pages", "pdf-rotate", "pdf-pageno",
             "pdf-nup", "pdf-compress", "office-to-pdf", "pdf-to-image",
-            "image-to-pdf",
+            "image-to-pdf", "pdf-to-office",
         ],
     },
     {

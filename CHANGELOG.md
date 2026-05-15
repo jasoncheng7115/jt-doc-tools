@@ -4,6 +4,39 @@
 
 ---
 
+## [1.8.32] - 2026-05-15
+
+### 新增
+
+- **新工具：PDF 轉文書檔（pdf-to-office）— Sprint 1 MVP**
+  - PDF → Word (.docx) 或 OpenDocument (.odt)
+  - 引擎：pdf2docx 0.5.13（目前唯一輸出真正可編輯 Word 物件的開源引擎；上游已停止維護，已鎖版 + fork 計畫），LibreOffice 直轉 fallback
+  - 智慧後處理（Sprint 1 三層）：
+    - **PDF 真值解析（PDFTruth）**：從原 PDF 抽出每頁 block / 字型 / 字級 / 繪圖物件 / 圖片，當 fixer 校正的「真值來源」
+    - **docx ↔ PDFTruth 對應器（aligner）**：rapidfuzz 模糊比對 docx 段落 → PDF blocks，給後續 fixer 用
+    - **三個基礎 fixer**：
+      - `font_normalize` — 字型正規化（CJK 字型套到 w:eastAsia，含 30+ 種 PDF 字型 → 系統字型對應表）
+      - `paragraph_merge` — 段落合併（用 PDFTruth y 距離強化，避免錯誤合併）
+      - `cleanup` — 雜訊清理（連續空段落 / 過小圖片）
+    - **style_apply** — Normal 段距 / 預設 CJK 字型 / 頁面大小用 PDFTruth 真值
+  - 後處理可關閉（純 pdf2docx 輸出）
+  - 對外 API：`POST /api/pdf-to-office/convert`（單次 upload + return job_id）
+  - 預設給 default-user / clerk role（不含敏感資料風險）
+- **新增依賴**：pdf2docx 0.5.13、rapidfuzz 3.x（Apache-2.0 / MIT）
+- **新增 helper**：`app/core/office_convert.convert_to_odt()` — soffice docx → odt writer8 轉換
+
+### 已知限制（必看 — 避免期待錯位）
+
+- 不還原向量繪圖 / 數學公式 / 浮水印 / 註解 / 表單欄位 / 直書 / 色彩管理
+- 不替使用者改錯字 / 改文意
+- 不保證像素級還原（流式排版本質限制）
+- 表格合併儲存格、漏抓表格自動補等高風險項目留待 Sprint 2-3
+- 真實使用建議：先試小 PDF，看後處理報告再決定要不要套全文
+
+### Sprint 1 後續預告（暫緩）
+
+Sprint 2 會加段落拆分 / 標題識別 / 清單識別 / 表格修正 / 頁首頁尾識別 / 圖片位置校正 / 中文排版修正 6 個 fixer。Sprint 3 會接 LLM 視覺校正（軌道 B）。先在實際 PDF 上看 Sprint 1 效果再排優先序。
+
 ## [1.8.31] - 2026-05-15
 
 ### UX 修正

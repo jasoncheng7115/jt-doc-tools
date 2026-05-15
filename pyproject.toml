@@ -1,6 +1,6 @@
 [project]
 name = "jt-doc-tools"
-version = "1.8.31"
+version = "1.8.32"
 description = "Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台"
 authors = [{ name = "Jason Cheng (Jason Tools)", email = "jason@jason.tools" }]
 requires-python = ">=3.10"
@@ -36,6 +36,12 @@ dependencies = [
     # native deps，跨平台 wheel 都有。比 xlsxwriter 慣用面廣（Pandas / Anaconda
     # 預設用 openpyxl）。
     "openpyxl>=3.1,<4",
+    # pdf-to-office (Sprint 1) — pdf2docx 是目前唯一輸出真正可編輯 Word 物件的開源
+    # PDF→docx 引擎。上游 (Artifex) 2026 釋出 0.5.13 後停止維護，已轉 MIT。我們鎖
+    # 死版本 + fork 計畫；THIRD-PARTY-NOTICES.md 標註自維護。
+    "pdf2docx>=0.5.13,<0.6",
+    # rapidfuzz — pdf-to-office 的 docx↔PDFTruth alignment 模糊比對引擎（比 difflib 快 10x+）。
+    "rapidfuzz>=3.0,<4",
     "ldap3>=2.9.1,<3",
     # OCR — soft optional. Used by pdf-editor when extracting text from
     # PDFs whose Identity-H subset font has a missing/identity ToUnicode CMap
