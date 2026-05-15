@@ -185,9 +185,15 @@ ask_bind_host
 #   改顯示機器的主要 IP 或回 127.0.0.1
 ADVERTISED_HOST="$BIND_HOST"
 if [ "$BIND_HOST" = "0.0.0.0" ]; then
-    # 拿一個對外可用的 IP（hostname -I 在 macOS 沒有，就 fallback）
-    ADVERTISED_HOST="$(hostname -I 2>/dev/null | awk '{print $1}')"
-    [ -z "$ADVERTISED_HOST" ] && ADVERTISED_HOST="$(ipconfig getifaddr en0 2>/dev/null || echo 127.0.0.1)"
+    # 拿一個對外可用的 IP。`hostname -I` 是 Linux only（macOS 沒這個 flag，且
+    # 配上 set -e + pipefail 會讓整個 install abort）。所以平台分流：
+    if [ "$PLATFORM" = "macos" ]; then
+        ADVERTISED_HOST="$(ipconfig getifaddr en0 2>/dev/null || true)"
+        [ -z "$ADVERTISED_HOST" ] && ADVERTISED_HOST="$(ipconfig getifaddr en1 2>/dev/null || true)"
+    else
+        ADVERTISED_HOST="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+    fi
+    [ -z "$ADVERTISED_HOST" ] && ADVERTISED_HOST="127.0.0.1"
 fi
 
 # --------------------------------------------------------------------- 工具

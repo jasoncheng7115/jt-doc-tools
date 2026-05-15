@@ -4,6 +4,13 @@
 
 ---
 
+## [1.8.29] - 2026-05-15
+
+### 修復
+
+- **macOS install.sh 撞 `hostname -I` Linux only flag → 立刻 abort（issue #19 第二層）**：`hostname -I` 是 GNU hostname 才有的 flag，macOS BSD hostname 不認。配上 `set -euo pipefail` 直接 fail 整個 install。修法：平台分流 — macOS 改用 `ipconfig getifaddr en0/en1`，Linux 維持 `hostname -I`，最後 fallback 127.0.0.1。
+- 此 bug 只在 `JTDT_HOST=0.0.0.0` 路徑觸發，預設 127.0.0.1 不會撞到，所以早期測試沒抓到。
+
 ## [1.8.28] - 2026-05-15
 
 ### 修復
