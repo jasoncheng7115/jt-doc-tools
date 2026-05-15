@@ -65,13 +65,28 @@ def _docx_table_to_text(table) -> list[list[str]]:
     return rows
 
 
+def _strip_empty(row: list[str]) -> list[str]:
+    """過濾掉純空白 cell — pdfplumber 對某些 PDF 會回多個 spacer column 是 empty。"""
+    return [c for c in row if c and c.strip()]
+
+
 def _shape_match(docx_table_text, pdfplumber_table) -> bool:
-    """簡化匹配：rows 數一致 ± 1，cols 數一致 ± 1。"""
+    """簡化匹配：rows ± 2、cols (含 / 不含 empty) 任一吻合 ± 1。
+
+    pdfplumber 對寬欄位 PDF 會抽出 spacer empty column；strip empty 後 col 數常
+    跟 docx 一致。所以兩種都試。
+    """
     if not docx_table_text or not pdfplumber_table:
         return False
-    dr, dc = len(docx_table_text), max(len(r) for r in docx_table_text)
-    pr, pc = len(pdfplumber_table), max(len(r) for r in pdfplumber_table)
-    return abs(dr - pr) <= 1 and abs(dc - pc) <= 1
+    dr = len(docx_table_text)
+    pr = len(pdfplumber_table)
+    if abs(dr - pr) > 2:
+        return False
+    dc = max(len(r) for r in docx_table_text) if docx_table_text else 0
+    pc = max(len(r) for r in pdfplumber_table) if pdfplumber_table else 0
+    pc_stripped = max((len(_strip_empty(r)) for r in pdfplumber_table), default=0)
+    # 任一 col 數對得起來都算
+    return abs(dc - pc) <= 1 or abs(dc - pc_stripped) <= 1
 
 
 def _set_cell_text(cell, text: str) -> None:
@@ -86,6 +101,84 @@ def _set_cell_text(cell, text: str) -> None:
             r.text = ""
     else:
         p.add_run(text)
+
+
+def _repair_via_pdf_truth_blocks(docx_doc, pdf_truth) -> int:
+    """用 PDFTruth multi-line block 補 docx table empty cell。
+
+    對每個 docx table row, 看是否有空 cell。對非空 cells 的內容 (concat) 在
+    PDFTruth blocks 找含這些內容的 block (block.text 含 \\n 多行)。block 內 lines
+    跟 row cells 數一致時，把 block 對應位置的 line 填回空 cell。
+
+    例：○○單 docx row [1,'','','○○','(稅率)','NT$ ○○○']
+    對應 PDF block.text = '1\\n技術服務\\n1 單位\\n○○\\n(稅率)\\nNT$ ○○○'
+    block.lines = 6 行 = row.cells = 6 → 對應 c1='技術服務', c2='1 單位' 補上
+    """
+    if not pdf_truth or not pdf_truth.pages:
+        return 0
+    # 收集 PDF 內所有 multi-line text blocks（lines ≥ 2 行）
+    multi_blocks = []
+    for page in pdf_truth.pages:
+        for b in page.blocks:
+            if b.block_type != "text":
+                continue
+            if len(b.lines) >= 2:
+                multi_blocks.append(b)
+    if not multi_blocks:
+        return 0
+
+    filled = 0
+    consumed_blocks: set[int] = set()  # 每個 PDF block 只能用來補一個 row
+    for table in docx_doc.tables:
+        for row in table.rows:
+            cells = list(row.cells)
+            n_cells = len(cells)
+            if n_cells < 3:
+                continue
+            cell_texts = [_normalize(c.text or "") for c in cells]
+            empty_idxs = [i for i, t in enumerate(cell_texts) if not t]
+            if not empty_idxs:
+                continue
+            nonempty_texts = [t for t in cell_texts if t]
+            if len(nonempty_texts) < 2:
+                continue  # 太少 anchor — 容易誤配
+            # 找 block.lines 數量跟 n_cells 一致 + 含全部 nonempty 內容 + 還沒用過
+            best_block = None
+            best_idx = -1
+            for bi, b in enumerate(multi_blocks):
+                if bi in consumed_blocks:
+                    continue
+                lines_text = [_normalize(ln.text or "") for ln in b.lines]
+                if len(lines_text) != n_cells:
+                    continue
+                # 嚴格匹配：每個 nonempty 都要在 lines 內 substr，且位置一致
+                # （避免 row r4/r5/r6 全配到同一個 block 6 的 case）
+                # 位置對準：cell_texts[i] 非空時必須 == 或 in lines_text[i]
+                position_match = True
+                for i, ct in enumerate(cell_texts):
+                    if not ct:
+                        continue
+                    if i >= len(lines_text):
+                        position_match = False
+                        break
+                    lt = lines_text[i]
+                    if not (ct == lt or ct in lt or lt in ct):
+                        position_match = False
+                        break
+                if position_match:
+                    best_block = b
+                    best_idx = bi
+                    break
+            if best_block is None:
+                continue
+            # 對 empty cell, block.lines[idx] 補上
+            block_lines = [_normalize(ln.text or "") for ln in best_block.lines]
+            for idx in empty_idxs:
+                if idx < len(block_lines) and block_lines[idx]:
+                    _set_cell_text(cells[idx], block_lines[idx])
+                    filled += 1
+            consumed_blocks.add(best_idx)
+    return filled
 
 
 def fix_table_cell_repair(docx_doc, pdf_truth, alignment, pdf_path=None) -> dict:
@@ -121,11 +214,17 @@ def fix_table_cell_repair(docx_doc, pdf_truth, alignment, pdf_path=None) -> dict
         matched_tables += 1
         pdf_consumed.add(best_pi)
         p_tbl = pdf_tables[best_pi]
-        # cell-by-cell repair（只填空）
+        # cell-by-cell repair（只填空）— 若 pdfplumber row 的 col 數 > docx row，
+        # 先 strip empty cells 對齊
         for ri, p_row in enumerate(p_tbl):
             if ri >= len(d_tbl.rows):
                 continue
             d_cells = list(d_tbl.rows[ri].cells)
+            # 若 cols 不一致且 strip empty 後一致 → 用 strip 後的 row
+            if len(p_row) != len(d_cells):
+                p_row_stripped = _strip_empty(p_row)
+                if abs(len(p_row_stripped) - len(d_cells)) <= 1:
+                    p_row = p_row_stripped
             for ci, p_cell_text in enumerate(p_row):
                 if ci >= len(d_cells):
                     continue
@@ -135,9 +234,16 @@ def fix_table_cell_repair(docx_doc, pdf_truth, alignment, pdf_path=None) -> dict
                     _set_cell_text(d_cells[ci], p_cell_text)
                     filled += 1
 
+    # Fallback / 強化：用 PDFTruth multi-line block 配對 docx row（pdfplumber 抽
+    # 不到 / shape 對不上時用這條補）
+    truth_filled = _repair_via_pdf_truth_blocks(docx_doc, pdf_truth)
+    filled += truth_filled
+
     return {
         "fixer": "table_cell_repair",
         "filled": filled,
+        "via_pdfplumber": filled - truth_filled,
+        "via_pdf_truth_blocks": truth_filled,
         "matched_tables": matched_tables,
         "docx_tables": len(docx_tables),
         "pdf_tables": len(pdf_tables),

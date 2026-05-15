@@ -4,6 +4,18 @@
 
 ---
 
+## [1.8.44] - 2026-05-16
+
+### 修復
+
+- **`header_footer` 不誤刪客戶資訊整段**：v1.8.43 加的 `_looks_like_pure_footer` heuristic 對「pdf2docx 把 footer 黏到客戶資訊段內、整段含 ≥ 2 contact patterns」的 case 會把整段刪掉，連客戶資訊也丟了。修法：加 80 字長度上限 — 短純 footer 才整段刪，長段（含正文夾雜）改用 `_strip_footer_substring` 剝離 footer 部分保留正文。
+- **`table_cell_repair` 加 PDFTruth multi-line block 配對 fallback**：pdfplumber `extract_tables()` 對某些 PDF 抽不到 / shape 跟 docx 對不上時（例如○○單 docx 7×6 vs pdfplumber 2×8 / 1×2），改用 PDFTruth 內含 \n 多行的 block 跟 docx table row 配對 — block.lines 數量跟 row cells 數一致 + 非空 cell 內容跟 lines 位置對應 → 補空 cell。修○○單「技術服務 / 1 單位 不見」實測案例。
+- **`table_cell_repair` block 防重用**：每個 PDF block 只能用來補一個 row（避免 r4/r5/r6 同個 row template 全配到同個 block 6）。
+
+### 自我測試 loop
+
+對 4 份代表 PDF（○○單 / 票卡 / 申請表 / invoice）跑自我比對 + 自動修法 6 輪，發現一個 bug 修一個。
+
 ## [1.8.43] - 2026-05-15
 
 ### 新增
