@@ -150,7 +150,11 @@ def fix_table_normalize(docx_doc, pdf_truth, alignment) -> dict:
         for ri, row in enumerate(rows):
             for cell in row.cells:
                 shading = HEADER_SHADING if (ri == 0 and is_header) else None
-                _set_cell_props(cell, vertical_align="center", shading=shading)
+                # 標題列 vertical center 看起來比較整齊；內文列 vertical top
+                # 比較自然（避免短內容飄在 cell 中間 — invoice item description
+                # 應該靠上對齊跟其他欄位齊平）
+                v_align = "center" if (ri == 0 and is_header) else "top"
+                _set_cell_props(cell, vertical_align=v_align, shading=shading)
                 _clear_cell_paragraph_spacing(cell)
                 cells_centered += 1
             if ri == 0 and is_header:
