@@ -4,6 +4,13 @@
 
 ---
 
+## [1.8.45] - 2026-05-16
+
+### 新增
+
+- **PDFTruth `_split_block_by_y_gap` 啟用**：之前寫好但沒接的 helper 接到 `_extract_page` — block 內若連續兩 line y 距離 > 1.8 倍行高 → 拆成多個 sub-blocks。給 aligner 1:N 跟 paragraph_split 更多素材。實測申請表 alignment 從 31% → 33%。
+- **`table_dedup_cells` fixer**：偵測 row 內連續相同非空 cell → 用 `gridSpan` 合併。pdf2docx 對「跨欄合併儲存格」抓錯時自救。已會跳過已是 vMerge / gridSpan 的同 element cell（python-docx 會回多次同物件）。
+
 ## [1.8.44] - 2026-05-16
 
 ### 修復

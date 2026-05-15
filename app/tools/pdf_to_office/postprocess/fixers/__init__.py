@@ -11,6 +11,7 @@ from .paragraph_merge import fix_paragraph_merge
 from .paragraph_split import fix_paragraph_split
 from .table_autofit import fix_table_autofit
 from .table_cell_repair import fix_table_cell_repair
+from .table_dedup_cells import fix_table_dedup_cells
 from .table_normalize import fix_table_normalize
 
 __all__ = [
@@ -18,5 +19,6 @@ __all__ = [
     "fix_font_normalize", "fix_header_footer", "fix_heading_detect",
     "fix_image_position_fix", "fix_list_detect",
     "fix_paragraph_merge", "fix_paragraph_split",
-    "fix_table_autofit", "fix_table_cell_repair", "fix_table_normalize",
+    "fix_table_autofit", "fix_table_cell_repair",
+    "fix_table_dedup_cells", "fix_table_normalize",
 ]

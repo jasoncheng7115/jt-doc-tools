@@ -22,6 +22,7 @@ from .fixers import (
     fix_paragraph_split,
     fix_table_autofit,
     fix_table_cell_repair,
+    fix_table_dedup_cells,
     fix_table_normalize,
 )
 from .style_apply import apply_styles
@@ -48,6 +49,7 @@ def run_postprocess(
     enable_image_position_fix: bool = True,
     enable_table_normalize: bool = True,
     enable_table_cell_repair: bool = True,
+    enable_table_dedup_cells: bool = True,
 ) -> dict:
     """主入口。讀 PDF + docx → 跑 fixer → 寫到 docx_output。
 
@@ -161,6 +163,9 @@ def run_postprocess(
                                                                         pdf_path=pdf_path)))
     if enable_table_autofit:
         fixer_specs.append(("table_autofit", fix_table_autofit))
+    # 表格相鄰重複 cell 合併（pdf2docx 跨欄合併儲存格抓錯時自救）
+    if enable_table_dedup_cells:
+        fixer_specs.append(("table_dedup_cells", fix_table_dedup_cells))
     # 表格樣式正規化放最後 — 等所有結構修完才套樣式
     if enable_table_normalize:
         fixer_specs.append(("table_normalize", fix_table_normalize))

@@ -212,16 +212,27 @@ def _extract_page(page) -> PDFPage:
                 # 重複 line 去重（字疊字粗體效果常見）
                 lines_out = _dedup_consecutive_lines(lines_out)
                 dom_font, dom_size = _dominant(block_font_items)
-                block_text = "\n".join(ln.text for ln in lines_out)
-                blocks_out.append(PDFBlock(
-                    lines=lines_out,
-                    bbox=bbox,
-                    text=block_text,
-                    block_type="text",
-                    page_num=page_num,
-                    dominant_font=dom_font,
-                    dominant_size=dom_size,
-                ))
+                # 大 y 距 (>1.8 倍行高) 拆 sub-blocks — 給 aligner 1:N + paragraph_split 用
+                groups = _split_block_by_y_gap(lines_out, dom_size, gap_ratio=1.8)
+                for group in groups:
+                    if not group:
+                        continue
+                    g_text = "\n".join(ln.text for ln in group)
+                    g_bbox = (
+                        min(ln.bbox[0] for ln in group),
+                        min(ln.bbox[1] for ln in group),
+                        max(ln.bbox[2] for ln in group),
+                        max(ln.bbox[3] for ln in group),
+                    )
+                    blocks_out.append(PDFBlock(
+                        lines=group,
+                        bbox=g_bbox,
+                        text=g_text,
+                        block_type="text",
+                        page_num=page_num,
+                        dominant_font=dom_font,
+                        dominant_size=dom_size,
+                    ))
         elif btype == 1:
             # image block — 詳細圖片資料另外從 get_images() 取（拿 xref）
             blocks_out.append(PDFBlock(
