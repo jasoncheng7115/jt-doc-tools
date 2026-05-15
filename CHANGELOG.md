@@ -4,6 +4,14 @@
 
 ---
 
+## [1.8.28] - 2026-05-15
+
+### 修復
+
+- **macOS install.sh 撞 broken Python 直接 fail（issue #19）**：v1.8.25 加的「Apple Silicon 強制用 ARM brew python」邏輯把候選順序排成 3.14 → 3.13 → 3.12 ...，挑到第一個 `-x` 就用。但 Python 3.14 在某些 brew 安裝下 `platform.mac_ver()` 回空 tuple `('', ('', '', ''), '')`，uv 視為「Broken Python installation」直接拒收 → uv sync 失敗 → 整個 install 在 Python 環境階段 abort。
+  - 修法：對每個候選 python 跑 `mac_ver` probe，回空就跳過往下找；3.12 改第一順位（PyTorch / EasyOCR 測試最穩 + SDK metadata 完整），broken 的 3.14 直接 skip。
+  - 全候選都 broken 時印 warn + 建議 `brew install python@3.12`，由 uv 自己挑 fallback。
+
 ## [1.8.27] - 2026-05-14
 
 ### 文案修正

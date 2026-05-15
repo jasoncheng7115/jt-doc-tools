@@ -648,17 +648,28 @@ setup_python() {
     # 對不上 → uv sync 失敗。強制 prefer ARM brew python。
     UV_EXTRA_ARGS=""
     if [ "$PLATFORM" = "macos" ] && [ "$ARCH" = "arm64" ]; then
-        for py in /opt/homebrew/opt/python@3.14/bin/python3.14 \
+        # Prefer 3.12 first（PyTorch / EasyOCR 測試最穩 + macOS SDK metadata 完整）。
+        # Python 3.14 在某些 brew 安裝下 platform.mac_ver() 回空 tuple，uv 視為「broken
+        # Python」直接拒收（GitHub issue #19）。所以優先順序由 stable 排到 newest，
+        # 並對每個候選做可用性 probe（mac_ver 必須非空）才採用。
+        for py in /opt/homebrew/opt/python@3.12/bin/python3.12 \
                   /opt/homebrew/opt/python@3.13/bin/python3.13 \
-                  /opt/homebrew/opt/python@3.12/bin/python3.12 \
                   /opt/homebrew/opt/python@3.11/bin/python3.11 \
+                  /opt/homebrew/opt/python@3.14/bin/python3.14 \
                   /opt/homebrew/bin/python3; do
-            if [ -x "$py" ]; then
-                log "  Apple Silicon 強制用 ARM brew python: $py"
+            if [ -x "$py" ] \
+               && "$py" -c 'import platform,sys; v,_,_ = platform.mac_ver(); sys.exit(0 if v else 1)' 2>/dev/null; then
+                log "  Apple Silicon 用 ARM brew python: $py"
                 UV_EXTRA_ARGS="--python $py"
                 break
+            elif [ -x "$py" ]; then
+                warn "  跳過 broken Python（platform.mac_ver() 回空）：$py"
             fi
         done
+        if [ -z "$UV_EXTRA_ARGS" ]; then
+            warn "  ARM brew python 全 broken — 讓 uv 自己挑（可能會抓 Intel rosetta 走 x86_64 wheel）"
+            warn "  建議：brew install python@3.12  然後重跑 install.sh"
+        fi
     fi
     # 注意：絕不能用 --frozen — 那會盲信 uv.lock，若 lockfile 漏了某個 dep
     # （v1.1.66 之前的 uv.lock 漏 ldap3 就是這樣），uv 會「成功」回傳但實際
