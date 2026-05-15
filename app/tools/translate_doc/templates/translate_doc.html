@@ -238,12 +238,16 @@
   .trd-drop-zone:hover { border-color: #6366f1; background: #eef2ff; }
   .trd-drop-zone.is-dragover { border-color: #16a34a; background: #dcfce7; border-style: solid; }
   .trd-drop-zone.has-file { border-color: #16a34a; background: #f0fdf4; border-style: solid; }
+  .trd-drop-zone.has-warn { border-color: #dc2626; background: #fef2f2; border-style: solid; }
   .trd-drop-icon { color: #6366f1; flex-shrink: 0; line-height: 0; }
   .trd-drop-zone.has-file .trd-drop-icon { color: #16a34a; }
+  .trd-drop-zone.has-warn .trd-drop-icon { color: #dc2626; }
   .trd-drop-text { font-size: 12.5px; color: #475569; line-height: 1.4;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .trd-drop-text b { color: #1e40af; }
+  .trd-drop-zone.has-warn .trd-drop-text b { color: #991b1b; }
   .trd-drop-hint { font-size: 11px; color: #94a3b8; margin-left: 6px; }
+  .trd-drop-hint.warn { color: #dc2626; font-weight: 600; }
 
   /* === 翻譯進度條 === */
   .trd-progress-wrap {
@@ -638,7 +642,19 @@ async function handleUploadedFile(f) {
     if (j.truncated) {
       alert(`原文超過上限，僅取前 ${j.sentences.length} 句翻譯。`);
     }
-    dropText.innerHTML = `<b>${escapeHTML(f.name)}</b><div class="trd-drop-hint">已載入 ${j.sentence_count} 句、${j.char_count} 字</div>`;
+    if ((j.sentence_count || 0) === 0 || (j.char_count || 0) === 0) {
+      // 沒抽到任何文字 — 多半是掃描檔 PDF / 純圖片內嵌 PDF。提示使用者用 OCR 工具
+      const isPdf = /\.pdf$/i.test(f.name);
+      const hint = isPdf
+        ? '⚠ 沒偵測到文字，可能是掃描檔 PDF — 請先用「OCR 文字辨識」工具把它變成可選取文字 PDF 再回來翻譯'
+        : '⚠ 沒偵測到任何文字 — 檔案可能損毀或內容皆為圖片';
+      dropZone.classList.remove('has-file');
+      dropZone.classList.add('has-warn');
+      dropText.innerHTML = `<b>${escapeHTML(f.name)}</b><div class="trd-drop-hint warn">${hint}</div>`;
+    } else {
+      dropZone.classList.remove('has-warn');
+      dropText.innerHTML = `<b>${escapeHTML(f.name)}</b><div class="trd-drop-hint">已載入 ${j.sentence_count} 句、${j.char_count} 字</div>`;
+    }
     refreshCounter();
   } catch (err) {
     alert('上傳失敗：' + err.message);
