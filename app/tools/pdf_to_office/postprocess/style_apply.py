@@ -66,7 +66,7 @@ def apply_styles(docx_doc, pdf_truth: PDFTruth) -> dict:
     except Exception as e:
         log.warning("set doc default font failed: %s", e)
 
-    # === 3. 頁面大小（用 PDFTruth 真值） ===
+    # === 3. 頁面大小（用 PDFTruth 真值）+ 邊距 (clamp) ===
     if pdf_truth.pages:
         first_page = pdf_truth.pages[0]
         try:
@@ -74,12 +74,26 @@ def apply_styles(docx_doc, pdf_truth: PDFTruth) -> dict:
             # PDF pt → docx EMU (1 pt = 12700 EMU)
             section.page_width = int(first_page.width * 12700)
             section.page_height = int(first_page.height * 12700)
-            section.left_margin = int(first_page.margin_left * 12700)
-            section.right_margin = int(first_page.margin_right * 12700)
-            section.top_margin = int(first_page.margin_top * 12700)
-            section.bottom_margin = int(first_page.margin_bottom * 12700)
+            # 邊距 clamp：extractor 從「文字 block bbox 集中分佈」估 margin，但若 PDF
+            # 內容只佔頁面上方 1/3，bottom margin 會算成 600+pt → docx 可用內容區
+            # 變超小，footer 被擠下頁、表格內文字被截。clamp 到 [18, 90] pt 區間
+            # （0.25-1.25 inch — 涵蓋常見 PDF 邊距值，不會被異常 PDF 估算汙染）。
+            def _clamp(v: float, lo: float = 18.0, hi: float = 90.0) -> float:
+                if v < lo:
+                    return lo
+                if v > hi:
+                    return hi
+                return v
+            section.left_margin = int(_clamp(first_page.margin_left) * 12700)
+            section.right_margin = int(_clamp(first_page.margin_right) * 12700)
+            section.top_margin = int(_clamp(first_page.margin_top) * 12700)
+            section.bottom_margin = int(_clamp(first_page.margin_bottom) * 12700)
             changes["items"].append(
                 f"page_size={first_page.width:.0f}x{first_page.height:.0f}pt"
+                f" margins=L{_clamp(first_page.margin_left):.0f}/"
+                f"R{_clamp(first_page.margin_right):.0f}/"
+                f"T{_clamp(first_page.margin_top):.0f}/"
+                f"B{_clamp(first_page.margin_bottom):.0f}"
             )
         except Exception as e:
             log.debug("set page size failed: %s", e)

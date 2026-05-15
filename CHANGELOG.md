@@ -4,6 +4,25 @@
 
 ---
 
+## [1.8.36] - 2026-05-15
+
+### 修復
+
+- **pdf-to-office 票卡 / 短內容 PDF 邊距估錯導致 footer 被擠下頁**：原本從「文字 block bbox 集中分佈」估 PDF margin，若內容只佔頁面上方 1/3（例如台鐵票卡），bottom margin 會算成 600+pt → docx 可用內容區變超小。修法：margins clamp 到 [18, 90] pt 區間（0.25-1.25 inch，涵蓋常見值）。
+
+### 新增（Sprint 2 fixers）
+
+- **`list_detect`** — 把 `1. 2. 3.`、`(1) (2)`、`(一) (二)`、`壹、貳、`、`- *` 等開頭連續段落還原成 Word native list，剝離開頭符號 + 套 List Number / List Bullet style。
+- **`heading_detect`** — 用 PDFTruth body_size 當基準，字級 1.6×↑ → H1、1.35×↑ → H2、1.15×↑ → H3；附加台灣公文 keyword（主旨：/說明：/辦法：）→ H2。
+- **`header_footer`** — 多頁 PDF 的頁首頁尾（≥ 50% 頁面同位置出現相同文字）自動移到 Word section header / footer。
+- **`cjk_typography`** — CJK 字之間的單一半形空白（PDF 字距渲染殘留）移除；docDefaults 加 `autoSpaceDE` / `autoSpaceDN` 開啟 Word 中英自動字距。
+- **`paragraph_split`** — 骨架放好，等 Sprint 3 的 1:N aligner 完成後啟用。
+
+### 變更
+
+- pipeline fixer 順序定義：`fake_table_remove → font_normalize → paragraph_merge → paragraph_split → heading_detect → list_detect → header_footer → cjk_typography → cleanup`。前面 fixer 的輸出是後面 fixer 的輸入。
+- THIRD-PARTY-NOTICES 補上 pdf2docx (MIT) / rapidfuzz (MIT) / pyzbar (MIT) 三套依賴聲明 + pdf2docx 上游停止維護的注記。
+
 ## [1.8.35] - 2026-05-15
 
 ### 修復 + 改良
