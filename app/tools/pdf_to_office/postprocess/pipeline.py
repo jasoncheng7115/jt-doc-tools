@@ -16,9 +16,11 @@ from .fixers import (
     fix_font_normalize,
     fix_header_footer,
     fix_heading_detect,
+    fix_image_position_fix,
     fix_list_detect,
     fix_paragraph_merge,
     fix_paragraph_split,
+    fix_table_autofit,
 )
 from .style_apply import apply_styles
 
@@ -40,6 +42,8 @@ def run_postprocess(
     enable_cleanup: bool = True,
     enable_style_apply: bool = True,
     enable_fake_table_remove: bool = True,
+    enable_table_autofit: bool = True,
+    enable_image_position_fix: bool = True,
 ) -> dict:
     """主入口。讀 PDF + docx → 跑 fixer → 寫到 docx_output。
 
@@ -139,10 +143,15 @@ def run_postprocess(
         fixer_specs.append(("list_detect", fix_list_detect))
     if enable_header_footer:
         fixer_specs.append(("header_footer", fix_header_footer))
+    if enable_image_position_fix:
+        fixer_specs.append(("image_position_fix", fix_image_position_fix))
     if enable_cjk_typography:
         fixer_specs.append(("cjk_typography", fix_cjk_typography))
     if enable_cleanup:
         fixer_specs.append(("cleanup", fix_cleanup))
+    # 表格 autofit 放最後 — 先讓其他 fixer 動完內容，最後讓表格自動 resize
+    if enable_table_autofit:
+        fixer_specs.append(("table_autofit", fix_table_autofit))
 
     for name, fn in fixer_specs:
         if pdf_truth is None or alignment is None:

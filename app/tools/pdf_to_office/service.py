@@ -41,6 +41,7 @@ def convert_pdf_to_office(
     *,
     enable_postprocess: bool = True,
     keep_intermediate: bool = False,
+    fixer_opts: dict | None = None,
 ) -> ConvertResult:
     """主入口。
 
@@ -80,7 +81,7 @@ def convert_pdf_to_office(
     report: dict = {}
     if enable_postprocess:
         try:
-            report = run_postprocess(pdf_path, raw_docx, final_docx)
+            report = run_postprocess(pdf_path, raw_docx, final_docx, **(fixer_opts or {}))
         except Exception as e:
             log.exception("postprocess failed — using raw output")
             report = {"errors": [f"postprocess: {e}"]}

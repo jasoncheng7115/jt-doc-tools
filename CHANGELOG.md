@@ -4,6 +4,37 @@
 
 ---
 
+## [1.8.40] - 2026-05-15
+
+### 變更
+
+- pdf-to-office 輸出格式 .docx / .odt 加上 `W` / `O` 顏色徽章 icon 區分（藍色 / 綠色），不再都用同一個檔案 icon。
+
+## [1.8.39] - 2026-05-15
+
+### 新增 + 改良 (Sprint 2 補完)
+
+- **`image_position_fix` fixer** — 用 PDFTruth.images SHA1 hash 配對 docx 內嵌圖片，size 差異 > 10% 時調整為 PDF 真值大小。
+- **`report.py` Markdown 報告** — `/tools/pdf-to-office/report/{job_id}` 端點下載完整改善報告（PDFTruth / alignment / diagnosis / fixers / errors）。
+- **UI per-fixer toggle** — 進階選項加 11 個 fixer 個別開關（fake_table_remove / font_normalize / paragraph_merge / ... / table_autofit）。
+- **修正結果面板改 chip 樣式** — 每個有變動的 fixer 變成獨立 chip，數字加粗顯示，0 變動的 fixer 自動隱藏。
+- 結果面板加「下載改善報告 (Markdown)」按鈕。
+- pipeline 加 `enable_image_position_fix` 開關。
+
+## [1.8.38] - 2026-05-15
+
+### 修復
+
+- **pdf-to-office 上傳 .docx 時錯誤訊息顯示原始 JSON**：`{"detail":"只支援 PDF 輸入"}` 直接秀給使用者看。加 `readErr()` helper 解 JSON 取 `detail`/`error`，只顯示乾淨訊息。
+- **pdf-to-office 多餘的「下載 PDF / 下載 PNG」按鈕**：JobProgress component 預設按鈕對 docx/odt 輸出不適用，CSS 隱藏。
+- **修正結果面板顯示重複未做的 fixer 名稱**：原本 `paragraph_split` 等 0 變動的 fixer 會原樣顯示英文名稱；改成過濾 0 + 全中文化。
+
+## [1.8.37] - 2026-05-15
+
+### 修復
+
+- **pdf-to-office 表格 cell 文字被截**（票卡 (票號) 範例）：pdf2docx 預設給表格 fixed layout，cell 寬度算錯時文字會被切。新增 `table_autofit` fixer 把所有 table layout 改 autofit + cell preferred width 改 auto，讓 LibreOffice / Word 自動調整 cell 寬度容下文字。
+
 ## [1.8.36] - 2026-05-15
 
 ### 修復

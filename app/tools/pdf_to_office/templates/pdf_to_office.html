@@ -21,7 +21,14 @@
 .p2o-fmt input[type=radio] { display:none; }
 .p2o-fmt input[type=radio]:checked + label,
 .p2o-fmt label.active { border-color:#2563eb; background:#dbeafe; }
-.p2o-fmt .ttl { font-weight:600; font-size:14px; color:#0f172a; }
+.p2o-fmt .ttl { font-weight:600; font-size:14px; color:#0f172a; display:flex; align-items:center; gap:8px; }
+.p2o-fmt .ttl .ic-doc {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:22px; height:22px; border-radius:4px; color:#fff;
+  font-size:11px; font-weight:800; letter-spacing:-0.5px; flex-shrink:0;
+}
+.p2o-fmt .ttl .ic-doc.docx { background:linear-gradient(135deg,#1d4ed8,#2563eb); }
+.p2o-fmt .ttl .ic-doc.odt  { background:linear-gradient(135deg,#16a34a,#22c55e); }
 .p2o-fmt .desc { font-size:12px; color:#475569; line-height:1.5; }
 
 .p2o-warn {
@@ -43,6 +50,22 @@
 .p2o-result .meta-grid .lbl { color:#047857; font-weight:600; white-space:nowrap; }
 .p2o-result .meta-grid .val { color:#064e3b; }
 .p2o-result .meta-grid .val b { color:#064e3b; }
+.p2o-result .fixer-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.p2o-result .fixer-chip {
+  display:inline-flex; align-items:center; gap:6px;
+  background:#fff; border:1px solid #86efac; border-radius:999px;
+  padding:2px 10px; font-size:12px; color:#065f46;
+}
+.p2o-result .fixer-chip b { color:#047857; font-weight:700; }
+
+/* per-fixer toggle 進階選項 */
+.p2o-fixers { background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px;
+  padding:10px 12px; margin-top:10px; }
+.p2o-fixers summary { cursor:pointer; font-weight:600; font-size:13px; color:#334155; }
+.p2o-fixers .grid { display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));
+  gap:6px 14px; margin-top:10px; font-size:12.5px; color:#334155; }
+.p2o-fixers label { display:flex; align-items:center; gap:6px; cursor:pointer; }
 
 .p2o-report { background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px;
   padding:10px 12px; margin-top:10px; }
@@ -56,6 +79,9 @@
   border-radius:50%; animation:p2o-spin .7s linear infinite;
   vertical-align:-3px; margin-right:6px; }
 .btn:disabled, .btn[disabled] { opacity:.6; cursor:not-allowed; pointer-events:none; }
+/* JobProgress 預設「下載 PDF / 下載 PNG」按鈕跟 pdf-to-office 不適用（輸出是 docx/odt
+   不是 pdf）— 完全藏起來，下載走我們綠色 result panel 內的「下載」按鈕。 */
+#p2oJob .job-download, #p2oJob .job-download-png { display: none !important; }
 </style>
 {% endblock %}
 
@@ -84,12 +110,12 @@
   <div class="p2o-fmt">
     <input type="radio" name="fmt" id="fmtDocx" value="docx" checked>
     <label for="fmtDocx" data-fmt="docx">
-      <div class="ttl">{{ icon('file-text', size=14) }} Word (.docx)</div>
+      <div class="ttl"><span class="ic-doc docx">W</span>Word (.docx)</div>
       <div class="desc">Microsoft Word 原生格式，最廣相容。</div>
     </label>
     <input type="radio" name="fmt" id="fmtOdt" value="odt">
     <label for="fmtOdt" data-fmt="odt">
-      <div class="ttl">{{ icon('file-text', size=14) }} OpenDocument (.odt)</div>
+      <div class="ttl"><span class="ic-doc odt">O</span>OpenDocument (.odt)</div>
       <div class="desc">LibreOffice / OxOffice 原生格式，開源開放。</div>
     </label>
   </div>
@@ -97,8 +123,25 @@
   <h2 style="margin-top:14px;">3. 進階選項</h2>
   <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13.5px;">
     <input type="checkbox" id="enablePost" checked>
-    啟用智慧後處理（字型正規化 / 段落合併 / 雜訊清理）— 建議開啟
+    啟用智慧後處理（10 個 fixer 修字型 / 段落 / 標題 / 清單 / 表格 / 雜訊）— 建議開啟
   </label>
+
+  <details class="p2o-fixers">
+    <summary>個別 fixer 開關（後處理啟用時生效）</summary>
+    <div class="grid">
+      <label><input type="checkbox" id="fx_fake_table_remove" checked>假表格移除</label>
+      <label><input type="checkbox" id="fx_font_normalize" checked>字型正規化</label>
+      <label><input type="checkbox" id="fx_paragraph_merge" checked>段落合併</label>
+      <label><input type="checkbox" id="fx_paragraph_split" checked>段落拆分</label>
+      <label><input type="checkbox" id="fx_heading_detect" checked>標題識別</label>
+      <label><input type="checkbox" id="fx_list_detect" checked>清單識別</label>
+      <label><input type="checkbox" id="fx_header_footer" checked>頁首頁尾識別</label>
+      <label><input type="checkbox" id="fx_image_position_fix" checked>圖片位置校正</label>
+      <label><input type="checkbox" id="fx_cjk_typography" checked>中文排版</label>
+      <label><input type="checkbox" id="fx_cleanup" checked>雜訊清理</label>
+      <label><input type="checkbox" id="fx_table_autofit" checked>表格寬度自動</label>
+    </div>
+  </details>
 
   <div style="margin-top:14px;">
     <button class="btn btn-primary" id="btnConvert">{{ icon('file-text', size=14) }} 開始轉換</button>
@@ -110,12 +153,13 @@
 <div class="panel p2o-result" id="resultPanel" hidden>
   <h3>{{ icon('check', size=15) }} 轉換完成</h3>
   <div class="meta" id="rMeta"></div>
-  <div style="margin-top:10px;">
+  <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
     <a class="btn btn-primary" id="rDownload" download>{{ icon('download', size=14) }} 下載</a>
+    <a class="btn" id="rReport" download style="background:#f0fdf4;border:1px solid #86efac;color:#065f46;">{{ icon('file-text', size=14) }} 下載改善報告 (Markdown)</a>
   </div>
   <details class="p2o-report" id="rReportWrap" hidden>
-    <summary>檢視後處理報告（給工程師除錯用）</summary>
-    <pre id="rReport"></pre>
+    <summary>檢視原始 JSON 報告（給工程師除錯用）</summary>
+    <pre id="rReportRaw"></pre>
   </details>
 </div>
 {% endblock %}
@@ -131,6 +175,17 @@ function fmtBytes(n) {
   if (n < 1024) return n + ' B';
   if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
   return (n/1024/1024).toFixed(1) + ' MB';
+}
+
+async function readErr(r) {
+  // FastAPI HTTPException 回 {"detail":"..."}；其他情況可能純文字 — 兩者都解出乾淨訊息
+  const txt = await r.text();
+  try {
+    const j = JSON.parse(txt);
+    if (j && j.detail) return j.detail;
+    if (j && j.error) return j.error;
+  } catch (_) {}
+  return txt;
 }
 
 function setBtnBusy(btn, busy, label) {
@@ -160,7 +215,7 @@ const fu = new FileUpload($('p2oUpload'), async (f) => {
   fd.append('file', f);
   const r = await fu.upload('/tools/pdf-to-office/upload', fd, {processingLabel: '解析 PDF 中…'});
   if (!r.ok) {
-    alert('上傳失敗：' + await r.text());
+    alert('上傳失敗：' + await readErr(r));
     return;
   }
   const j = await r.json();
@@ -181,13 +236,19 @@ $('btnConvert').addEventListener('click', async () => {
   if (btn.disabled) return;
   const fmt = document.querySelector('input[name=fmt]:checked').value;
   const enablePost = $('enablePost').checked;
+  // 收集 per-fixer toggle 狀態
+  const fixerOpts = {};
+  document.querySelectorAll('.p2o-fixers input[type=checkbox]').forEach(cb => {
+    const key = cb.id.replace(/^fx_/, 'enable_');
+    fixerOpts[key] = cb.checked;
+  });
   $('resultPanel').hidden = true;
   setBtnBusy(btn, true, '轉換中…');
   let r;
   try {
     r = await fetch('/tools/pdf-to-office/submit', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({upload_id: uploadId, output_format: fmt, enable_postprocess: enablePost}),
+      body: JSON.stringify({upload_id: uploadId, output_format: fmt, enable_postprocess: enablePost, fixer_opts: fixerOpts}),
     });
   } catch (e) {
     setBtnBusy(btn, false);
@@ -195,7 +256,7 @@ $('btnConvert').addEventListener('click', async () => {
   }
   if (!r.ok) {
     setBtnBusy(btn, false);
-    return alert('送出失敗：' + await r.text());
+    return alert('送出失敗：' + await readErr(r));
   }
   const j = await r.json();
   jp.track(j.job_id);
@@ -208,6 +269,7 @@ const jp = new JobProgress($('p2oJob'), {
     const sm = meta.summary || {};
     const rep = sm.report || {};
     $('rDownload').href = `/api/jobs/${jobData.id}/download`;
+    $('rReport').href = `/tools/pdf-to-office/report/${jobData.id}`;
     const rows = [];
     rows.push(['引擎', `<b>${sm.engine || '-'}</b>`]);
     rows.push(['格式', `<b>${(sm.output_format||'').toUpperCase()}</b>`]);
@@ -222,20 +284,37 @@ const jp = new JobProgress($('p2oJob'), {
       rows.push(['對齊率', `<b>${(rep.alignment.match_rate*100).toFixed(0)}%</b>　（已對齊段落 ${rep.alignment.matched}）`]);
     }
     if (rep.fixers && rep.fixers.length) {
-      const summary = rep.fixers.map(f => {
-        if (f.fixer === 'fake_table_remove') return `假表格移除 ${f.removed_tables||0}`;
-        if (f.fixer === 'font_normalize') return `字型正規化 ${f.changes}`;
-        if (f.fixer === 'paragraph_merge') return `合併段落 ${f.merged}`;
-        if (f.fixer === 'cleanup') return `清雜訊 ${(f.removed_empty_paragraphs||0) + (f.removed_tiny_images||0)}`;
-        return f.fixer;
-      }).filter(s => !s.endsWith(' 0'));
-      rows.push(['修正', summary.join('、') || '無']);
+      const chips = rep.fixers.map(f => {
+        const map = {
+          fake_table_remove:   ['假表格移除', f.removed_tables],
+          font_normalize:      ['字型正規化', f.changes],
+          paragraph_merge:     ['合併段落',   f.merged],
+          paragraph_split:     ['段落拆分',   f.split],
+          heading_detect:      ['標題識別',   f.promoted],
+          list_detect:         ['清單識別',   f.converted_paragraphs],
+          header_footer:       ['頁首頁尾',   (f.moved_to_header||0) + (f.moved_to_footer||0)],
+          image_position_fix:  ['圖片位置',   f.adjusted],
+          cjk_typography:      ['中文排版',   f.inter_cjk_spaces_removed],
+          cleanup:             ['清雜訊',     (f.removed_empty_paragraphs||0) + (f.removed_tiny_images||0)],
+          table_autofit:       ['表格寬度',   f.tables_changed],
+        };
+        const m = map[f.fixer];
+        if (!m) return null;
+        const [label, n] = m;
+        if (!n) return null;
+        return `<span class="fixer-chip">${label}<b>${n}</b></span>`;
+      }).filter(Boolean);
+      rows.push(['修正',
+        chips.length
+          ? `<div class="fixer-chips">${chips.join('')}</div>`
+          : '<span style="color:#94a3b8;">無變動</span>'
+      ]);
     }
     const html = '<div class="meta-grid">' +
       rows.map(([k, v]) => `<div class="lbl">${k}</div><div class="val">${v}</div>`).join('') +
       '</div>';
     $('rMeta').innerHTML = html;
-    $('rReport').textContent = JSON.stringify(rep, null, 2);
+    $('rReportRaw').textContent = JSON.stringify(rep, null, 2);
     $('rReportWrap').hidden = false;
     $('resultPanel').hidden = false;
     $('resultPanel').scrollIntoView({behavior:'smooth', block:'end'});

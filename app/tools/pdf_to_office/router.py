@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from ...config import settings
 from ...core import upload_owner as _uo
@@ -52,6 +52,23 @@ async def index(request: Request):
         "pdf_to_office.html",
         {"request": request},
     )
+
+
+@router.get("/report/{job_id}")
+async def download_report(request: Request, job_id: str):
+    """下載某 job 的 Markdown 改善報告。"""
+    job = job_manager.get(job_id)
+    if not job:
+        raise HTTPException(404, "job 不存在")
+    summary = (job.meta or {}).get("summary") or {}
+    rep = summary.get("report") or {}
+    if not rep:
+        raise HTTPException(404, "找不到報告（job 還沒完成或非後處理過）")
+    from .postprocess.report import render_markdown_report
+    src_filename = (job.meta or {}).get("filename", "")
+    md = render_markdown_report(rep, src_filename=src_filename)
+    headers = {"content-disposition": f'attachment; filename="pdf-to-office-report-{job_id}.md"'}
+    return PlainTextResponse(md, media_type="text/markdown; charset=utf-8", headers=headers)
 
 
 @router.post("/upload")
@@ -103,6 +120,15 @@ async def submit(request: Request):
     if output_format not in ("docx", "odt"):
         raise HTTPException(400, "output_format 必須是 docx 或 odt")
     enable_postprocess = bool(body.get("enable_postprocess", True))
+    # Per-fixer toggle dict（key 例：enable_font_normalize）— 白名單過濾，不接 unknown
+    raw_opts = body.get("fixer_opts") or {}
+    _ALLOWED_FIXER_KEYS = {
+        "enable_font_normalize", "enable_paragraph_merge", "enable_paragraph_split",
+        "enable_heading_detect", "enable_list_detect", "enable_header_footer",
+        "enable_image_position_fix", "enable_cjk_typography", "enable_cleanup",
+        "enable_fake_table_remove", "enable_table_autofit", "enable_style_apply",
+    }
+    fixer_opts = {k: bool(v) for k, v in raw_opts.items() if k in _ALLOWED_FIXER_KEYS}
 
     src = _src_path(uid)
     if not src.exists():
@@ -121,6 +147,7 @@ async def submit(request: Request):
             src, work_dir, output_format,
             enable_postprocess=enable_postprocess,
             keep_intermediate=False,
+            fixer_opts=fixer_opts,
         )
         if not result.ok:
             raise RuntimeError(result.error or "轉換失敗")
