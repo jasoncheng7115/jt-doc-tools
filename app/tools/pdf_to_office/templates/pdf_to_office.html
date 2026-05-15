@@ -143,6 +143,7 @@
       <label><input type="checkbox" id="fx_table_normalize" checked>表格樣式正規化</label>
       <label><input type="checkbox" id="fx_table_cell_repair" checked>表格 cell 修復(pdfplumber)</label>
       <label><input type="checkbox" id="fx_table_dedup_cells" checked>表格相鄰重複 cell 合併</label>
+      <label><input type="checkbox" id="fx_title_split" checked>標題段啟發式拆段</label>
     </div>
   </details>
 
@@ -302,7 +303,8 @@ const jp = new JobProgress($('p2oJob'), {
           table_autofit:       ['表格寬度',   f.tables_changed],
           table_normalize:     ['表格樣式',   f.tables_styled],
           table_cell_repair:   ['表格cell修復', f.filled],
-          table_dedup_cells:   ['表格合併cell', f.horizontal_merges],
+          table_dedup_cells:   ['表格合併cell', (f.horizontal_merges||0)+(f.vertical_merges||0)],
+          title_split:         ['標題拆段',   f.split],
         };
         const m = map[f.fixer];
         if (!m) return null;

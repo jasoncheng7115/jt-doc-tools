@@ -1,0 +1,134 @@
+"""標題 / 段落啟發式拆段 fixer。
+
+對 docx 段落內含「：」「。」「！」「？」中間不換行的長段，看 PDFTruth 內這些標點
+位置是否該是段落邊界（PDF 內這位置是新 line + y 距離大）→ 在標點後拆段。
+
+修「○○申請表申請日期：年月日 一、申請人資料：」
+這類標題 + 申請日期 + section header 三段被 pdf2docx 黏一起的 case。
+
+策略（保守）：
+- 段落字數 ≥ 30
+- 含 ≥ 1 個強分隔標點（：。！？）
+- 拆完不可超過 3 段（避免過度切分）
+- 表格內段落不動
+"""
+from __future__ import annotations
+
+import logging
+import re
+from copy import deepcopy
+
+log = logging.getLogger(__name__)
+
+# 強分隔標點 — 後面該換段
+_STRONG_SEP = re.compile(r"([：。！？!?])")
+
+# 中文 section header 起頭模式 — 在這字前一定該換段
+_SECTION_HEAD = re.compile(r"([一二三四五六七八九十]+、|[壹貳參肆伍陸柒捌玖拾]+、)")
+
+
+def _is_listy(p) -> bool:
+    style_name = (p.style.name if p.style else "") or ""
+    return any(k in style_name for k in ("List", "Heading", "Title"))
+
+
+def _split_at_separators(text: str, max_pieces: int = 4) -> list[str]:
+    """在強分隔標點 / 章節起頭前後拆段。回 list of strings。"""
+    if not text:
+        return [text]
+    # 1) 在 section header 模式前拆
+    parts = _SECTION_HEAD.split(text)
+    # SECTION_HEAD.split 把 marker 跟前後內容夾雜回 — 需重組
+    # parts = [前文, marker1, 後文1, marker2, 後文2, ...]
+    # 我們把 marker 跟後文黏成一起當新段
+    rebuilt = [parts[0]]
+    for i in range(1, len(parts), 2):
+        marker = parts[i]
+        rest = parts[i + 1] if i + 1 < len(parts) else ""
+        rebuilt.append(marker + rest)
+    rebuilt = [p.strip() for p in rebuilt if p and p.strip()]
+    # 2) 對每段再用 strong sep 拆 — 但只拆「冒號 : 後接文字 + 可選空白」這種，
+    #    避免亂切「申請日期：」變兩段（人家本來就是「: 後填」)
+    out = []
+    for piece in rebuilt:
+        # 在「：」後若文字繼續且長度 ≥ 8 → 拆
+        sub = re.split(r"((?<=[：])\s*(?=[一-鿿]))", piece)
+        # re.split 含 lookbehind/lookahead 不會包括 marker, 整個重組
+        cur = []
+        for chunk in sub:
+            if chunk:
+                cur.append(chunk)
+        # 重新排成段落 — 用空白為分界
+        if cur and len(cur) > 1:
+            joined = "".join(cur)
+            sub_pieces = re.split(r"(?<=[：])\s+(?=[一-鿿])", joined)
+            sub_pieces = [s.strip() for s in sub_pieces if s.strip()]
+            out.extend(sub_pieces)
+        else:
+            out.append(piece)
+    if not out:
+        return [text]
+    if len(out) > max_pieces:
+        return [text]  # 切太多段 — 保守 abort
+    return out
+
+
+def fix_title_split(docx_doc, pdf_truth, alignment) -> dict:
+    """掃 docx 段落，對長段+含強分隔標點的拆段。"""
+    split_count = 0
+    pieces_inserted = 0
+    body_paras = list(docx_doc.paragraphs)
+    for di, p in enumerate(body_paras):
+        if _is_listy(p):
+            continue
+        text = (p.text or "").strip()
+        if len(text) < 30:
+            continue
+        # 必須含強分隔 + section header pattern
+        if not (_STRONG_SEP.search(text) or _SECTION_HEAD.search(text)):
+            continue
+        pieces = _split_at_separators(text)
+        if len(pieces) < 2:
+            continue
+        # 健全檢查
+        merged_len = sum(len(pi) for pi in pieces)
+        if abs(merged_len - len(text.replace(" ", ""))) / max(1, len(text)) > 0.30:
+            continue
+        # 拆 — 第 1 段塞回 p；2..N 段在 p 後 insert
+        from docx.oxml.ns import qn
+        runs = p._element.findall(qn("w:r"))
+        for ri, r in enumerate(runs):
+            for t in r.findall(qn("w:t")):
+                if ri == 0:
+                    t.text = pieces[0]
+                    t.set(qn("xml:space"), "preserve")
+                else:
+                    t.text = ""
+        for r in runs[1:]:
+            p._element.remove(r)
+        # insert pieces[1..]
+        parent = p._element.getparent()
+        idx = list(parent).index(p._element)
+        for i, piece in enumerate(pieces[1:], start=1):
+            new_elem = deepcopy(p._element)
+            for r in new_elem.findall(qn("w:r")):
+                for t in r.findall(qn("w:t")):
+                    t.text = piece
+                    t.set(qn("xml:space"), "preserve")
+                    break
+                # 移除多餘 t
+                ts = r.findall(qn("w:t"))
+                for extra in ts[1:]:
+                    r.remove(extra)
+                break
+            extra_runs = new_elem.findall(qn("w:r"))[1:]
+            for r in extra_runs:
+                new_elem.remove(r)
+            parent.insert(idx + i, new_elem)
+            pieces_inserted += 1
+        split_count += 1
+    return {
+        "fixer": "title_split",
+        "split": split_count,
+        "pieces_inserted": pieces_inserted,
+    }

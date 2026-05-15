@@ -41,8 +41,38 @@ def _set_horizontal_merge(cells: list, span_count: int) -> None:
     tcPr.append(grid_span)
 
 
+def _set_vertical_merge_restart(cell) -> None:
+    tcPr = cell._element.find(qn("w:tcPr"))
+    if tcPr is None:
+        tcPr = cell._element.makeelement(qn("w:tcPr"), {})
+        cell._element.insert(0, tcPr)
+    for old in tcPr.findall(qn("w:vMerge")):
+        tcPr.remove(old)
+    el = tcPr.makeelement(qn("w:vMerge"), {})
+    el.set(qn("w:val"), "restart")
+    tcPr.append(el)
+
+
+def _set_vertical_merge_continue(cell) -> None:
+    tcPr = cell._element.find(qn("w:tcPr"))
+    if tcPr is None:
+        tcPr = cell._element.makeelement(qn("w:tcPr"), {})
+        cell._element.insert(0, tcPr)
+    for old in tcPr.findall(qn("w:vMerge")):
+        tcPr.remove(old)
+    el = tcPr.makeelement(qn("w:vMerge"), {})
+    # value 不設 → 預設 continue
+    tcPr.append(el)
+    # 清空文字
+    for p_elem in cell._element.findall(qn("w:p")):
+        for r in p_elem.findall(qn("w:r")):
+            for t in r.findall(qn("w:t")):
+                t.text = ""
+
+
 def fix_table_dedup_cells(docx_doc, pdf_truth, alignment) -> dict:
     horizontal_merges = 0
+    vertical_merges = 0
     rows_processed = 0
     for table in docx_doc.tables:
         for row in table.rows:
@@ -80,8 +110,55 @@ def fix_table_dedup_cells(docx_doc, pdf_truth, alignment) -> dict:
                                 r.text = ""
                     horizontal_merges += 1
                 i = j
+    # === vertical merge — 同一 col 連續相同非空 cell 合併 ===
+    for table in docx_doc.tables:
+        rows = list(table.rows)
+        if len(rows) < 2:
+            continue
+        n_cols = max(len(r.cells) for r in rows)
+        for ci in range(n_cols):
+            col_cells = []
+            seen_elems = []
+            for row in rows:
+                if ci >= len(row.cells):
+                    col_cells.append(None)
+                    continue
+                c = row.cells[ci]
+                if c._element in seen_elems:
+                    col_cells.append(None)  # 已是 merged 範圍
+                else:
+                    col_cells.append(c)
+                    seen_elems.append(c._element)
+            # 找連續相同非空群組
+            i = 0
+            while i < len(col_cells):
+                c = col_cells[i]
+                if c is None:
+                    i += 1
+                    continue
+                base_text = _normalize(c.text or "")
+                if not base_text:
+                    i += 1
+                    continue
+                j = i + 1
+                while j < len(col_cells):
+                    nxt = col_cells[j]
+                    if nxt is None:
+                        j += 1
+                        continue
+                    if _normalize(nxt.text or "") != base_text:
+                        break
+                    j += 1
+                if j - i >= 2:
+                    _set_vertical_merge_restart(col_cells[i])
+                    for k in range(i + 1, j):
+                        if col_cells[k] is not None:
+                            _set_vertical_merge_continue(col_cells[k])
+                    vertical_merges += 1
+                i = j
     return {
         "fixer": "table_dedup_cells",
         "horizontal_merges": horizontal_merges,
+        "vertical_merges": vertical_merges,
         "rows_processed": rows_processed,
     }

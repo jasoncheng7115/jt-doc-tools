@@ -4,6 +4,21 @@
 
 ---
 
+## [1.8.47] - 2026-05-16
+
+### 新增 (Sprint 3 第 N 輪)
+
+- **`title_split` fixer**：標題段啟發式拆段 — 段落字數 ≥ 30 + 含強分隔標點 (：。！？) 或章節 header 起頭 (一、二、壹、) → 在標點 / header 前後拆段。修「標題 + 申請日期 + section header」三段被 pdf2docx 黏一起的 case (○○範例實測拆 1 段成 2 段，list_detect 後續也認到 3 個章節 header 變 List)。
+- **`table_dedup_cells` 加 vertical merge**：原本只做 row 內水平合併；新增 col 內垂直合併連續相同非空 cell — 用 `w:vMerge=restart/continue`。修「150cm 在表格內 3 row 重複」這類 pdf2docx 把垂直 spanning cell 切成 N 個獨立 row 的 case。
+
+### 修復
+
+- **`table_normalize` 內文列改 vertical top**：原本一律 vertical center 讓內容飄到 cell 中間（像 invoice item description 看起來不對齊）。改為標題列 vertical center、其他列 vertical top。
+
+### 變更
+
+- pdf-to-office 工具描述 Word docx 「最廣相容」→「全球使用率最高」。
+
 ## [1.8.45] - 2026-05-16
 
 ### 新增

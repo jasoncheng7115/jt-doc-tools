@@ -13,6 +13,7 @@ from .table_autofit import fix_table_autofit
 from .table_cell_repair import fix_table_cell_repair
 from .table_dedup_cells import fix_table_dedup_cells
 from .table_normalize import fix_table_normalize
+from .title_split import fix_title_split
 
 __all__ = [
     "fix_cjk_typography", "fix_cleanup", "fix_fake_table_remove",
@@ -21,4 +22,5 @@ __all__ = [
     "fix_paragraph_merge", "fix_paragraph_split",
     "fix_table_autofit", "fix_table_cell_repair",
     "fix_table_dedup_cells", "fix_table_normalize",
+    "fix_title_split",
 ]

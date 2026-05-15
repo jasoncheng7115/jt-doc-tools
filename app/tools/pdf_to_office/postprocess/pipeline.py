@@ -24,6 +24,7 @@ from .fixers import (
     fix_table_cell_repair,
     fix_table_dedup_cells,
     fix_table_normalize,
+    fix_title_split,
 )
 from .style_apply import apply_styles
 
@@ -50,6 +51,7 @@ def run_postprocess(
     enable_table_normalize: bool = True,
     enable_table_cell_repair: bool = True,
     enable_table_dedup_cells: bool = True,
+    enable_title_split: bool = True,
 ) -> dict:
     """主入口。讀 PDF + docx → 跑 fixer → 寫到 docx_output。
 
@@ -143,6 +145,9 @@ def run_postprocess(
         fixer_specs.append(("paragraph_merge", fix_paragraph_merge))
     if enable_paragraph_split:
         fixer_specs.append(("paragraph_split", fix_paragraph_split))
+    # 標題啟發式拆段（強分隔標點 + 章節 header 起頭）— 補 paragraph_split 的不足
+    if enable_title_split:
+        fixer_specs.append(("title_split", fix_title_split))
     if enable_heading_detect:
         fixer_specs.append(("heading_detect", fix_heading_detect))
     if enable_list_detect:
