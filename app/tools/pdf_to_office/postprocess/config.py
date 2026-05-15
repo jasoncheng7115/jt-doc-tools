@@ -2,6 +2,20 @@
 from __future__ import annotations
 
 # CJK 字型對應：(eastAsia 字型, ASCII fallback 字型)
+# 視為等寬（monospace）字型的 PDF 字型名 hints — 保留不換成 proportional fallback。
+# 命中後 font_normalize 會用 Courier New (Word 內建等寬) + 等寬中文，而不是新細明體。
+MONOSPACE_HINTS = (
+    "Courier", "Mono", "Consolas", "Menlo", "SFMono", "SF-Mono",
+    "JetBrains", "FiraCode", "Fira-Code", "Inconsolata", "Hack",
+    "RobotoMono", "Roboto-Mono", "SourceCodePro", "Source-Code-Pro",
+    "DejaVuSansMono", "DejaVu-Sans-Mono", "LiberationMono", "UbuntuMono",
+    "PTMono", "PT-Mono", "Anonymous", "Inconsolata", "OperatorMono",
+    "Cousine", "Andale", "Lucida-Console", "LucidaConsole",
+)
+# 等寬字型對應（CJK eastAsia, ASCII）— Word 通用 + 中文系統等寬
+MONOSPACE_FALLBACK = ("PingFang TC Mono", "Courier New")  # macOS 沒等寬中文就退 PingFang
+
+
 FONT_MAPPING: dict[str, tuple[str, str]] = {
     # 繁體中文
     "MingLiU": ("新細明體", "Times New Roman"),

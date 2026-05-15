@@ -12,7 +12,10 @@ from copy import deepcopy
 from docx.oxml.ns import qn
 
 from ...pdf_truth.aligner import DocxToPdfAlignment
-from ..config import FALLBACK_ASCII_FONT, FALLBACK_CJK_FONT, FONT_MAPPING
+from ..config import (
+    FALLBACK_ASCII_FONT, FALLBACK_CJK_FONT, FONT_MAPPING,
+    MONOSPACE_FALLBACK, MONOSPACE_HINTS,
+)
 
 log = logging.getLogger(__name__)
 
@@ -26,13 +29,28 @@ def _strip_subset_prefix(name: str) -> str:
     return name
 
 
+def _is_monospace(name: str) -> bool:
+    """偵測字型名稱看起來是不是等寬。"""
+    base = _strip_subset_prefix(name) or ""
+    bl = base.lower()
+    return any(h.lower() in bl for h in MONOSPACE_HINTS)
+
+
 def _resolve_font(pdf_font_name: str) -> tuple[str, str]:
-    """PDF 字型名 → (eastAsia 字型, ASCII 字型)。沒命中時 fallback。"""
+    """PDF 字型名 → (eastAsia 字型, ASCII 字型)。
+
+    優先順序：
+    1. 等寬字型（Courier / Mono / Consolas / Menlo 等）→ Courier New，避免 code 變
+       proportional 對不齊
+    2. FONT_MAPPING 完整匹配
+    3. prefix 匹配（PingFangTC-Regular / PingFangTC-Semibold 都對 PingFangTC）
+    4. fallback 新細明體 + Times New Roman
+    """
     base = _strip_subset_prefix(pdf_font_name)
-    # 完整匹配
+    if _is_monospace(base):
+        return MONOSPACE_FALLBACK
     if base in FONT_MAPPING:
         return FONT_MAPPING[base]
-    # prefix 匹配（PingFangTC-Regular / PingFangTC-Semibold 都對 PingFangTC）
     for key, value in FONT_MAPPING.items():
         if base.startswith(key + "-") or base.startswith(key):
             return value

@@ -496,9 +496,9 @@ def svc_update() -> int:
     if not venv_py.exists() and _is_windows():
         venv_py = root / ".venv" / "Scripts" / "python.exe"
     if venv_py.exists():
-        print("Verifying critical deps (fastapi / fitz / ldap3 / PIL / pdfplumber / docx / odf / pyzipper) ...")
+        print("Verifying critical deps (fastapi / fitz / ldap3 / PIL / pdfplumber / docx / odf / pyzipper / pdf2docx / rapidfuzz) ...")
         rc = subprocess.call([str(venv_py), "-c",
-            "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx, psutil, pyotp, qrcode"])
+            "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, pyzipper, httpx, psutil, pyotp, qrcode, pdf2docx, rapidfuzz"])
         if rc != 0:
             print("Dep import failed — upgrade may be incomplete, restoring", file=sys.stderr)
             _restore_ownership(root, owner)

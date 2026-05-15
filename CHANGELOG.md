@@ -4,6 +4,24 @@
 
 ---
 
+## [1.8.35] - 2026-05-15
+
+### 修復 + 改良
+
+- **pdf-to-office 上傳區改用標準拖曳組件**（`components/file_upload.html` + `FileUpload`）— 跟其他工具一致：可點選或拖曳檔案，不再只是 `<input type="file">`。
+- **pdf-to-office font_normalize 保留 monospace 字型**：原本 unknown PDF 字型一律 fallback 到新細明體，code 區的 Courier / Menlo / Consolas 等等寬字型都被換成 proportional 對不齊。新增 `MONOSPACE_HINTS` 偵測 + `MONOSPACE_FALLBACK` 對應到 Courier New。
+- **pdf-to-office paragraph_merge 不誤併 code 行**：偵測 monospace 字型 / 內容像 shell config（`auto`、`iface`、`bridge-` 起頭）的段落跳過合併 — 修「`auto nic1` + `iface nic1 inet manual` 被併成一行」。
+- **pdf-to-office 結果面板美化**：`引擎 / 格式 / 後處理 / 語言 / 頁數 / 內文字型 / 對齊率 / 修正` 改成兩欄 grid 排列整齊；fixer 數字 0 的不顯示。
+- **pdf-to-office 描述精簡**：只留「PDF 轉成 Word (.docx) 或 OpenDocument (.odt)。」，工具名仍保留 (Beta) 標示。
+
+### 新依賴 5 處同步
+
+CLAUDE.md 規則「新加 Python 依賴 = 改 5 處」這次補完：
+- `pyproject.toml`（v1.8.32 已加）
+- `uv.lock`（v1.8.32 已加）
+- **`requirements.txt`**（這版補：pdf2docx、rapidfuzz、順手補 pyzbar）
+- **`install.sh` 內 import smoke test**（這版補）+ **`setup-python.cmd`**（這版補）+ **`app/cli.py:svc_update` smoke test**（這版補）
+
 ## [1.8.34] - 2026-05-15
 
 ### 修復

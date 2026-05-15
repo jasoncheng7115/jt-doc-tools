@@ -15,6 +15,7 @@ import logging
 
 from ...pdf_truth.aligner import DocxToPdfAlignment
 from ..config import PARAGRAPH_MERGE
+from .font_normalize import _is_monospace
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +47,33 @@ def _font_matches(p1, p2, tol: float = 0.5) -> bool:
     if s1 and s2 and abs(s1 - s2) > tol:
         return False
     return True
+
+
+def _is_code_paragraph(p) -> bool:
+    """段落是不是「code 行」— 用 run 字型 + 內容判斷。
+
+    code 行特性：
+    - 字型 monospace (Courier / Menlo / Mono...)
+    - 或內容像 shell / config 命令（含 `=`、`/`、起頭是 keyword）
+
+    code 行絕不該跟下一行併（保留行尾換行）。
+    """
+    r = p.runs[0] if p.runs else None
+    if r and r.font.name and _is_monospace(r.font.name):
+        return True
+    # 內容啟發式 — Markdown / config 命令常見起頭
+    txt = (p.text or "").lstrip()
+    if not txt:
+        return False
+    if any(txt.startswith(kw) for kw in (
+        "auto ", "iface ", "bridge-", "ip ", "ifconfig ", "sudo ", "systemctl ",
+        "$ ", "# ", "> ", "->", "+", "/", "\\", "*",
+    )):
+        # 但純粹 markdown bullet "- " "* " 等不算 code（list_detect 處理）
+        if txt[:2] in ("# ", "- ", "* ", "> "):
+            return False
+        return True
+    return False
 
 
 def _merge_into(p1, p2):

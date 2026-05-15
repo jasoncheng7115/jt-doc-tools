@@ -31,9 +31,18 @@
 
 .p2o-result { background:#ecfdf5; border:1px solid #86efac; border-radius:10px;
   padding:14px 16px; margin-top:12px; }
-.p2o-result h3 { margin:0 0 8px; color:#064e3b; font-size:15px; }
+.p2o-result h3 { margin:0 0 10px; color:#064e3b; font-size:15px; }
 .p2o-result .meta { font-size:13px; color:#065f46; line-height:1.6; }
 .p2o-result .meta b { color:#064e3b; }
+.p2o-result .meta-grid {
+  display:grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 16px; row-gap: 6px;
+  font-size:13px; color:#065f46; align-items:baseline;
+}
+.p2o-result .meta-grid .lbl { color:#047857; font-weight:600; white-space:nowrap; }
+.p2o-result .meta-grid .val { color:#064e3b; }
+.p2o-result .meta-grid .val b { color:#064e3b; }
 
 .p2o-report { background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px;
   padding:10px 12px; margin-top:10px; }
@@ -57,7 +66,9 @@
 
 <div class="panel">
   <h2>1. 上傳 PDF</h2>
-  <input type="file" id="fileInput" accept=".pdf">
+  {% with upload_id='p2oUpload', accept='application/pdf', hint='單檔、PDF only。掃描 PDF 請先用 OCR 工具轉成可選取文字 PDF 再來。' %}
+    {% include "components/file_upload.html" %}
+  {% endwith %}
   <div id="warnZone"></div>
   <div id="statBox" hidden>
     <div class="p2o-stat">
@@ -110,6 +121,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/file_upload.js"></script>
 <script src="/static/js/job_progress.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -132,16 +144,21 @@ function setBtnBusy(btn, busy, label) {
   }
 }
 
-$('fileInput').addEventListener('change', async (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
+const fu = new FileUpload($('p2oUpload'), async (f) => {
+  if (!f) {
+    $('warnZone').innerHTML = '';
+    $('statBox').hidden = true;
+    $('optsPanel').hidden = true;
+    $('resultPanel').hidden = true;
+    return;
+  }
   $('warnZone').innerHTML = '';
   $('statBox').hidden = true;
   $('optsPanel').hidden = true;
   $('resultPanel').hidden = true;
   const fd = new FormData();
   fd.append('file', f);
-  const r = await fetch('/tools/pdf-to-office/upload', {method:'POST', body: fd});
+  const r = await fu.upload('/tools/pdf-to-office/upload', fd, {processingLabel: '解析 PDF 中…'});
   if (!r.ok) {
     alert('上傳失敗：' + await r.text());
     return;
@@ -191,24 +208,32 @@ const jp = new JobProgress($('p2oJob'), {
     const sm = meta.summary || {};
     const rep = sm.report || {};
     $('rDownload').href = `/api/jobs/${jobData.id}/download`;
-    let html = '';
-    html += `引擎：<b>${sm.engine || '-'}</b>　|　格式：<b>${(sm.output_format||'').toUpperCase()}</b>　|　後處理：<b>${sm.postprocess_done ? '是' : '否'}</b><br>`;
+    const rows = [];
+    rows.push(['引擎', `<b>${sm.engine || '-'}</b>`]);
+    rows.push(['格式', `<b>${(sm.output_format||'').toUpperCase()}</b>`]);
+    rows.push(['後處理', sm.postprocess_done ? '是' : '否']);
     if (rep.diagnosis && rep.diagnosis.summary) {
       const ds = rep.diagnosis.summary;
-      html += `語言：${ds.language_guess || '-'}　|　頁數：${ds.page_count}　|　內文字型：${ds.primary_body_font_pdf || '-'} ${ds.primary_body_font_size_pdf}pt<br>`;
+      rows.push(['語言', ds.language_guess || '-']);
+      rows.push(['頁數', ds.page_count]);
+      rows.push(['內文字型', `${ds.primary_body_font_pdf || '-'}　${ds.primary_body_font_size_pdf}pt`]);
     }
     if (rep.alignment) {
-      html += `對齊率：<b>${(rep.alignment.match_rate*100).toFixed(0)}%</b>　|　已對齊段落：${rep.alignment.matched}<br>`;
+      rows.push(['對齊率', `<b>${(rep.alignment.match_rate*100).toFixed(0)}%</b>　（已對齊段落 ${rep.alignment.matched}）`]);
     }
     if (rep.fixers && rep.fixers.length) {
       const summary = rep.fixers.map(f => {
+        if (f.fixer === 'fake_table_remove') return `假表格移除 ${f.removed_tables||0}`;
         if (f.fixer === 'font_normalize') return `字型正規化 ${f.changes}`;
         if (f.fixer === 'paragraph_merge') return `合併段落 ${f.merged}`;
         if (f.fixer === 'cleanup') return `清雜訊 ${(f.removed_empty_paragraphs||0) + (f.removed_tiny_images||0)}`;
         return f.fixer;
-      });
-      html += `修正：${summary.join('、')}<br>`;
+      }).filter(s => !s.endsWith(' 0'));
+      rows.push(['修正', summary.join('、') || '無']);
     }
+    const html = '<div class="meta-grid">' +
+      rows.map(([k, v]) => `<div class="lbl">${k}</div><div class="val">${v}</div>`).join('') +
+      '</div>';
     $('rMeta').innerHTML = html;
     $('rReport').textContent = JSON.stringify(rep, null, 2);
     $('rReportWrap').hidden = false;
