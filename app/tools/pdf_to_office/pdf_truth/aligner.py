@@ -152,7 +152,60 @@ def align_docx_to_pdf(docx_doc, pdf_truth: PDFTruth) -> DocxToPdfAlignment:
             used_pdf.add(best_pi)
             matched_docx.add(di)
 
-    # ----- Round 3: 順序補位 — 用 PDF block 順序當提示 -----
+    # ----- Round 3: 1:N concat match — docx 一段對應 PDF 多 block -----
+    # pdf2docx 偶爾把 PDF 多個 block 黏成 docx 一段（中間沒換行）。比對方式：
+    # 對每個 unmatched docx para，看 PDF 連續 N 個 unmatched blocks 的 text 拼起來
+    # ≈ docx para 的程度。N 從 2 到 5 試（更大就算了）。
+    for di, dtxt in docx_paras:
+        if di in matched_docx:
+            continue
+        # 候選 — unmatched PDF block 依原順序
+        ordered_pdf = [(pi, ptxt) for pi, ptxt in pdf_indexed
+                       if pi not in used_pdf]
+        if len(ordered_pdf) < 2:
+            continue
+        # 滑動視窗 size 2..min(5, 剩餘量)
+        best_score = 0.0
+        best_window: list[int] = []
+        for size in range(2, min(6, len(ordered_pdf) + 1)):
+            for start in range(len(ordered_pdf) - size + 1):
+                window = ordered_pdf[start:start + size]
+                concat = " ".join(t for _, t in window)
+                # 兩種 concat：有空白 + 無空白（pdf2docx 黏東西時可能省空白）
+                no_ws = "".join(t for _, t in window).replace(" ", "")
+                d_no_ws = dtxt.replace(" ", "")
+                score1 = fuzz.ratio(dtxt, concat) / 100.0
+                score2 = fuzz.ratio(d_no_ws, no_ws) / 100.0
+                score = max(score1, score2)
+                if score > best_score:
+                    best_score = score
+                    best_window = [pi for pi, _ in window]
+        if best_score >= 0.85 and best_window:
+            # 1:N alignment 成立 — 多 block refs
+            first_pi = best_window[0]
+            b = pdf_blocks[first_pi]
+            # union bbox of all blocks in window
+            bbs = [pdf_blocks[pi].bbox for pi in best_window]
+            union_bbox = (
+                min(bb[0] for bb in bbs), min(bb[1] for bb in bbs),
+                max(bb[2] for bb in bbs), max(bb[3] for bb in bbs),
+            )
+            alignments.append(Alignment(
+                docx_para_index=di,
+                pdf_block_refs=list(best_window),
+                confidence=best_score,
+                method="fuzzy_match",  # 1:N 也算 fuzzy
+                text_similarity=best_score,
+                pdf_bbox_union=union_bbox,
+                pdf_dominant_font=b.dominant_font,
+                pdf_dominant_size=b.dominant_size,
+                page_num=b.page_num,
+            ))
+            for pi in best_window:
+                used_pdf.add(pi)
+            matched_docx.add(di)
+
+    # ----- Round 4: 順序補位 — 用 PDF block 順序當提示 -----
     unmatched_docx = [(di, dtxt) for di, dtxt in docx_paras if di not in matched_docx]
     remaining_pdf_seq = [pi for pi, _ in pdf_indexed if pi not in used_pdf]
     if unmatched_docx and remaining_pdf_seq:

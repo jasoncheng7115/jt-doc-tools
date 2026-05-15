@@ -4,6 +4,22 @@
 
 ---
 
+## [1.8.41] - 2026-05-15
+
+### 新增 (Sprint 3 第一輪)
+
+- **aligner 1:N 比對**：`align_docx_to_pdf` 加 round 3 — 滑動視窗 (size 2-5) 找 PDF 連續 N 個 unmatched blocks 拼起來 ≈ docx 一段的情境（rapidfuzz ratio ≥ 0.85），讓 `paragraph_split` 拿得到真實 multi-block alignment。
+- **`paragraph_split` fixer 真實版** — 對 1:N alignment 拆 docx 段落：用 PDF block text 的 6-20 字 prefix 在 docx text 內找切點，第 1 段塞回原 paragraph，2..N 段 insert before 下一段；任一切點找不到整批 abort，pieces 文字加總跟原文差 > 10% rollback。
+- **`table_normalize` fixer**（Sprint 3 表格樣式正規化） — 統一表格邊框 single 0.5pt #999、cell 垂直對齊 center、cell 段距前後 0、第一列若粗體 ≥ 50% 視為標題列加淺灰底色。
+- pipeline + UI per-fixer toggle 加 `enable_table_normalize`；結果面板 chip 加「表格樣式」項目。
+
+### 實測結果
+
+對 temp 內 3 份 PDF（國家圖書館規章 / ○○單 / ○○範例）：
+- 國圖規章：`paragraph_split=1`、`heading_detect=6`、`list_detect=6`、`table_normalize=4`
+- ○○單：`paragraph_merge=4`、`table_normalize=1`
+- 申請表：`heading_detect=1`、`table_normalize=3`
+
 ## [1.8.40] - 2026-05-15
 
 ### 變更
