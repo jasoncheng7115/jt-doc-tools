@@ -21,6 +21,7 @@ from .fixers import (
     fix_paragraph_merge,
     fix_paragraph_split,
     fix_table_autofit,
+    fix_table_cell_repair,
     fix_table_normalize,
 )
 from .style_apply import apply_styles
@@ -46,6 +47,7 @@ def run_postprocess(
     enable_table_autofit: bool = True,
     enable_image_position_fix: bool = True,
     enable_table_normalize: bool = True,
+    enable_table_cell_repair: bool = True,
 ) -> dict:
     """主入口。讀 PDF + docx → 跑 fixer → 寫到 docx_output。
 
@@ -152,6 +154,11 @@ def run_postprocess(
     if enable_cleanup:
         fixer_specs.append(("cleanup", fix_cleanup))
     # 表格 autofit 放最後 — 先讓其他 fixer 動完內容，最後讓表格自動 resize
+    # 表格 cell 修復 — 用 pdfplumber 真值補空 cell（早於 autofit / normalize）
+    if enable_table_cell_repair:
+        fixer_specs.append(("table_cell_repair",
+                             lambda doc, pt, al: fix_table_cell_repair(doc, pt, al,
+                                                                        pdf_path=pdf_path)))
     if enable_table_autofit:
         fixer_specs.append(("table_autofit", fix_table_autofit))
     # 表格樣式正規化放最後 — 等所有結構修完才套樣式

@@ -41,6 +41,19 @@ def _normalize(s: str) -> str:
     return " ".join((s or "").split())
 
 
+def _normalize_loose(s: str) -> str:
+    """寬鬆 normalize — 移除 PUA 字符 (FontAwesome icon glyph) + 全部空白合併。"""
+    if not s:
+        return ""
+    # PUA private use area (E000-F8FF) 是常見 icon font 範圍 — strip
+    out = []
+    for ch in s:
+        if "" <= ch <= "":
+            continue
+        out.append(ch)
+    return "".join(out).split() and " ".join("".join(out).split()) or ""
+
+
 def _candidates(pages, top: bool) -> list[str]:
     """收集所有頁的頁首 / 頁尾候選文字。"""
     out: list[str] = []
@@ -116,6 +129,123 @@ def _looks_like_footer(text: str) -> bool:
     return any(h in text for h in _FOOTER_HINTS)
 
 
+# Footer 自動偵測 regex — 連續含 contact info pattern 的 substring 視為 footer
+# (含可選的 PUA 圖示字符 - — 例如 fontawesome 字型)
+_FOOTER_INLINE_RE = re.compile(
+    r"[-\s]*"                          # 開頭可能的 PUA icon
+    r"(?:電話|Tel|TEL|Phone|傳真|Fax|FAX)\s*[:：]?\s*[\d\-\+\(\) ]{6,}"  # 電話
+    r".*?"
+    r"(?:郵件|Email|email|E-?mail)?\s*[:：]?\s*[\w\.\-+]+@[\w\.\-]+\.[A-Za-z]{2,}"  # email
+    r".*?"
+    r"(?:統編|統一編號|VAT)\s*[:：]?\s*\d{6,10}"   # 統編
+    r"(?:.*?(?:頁\s*[:：]?\s*\d+\s*/\s*\d+|Page\s*\d+))?",  # 可選 Page 1/N
+    re.UNICODE | re.DOTALL,
+)
+
+
+_PAGE_NUM_RE = re.compile(
+    r"(?:頁|Page|p\.?|Pg)\s*[:：]?\s*\d+\s*[/／]?\s*\d*",
+    re.IGNORECASE,
+)
+# 「strong footer evidence」— 單段內含 ≥ 2 個獨立 contact pattern（電話 / email
+# / 統編 / 頁碼），認定為純粹頁尾段落
+_PHONE_RE = re.compile(r"\b\d{2,4}[-\s]?\d{3,4}[-\s]?\d{4}\b|\b886[-\s]?\d")
+_EMAIL_RE = re.compile(r"[\w\.\-+]+@[\w\.\-]+\.[A-Za-z]{2,}")
+_VAT_RE = re.compile(r"(?:統編|統一編號|VAT|統一編號)\s*[:：]?\s*\d{6,10}")
+
+
+def _looks_like_pure_footer(txt: str) -> bool:
+    """段落整段就是 footer — ≥ 2 個 contact 證據 + 全段沒太多其他內容。"""
+    if not txt or len(txt) > MAX_FOOTER_CHARS:
+        return False
+    score = 0
+    if _PHONE_RE.search(txt): score += 1
+    if _EMAIL_RE.search(txt): score += 1
+    if _VAT_RE.search(txt): score += 1
+    if _PAGE_NUM_RE.search(txt): score += 1
+    return score >= 2
+
+
+def _strip_footer_substring(docx_doc, footer_text: str) -> int:
+    """在 docx 內找含 footer pattern 的段落，把 footer substring 剝離。
+
+    支援多種 fallback：
+    1. 直接 footer_text 子字串 in para text → replace
+    2. loose normalize 比對（去 PUA 字符 + 空白）→ 找出 footer 起點剝離
+    3. _looks_like_pure_footer — 整段都是 footer evidence → 整段刪
+    4. heuristic: para 含 footer 半段 + 結尾頁碼 → 從 contact hint 切走
+    """
+    if not footer_text:
+        return 0
+    target_loose = _normalize_loose(footer_text)
+    for p in list(docx_doc.paragraphs):
+        txt = (p.text or "")
+        if not txt.strip():
+            continue
+        # 1. exact substring
+        if footer_text in txt:
+            new_text = txt.replace(footer_text, "").strip()
+            _replace_paragraph_text(p, new_text)
+            return 1
+        # 2. loose normalize 比對（PUA / 空白差異）
+        if target_loose and target_loose in _normalize_loose(txt):
+            # 找 docx para 內 footer 起點 — 用第一個 contact pattern 位置切
+            for matcher in (_PHONE_RE, _EMAIL_RE, _VAT_RE):
+                m = matcher.search(txt)
+                if m and m.start() > 0:
+                    # 往前找最近的 PUA 字符 / 標點當切點
+                    cut = m.start()
+                    for i in range(m.start() - 1, max(0, m.start() - 5), -1):
+                        if "" <= txt[i] <= "" or txt[i] in " \t":
+                            cut = i
+                            break
+                    new_text = txt[:cut].rstrip()
+                    _replace_paragraph_text(p, new_text)
+                    return 1
+            # 找不到切點 → 整段刪
+            p._element.getparent().remove(p._element)
+            return 1
+        # 3. 整段是 footer evidence
+        if _looks_like_pure_footer(txt):
+            p._element.getparent().remove(p._element)
+            return 1
+        # 4. heuristic: para 結尾段含 footer + 頁碼
+        if _PAGE_NUM_RE.search(txt) and (_EMAIL_RE.search(txt) or _VAT_RE.search(txt)):
+            for kw in ("電話", "Tel", "TEL", "Phone", "傳真", "Fax", "FAX"):
+                idx = txt.find(kw)
+                if idx > 0:
+                    new_text = txt[:idx].rstrip()
+                    _replace_paragraph_text(p, new_text)
+                    return 1
+            # 沒中文 keyword — 用 PUA / 第一 contact 切
+            for matcher in (_PHONE_RE, _EMAIL_RE):
+                m = matcher.search(txt)
+                if m and m.start() > 0:
+                    new_text = txt[:m.start()].rstrip()
+                    # 移掉 trailing PUA chars
+                    while new_text and "" <= new_text[-1] <= "":
+                        new_text = new_text[:-1]
+                    _replace_paragraph_text(p, new_text.rstrip())
+                    return 1
+    return 0
+
+
+def _replace_paragraph_text(p, new_text: str) -> None:
+    """把段落內容換成 new_text，保留第一個 run 屬性；空字串則刪除整段。"""
+    if not new_text.strip():
+        try:
+            p._element.getparent().remove(p._element)
+        except Exception:
+            pass
+        return
+    if p.runs:
+        p.runs[0].text = new_text
+        for r in p.runs[1:]:
+            r.text = ""
+    else:
+        p.add_run(new_text)
+
+
 def fix_header_footer(docx_doc, pdf_truth, alignment) -> dict:
     if pdf_truth is None or pdf_truth.total_pages < 1:
         return {"fixer": "header_footer", "moved_to_header": 0,
@@ -135,26 +265,15 @@ def fix_header_footer(docx_doc, pdf_truth, alignment) -> dict:
             if _looks_like_footer(n):
                 candidates.append(n)
         moved_f = 0
+        footer_text_used = ""
         if candidates:
             footer_text = candidates[0]
+            footer_text_used = footer_text
             moved_f = _remove_paragraphs_with_text(docx_doc, {footer_text})
-            # 找不到完全相同段落時，試 substring 移除（contact info 常被黏到別段內）
             if moved_f == 0:
-                # 嘗試找含 footer pattern 的段落，把 footer 部分剝離
-                for p in list(docx_doc.paragraphs):
-                    txt = _normalize(p.text)
-                    if footer_text in txt:
-                        new_text = txt.replace(footer_text, "").strip()
-                        if new_text:
-                            for r in p.runs:
-                                r.text = ""
-                            p.runs[0].text = new_text if p.runs else None
-                            if not p.runs:
-                                p.add_run(new_text)
-                        else:
-                            p._element.getparent().remove(p._element)
-                        moved_f = 1
-                        break
+                # 整段精確比對失敗 — 用 substring + fuzzy 剝離
+                # （pdf2docx 把 footer 黏到別段內、或 unicode 私有區字符差異）
+                moved_f = _strip_footer_substring(docx_doc, footer_text)
             if moved_f:
                 _set_section_footer(docx_doc.sections[0], footer_text)
         return {
@@ -163,6 +282,7 @@ def fix_header_footer(docx_doc, pdf_truth, alignment) -> dict:
             "moved_to_footer": moved_f,
             "single_page_heuristic": True,
             "footer_candidates": len(candidates),
+            "footer_text_preview": (footer_text_used[:50] + "...") if footer_text_used else "",
         }
 
     # 多頁 PDF — 跨頁聚合

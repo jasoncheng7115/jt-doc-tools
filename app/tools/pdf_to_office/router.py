@@ -127,7 +127,8 @@ async def submit(request: Request):
         "enable_heading_detect", "enable_list_detect", "enable_header_footer",
         "enable_image_position_fix", "enable_cjk_typography", "enable_cleanup",
         "enable_fake_table_remove", "enable_table_autofit",
-        "enable_table_normalize", "enable_style_apply",
+        "enable_table_normalize", "enable_table_cell_repair",
+        "enable_style_apply",
     }
     fixer_opts = {k: bool(v) for k, v in raw_opts.items() if k in _ALLOWED_FIXER_KEYS}
 

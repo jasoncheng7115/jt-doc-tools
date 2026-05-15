@@ -93,18 +93,60 @@ def _is_header_row(row) -> bool:
     return bolds / total >= 0.5
 
 
+def _set_table_no_borders(table) -> None:
+    """設整個 table 全邊框 nil（無框線 PDF 的對應方式 — 不要憑空長框）。"""
+    tblPr = table._element.find(qn("w:tblPr"))
+    if tblPr is None:
+        return
+    for old in tblPr.findall(qn("w:tblBorders")):
+        tblPr.remove(old)
+    borders = tblPr.makeelement(qn("w:tblBorders"), {})
+    for tag in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        el = borders.makeelement(qn(f"w:{tag}"), {})
+        el.set(qn("w:val"), "nil")
+        borders.append(el)
+    tblPr.append(borders)
+
+
+def _pdf_is_borderless(pdf_truth) -> bool:
+    """PDF 整體看是不是「無框線排版」型 — 用 page drawings 數量啟發判斷。
+
+    判定為無框線（不要在 docx 加框）：
+    - 第一頁總 drawings < 30 (簡單發票 / 報價沒太多線條，pdf2docx 卻硬包成 table)
+    - 並且該頁 text blocks > 5 (確認有實際內容，不是空白頁)
+
+    對票卡 / 廠商資料表 / 申請表這類「PDF 真的有畫框線的表格」(drawings > 100)
+    這個 fixer 仍會套上邊框（_set_table_borders）— 維持原表格樣貌。
+    """
+    if not pdf_truth or not pdf_truth.pages:
+        return False
+    first_page = pdf_truth.pages[0]
+    n_drawings = len(first_page.drawings)
+    n_text_blocks = sum(1 for b in first_page.blocks if b.block_type == "text")
+    return n_drawings < 30 and n_text_blocks > 5
+
+
 def fix_table_normalize(docx_doc, pdf_truth, alignment) -> dict:
     tables_styled = 0
     cells_centered = 0
     headers_shaded = 0
+    border_mode = "single"
+
+    # 偵測 PDF 是不是「無框線排版」(用 invisible table 對齊欄位的 invoice 風格)
+    borderless = _pdf_is_borderless(pdf_truth)
+    if borderless:
+        border_mode = "nil"
 
     for table in docx_doc.tables:
-        _set_table_borders(table)
+        if borderless:
+            _set_table_no_borders(table)
+        else:
+            _set_table_borders(table)
         tables_styled += 1
         rows = list(table.rows)
         if not rows:
             continue
-        is_header = _is_header_row(rows[0])
+        is_header = _is_header_row(rows[0]) and not borderless
         for ri, row in enumerate(rows):
             for cell in row.cells:
                 shading = HEADER_SHADING if (ri == 0 and is_header) else None
@@ -118,4 +160,5 @@ def fix_table_normalize(docx_doc, pdf_truth, alignment) -> dict:
         "tables_styled": tables_styled,
         "cells_centered": cells_centered,
         "header_rows_shaded": headers_shaded,
+        "border_mode": border_mode,
     }

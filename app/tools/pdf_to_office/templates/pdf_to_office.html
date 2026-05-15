@@ -141,6 +141,7 @@
       <label><input type="checkbox" id="fx_cleanup" checked>雜訊清理</label>
       <label><input type="checkbox" id="fx_table_autofit" checked>表格寬度自動</label>
       <label><input type="checkbox" id="fx_table_normalize" checked>表格樣式正規化</label>
+      <label><input type="checkbox" id="fx_table_cell_repair" checked>表格 cell 修復(pdfplumber)</label>
     </div>
   </details>
 
@@ -299,6 +300,7 @@ const jp = new JobProgress($('p2oJob'), {
           cleanup:             ['清雜訊',     (f.removed_empty_paragraphs||0) + (f.removed_tiny_images||0)],
           table_autofit:       ['表格寬度',   f.tables_changed],
           table_normalize:     ['表格樣式',   f.tables_styled],
+          table_cell_repair:   ['表格cell修復', f.filled],
         };
         const m = map[f.fixer];
         if (!m) return null;

@@ -104,6 +104,32 @@ def _extract_chars_from_span(span: dict, page_num: int) -> list[PDFChar]:
     return out
 
 
+def _split_block_by_y_gap(lines: list[PDFLine], dominant_size: float,
+                           gap_ratio: float = 1.8) -> list[list[PDFLine]]:
+    """同 PDF block 內若兩相鄰 line 的 y 距離 > gap_ratio × dominant_size，
+    視為段落邊界 → 拆成多個 sub-block。
+
+    PDF source 有時把標題 + 申請日期 + section header 通通塞同一 block，導致
+    pdf2docx 黏成 docx 一段、aligner 也只能 1:1 對到一個 PDF block 沒得拆。
+    extractor 拆了之後，alignment 1:N 跟 paragraph_split 才有素材可用。
+    """
+    if not lines or len(lines) == 1:
+        return [lines] if lines else []
+    if dominant_size <= 0:
+        return [lines]
+    threshold = dominant_size * gap_ratio
+    groups: list[list[PDFLine]] = [[lines[0]]]
+    for prev, cur in zip(lines, lines[1:]):
+        prev_y_bottom = prev.bbox[3]
+        cur_y_top = cur.bbox[1]
+        gap = cur_y_top - prev_y_bottom
+        if gap > threshold:
+            groups.append([cur])
+        else:
+            groups[-1].append(cur)
+    return groups
+
+
 def _dedup_consecutive_lines(lines: list[PDFLine]) -> list[PDFLine]:
     """連續完全相同文字的 PDFLine 去重（PDF 用 stroke+fill 多層渲染粗體效果時，
     PyMuPDF 會抽出重複行，例如「彰化縣\\n彰化縣\\n彰化縣\\n彰化縣」— pdf2docx 把

@@ -4,6 +4,18 @@
 
 ---
 
+## [1.8.43] - 2026-05-15
+
+### 新增
+
+- **`table_cell_repair` fixer (Sprint 3)** — 用既有 pdfplumber 依賴重新從 PDF 抽 ground-truth 表格，跟 docx 表格 cell-by-cell 比對，**只填空 cell**（不覆蓋已有內容）；shape match (rows/cols ± 1) 配對，避免猜錯。修「pdf2docx 把 PDF 多行 block 切到 table cell 但漏內容」的常見 bug。
+- **`table_normalize` 加無框線偵測** — 對「PDF 用 invisible table 排版」(drawings < 30 + text blocks > 5) 套 `w:tblBorders type=nil` 不憑空長框線；有框線的 PDF 仍套 single 0.5pt 灰邊框。
+- **`header_footer` footer 剝離大幅強化** — 加 4 層 fallback：精確子字串 / loose normalize（去 PUA icon glyph 比對） / 整段 footer evidence 偵測（≥ 2 contact pattern）/ 結尾頁碼啟發式。修 invoice 類「contact 跟其他內容黏一段」剝不出來的 case。
+
+### 變更
+
+- pipeline 加 `enable_table_cell_repair`；UI per-fixer toggle 加對應 checkbox。
+
 ## [1.8.42] - 2026-05-15
 
 ### 修復
