@@ -4,6 +4,17 @@
 
 ---
 
+## [1.8.42] - 2026-05-15
+
+### 修復
+
+- **PDFTruth extractor 連續重複行 dedup**：某些 PDF 為了模擬粗體，會把同一個字 / 段落用 stroke + fill 多層渲染（PyMuPDF 抽出來會看到完全相同的文字行重複 N 次）。pdf2docx 進 docx 後變字疊字 / 段落重複出現。新增 `_dedup_consecutive_lines` 在 block 抽出時把連續完全相同的 line 折疊成 1 條。
+- **`header_footer` 加單頁 PDF 啟發式**：原本只處理多頁 PDF（跨頁聚合），單頁直接 skip。現在單頁也會掃最下方 (y > 0.85*page_h) 的 block，若含 contact info pattern (電話 / Email / 統編 / Page X/Y / 傳真) → 視為 footer 移到 docx section footer；找不到完全相同段落時退而求其次用 substring 剝離（pdf2docx 把 footer 文字黏到別段的常見情境）。
+
+### 安全
+
+- CHANGELOG v1.8.37 entry 移除可能的客戶機敏字串（票號），改泛指描述。
+
 ## [1.8.41] - 2026-05-15
 
 ### 新增 (Sprint 3 第一輪)
@@ -49,7 +60,7 @@
 
 ### 修復
 
-- **pdf-to-office 表格 cell 文字被截**（票卡 (票號) 範例）：pdf2docx 預設給表格 fixed layout，cell 寬度算錯時文字會被切。新增 `table_autofit` fixer 把所有 table layout 改 autofit + cell preferred width 改 auto，讓 LibreOffice / Word 自動調整 cell 寬度容下文字。
+- **pdf-to-office 表格 cell 文字被截**：pdf2docx 預設給表格 fixed layout，cell 寬度算錯時文字會被切。新增 `table_autofit` fixer 把所有 table layout 改 autofit + cell preferred width 改 auto，讓 LibreOffice / Word 自動調整 cell 寬度容下文字。
 
 ## [1.8.36] - 2026-05-15
 

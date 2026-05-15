@@ -104,6 +104,24 @@ def _extract_chars_from_span(span: dict, page_num: int) -> list[PDFChar]:
     return out
 
 
+def _dedup_consecutive_lines(lines: list[PDFLine]) -> list[PDFLine]:
+    """連續完全相同文字的 PDFLine 去重（PDF 用 stroke+fill 多層渲染粗體效果時，
+    PyMuPDF 會抽出重複行，例如「彰化縣\\n彰化縣\\n彰化縣\\n彰化縣」— pdf2docx 把
+    重複內容塞進 docx 看起來就是字疊字 / 重複段落）。
+
+    判定：相鄰兩 line 的 text 完全相同 → 後面的合併到前面（保留前者 bbox/font）。
+    """
+    if not lines:
+        return lines
+    out: list[PDFLine] = [lines[0]]
+    for ln in lines[1:]:
+        if ln.text and out[-1].text == ln.text:
+            # 跳過重複行（保留前者）
+            continue
+        out.append(ln)
+    return out
+
+
 def _extract_page(page) -> PDFPage:
     page_num = page.number
     rect = page.rect
@@ -165,6 +183,8 @@ def _extract_page(page) -> PDFPage:
                 ))
                 total_text_len += len(line_text)
             if lines_out:
+                # 重複 line 去重（字疊字粗體效果常見）
+                lines_out = _dedup_consecutive_lines(lines_out)
                 dom_font, dom_size = _dominant(block_font_items)
                 block_text = "\n".join(ln.text for ln in lines_out)
                 blocks_out.append(PDFBlock(
