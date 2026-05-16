@@ -609,18 +609,25 @@ async def _auth_gate(request: Request, call_next):
     path = request.url.path
     if path in _PUBLIC_EXACT or any(path.startswith(p) for p in _PUBLIC_PREFIXES):
         return await call_next(request)
-    # Need a valid session
-    token = request.cookies.get(sessions.COOKIE_NAME, "")
-    user = sessions.lookup(token) if token else None
-    if not user:
-        if _looks_like_xhr(request):
-            return _JSONResponse({"error": "unauthorized",
-                                  "detail": "請先登入"}, status_code=401)
-        # Preserve where the user was trying to go.
-        next_q = "?next=" + _qstr(path + ("?" + request.url.query if request.url.query else ""))
-        return RedirectResponse("/login" + next_q, status_code=302)
-    # Stash user on request.state for downstream handlers (audit context, etc).
-    request.state.user = user
+    # Bearer-token middleware (executed earlier in the chain) may have already
+    # validated an API token and stashed user on request.state.user. In that
+    # case skip the cookie session check — bearer token is a valid auth path.
+    bearer_user = getattr(request.state, "user", None)
+    if bearer_user:
+        user = bearer_user
+    else:
+        # Need a valid session cookie
+        token = request.cookies.get(sessions.COOKIE_NAME, "")
+        user = sessions.lookup(token) if token else None
+        if not user:
+            if _looks_like_xhr(request):
+                return _JSONResponse({"error": "unauthorized",
+                                      "detail": "請先登入"}, status_code=401)
+            # Preserve where the user was trying to go.
+            next_q = "?next=" + _qstr(path + ("?" + request.url.query if request.url.query else ""))
+            return RedirectResponse("/login" + next_q, status_code=302)
+        # Stash user on request.state for downstream handlers (audit context, etc).
+        request.state.user = user
 
     # Per-tool permission gating: any path under /tools/<tool_id>/... requires
     # the user to have that tool granted (via roles or direct grant). admin
@@ -690,8 +697,27 @@ async def _api_token_gate(request: Request, call_next):
 
     # Only guard explicit API surfaces; never block UI pages, static files,
     # or admin (admin is browser-based and has its own access control).
-    is_api = path.startswith("/api/")
-    if not is_api or not api_tokens.is_enforced():
+    # Cover both root-level `/api/*` and tool-prefixed `/tools/<x>/api/*`
+    # + `/tools/<x>/convert` — both是外部 API 介面。
+    is_api = (
+        path.startswith("/api/")
+        or "/api/" in path  # tool-prefixed e.g. /tools/pdf-rotate/api/pdf-rotate
+        or path.endswith("/convert")  # pdf-to-image / pdf-to-office
+    )
+    if not is_api:
+        return await call_next(request)
+    enforce = api_tokens.is_enforced()
+    # 若提供 Authorization: Bearer，無論 enforce 是否開都驗 token；驗過即視為已認證
+    # （讓 auth_gate 不再因為缺 session cookie 而 redirect 到 /login）。
+    auth_hdr = request.headers.get("Authorization") or ""
+    presented = None
+    if auth_hdr.lower().startswith("bearer "):
+        presented = auth_hdr.split(None, 1)[1].strip()
+    if not presented:
+        presented = request.query_params.get("token")
+    has_bearer_attempt = bool(presented)
+    if not enforce and not has_bearer_attempt:
+        # 沒帶 token 且 enforce 關 → 維持舊行為（API 公開）
         return await call_next(request)
 
     # Accept: Authorization: Bearer <token>  OR  ?token=<token>
