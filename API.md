@@ -310,11 +310,21 @@ GET /api/jobs/{job_id}/download-png
 |---|---|---|
 | POST | `/tools/translate-doc/api/translate-doc` | 逐句翻譯 |
 | POST | `/tools/image-to-pdf/api/image-to-pdf` | 圖片轉 PDF |
+| POST | `/tools/pdf-to-image/convert` | PDF 轉圖片（PNG / JPG） |
+| POST | `/tools/pdf-to-office/convert` | PDF 轉 Word / OpenDocument（v1.8.32+，回 `job_id`） |
 | POST | `/tools/pdf-wordcount/api/pdf-wordcount` | PDF 字數統計 |
 | POST | `/tools/pdf-annotations/api/pdf-annotations` | 註解整理（列出） |
 | POST | `/tools/pdf-annotations-strip/api/pdf-annotations-strip` | 註解清除 |
 | POST | `/tools/pdf-annotations-flatten/api/pdf-annotations-flatten` | 註解平面化 |
 | POST | `/tools/text-diff/api/text-diff` | 文字差異比對 |
+| POST | `/tools/text-list/api/text-list` | 清單處理（去重、排序、計數、集合運算） |
+| POST | `/tools/text-deident/api/text-deident` | 文字去識別化（regex / LLM 偵測 PII） |
+| POST | `/tools/vat-lookup/api/vat-lookup` | 統編查詢（單筆） |
+| POST | `/tools/vat-lookup/api/vat-lookup/batch` | 統編查詢（批次） |
+| GET | `/api/vat-lookup/{vat}` | 統編查詢（單筆，path-style） |
+| POST | `/tools/einvoice-scan/api/einvoice-scan` | 電子發票 QR Code 掃描 |
+| GET | `/tools/einvoice-scan/api/backend-status` | 電子發票後端 zbar 狀態 |
+| GET, POST, PUT, DELETE | `/tools/submission-check/api/self-entities` | 送件前檢核 — 自家公司主檔 CRUD |
 
 ### 管理端（需 admin 登入或 admin role token）
 

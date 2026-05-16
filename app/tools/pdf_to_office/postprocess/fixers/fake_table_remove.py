@@ -2,7 +2,7 @@
 
 pdf2docx 對 absolute-positioned text block（例如 invoice description cell 內的
 每個 bullet point）會各自包成獨立 1×1 表格。視覺上會跟其他元素重疊，且嚴重破壞
-docx 流式排版。
+docx 流動排版。
 
 判定為假表格（任一即移除）：
 - 表格只有 1 列且只有 1 欄

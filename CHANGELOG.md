@@ -4,6 +4,18 @@
 
 ---
 
+## [1.8.49] - 2026-05-16
+
+### 修復
+
+- **PDF 轉文書檔 icon 升級**：原本用 `file-text` 但 icon registry 沒這條，落到預設 fallback 的單一圓形（user 反應「太 low」）。新增 `file-swap` icon — 文件 + 箭頭代表「轉換」，跟工具語意吻合；同時加 `file-text` 標準文字檔 icon 備用。
+- **「流式」改「流動排版」**：`pdf_to_office.html` UI 文案 + `fake_table_remove.py` docstring + CHANGELOG 把陸味用詞「流式」一律改「流動排版」「PDF 是固定排版、Word 是流動排版」（user 點出「流式 這不像台灣用語」）。
+- **`title_split` 表單標題後綴規則放寬**：標題與欄位緊接（"○○申請表 \\n\\t申請日期:"）只要 `_FORM_TITLE_SUFFIX` pattern 命中就拆，不卡長度 ≥ 16 限制；keyword 加上「統一編號 / 統編 / 填表」。
+
+### 文件
+
+- **`API.md` 補齊近期新增端點**：text-list / text-deident / vat-lookup（含 batch + path-style）/ einvoice-scan / submission-check（CRUD）/ pdf-to-image / pdf-to-office 全部納入「工具直連」對照表（先前最後更新 2026-05-04，落後 12 天）。
+
 ## [1.8.48] - 2026-05-16
 
 ### 修復 (申請表標題拆段強化)
@@ -196,7 +208,7 @@ CLAUDE.md 規則「新加 Python 依賴 = 改 5 處」這次補完：
 
 - 不還原向量繪圖 / 數學公式 / 浮水印 / 註解 / 表單欄位 / 直書 / 色彩管理
 - 不替使用者改錯字 / 改文意
-- 不保證像素級還原（流式排版本質限制）
+- 不保證像素級還原（PDF 固定排版 → Word 流動排版本質限制）
 - 表格合併儲存格、漏抓表格自動補等高風險項目留待 Sprint 2-3
 - 真實使用建議：先試小 PDF，看後處理報告再決定要不要套全文
 

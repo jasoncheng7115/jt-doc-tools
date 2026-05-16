@@ -31,7 +31,7 @@ _SECTION_HEAD = re.compile(r"([一二三四五六七八九十]+、|[壹貳參肆
 _FORM_TITLE_SUFFIX = re.compile(
     r"(表|書|單|單據|證|證明|報告|清冊|憑證)"
     r"\s*"
-    r"(申請日期|報送日期|簽收日期|簽訂日期|核准日期|訂購日期|日期|編號|文號|字號|序號)"
+    r"(申請日期|報送日期|簽收日期|簽訂日期|核准日期|訂購日期|日期|編號|文號|字號|序號|統一編號|統編|填表)"
     r"(?=[：:])"
 )
 
@@ -128,10 +128,12 @@ def fix_title_split(docx_doc, pdf_truth, alignment) -> dict:
                 p._element.remove(r)
             text = new_text
             measure_stripped += 1
-        if len(text) < 16:
+        # 表單標題後綴 pattern 命中時不卡長度（短的「○○申請表\n\t申請日期:」也要拆）
+        has_form_suffix = bool(_FORM_TITLE_SUFFIX.search(text))
+        if not has_form_suffix and len(text) < 16:
             continue
         # 必須含強分隔 + section header pattern + 表單標題後綴
-        if not (_STRONG_SEP.search(text) or _SECTION_HEAD.search(text) or _FORM_TITLE_SUFFIX.search(text)):
+        if not (_STRONG_SEP.search(text) or _SECTION_HEAD.search(text) or has_form_suffix):
             continue
         pieces = _split_at_separators(text)
         if len(pieces) < 2:

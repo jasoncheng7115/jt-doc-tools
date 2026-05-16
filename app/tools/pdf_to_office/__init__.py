@@ -12,7 +12,7 @@ metadata = ToolMetadata(
     id="pdf-to-office",
     name="PDF 轉文書檔（Beta）",
     description="PDF 轉成 Word (.docx) 或 OpenDocument (.odt)。",
-    icon="file-text",
+    icon="file-swap",
     category="格式轉換",
 )
 

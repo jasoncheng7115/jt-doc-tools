@@ -86,9 +86,9 @@
 {% endblock %}
 
 {% block content %}
-<h1>{{ icon('file-text', size=22) }} PDF 轉文書檔</h1>
+<h1>{{ icon('file-swap', size=22) }} PDF 轉文書檔</h1>
 <p class="muted">把 PDF 轉成 <b>Word (.docx)</b> 或 <b>OpenDocument (.odt)</b>，內含字型 / 段落 / 雜訊智慧校正。
-<br><span style="color:#94a3b8; font-size:12.5px;">⚠ 不會 100% 還原原 PDF 排版（這是 PDF 流式轉換的本質限制）；掃描檔請先用「OCR 文字辨識」工具轉成可選取文字 PDF 再來。</span></p>
+<br><span style="color:#94a3b8; font-size:12.5px;">⚠ 不會 100% 還原原 PDF 排版（PDF 是固定排版、Word 是流動排版，本質就無法精準還原）；掃描檔請先用「OCR 文字辨識」工具轉成可選取文字 PDF 再來。</span></p>
 
 <div class="panel">
   <h2>1. 上傳 PDF</h2>
