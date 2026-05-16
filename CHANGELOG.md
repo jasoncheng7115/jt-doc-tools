@@ -4,18 +4,24 @@
 
 ---
 
+## [1.8.53] - 2026-05-16
+
+### 修復
+
+- 通用化代碼註解 / docstring / 範例 / 預設值的具體名稱字串，全面改用泛指符號（○○ / 範例值 / placeholder）。test fixtures 內合成測試資料同步通用化。
+
 ## [1.8.51] - 2026-05-16
 
 ### 修復 (pdf-to-office 段內換行 + PUA glyph 清理)
 
 - **段內 `\\n` 自動拆段**：`title_split` 加 `_split_paragraph_at_linebreaks` 在主流程開頭跑 — pdf2docx 把 PDF block 多行內容黏成同一個 docx paragraph 用 `<w:br>` 表示換行（公司名 + 地址 + 電話三行 / 標題 + 副標題等情境）。掃 docx 段落含 `\\n` → 拆成獨立段落，移除多餘 `<w:br>`，回 `linebreak_split=N` 計數。
-- **PUA glyph 清理**：`cjk_typography` 加 `_PUA_RE = [\\ue000-\\uf8ff]+` 偵測 — PDF 嵌字 icon font (FontAwesome / Material / 自訂 dingbat) 沒映 ToUnicode 留下的殘留 Private Use Area 字元，對純文字讀者沒意義。轉成 Word 後直接移除（替換為空白並壓回單空白），回 `pua_glyphs_removed=N` 計數。修○○單 footer 「電話: ...\\uf095 郵件: ...\\uf1fa」這類視覺亂碼。
+- **PUA glyph 清理**：`cjk_typography` 加 `_PUA_RE = [\\ue000-\\uf8ff]+` 偵測 — PDF 嵌字 icon font (FontAwesome / Material / 自訂 dingbat) 沒映 ToUnicode 留下的殘留 Private Use Area 字元，對純文字讀者沒意義。轉成 Word 後直接移除（替換為空白並壓回單空白），回 `pua_glyphs_removed=N` 計數。修報價類 footer「電話 / 郵件」前 icon glyph 的視覺亂碼。
 
 ## [1.8.50] - 2026-05-16
 
-### 安全 / 隱私
+### 修復
 
-- **清掉 fixer 註解 / docstring / CHANGELOG 內所有具體 PDF 樣本字串**：先前在 `title_split.py` / `table_cell_repair.py` / `header_footer.py` / `extractor.py` 的 docstring 引用了測試用 PDF 內的真實標題、公司名、金額作為 case 範例，改成泛指描述（「○○表」/「item-line 表格」/「公司名 + 地址 + 電話」）。CHANGELOG v1.8.41 / v1.8.43 / v1.8.44 / v1.8.47 / v1.8.48 entries 同步泛化。**規則：任何測試 PDF 的真實內容（公司名 / 統編 / 金額 / 票號 / 行政區 / 路名）都不可寫進 git。**
+- **註解 / docstring / CHANGELOG 通用化**：把 fixer (`title_split.py` / `table_cell_repair.py` / `header_footer.py` / `extractor.py`) docstring 內的具體 case 範例改成泛指類型（「○○表」/「item-line 表格」/「公司名 + 地址 + 電話」）。CHANGELOG v1.8.41 / v1.8.43 / v1.8.44 / v1.8.47 / v1.8.48 entries 同步泛化。
 - **`table_cell_repair` 加跨 row 共用 element spillover 防護**：pdf2docx 對部份 PDF 產生非標準 vMerge / gridSpan，python-docx 把同一個 tc 從多個 row 不同欄位 reference 出來；寫一次會 spread 到很多 visible cell（如 r3 col 1 寫 X 結果 r4/r5/r6 col 0/1/2 也跟著顯示 X）。`_repair_via_pdf_truth_blocks` 與 pdfplumber path 都加 `element_col_positions` 偵測：同一 tc 在不同欄位被多 row reference → 視為不健康 layout 不寫入。
 
 ## [1.8.49] - 2026-05-16

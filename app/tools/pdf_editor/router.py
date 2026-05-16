@@ -308,8 +308,8 @@ def _looks_garbled(text: str) -> bool:
         return True
     # Signal b) 撤回（v1.7.34 慘案）：
     # 原本「cjk_count >= 8 且 common_hits == 0 → garbled」對長標題誤判頻繁
-    # （「○○○○○○○○」「○○發展歷程」「○○○○○○○○」
-    # 這類 8+ 字標題沒任何 common particle 的/是/在/了/一 → 誤判 garbled
+    # （8+ 字 CJK 標題如部門名 / 公司沿革 / 條款分項 等沒任何 common particle
+    # 的/是/在/了/一 → 誤判 garbled
     # → 觸發 OCR → 高解析 PDF 一張要 5-15 秒，使用者體驗差且 OCR 結果常
     # 不如原 PyMuPDF 抽出的字準）。改為靠 signal a/c/d（suspicious 符號 /
     # 長重複 / 短週期）即可，這幾條都是貨真價實的 garbage pattern。

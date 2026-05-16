@@ -162,7 +162,7 @@ class ProfileManager:
             "companies": {
                 cid: {
                     "id": cid,
-                    "name": "○○有限公司",
+                    "name": "（預設範例 — 請於 admin 修改）",
                     "fields": {k: v for k, _, v in DEFAULT_FIELDS},
                     "labels": {k: lbl for k, lbl, _ in DEFAULT_FIELDS},
                     "updated_at": time.time(),
