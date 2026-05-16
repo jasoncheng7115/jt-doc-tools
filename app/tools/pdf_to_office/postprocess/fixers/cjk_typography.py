@@ -39,15 +39,39 @@ def _is_codey(p) -> bool:
 
 
 def _clean_inter_cjk_spaces(text: str) -> tuple[str, int]:
-    """回 (清理後 text, 移除空白數)。"""
+    """回 (清理後 text, 移除空白數)。
+
+    保留：日期、地址、電話等常用「字 + 多空白 + 字」表單欄位骨架，
+    避免「年  月  日」「年  月  日 自年月日起」被吞成「年月日」失去填寫間距。
+    """
+    # 表單欄位佔位 — 保留多 (≥2) 半形空白
+    PRESERVE = re.compile(
+        r"(年[  \t]{1,}月[  \t]{1,}日"
+        r"|時[  \t]{1,}分"
+        r"|公[  \t]{1,}里[  \t]{1,}公[  \t]{1,}尺"
+        r")"
+    )
+    # 把 PRESERVE 區段抽出 → 用 placeholder 暫存 → 清理 → 還原
+    placeholders: list[str] = []
+    def _stash(m):
+        placeholders.append(m.group(0))
+        return f"\x02PRESERVE{len(placeholders)-1}\x02"
+    masked = PRESERVE.sub(_stash, text)
+
     n = 0
-    new = text
+    new = masked
     while True:
         replaced, count = _INTER_CJK_SPACE.subn(r"\1\2", new)
         if count == 0:
-            return new if n else text, n
+            break
         new = replaced
         n += count
+
+    # 還原 PRESERVE 區段
+    for i, ph in enumerate(placeholders):
+        new = new.replace(f"\x02PRESERVE{i}\x02", ph)
+
+    return (new if n else text, n)
 
 
 def _walk_paragraphs(doc):

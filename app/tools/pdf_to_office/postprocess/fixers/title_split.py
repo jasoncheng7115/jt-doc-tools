@@ -26,6 +26,22 @@ _STRONG_SEP = re.compile(r"([：。！？!?])")
 # 中文 section header 起頭模式 — 在這字前一定該換段
 _SECTION_HEAD = re.compile(r"([一二三四五六七八九十]+、|[壹貳參肆伍陸柒捌玖拾]+、)")
 
+# 表單標題後緊接「申請日期：/編號：/日期：/簽收日期：」之類欄位 → 強制拆段
+# 實務常見「○○申請表申請日期：」「○○單編號：」「訂購單日期：」等被 pdf2docx 黏一起
+_FORM_TITLE_SUFFIX = re.compile(
+    r"(表|書|單|單據|證|證明|報告|清冊|憑證)"
+    r"\s*"
+    r"(申請日期|報送日期|簽收日期|簽訂日期|核准日期|訂購日期|日期|編號|文號|字號|序號)"
+    r"(?=[：:])"
+)
+
+# 段落開頭的尺寸量測殘字（圖示位置溢出文字）— 該前剝離
+_LEADING_MEASURE = re.compile(
+    r"^\s*\d+(?:\.\d+)?\s*(?:cm|mm|公分|公尺|公釐|公里|英吋|英寸|°)\s*"
+    r"(?=[一-鿿])",
+    re.IGNORECASE,
+)
+
 
 def _is_listy(p) -> bool:
     style_name = (p.style.name if p.style else "") or ""
@@ -36,17 +52,27 @@ def _split_at_separators(text: str, max_pieces: int = 4) -> list[str]:
     """在強分隔標點 / 章節起頭前後拆段。回 list of strings。"""
     if not text:
         return [text]
-    # 1) 在 section header 模式前拆
-    parts = _SECTION_HEAD.split(text)
-    # SECTION_HEAD.split 把 marker 跟前後內容夾雜回 — 需重組
-    # parts = [前文, marker1, 後文1, marker2, 後文2, ...]
-    # 我們把 marker 跟後文黏成一起當新段
-    rebuilt = [parts[0]]
-    for i in range(1, len(parts), 2):
-        marker = parts[i]
-        rest = parts[i + 1] if i + 1 < len(parts) else ""
-        rebuilt.append(marker + rest)
-    rebuilt = [p.strip() for p in rebuilt if p and p.strip()]
+    # 0) 段落開頭剝離殘留尺寸字元（如 "60cm申請人："）
+    m_meas = _LEADING_MEASURE.match(text)
+    if m_meas:
+        text = text[m_meas.end():]
+    # 0.5) 在表單標題 + 欄位名稱黏一起時，於欄位名前插斷點
+    # e.g. "○○申請表申請日期：" → 強制拆成 ["...申請表", "申請日期："]
+    HARD = "HARDBREAK"
+    text2 = _FORM_TITLE_SUFFIX.sub(lambda m: m.group(1) + HARD + m.group(2), text)
+    initial_chunks = [c for c in text2.split(HARD) if c.strip()] if HARD in text2 else [text]
+    # 1) 對每個 chunk 用 SECTION_HEAD 再拆
+    rebuilt: list[str] = []
+    for chunk in initial_chunks:
+        parts = _SECTION_HEAD.split(chunk)
+        # SECTION_HEAD.split 把 marker 跟前後內容夾雜回 — 需重組
+        # parts = [前文, marker1, 後文1, marker2, 後文2, ...]
+        sub_rebuilt = [parts[0]]
+        for i in range(1, len(parts), 2):
+            marker = parts[i]
+            rest = parts[i + 1] if i + 1 < len(parts) else ""
+            sub_rebuilt.append(marker + rest)
+        rebuilt.extend(p.strip() for p in sub_rebuilt if p and p.strip())
     # 2) 對每段再用 strong sep 拆 — 但只拆「冒號 : 後接文字 + 可選空白」這種，
     #    避免亂切「申請日期：」變兩段（人家本來就是「: 後填」)
     out = []
@@ -77,15 +103,35 @@ def fix_title_split(docx_doc, pdf_truth, alignment) -> dict:
     """掃 docx 段落，對長段+含強分隔標點的拆段。"""
     split_count = 0
     pieces_inserted = 0
+    measure_stripped = 0
     body_paras = list(docx_doc.paragraphs)
     for di, p in enumerate(body_paras):
         if _is_listy(p):
             continue
         text = (p.text or "").strip()
-        if len(text) < 30:
+        if not text:
             continue
-        # 必須含強分隔 + section header pattern
-        if not (_STRONG_SEP.search(text) or _SECTION_HEAD.search(text)):
+        # 段落開頭尺寸殘字 (e.g. "60cm申請人") 即使段不分也剝
+        m_meas = _LEADING_MEASURE.match(text)
+        if m_meas:
+            new_text = text[m_meas.end():]
+            from docx.oxml.ns import qn as _qn
+            runs0 = p._element.findall(_qn("w:r"))
+            for ri, r in enumerate(runs0):
+                for t in r.findall(_qn("w:t")):
+                    if ri == 0:
+                        t.text = new_text
+                        t.set(_qn("xml:space"), "preserve")
+                    else:
+                        t.text = ""
+            for r in runs0[1:]:
+                p._element.remove(r)
+            text = new_text
+            measure_stripped += 1
+        if len(text) < 16:
+            continue
+        # 必須含強分隔 + section header pattern + 表單標題後綴
+        if not (_STRONG_SEP.search(text) or _SECTION_HEAD.search(text) or _FORM_TITLE_SUFFIX.search(text)):
             continue
         pieces = _split_at_separators(text)
         if len(pieces) < 2:
@@ -131,4 +177,5 @@ def fix_title_split(docx_doc, pdf_truth, alignment) -> dict:
         "fixer": "title_split",
         "split": split_count,
         "pieces_inserted": pieces_inserted,
+        "measure_stripped": measure_stripped,
     }
