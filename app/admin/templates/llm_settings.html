@@ -18,7 +18,7 @@
     <div style="flex:1; font-size:13.5px; line-height:1.7; color:#7f1d1d;">
       <b style="font-size:14.5px;">使用反向代理（nginx / Caddy）必看 — 504 Gateway Timeout 預防</b><br>
       LLM 推理單筆常 <b>5-15 分鐘</b>（翻譯 / 視覺校驗 / 大模型）。若 jt-doc-tools 放在 nginx 後面，
-      <b>nginx 預設 60 秒就會回 504</b>，下方 Timeout 設多少都救不了。
+      <b>nginx 預設 60 秒就會回 504</b>，本頁下方 Timeout 設多少都救不了。
       <ul style="margin:6px 0 0 0; padding-left:22px; line-height:1.8;">
         <li>nginx 設 <code>proxy_read_timeout 900s;</code> + <code>proxy_send_timeout 900s;</code>（≥ 下方 Timeout 值 + 60s 緩衝）</li>
         <li><b>多層反向代理</b>（例：自架 LLM proxy 在前 + jt-doc-tools 在後，各自有 nginx）：<b>每一層 nginx 都要設</b>，任一層用預設就斷</li>
