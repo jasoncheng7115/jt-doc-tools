@@ -351,3 +351,65 @@ async def preview(upload_id: str, request: Request):
     return FileResponse(out, media_type="application/pdf",
                           headers={"Content-Disposition": "inline",
                                    "Cache-Control": "private, max-age=0"})
+
+
+# ---- 對外 API：單次 upload + 背景 OCR job + 回 job_id ----
+@router.post("/api/pdf-ocr", include_in_schema=True)
+async def api_pdf_ocr(
+    request: Request,
+    file: UploadFile = File(...),
+    lang: str = Form("chi_tra+eng"),
+    dpi: int = Form(300),
+    skip_pages_with_text: bool = Form(True),
+):
+    """單次上傳 PDF / 圖檔，背景跑 OCR 補文字層。回 job_id 與下載 URL；
+    請輪詢 /api/jobs/{job_id} 取得進度，完成後 GET /api/jobs/{job_id}/download。"""
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "空檔案")
+    name = (file.filename or "").lower()
+    suffix = next((e for e in _ACCEPTED_EXTS if name.endswith(e)), None)
+    if not suffix:
+        raise HTTPException(400, f"不支援的檔案類型；支援：{', '.join(_ACCEPTED_EXTS)}")
+    if len(raw) > 200 * 1024 * 1024:
+        raise HTTPException(400, "檔案超過 200 MB 上限")
+    upload_id = uuid.uuid4().hex
+    src = _work_dir() / f"po_{upload_id}_src.pdf"
+    if suffix == ".pdf":
+        src.write_bytes(raw)
+    else:
+        try:
+            pdf_bytes = _image_to_pdf_bytes(raw)
+            src.write_bytes(pdf_bytes)
+        except Exception as e:
+            raise HTTPException(400, f"圖檔轉 PDF 失敗：{e}")
+    _uo.record(upload_id, request)
+    out = _work_dir() / f"po_{upload_id}_out.pdf"
+    active_langs = (lang or ocr_core.get_active_langs()).strip() or "eng"
+    dpi_val = max(72, min(int(dpi), 600))
+
+    def _run(job: "_jm.Job") -> None:
+        def _progress(cur, total, msg):
+            job.progress = cur / max(total, 1) * 0.95
+            job.message = msg
+        try:
+            stats = ocr_core.ocr_pdf_to_searchable(
+                src, out,
+                langs=active_langs, dpi=dpi_val,
+                skip_pages_with_text=skip_pages_with_text,
+                progress_cb=_progress,
+            )
+            job.message = (f"完成 — 處理 {stats['pages_ocrd']}/{stats['pages_total']} 頁，"
+                           f"插入 {stats['words_inserted']} 字")
+            job.meta = {"upload_id": upload_id, "stats": stats,
+                        "langs": active_langs,
+                        "download_url": f"/api/jobs/{job.id}/download"}
+            job.result_path = out
+            job.result_filename = Path(src).stem.replace("_src", "") + "_searchable.pdf"
+        except Exception as e:
+            job.error = str(e)
+            raise
+
+    job = _jm.job_manager.submit("pdf-ocr", _run, meta={"upload_id": upload_id})
+    return {"job_id": job.id, "upload_id": upload_id,
+            "download_url": f"/api/jobs/{job.id}/download"}

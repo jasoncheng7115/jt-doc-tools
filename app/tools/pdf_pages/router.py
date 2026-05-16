@@ -197,3 +197,48 @@ async def submit(
 
     job = job_manager.submit("pdf-pages", run, meta={"count": len(saved)})
     return {"job_id": job.id}
+
+
+# ---- 對外 API：單次 upload + 重排或剔除頁面 + 直接回 PDF ----
+@router.post("/api/pdf-pages", include_in_schema=True)
+async def api_pdf_pages(
+    request: Request,
+    file: UploadFile = File(...),
+    mode: str = Form("reorder"),  # reorder | drop
+    spec: str = Form(""),
+):
+    """單次上傳 PDF，依 mode 與 spec 重排或剔除頁面，回新 PDF。
+    spec 範例：reorder=「1,3,5,2」；drop=「2,4-6」。"""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    if mode not in ("reorder", "drop"):
+        raise HTTPException(400, "mode 必須是 reorder 或 drop")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    uid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(uid, request)
+    src = settings.temp_dir / f"pg_api_{uid}_in.pdf"
+    out_path = settings.temp_dir / f"pg_api_{uid}_out.pdf"
+    src.write_bytes(data)
+    stem = Path(file.filename or "document.pdf").stem
+    import asyncio as _asyncio
+    def _do():
+        with fitz.open(str(src)) as srcd:
+            n = srcd.page_count
+            if mode == "reorder":
+                order = _parse_order(spec, n) if spec.strip() else list(range(n))
+            else:
+                drop = _parse_drop(spec, n)
+                order = [i for i in range(n) if i not in drop]
+            if not order:
+                raise HTTPException(400, "結果頁數為 0")
+            out = fitz.open()
+            for i in order:
+                out.insert_pdf(srcd, from_page=i, to_page=i)
+            out.save(str(out_path), garbage=3, deflate=True)
+            out.close()
+    await _asyncio.to_thread(_do)
+    return FileResponse(str(out_path), media_type="application/pdf",
+                        filename=f"{stem}_pages.pdf")

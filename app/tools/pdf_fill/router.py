@@ -871,3 +871,33 @@ async def history_refill(hid: str, request: Request):
 def _result_filename(orig: str) -> str:
     stem = Path(orig).stem
     return f"{stem}_filled.pdf"
+
+
+# ---- 對外 API：單次 upload + 自動辨識欄位填寫 + 直接回 PDF ----
+@router.post("/api/pdf-fill", include_in_schema=True)
+async def api_pdf_fill(
+    request: Request,
+    file: UploadFile = File(...),
+    company_id: str = Form(""),
+    font_id: str = Form("auto"),
+):
+    """單次上傳廠商表單 PDF，使用指定 company_id 的 profile 填入欄位後回 PDF。
+    company_id 空字串 → 使用預設 profile。"""
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "empty file")
+    upload_id = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
+    src = settings.temp_dir / f"{upload_id}_in.pdf"
+    dst = settings.temp_dir / f"{upload_id}_filled.pdf"
+    try:
+        _write_upload_as_pdf(data, file.filename or "uploaded.pdf", src)
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+    profile = profile_manager.get(company_id or None)
+    await asyncio.to_thread(service.fill_pdf, src, dst, profile["fields"],
+                            font_id=font_id)
+    result_filename = _result_filename(file.filename or "uploaded.pdf")
+    return FileResponse(str(dst), media_type="application/pdf",
+                        filename=result_filename)

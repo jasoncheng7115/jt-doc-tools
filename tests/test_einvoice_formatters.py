@@ -54,7 +54,7 @@ def test_date_invalid_format():
 def test_amount_formats():
     assert fmt_amount(1050, "plain") == "1050"
     assert fmt_amount(1050, "comma") == "1,050"
-    assert fmt_amount(1050, "currency") == "NT$ ○○○"
+    assert fmt_amount(1050, "currency") == "NT$ 1,050"
     assert fmt_amount(1234567, "comma") == "1,234,567"
 
 
@@ -125,6 +125,6 @@ def test_apply_format_no_formats_field():
 def test_apply_format_amount_group():
     """三個金額欄位都用 amount formatter。"""
     f = {"amount_total": "currency", "amount_untaxed": "currency", "tax": "currency"}
-    assert apply_format("amount_total", 1050, f) == "NT$ ○○○"
+    assert apply_format("amount_total", 1050, f) == "NT$ 1,050"
     assert apply_format("amount_untaxed", 1000, f) == "NT$ 1,000"
     assert apply_format("tax", 50, f) == "NT$ 50"

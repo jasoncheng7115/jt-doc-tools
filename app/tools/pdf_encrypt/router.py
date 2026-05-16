@@ -128,3 +128,52 @@ async def submit(
 
     job = job_manager.submit("pdf-encrypt", run, meta={"count": len(saved)})
     return {"job_id": job.id}
+
+
+# ---- 對外 API：單次 upload + 直接回加密 PDF ----
+@router.post("/api/pdf-encrypt", include_in_schema=True)
+async def api_pdf_encrypt(
+    request: Request,
+    file: UploadFile = File(...),
+    user_pw: str = Form(""),
+    owner_pw: str = Form(""),
+    algorithm: str = Form("aes-256"),
+    allow_print: bool = Form(True),
+    allow_copy: bool = Form(False),
+):
+    """單次上傳 PDF + 密碼，回傳加密 PDF。預設允許列印，禁止複製。"""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    if not user_pw and not owner_pw:
+        raise HTTPException(400, "至少需設定 user_pw 或 owner_pw 其中之一")
+    if algorithm not in ALGO_MAP:
+        raise HTTPException(400, f"algorithm 必須是 {list(ALGO_MAP)}")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    uid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(uid, request)
+    src = settings.temp_dir / f"enc_{uid}_in.pdf"
+    src.write_bytes(data)
+    out = settings.temp_dir / f"enc_{uid}_out.pdf"
+    stem = Path(file.filename or "document.pdf").stem
+    permissions = PERMISSION_FLAGS["accessibility"]
+    if allow_print: permissions |= PERMISSION_FLAGS["print"]
+    if allow_copy:  permissions |= PERMISSION_FLAGS["copy"]
+    import asyncio as _asyncio
+    def _do():
+        with fitz.open(str(src)) as doc:
+            if doc.needs_pass:
+                raise HTTPException(400, "輸入 PDF 已加密；請先解除")
+            doc.save(
+                str(out),
+                encryption=ALGO_MAP[algorithm],
+                owner_pw=owner_pw or user_pw,
+                user_pw=user_pw,
+                permissions=permissions,
+                garbage=3, deflate=True,
+            )
+    await _asyncio.to_thread(_do)
+    return FileResponse(str(out), media_type="application/pdf",
+                        filename=f"{stem}_encrypted.pdf")

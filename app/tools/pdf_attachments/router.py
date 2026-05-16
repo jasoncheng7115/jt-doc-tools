@@ -173,3 +173,47 @@ async def stripped(uid: str, request: Request):
         pass
     return FileResponse(str(out), media_type="application/pdf",
                         filename=f"{stem}_no-attachments.pdf")
+
+
+# ---- 對外 API：單次 upload + 回 ZIP（所有附件）----
+@router.post("/api/pdf-attachments", include_in_schema=True)
+async def api_pdf_attachments(request: Request, file: UploadFile = File(...)):
+    """單次上傳 PDF，抽出所有內嵌附件，回 ZIP。"""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    uid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(uid, request)
+    src = settings.temp_dir / f"att_api_{uid}_in.pdf"
+    src.write_bytes(data)
+    stem = Path(file.filename or "document").stem
+    import asyncio as _asyncio
+    def _do() -> tuple[bytes, int]:
+        buf = io.BytesIO()
+        count = 0
+        with fitz.open(str(src)) as doc:
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                try:
+                    names = list(doc.embfile_names())
+                except Exception:
+                    names = []
+                for name in names:
+                    try:
+                        payload = doc.embfile_get(name)
+                    except Exception:
+                        payload = None
+                    if payload is None:
+                        continue
+                    zf.writestr(_safe_name(name), payload)
+                    count += 1
+        return buf.getvalue(), count
+    zip_bytes, count = await _asyncio.to_thread(_do)
+    if count == 0:
+        raise HTTPException(404, "PDF 內未找到任何附件")
+    return Response(
+        content=zip_bytes, media_type="application/zip",
+        headers={"Content-Disposition": content_disposition(f"{stem}_attachments.zip")},
+    )

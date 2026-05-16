@@ -501,3 +501,57 @@ async def serve_preview(name: str, request: Request):
 def _result_filename(orig: str) -> str:
     stem = Path(orig).stem
     return f"{stem}_stamped.pdf"
+
+
+# ---- 對外 API：單次 upload + 印章圖檔 + 直接回 PDF ----
+from fastapi.responses import FileResponse as _FileResponse  # noqa: E402
+
+
+@router.post("/api/pdf-stamp", include_in_schema=True)
+async def api_pdf_stamp(
+    request: Request,
+    file: UploadFile = File(...),
+    stamp_image: UploadFile = File(...),
+    x_mm: float = Form(105.0),
+    y_mm: float = Form(250.0),
+    width_mm: float = Form(30.0),
+    height_mm: float = Form(30.0),
+    rotation_deg: float = Form(0.0),
+    page_mode: str = Form("all"),  # all | first | last
+):
+    """單次上傳 PDF + 印章圖檔（PNG / JPG），蓋章後回 PDF。"""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    img_ext = Path(stamp_image.filename or "stamp.png").suffix.lower()
+    if img_ext not in _TEMP_ASSET_ALLOWED_EXT:
+        raise HTTPException(400, f"印章圖檔格式必須是 {_TEMP_ASSET_ALLOWED_EXT}")
+    pdf_data = await file.read()
+    if not pdf_data or pdf_data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    img_data = await stamp_image.read()
+    if not img_data:
+        raise HTTPException(400, "印章圖檔為空")
+    if len(img_data) > _TEMP_ASSET_MAX_BYTES:
+        raise HTTPException(400, f"印章圖檔超過 {_TEMP_ASSET_MAX_BYTES // 1024 // 1024} MB")
+    uid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(uid, request)
+    src = settings.temp_dir / f"stamp_api_{uid}_in.pdf"
+    src.write_bytes(pdf_data)
+    stamp_png = settings.temp_dir / f"stamp_api_{uid}{img_ext}"
+    stamp_png.write_bytes(img_data)
+    out = settings.temp_dir / f"stamp_api_{uid}_out.pdf"
+    stem = Path(file.filename or "document.pdf").stem
+    import fitz as _fitz
+    pages_arg: Optional[list[int]] = None
+    if page_mode != "all":
+        with _fitz.open(str(src)) as d:
+            n = d.page_count
+        pages_arg = [0] if page_mode == "first" else [max(0, n - 1)]
+    params = service.StampParams(
+        x_mm=x_mm, y_mm=y_mm, width_mm=width_mm, height_mm=height_mm,
+        rotation_deg=rotation_deg, pages=pages_arg,
+    )
+    await asyncio.to_thread(service.stamp, src, out, stamp_png, params)
+    return _FileResponse(str(out), media_type="application/pdf",
+                         filename=f"{stem}_stamped.pdf")

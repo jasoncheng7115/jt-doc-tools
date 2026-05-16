@@ -535,3 +535,98 @@ async def download(upload_id: str, request: Request):
         pass
     return FileResponse(str(out), media_type="application/pdf",
                         filename=orig_name)
+
+
+# ---- 對外 API：單次 upload + 偵測 + 自動遮罩 / 真遮蔽 + 直接回 PDF ----
+@router.post("/api/doc-deident", include_in_schema=True)
+async def api_doc_deident(
+    request: Request,
+    file: UploadFile = File(...),
+    types: str = Form(""),       # comma-separated pattern ids（空 = 全部 default-on）
+    mode: str = Form("mask"),    # mask（覆蓋同樣字數的 *）/ redact（黑條真遮蔽）
+):
+    """單次上傳 PDF / Office，依 types 偵測敏感資料、依 mode 處理後回 PDF。"""
+    if mode not in ("mask", "redact"):
+        raise HTTPException(400, "mode 必須是 mask 或 redact")
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "empty file")
+    orig_name = file.filename or "document"
+    ext = Path(orig_name).suffix.lower()
+    upload_id = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
+    pdf_path = _src_path(upload_id)
+    if ext == ".pdf":
+        pdf_path.write_bytes(data)
+    elif office_convert.is_office_file(orig_name):
+        tmp = settings.temp_dir / f"did_{upload_id}_orig{ext}"
+        tmp.write_bytes(data)
+        try:
+            office_convert.convert_to_pdf(tmp, pdf_path, timeout=120.0)
+        except Exception as exc:
+            raise HTTPException(500, f"Office 轉 PDF 失敗：{exc}")
+        finally:
+            try: tmp.unlink(missing_ok=True)
+            except Exception: pass
+    else:
+        raise HTTPException(400, f"不支援的檔案格式：{ext}")
+    selected_ids = {t for t in (types or "").split(",") if t.strip()}
+    if not selected_ids:
+        selected_ids = {p.id for p in P.CATALOG if p.default_on}
+
+    import asyncio as _asyncio
+    out_path = _out_path(upload_id)
+    mode_fill = (0, 0, 0) if mode == "redact" else None
+
+    def _do():
+        with fitz.open(str(pdf_path)) as doc:
+            # 1. 偵測所有 findings
+            by_page: dict[int, list[dict]] = {}
+            for pno in range(doc.page_count):
+                page = doc[pno]
+                findings = _build_findings_for_page(page, selected_ids, [])
+                if findings:
+                    by_page[pno] = findings
+            # 2. 依 mode redact / mask
+            for pno, items in by_page.items():
+                page = doc[pno]
+                for it in items:
+                    bb = it.get("bbox") or []
+                    if len(bb) != 4:
+                        continue
+                    rect = fitz.Rect(*bb)
+                    if mode_fill is None:
+                        page.add_redact_annot(rect)
+                    else:
+                        page.add_redact_annot(rect, fill=mode_fill)
+                try:
+                    page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+                except Exception:
+                    page.apply_redactions()
+                if mode == "mask":
+                    for it in items:
+                        bb = it.get("bbox") or []
+                        if len(bb) != 4:
+                            continue
+                        masked = it.get("masked") or ""
+                        if not masked:
+                            continue
+                        font_size = float(it.get("font_size") or 11.0)
+                        bx0, _, _, by1 = bb
+                        base_y = by1 - font_size * 0.18
+                        has_cjk = any("一" <= c <= "鿿" for c in masked)
+                        font = "china-t" if has_cjk else "helv"
+                        try:
+                            page.insert_text(fitz.Point(bx0, base_y), masked,
+                                             fontname=font, fontsize=font_size,
+                                             color=(0, 0, 0))
+                        except Exception:
+                            pass
+            doc.save(str(out_path), garbage=3, deflate=True)
+            return sum(len(v) for v in by_page.values())
+    processed = await _asyncio.to_thread(_do)
+    stem = Path(orig_name).stem
+    headers = {"X-Deident-Count": str(processed)}
+    return FileResponse(str(out_path), media_type="application/pdf",
+                        filename=f"{stem}_deidentified.pdf", headers=headers)

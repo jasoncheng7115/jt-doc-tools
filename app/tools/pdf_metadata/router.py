@@ -172,3 +172,59 @@ async def download(uid: str, request: Request, name: str = "clean.pdf"):
     safe = Path(name).name or "clean.pdf"
     return FileResponse(str(out), media_type="application/pdf",
                         filename=safe)
+
+
+# ---- 對外 API：單次 upload + 直接回 cleaned PDF ----
+@router.post("/api/pdf-metadata", include_in_schema=True)
+async def api_pdf_metadata(request: Request,
+                            file: UploadFile = File(...),
+                            clear_info: bool = Form(True),
+                            clear_xmp: bool = Form(True),
+                            clear_toc: bool = Form(False),
+                            clear_annots: bool = Form(False),
+                            clear_forms: bool = Form(False)):
+    """單次 upload 中繼資料清除：上傳 PDF → 回 cleaned PDF。"""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    uid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(uid, request)
+    src = settings.temp_dir / f"meta_{uid}_in.pdf"
+    src.write_bytes(data)
+    (settings.temp_dir / f"meta_{uid}_name.txt").write_text(
+        file.filename or "document.pdf", encoding="utf-8")
+    out = settings.temp_dir / f"meta_{uid}_out.pdf"
+    import asyncio as _asyncio
+    def _do_clean():
+        doc = fitz.open(str(src))
+        try:
+            if clear_info:
+                try: doc.set_metadata({})
+                except Exception: pass
+            if clear_xmp:
+                try: doc.set_xml_metadata("")
+                except Exception: pass
+            if clear_toc:
+                try: doc.set_toc([])
+                except Exception: pass
+            if clear_annots or clear_forms:
+                for pno in range(doc.page_count):
+                    page = doc[pno]
+                    if clear_annots:
+                        for a in list(page.annots() or []):
+                            try: page.delete_annot(a)
+                            except Exception: pass
+                    if clear_forms:
+                        for w in list(page.widgets() or []):
+                            try: page.delete_widget(w)
+                            except Exception: pass
+            doc.save(str(out), garbage=4, deflate=True, clean=True)
+        finally:
+            doc.close()
+    await _asyncio.to_thread(_do_clean)
+    stem = Path(file.filename or "document.pdf").stem
+    return FileResponse(str(out), media_type="application/pdf",
+                        filename=f"{stem}_clean.pdf")

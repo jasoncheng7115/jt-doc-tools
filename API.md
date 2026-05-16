@@ -6,6 +6,41 @@ Jason Tools 文件工具箱對外提供 RESTful API，所有功能皆有對應 e
 
 ---
 
+## 目錄
+
+- [1. 認證](#1-認證)
+  - [不啟用認證（預設）](#不啟用認證預設)
+  - [啟用 API token](#啟用-api-token)
+- [2. 通用約定](#2-通用約定)
+- [3. 即時回應 API](#3-即時回應-api)
+  - [3.1 文書轉 PDF（OxOffice/LibreOffice）](#31-文書轉-pdfoxofficelibreoffice)
+  - [3.2 PDF 字數統計](#32-pdf-字數統計)
+  - [3.3 PDF 註解整理](#33-pdf-註解整理)
+  - [3.4 PDF 註解清除](#34-pdf-註解清除)
+  - [3.5 PDF 註解平面化](#35-pdf-註解平面化)
+  - [3.6 圖片轉 PDF](#36-圖片轉-pdf)
+  - [3.7 文字差異比對](#37-文字差異比對)
+  - [3.8 逐句翻譯](#38-逐句翻譯)
+- [4. Job 模式 API（長時間操作）](#4-job-模式-api長時間操作)
+  - [4.1 LLM 校驗（pdf-fill）](#41-llm-校驗pdf-fill)
+  - [4.2 查 job 狀態](#42-查-job-狀態)
+  - [4.3 下載 job 結果](#43-下載-job-結果)
+  - [4.4 下載 job 結果為 PNG](#44-下載-job-結果為-png)
+- [5. 完整端點對照表](#5-完整端點對照表)
+  - [通用](#通用)
+  - [工具直連](#工具直連)
+  - [管理端（需 admin 登入或 admin role token）](#管理端需-admin-登入或-admin-role-token)
+- [6. 整合範例](#6-整合範例)
+  - [6.1 GitLab CI / GitHub Actions：把 Word 文件自動轉 PDF](#61-gitlab-ci--github-actions把-word-文件自動轉-pdf)
+  - [6.2 Python 客戶端：批次清掉 PDF 註解](#62-python-客戶端批次清掉-pdf-註解)
+  - [6.3 Shell：監看 job 完成後下載](#63-shell監看-job-完成後下載)
+  - [6.4 Node.js：逐句翻譯](#64-nodejs逐句翻譯)
+- [7. CLI 管理 token](#7-cli-管理-token)
+- [8. 速率限制 / 大檔上限](#8-速率限制--大檔上限)
+- [9. 變更歷史](#9-變更歷史)
+
+---
+
 ## 1. 認證
 
 ### 不啟用認證（預設）

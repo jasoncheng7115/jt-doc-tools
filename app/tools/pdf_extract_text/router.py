@@ -502,3 +502,33 @@ async def llm_reflow(request: Request):
                     "ok": ok, "skipped": skipped, "total": total})
 
     return StreamingResponse(_iter(), media_type="application/x-ndjson")
+
+
+# ---- 對外 API：單次 upload + JSON 回傳所有文字 ----
+@router.post("/api/pdf-extract-text", include_in_schema=True)
+async def api_pdf_extract_text(request: Request, file: UploadFile = File(...)):
+    """單次上傳 PDF，回 JSON：每頁文字 + 結構化區塊。"""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    bid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(bid, request)
+    wdir = _work_dir(bid)
+    src = wdir / "src.pdf"
+    src.write_bytes(data)
+    import asyncio as _asyncio
+    doc_model = await _asyncio.to_thread(_extract_structured, src)
+    # Build per-page text (joined blocks) for callers who just need text.
+    pages_text: list[dict] = []
+    for pg in doc_model["pages"]:
+        text = "\n".join(b["text"] for b in pg["blocks"])
+        pages_text.append({"page": pg["page"], "text": text,
+                           "blocks": pg["blocks"]})
+    return {
+        "filename": file.filename,
+        "page_count": len(doc_model["pages"]),
+        "pages": pages_text,
+    }

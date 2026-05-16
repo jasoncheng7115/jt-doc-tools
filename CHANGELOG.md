@@ -4,6 +4,18 @@
 
 ---
 
+## [1.8.55] - 2026-05-16
+
+### 新增
+
+- **API 全覆蓋（36 個工具全有 API endpoint）**：補齊 19 個 tool 缺的 `/api/<tool-id>` POST endpoint — pdf-compress / decrypt / encrypt / extract-images / extract-text / hidden-scan / merge / nup / pageno / pages / rotate / split / attachments / watermark / stamp / fill / metadata / doc-deident / doc-diff / pdf-editor / pdf-ocr。每條都重用現有 service helper、PDF magic bytes 驗證、`upload_owner.record()` ACL；長運算 (pdf-ocr) 走 job 模式回 `{job_id, download_url}`。OpenAPI 收錄 58 個 /api/ paths。
+- **API.md 加目錄**：手機 / 桌面瀏覽容易跳節。
+- **TEST_PLAN.md §4 完整 API 覆蓋清單**：列出全部 36 個工具的 API path + 共通驗證項（拒絕非 PDF / ACL / 大檔 413 / RFC 5987 中文檔名）。
+
+### 文件
+
+- `tests/test_einvoice_scan.py` 修「電子發票掃描」→「電子發票」匹配（v1.7.x 工具改名後 test 沒同步）。
+
 ## [1.8.54] - 2026-05-16
 
 ### 安全

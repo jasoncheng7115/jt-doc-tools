@@ -212,3 +212,46 @@ async def submit(
 
     job = job_manager.submit("pdf-pageno", run, meta={"count": len(saved)})
     return {"job_id": job.id}
+
+
+# ---- 對外 API：單次 upload + 加頁碼 + 直接回 PDF ----
+@router.post("/api/pdf-pageno", include_in_schema=True)
+async def api_pdf_pageno(
+    request: Request,
+    file: UploadFile = File(...),
+    position: str = Form("br"),
+    fmt: str = Form("{n} / {N}"),
+    start: int = Form(1),
+    font_size: float = Form(11.0),
+    margin_mm: float = Form(10.0),
+    color: str = Form("#000000"),
+):
+    """單次上傳 PDF，加頁碼後直接回 PDF。position: tl/tr/bl/br/tc/bc。"""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    uid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(uid, request)
+    src = settings.temp_dir / f"pn_api_{uid}_in.pdf"
+    out = settings.temp_dir / f"pn_api_{uid}_out.pdf"
+    src.write_bytes(data)
+    stem = Path(file.filename or "document.pdf").stem
+    import asyncio as _asyncio
+    def _do():
+        with fitz.open(str(src)) as doc:
+            N = doc.page_count
+            for i, page in enumerate(doc):
+                _draw_pageno(
+                    page, page_index=i, total=N,
+                    position=position, fmt=fmt, start=start,
+                    font_size=font_size, margin_mm=margin_mm,
+                    color_hex=color,
+                    from_page=1, to_page=None,
+                )
+            doc.save(str(out), garbage=3, deflate=True)
+    await _asyncio.to_thread(_do)
+    return FileResponse(str(out), media_type="application/pdf",
+                        filename=f"{stem}_pageno.pdf")

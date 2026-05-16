@@ -358,3 +358,44 @@ async def text_png(
 
 def _result_filename(orig: str) -> str:
     return f"{Path(orig).stem}_watermarked.pdf"
+
+
+# ---- 對外 API：單次 upload + 文字浮水印 + 直接回 PDF ----
+@router.post("/api/pdf-watermark", include_in_schema=True)
+async def api_pdf_watermark(
+    request: Request,
+    file: UploadFile = File(...),
+    text: str = Form(...),
+    opacity: float = Form(0.25),
+    rotation_deg: float = Form(30.0),
+    mode: str = Form("tile"),
+    text_color: str = Form("#cc0000"),
+    text_size_pt: float = Form(48.0),
+):
+    """單次上傳 PDF + 文字浮水印，回 PDF。mode: tile（鋪滿）/ single（單點）。"""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    if not (text or "").strip():
+        raise HTTPException(400, "text 必填")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    uid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(uid, request)
+    src = settings.temp_dir / f"wm_api_{uid}_in.pdf"
+    out = settings.temp_dir / f"wm_api_{uid}_out.pdf"
+    src.write_bytes(data)
+    stem = Path(file.filename or "document.pdf").stem
+    params = service.WatermarkParams(
+        mode=("single" if mode == "single" else "tile"),
+        opacity=max(0.05, min(1.0, float(opacity))),
+        rotation_deg=float(rotation_deg),
+        text=text,
+        text_color=text_color,
+        text_size_pt=float(text_size_pt),
+    )
+    import asyncio as _asyncio
+    await _asyncio.to_thread(service.apply_watermark, src, out, None, params)
+    return FileResponse(str(out), media_type="application/pdf",
+                        filename=f"{stem}_watermarked.pdf")

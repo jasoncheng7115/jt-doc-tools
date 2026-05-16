@@ -395,3 +395,35 @@ async def download(upload_id: str, request: Request):
         raise HTTPException(404, "not generated yet")
     return FileResponse(str(p), media_type="application/pdf",
                         filename=f"nup_{upload_id[:8]}.pdf")
+
+
+# ---- 對外 API：單次 upload + n-up 拼版 + 直接回 PDF ----
+@router.post("/api/pdf-nup", include_in_schema=True)
+async def api_pdf_nup(request: Request,
+                       file: UploadFile = File(...),
+                       cols: int = Form(2),
+                       rows: int = Form(1),
+                       paper: str = Form("a4"),
+                       orientation: str = Form("auto")):
+    """單次上傳 PDF + 拼版設定（cols × rows / 紙張），回 imposed PDF。"""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    if cols < 1 or rows < 1 or cols * rows > 64:
+        raise HTTPException(400, "cols / rows 不合理（1 <= cols*rows <= 64）")
+    upload_id = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
+    target = _src_path(upload_id, 0)
+    target.write_bytes(data)
+    opts = NupOptions(
+        upload_id=upload_id, cols=cols, rows=rows,
+        paper=paper, orientation=orientation, file_count=1,
+    )
+    import asyncio as _asyncio
+    out_path = await _asyncio.to_thread(impose, upload_id, opts, preview_only=False)
+    stem = Path(file.filename or "document.pdf").stem
+    return FileResponse(str(out_path), media_type="application/pdf",
+                        filename=f"{stem}_nup.pdf")

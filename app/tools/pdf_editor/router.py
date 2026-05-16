@@ -1859,3 +1859,57 @@ async def download(upload_id: str, request: Request):
     base = orig.rsplit(".", 1)[0]
     fn = f"{base}_edited.pdf"
     return FileResponse(str(out), media_type="application/pdf", filename=fn)
+
+
+# ---- 對外 API：upload PDF + 編輯 model JSON → 平面化後直接回 PDF ----
+@router.post("/api/pdf-editor", include_in_schema=True)
+async def api_pdf_editor(
+    request: Request,
+    file: UploadFile = File(...),
+    model: str = Form(...),
+):
+    """單次上傳 PDF + 編輯 model（JSON 字串），平面化後回 PDF。
+
+    model 結構與 /save 相同：
+      {"pages": [{"page": 0, "objects": [{"type":"text","x":..,"y":..,"text":"..."}, ...]}]}
+    """
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    import json as _json
+    try:
+        model_obj = _json.loads(model or "{}")
+    except Exception as exc:
+        raise HTTPException(400, f"model JSON 解析失敗：{exc}")
+    upload_id = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(upload_id, request)
+    src = _work_dir() / f"pe_{upload_id}_src.pdf"
+    src.write_bytes(data)
+    (_work_dir() / f"pe_{upload_id}_name.txt").write_text(
+        file.filename or "document.pdf", encoding="utf-8")
+    # 模擬呼叫 /save：建一個只覆寫 receive 的 Request wrapper，scope（含
+    # state.user 給 ACL 用）沿用本 request。
+    import json as _json2
+    body_bytes = _json2.dumps({"upload_id": upload_id,
+                                "pages": model_obj.get("pages", [])}).encode("utf-8")
+    _sent = False
+
+    async def _fake_receive():
+        nonlocal _sent
+        if _sent:
+            return {"type": "http.disconnect"}
+        _sent = True
+        return {"type": "http.request", "body": body_bytes, "more_body": False}
+
+    from starlette.requests import Request as _Req
+    fake_req = _Req(scope=request.scope, receive=_fake_receive)
+    await save(fake_req)  # type: ignore[arg-type]
+    out = _work_dir() / f"pe_{upload_id}_out.pdf"
+    if not out.exists():
+        raise HTTPException(500, "平面化失敗：未產生輸出")
+    stem = Path(file.filename or "document.pdf").stem
+    return FileResponse(str(out), media_type="application/pdf",
+                        filename=f"{stem}_edited.pdf")

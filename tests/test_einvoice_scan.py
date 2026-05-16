@@ -181,7 +181,7 @@ def test_buffer_corrupt_json_recovery(buffer_tmp):
 def test_index_renders():
     r = client.get("/tools/einvoice-scan/")
     assert r.status_code == 200
-    assert "電子發票掃描" in r.text
+    assert "電子發票" in r.text
 
 
 def test_backend_status_endpoint():
@@ -441,7 +441,7 @@ def test_export_json_uses_internal_format():
     # 找這筆 EX12345678 — 應該是 compact 字串而非 'EX-12345678'
     matched = [i for i in invs if i.get("invoice_number") == "EX12345678"]
     assert matched, "EX12345678 未出現在 JSON 匯出 (應為 compact)"
-    # amount_total 應該是 int 不是 'NT$ ○○○'
+    # amount_total 應該是 int 不是 'NT$ 1,050'
     assert isinstance(matched[0]["amount_total"], int)
     client.delete("/tools/einvoice-scan/buffer")
 

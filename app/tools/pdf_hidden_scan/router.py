@@ -319,3 +319,26 @@ async def download(uid: str, request: Request):
         pass
     return FileResponse(str(out), media_type="application/pdf",
                         filename=f"{stem}_cleaned.pdf")
+
+
+# ---- 對外 API：單次 upload + JSON 回傳掃描結果 ----
+@router.post("/api/pdf-hidden-scan", include_in_schema=True)
+async def api_pdf_hidden_scan(request: Request, file: UploadFile = File(...)):
+    """單次上傳 PDF，回 JSON 包含所有偵測到的隱藏 / 風險內容。"""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    uid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(uid, request)
+    src = settings.temp_dir / f"hid_{uid}_in.pdf"
+    src.write_bytes(data)
+    import asyncio as _asyncio
+    def _do():
+        with fitz.open(str(src)) as doc:
+            return _scan(doc)
+    findings = await _asyncio.to_thread(_do)
+    totals = {k: len(v) for k, v in findings.items()}
+    return {"filename": file.filename, "findings": findings, "totals": totals}

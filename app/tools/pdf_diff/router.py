@@ -340,3 +340,15 @@ async def compare(
             _lg.getLogger(__name__).warning("LLM diff summarize failed: %s", exc)
             out["llm"] = {"error": str(exc)}
     return out
+
+
+# ---- 對外 API：單次 upload 兩份文件 + JSON 回傳差異 ----
+@router.post("/api/doc-diff", include_in_schema=True)
+async def api_doc_diff(
+    request: Request,
+    file_a: UploadFile = File(...),
+    file_b: UploadFile = File(...),
+):
+    """單次上傳兩份 PDF / Office，比對後回 JSON：每頁差異 + 統計。"""
+    return await compare(request=request, file_a=file_a, file_b=file_b,
+                         llm_summarize="")

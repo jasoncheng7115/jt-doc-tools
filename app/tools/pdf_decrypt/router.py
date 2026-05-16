@@ -183,3 +183,39 @@ async def submit(
 
     job = job_manager.submit("pdf-decrypt", run, meta={"count": len(saved)})
     return {"job_id": job.id}
+
+
+# ---- 對外 API：單次 upload + 直接回解除密碼的 PDF ----
+from fastapi.responses import FileResponse as _FileResponse  # noqa: E402
+
+
+@router.post("/api/pdf-decrypt", include_in_schema=True)
+async def api_pdf_decrypt(
+    request: Request,
+    file: UploadFile = File(...),
+    password: str = Form(""),
+):
+    """單次上傳含密 PDF + 密碼，回傳已解密 PDF。空密碼會嘗試空字串開啟。"""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    uid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(uid, request)
+    src = settings.temp_dir / f"dec_{uid}_in.pdf"
+    src.write_bytes(data)
+    out = settings.temp_dir / f"dec_{uid}_out.pdf"
+    stem = Path(file.filename or "document.pdf").stem
+    import asyncio as _asyncio
+    def _do():
+        with fitz.open(str(src)) as doc:
+            if doc.needs_pass:
+                if not doc.authenticate(password or ""):
+                    raise HTTPException(400, "密碼錯誤或無法解除")
+            doc.save(str(out), encryption=fitz.PDF_ENCRYPT_NONE,
+                     garbage=3, deflate=True)
+    await _asyncio.to_thread(_do)
+    return _FileResponse(str(out), media_type="application/pdf",
+                         filename=f"{stem}_decrypted.pdf")

@@ -549,3 +549,41 @@ def _fmt_bytes(n: int) -> str:
     if n < 1024 * 1024 * 1024:
         return f"{n/1024/1024:.1f} MB"
     return f"{n/1024/1024/1024:.2f} GB"
+
+
+# ---- 對外 API：單次 upload + 直接回壓縮後 PDF ----
+@router.post("/api/pdf-compress", include_in_schema=True)
+async def api_pdf_compress(
+    request: Request,
+    file: UploadFile = File(...),
+    preset: str = Form("balanced"),
+):
+    """單次上傳 PDF + 預設方案壓縮，直接回壓縮後 PDF。"""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    uid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(uid, request)
+    src = settings.temp_dir / f"cmp_{uid}_in.pdf"
+    src.write_bytes(data)
+    stem = Path(file.filename or "document.pdf").stem
+    params = _preset_params(preset)
+    out = settings.temp_dir / f"cmp_{uid}_out.pdf"
+    import asyncio as _asyncio
+    def _do():
+        _run_pymupdf_compression(
+            src, out,
+            image_max_dpi=params["image_max_dpi"],
+            jpeg_quality=params["jpeg_quality"],
+            subset_fonts=params["subset_fonts"],
+            strip_annotations=params["strip_annotations"],
+            strip_forms=params["strip_forms"],
+            strip_bookmarks=params["strip_bookmarks"],
+            strip_metadata=params["strip_metadata"],
+        )
+    await _asyncio.to_thread(_do)
+    return FileResponse(str(out), media_type="application/pdf",
+                        filename=f"{stem}_compressed.pdf")

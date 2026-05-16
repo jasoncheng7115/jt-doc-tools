@@ -43,6 +43,14 @@ _LEADING_MEASURE = re.compile(
     re.IGNORECASE,
 )
 
+# 法規 / 公文「訂定 / 修正 / 更正 / 增訂 / 公布 / 函更正」日期序列 — 多條被 pdf2docx
+# 黏成一段，每條結尾都該換段。pattern 抓「中華民國 N 年 M 月 D 日 ... (訂定|修正|...)」。
+_REGULATION_DATE = re.compile(
+    r"中華民國\s*\d+\s*年\s*\d+\s*月\s*\d+\s*日"
+    r"[^中華民國]{0,80}?"
+    r"(?:訂定|修正|公布|增訂|刪除|更正|公告|施行|生效)"
+)
+
 
 def _is_listy(p) -> bool:
     style_name = (p.style.name if p.style else "") or ""
@@ -103,27 +111,57 @@ def _split_at_separators(text: str, max_pieces: int = 4) -> list[str]:
 def _split_paragraph_at_linebreaks(p, parent) -> int:
     """段落內含 \\n 的段（多行擠在同一個 docx paragraph）— 拆成多段。
     回新增的段數。pdf2docx 對 PDF block 含多行卻沒展開時常見此情形（如公司
-    名 + 地址 + 電話 三行黏在一段、標題 + 副標題黏一段）。"""
+    名 + 地址 + 電話 三行黏在一段、標題 + 副標題黏一段）。
+
+    也涵蓋連續 ≥2 個 \\t（pdf2docx 用 tab stop 模擬大間距視覺斷塊時）— 出現
+    `\\t\\t` 視同強分隔。"""
     from docx.oxml.ns import qn
+    import re as _re
     text = p.text or ""
-    if "\n" not in text:
+    has_lf = "\n" in text
+    has_double_tab = bool(_re.search(r"\t{2,}", text))
+    # 法規日期序列（多條訂定/修正日期擠一段）— 在每條後插斷點
+    reg_matches = list(_REGULATION_DATE.finditer(text))
+    has_regulation_seq = len(reg_matches) >= 2
+    if not (has_lf or has_double_tab or has_regulation_seq):
         return 0
-    pieces = [pi.strip() for pi in text.split("\n")]
+    # 標準化分隔符 → 統一拆
+    work = text.replace("\n", "\x01")
+    work = _re.sub(r"\t{2,}", "\x01", work)
+    if has_regulation_seq:
+        # 在每個 _REGULATION_DATE 結束後插斷點
+        out_chars = []
+        last = 0
+        for m in _REGULATION_DATE.finditer(work):
+            out_chars.append(work[last:m.end()])
+            out_chars.append("\x01")
+            last = m.end()
+        out_chars.append(work[last:])
+        work = "".join(out_chars)
+    pieces = [pi.strip() for pi in work.split("\x01")]
     pieces = [pi for pi in pieces if pi]
     if len(pieces) < 2:
         return 0
-    # 第一段塞回原 paragraph (壓在第一個 run)
+    # 第一段塞回原 paragraph — 把所有 run 清空，第一個 run 的第一個 <w:t> 寫
+    # pieces[0]，其他 <w:t> 一律清空；w:tab / w:br 全砍（免得文字重複出現
+    # 或殘留視覺分隔）
     runs = p._element.findall(qn("w:r"))
+    first_t_set = False
     for ri, r in enumerate(runs):
+        for tab in r.findall(qn("w:tab")):
+            r.remove(tab)
+        for br in r.findall(qn("w:br")):
+            r.remove(br)
         for t in r.findall(qn("w:t")):
-            if ri == 0:
+            if ri == 0 and not first_t_set:
                 t.text = pieces[0]
                 t.set(qn("xml:space"), "preserve")
+                first_t_set = True
             else:
                 t.text = ""
     for r in runs[1:]:
         p._element.remove(r)
-    # 移除任何 w:br 元素（換行符 XML），免得殘留視覺斷行
+    # 段層級殘留 w:br 也清掉
     for br in p._element.findall(".//" + qn("w:br")):
         br.getparent().remove(br)
     # 後續 N-1 段在 p 後 insert
@@ -133,11 +171,17 @@ def _split_paragraph_at_linebreaks(p, parent) -> int:
     for i, piece in enumerate(pieces[1:], start=1):
         new_elem = deepcopy(p._element)
         new_runs = new_elem.findall(qn("w:r"))
+        first_t_set_new = False
         for ri, r in enumerate(new_runs):
+            for tab in r.findall(qn("w:tab")):
+                r.remove(tab)
+            for br in r.findall(qn("w:br")):
+                r.remove(br)
             for t in r.findall(qn("w:t")):
-                if ri == 0:
+                if ri == 0 and not first_t_set_new:
                     t.text = piece
                     t.set(qn("xml:space"), "preserve")
+                    first_t_set_new = True
                 else:
                     t.text = ""
         for r in new_runs[1:]:

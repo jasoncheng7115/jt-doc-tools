@@ -104,3 +104,65 @@ async def submit(
 
     job = job_manager.submit("pdf-split", run, meta={"count": len(saved)})
     return {"job_id": job.id}
+
+
+# ---- 對外 API：單次 upload + 切割 + 回 ZIP（或單一 PDF）----
+from fastapi.responses import FileResponse as _FileResponse  # noqa: E402
+
+
+@router.post("/api/pdf-split", include_in_schema=True)
+async def api_pdf_split(
+    request: Request,
+    file: UploadFile = File(...),
+    mode: str = Form("each"),    # each | ranges
+    ranges: str = Form(""),
+):
+    """單次上傳 PDF，依 mode 切割：each = 每頁一份；ranges = 依 ranges 切。
+    多份結果回 ZIP，單份回 PDF。"""
+    if mode not in ("each", "ranges"):
+        raise HTTPException(400, "mode 必須是 each 或 ranges")
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    bid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(bid, request)
+    bdir = settings.temp_dir / f"split_api_{bid}"
+    bdir.mkdir(parents=True, exist_ok=True)
+    sp = bdir / Path(file.filename).name
+    sp.write_bytes(data)
+    stem = Path(file.filename or "document").stem
+    import asyncio as _asyncio
+    def _do() -> tuple[Path, str, str]:
+        outs: list[Path] = []
+        with fitz.open(str(sp)) as src:
+            n = src.page_count
+            if mode == "each":
+                parts = [[i] for i in range(n)]
+            else:
+                parts = _parse_ranges(ranges or "", n)
+                if not parts:
+                    parts = [[i] for i in range(n)]
+            for page_indices in parts:
+                out = fitz.open()
+                for p in page_indices:
+                    out.insert_pdf(src, from_page=p, to_page=p)
+                label = (f"p{page_indices[0] + 1}" if len(page_indices) == 1
+                         else f"p{page_indices[0] + 1}-{page_indices[-1] + 1}")
+                op = bdir / f"{stem}_{label}.pdf"
+                out.save(str(op), garbage=3, deflate=True)
+                out.close()
+                outs.append(op)
+        if len(outs) == 1:
+            return outs[0], outs[0].name, "application/pdf"
+        zname = f"{stem}_split.zip"
+        zp = bdir / zname
+        with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED) as zf:
+            for p in outs:
+                zf.write(p, arcname=p.name)
+        return zp, zname, "application/zip"
+    result_path, result_name, media = await _asyncio.to_thread(_do)
+    return _FileResponse(str(result_path), media_type=media,
+                         filename=result_name)

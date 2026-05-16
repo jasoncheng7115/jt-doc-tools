@@ -238,3 +238,61 @@ async def submit(file: List[UploadFile] = File(...)):
 
     job = job_manager.submit("pdf-extract-images", run, meta={"count": len(saved)})
     return {"job_id": job.id}
+
+
+# ---- 對外 API：單次 upload + 直接回 ZIP（所有抽出的圖片）----
+@router.post("/api/pdf-extract-images", include_in_schema=True)
+async def api_pdf_extract_images(request: Request, file: UploadFile = File(...)):
+    """單次上傳 PDF，回傳含所有抽出圖片的 ZIP。"""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    uid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(uid, request)
+    bdir = settings.temp_dir / f"ext_api_{uid}"
+    bdir.mkdir(parents=True, exist_ok=True)
+    src = bdir / Path(file.filename).name
+    src.write_bytes(data)
+    stem = Path(file.filename or "document").stem
+    zname = f"{stem}_images.zip"
+    zp = bdir / zname
+    import asyncio as _asyncio
+    def _do():
+        total = 0
+        with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED) as zf:
+            with fitz.open(str(src)) as doc:
+                for pno in range(doc.page_count):
+                    page = doc[pno]
+                    for img_index, img in enumerate(page.get_images(full=True), start=1):
+                        xref = img[0]
+                        smask_xref = img[1] if len(img) > 1 else 0
+                        try:
+                            pix = fitz.Pixmap(doc, xref)
+                            if smask_xref:
+                                try:
+                                    mask = fitz.Pixmap(doc, smask_xref)
+                                    if pix.n - pix.alpha >= 4:
+                                        pix = fitz.Pixmap(fitz.csRGB, pix)
+                                    pix = fitz.Pixmap(pix, mask)
+                                except Exception:
+                                    pass
+                            elif pix.n - pix.alpha >= 4:
+                                pix = fitz.Pixmap(fitz.csRGB, pix)
+                            ext = "png"
+                            payload = pix.tobytes("png")
+                        except Exception:
+                            d = doc.extract_image(xref)
+                            payload = d.get("image"); ext = d.get("ext", "bin")
+                        if not payload:
+                            continue
+                        zf.writestr(f"p{pno + 1:03d}_img{img_index:02d}.{ext}",
+                                    payload)
+                        total += 1
+        return total
+    total = await _asyncio.to_thread(_do)
+    if total == 0:
+        raise HTTPException(404, "PDF 內未找到任何圖片")
+    return FileResponse(str(zp), media_type="application/zip", filename=zname)

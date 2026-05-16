@@ -59,3 +59,47 @@ async def submit(request: Request, file: List[UploadFile] = File(...)):
 
     job = job_manager.submit("pdf-merge", run, meta={"count": len(saved)})
     return {"job_id": job.id}
+
+
+# ---- 對外 API：單次 upload 多 PDF + 直接回合併後 PDF ----
+from fastapi.responses import FileResponse as _FileResponse  # noqa: E402
+
+
+@router.post("/api/pdf-merge", include_in_schema=True)
+async def api_pdf_merge(request: Request,
+                         files: list[UploadFile] = File(...)):
+    """單次上傳多個 PDF（≥2 份），合併後直接回單一 PDF。"""
+    fs = files or []
+    if len(fs) < 2:
+        raise HTTPException(400, "至少需要 2 個 PDF 檔")
+    for f in fs:
+        if not (f.filename or "").lower().endswith(".pdf"):
+            raise HTTPException(400, f"只支援 PDF：{f.filename}")
+    bid = uuid.uuid4().hex
+    from ...core import upload_owner as _uo
+    _uo.record(bid, request)
+    bdir = settings.temp_dir / f"merge_api_{bid}"
+    bdir.mkdir(parents=True, exist_ok=True)
+    saved: list[Path] = []
+    for i, f in enumerate(fs):
+        data = await f.read()
+        if not data or data[:4] != b"%PDF":
+            raise HTTPException(400, f"不是有效的 PDF：{f.filename}")
+        sp = bdir / f"{i:03d}_{Path(f.filename).name}"
+        sp.write_bytes(data)
+        saved.append(sp)
+    out_name = f"merged_{time.strftime('%Y%m%d_%H%M%S')}.pdf"
+    out_path = bdir / out_name
+    import asyncio as _asyncio
+    def _do():
+        merged = fitz.open()
+        try:
+            for sp in saved:
+                with fitz.open(str(sp)) as src:
+                    merged.insert_pdf(src)
+            merged.save(str(out_path), garbage=3, deflate=True)
+        finally:
+            merged.close()
+    await _asyncio.to_thread(_do)
+    return _FileResponse(str(out_path), media_type="application/pdf",
+                         filename=out_name)
