@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.8.50"
+VERSION = "1.8.51"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)

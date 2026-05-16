@@ -100,11 +100,71 @@ def _split_at_separators(text: str, max_pieces: int = 4) -> list[str]:
     return out
 
 
+def _split_paragraph_at_linebreaks(p, parent) -> int:
+    """段落內含 \\n 的段（多行擠在同一個 docx paragraph）— 拆成多段。
+    回新增的段數。pdf2docx 對 PDF block 含多行卻沒展開時常見此情形（如公司
+    名 + 地址 + 電話 三行黏在一段、標題 + 副標題黏一段）。"""
+    from docx.oxml.ns import qn
+    text = p.text or ""
+    if "\n" not in text:
+        return 0
+    pieces = [pi.strip() for pi in text.split("\n")]
+    pieces = [pi for pi in pieces if pi]
+    if len(pieces) < 2:
+        return 0
+    # 第一段塞回原 paragraph (壓在第一個 run)
+    runs = p._element.findall(qn("w:r"))
+    for ri, r in enumerate(runs):
+        for t in r.findall(qn("w:t")):
+            if ri == 0:
+                t.text = pieces[0]
+                t.set(qn("xml:space"), "preserve")
+            else:
+                t.text = ""
+    for r in runs[1:]:
+        p._element.remove(r)
+    # 移除任何 w:br 元素（換行符 XML），免得殘留視覺斷行
+    for br in p._element.findall(".//" + qn("w:br")):
+        br.getparent().remove(br)
+    # 後續 N-1 段在 p 後 insert
+    from copy import deepcopy
+    idx = list(parent).index(p._element)
+    inserted = 0
+    for i, piece in enumerate(pieces[1:], start=1):
+        new_elem = deepcopy(p._element)
+        new_runs = new_elem.findall(qn("w:r"))
+        for ri, r in enumerate(new_runs):
+            for t in r.findall(qn("w:t")):
+                if ri == 0:
+                    t.text = piece
+                    t.set(qn("xml:space"), "preserve")
+                else:
+                    t.text = ""
+        for r in new_runs[1:]:
+            new_elem.remove(r)
+        parent.insert(idx + i, new_elem)
+        inserted += 1
+    return inserted
+
+
 def fix_title_split(docx_doc, pdf_truth, alignment) -> dict:
     """掃 docx 段落，對長段+含強分隔標點的拆段。"""
     split_count = 0
     pieces_inserted = 0
     measure_stripped = 0
+    linebreak_split = 0
+    body_paras = list(docx_doc.paragraphs)
+    # === 0) 段內 \n 拆段（先做，後續 fixer 看到的就是已拆好）===
+    for p in list(body_paras):
+        if _is_listy(p):
+            continue
+        parent = p._element.getparent()
+        if parent is None:
+            continue
+        n = _split_paragraph_at_linebreaks(p, parent)
+        if n > 0:
+            linebreak_split += n
+    # 重新讀 paragraphs（剛才 insert 了新元素）
     body_paras = list(docx_doc.paragraphs)
     for di, p in enumerate(body_paras):
         if _is_listy(p):
@@ -181,4 +241,5 @@ def fix_title_split(docx_doc, pdf_truth, alignment) -> dict:
         "split": split_count,
         "pieces_inserted": pieces_inserted,
         "measure_stripped": measure_stripped,
+        "linebreak_split": linebreak_split,
     }

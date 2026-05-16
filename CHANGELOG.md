@@ -4,6 +4,13 @@
 
 ---
 
+## [1.8.51] - 2026-05-16
+
+### 修復 (pdf-to-office 段內換行 + PUA glyph 清理)
+
+- **段內 `\\n` 自動拆段**：`title_split` 加 `_split_paragraph_at_linebreaks` 在主流程開頭跑 — pdf2docx 把 PDF block 多行內容黏成同一個 docx paragraph 用 `<w:br>` 表示換行（公司名 + 地址 + 電話三行 / 標題 + 副標題等情境）。掃 docx 段落含 `\\n` → 拆成獨立段落，移除多餘 `<w:br>`，回 `linebreak_split=N` 計數。
+- **PUA glyph 清理**：`cjk_typography` 加 `_PUA_RE = [\\ue000-\\uf8ff]+` 偵測 — PDF 嵌字 icon font (FontAwesome / Material / 自訂 dingbat) 沒映 ToUnicode 留下的殘留 Private Use Area 字元，對純文字讀者沒意義。轉成 Word 後直接移除（替換為空白並壓回單空白），回 `pua_glyphs_removed=N` 計數。修○○單 footer 「電話: ...\\uf095 郵件: ...\\uf1fa」這類視覺亂碼。
+
 ## [1.8.50] - 2026-05-16
 
 ### 安全 / 隱私

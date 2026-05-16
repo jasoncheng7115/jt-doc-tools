@@ -22,6 +22,10 @@ log = logging.getLogger(__name__)
 _CJK_RE = re.compile(r"[㐀-鿿㐀-䶿가-힯぀-ヿ]")
 # 連續 CJK + 單空白 + CJK → 移除空白
 _INTER_CJK_SPACE = re.compile(r"([㐀-鿿㐀-䶿가-힯぀-ヿ])[  \t]+([㐀-鿿㐀-䶿가-힯぀-ヿ])")
+# Private Use Area glyphs (U+E000–U+F8FF, BMP PUA) — 多為 PDF 嵌字 icon font
+# (FontAwesome / Material / 自訂 dingbat) 沒映 ToUnicode 留下的殘留亂碼，對純文字
+# 讀者沒意義；轉成 Word 後直接移除（保留前後空白避免黏字）。
+_PUA_RE = re.compile(r"[\ue000-\uf8ff]+")
 
 
 def _is_listy(p) -> bool:
@@ -86,6 +90,7 @@ def _walk_paragraphs(doc):
 
 def fix_cjk_typography(docx_doc, pdf_truth, alignment) -> dict:
     spaces_removed = 0
+    pua_removed = 0
     paragraphs_touched = 0
 
     for p in _walk_paragraphs(docx_doc):
@@ -95,10 +100,19 @@ def fix_cjk_typography(docx_doc, pdf_truth, alignment) -> dict:
             continue
         # 先合併 run 文字 → 清理 → 攤回去
         full = "".join(r.text or "" for r in p.runs)
-        if not _CJK_RE.search(full):
-            continue
-        cleaned, n = _clean_inter_cjk_spaces(full)
-        if n == 0:
+        # 1) PUA glyph 清理（跨段都做，不限 CJK 段）
+        pua_n = 0
+        if _PUA_RE.search(full):
+            full_no_pua, pua_n = _PUA_RE.subn(" ", full)
+            # 連空白壓回單空白；段首尾空白 strip
+            import re as _re
+            full_no_pua = _re.sub(r"[  \t]{2,}", " ", full_no_pua).strip()
+            full = full_no_pua
+        # 2) inter-CJK 空白清理（僅 CJK 段才跑）
+        cleaned, n = (full, 0)
+        if _CJK_RE.search(full):
+            cleaned, n = _clean_inter_cjk_spaces(full)
+        if pua_n == 0 and n == 0:
             continue
         # Naive 攤回去：把所有文字塞回第一個 run，後續 run 清空
         # （犧牲 per-run 屬性精度，換中文段落乾淨 — 多數案例 run 屬性一致沒差）
@@ -106,6 +120,7 @@ def fix_cjk_typography(docx_doc, pdf_truth, alignment) -> dict:
         for r in p.runs[1:]:
             r.text = ""
         spaces_removed += n
+        pua_removed += pua_n
         paragraphs_touched += 1
 
     # autoSpaceDE / autoSpaceDN — 全文 default 開啟
@@ -132,5 +147,6 @@ def fix_cjk_typography(docx_doc, pdf_truth, alignment) -> dict:
     return {
         "fixer": "cjk_typography",
         "inter_cjk_spaces_removed": spaces_removed,
+        "pua_glyphs_removed": pua_removed,
         "paragraphs_touched": paragraphs_touched,
     }
