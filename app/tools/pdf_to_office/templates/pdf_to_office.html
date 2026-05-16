@@ -305,6 +305,7 @@ const jp = new JobProgress($('p2oJob'), {
           table_cell_repair:   ['表格cell修復', f.filled],
           table_dedup_cells:   ['表格合併cell', (f.horizontal_merges||0)+(f.vertical_merges||0)],
           title_split:         ['標題拆段',   f.split],
+          bbox_layout:         ['版面分析',   (f.multi_column_pages?.length||0) + (f.out_of_order_paragraphs||0)],
         };
         const m = map[f.fixer];
         if (!m) return null;

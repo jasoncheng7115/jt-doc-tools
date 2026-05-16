@@ -4,6 +4,18 @@
 
 ---
 
+## [1.8.56] - 2026-05-16
+
+### 新增 (pdf-to-office bbox/位置感知 — Sprint 4 開頭)
+
+- **`bbox_layout` fixer**：依 user 反饋「重點不是拆什麼資料文，是排版是位置」，前面 fixer 都著重 text regex；這支改用 PDFTruth bbox 真值座標分析版面：
+  - **多欄偵測**：blocks 的 bbox X 中心若呈雙峰 + 中間 gap > 頁寬 15% → 視為 2-column。pdf2docx 對多欄 PDF 常 linearize 出錯，先 detect + warn user。
+  - **Y-序驗證**：docx paragraphs 在 PDFTruth 內 best-match block 的 (page_num, y_top) 鍵若不單調遞增 → 計算 out-of-order 數，給 user 知 docx 順序跟 PDF 視覺由上而下不一致。
+  - **暫不重排**（risk 高），只 detect / report。UI 結果 chip 多「版面分析」項。
+  - 實測命中率：報價 / 申請 / 多種供應商表單 都被偵測到多欄或順序問題；純文字法規類 clean。
+
+下一階段：bbox-aware paragraph reorder + 2-column column break 插入。
+
 ## [1.8.55] - 2026-05-16
 
 ### 新增

@@ -26,6 +26,7 @@ from .fixers import (
     fix_table_normalize,
     fix_title_split,
 )
+from .fixers.bbox_layout import fix_bbox_layout
 from .style_apply import apply_styles
 
 log = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ def run_postprocess(
     enable_table_cell_repair: bool = True,
     enable_table_dedup_cells: bool = True,
     enable_title_split: bool = True,
+    enable_bbox_layout: bool = True,
 ) -> dict:
     """主入口。讀 PDF + docx → 跑 fixer → 寫到 docx_output。
 
@@ -174,6 +176,9 @@ def run_postprocess(
     # 表格樣式正規化放最後 — 等所有結構修完才套樣式
     if enable_table_normalize:
         fixer_specs.append(("table_normalize", fix_table_normalize))
+    # bbox layout 分析（最後跑 — 純 detect / report，不改文字內容）
+    if enable_bbox_layout:
+        fixer_specs.append(("bbox_layout", fix_bbox_layout))
 
     for name, fn in fixer_specs:
         if pdf_truth is None or alignment is None:
