@@ -1,6 +1,6 @@
 [project]
 name = "jt-doc-tools"
-version = "1.8.53"
+version = "1.8.54"
 description = "Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台"
 authors = [{ name = "Jason Cheng (Jason Tools)", email = "jason@jason.tools" }]
 requires-python = ">=3.10"
@@ -28,7 +28,8 @@ dependencies = [
     "PyMuPDF>=1.26.0,<2",
     "Pillow>=12.2.0,<13",
     "pdfplumber>=0.11.0",
-    "pyzipper>=0.3.6",
+    # pyzipper 0.4.0 修了 small-file encryption bypass (Dependabot #45 Moderate)
+    "pyzipper>=0.4.0",
     "httpx>=0.27,<1",
     "python-docx>=1.0.0",
     "odfpy>=1.4",

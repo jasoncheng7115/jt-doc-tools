@@ -18,14 +18,21 @@ from docx.oxml.ns import qn
 
 log = logging.getLogger(__name__)
 
-# CJK char range — 含基本中文 + 擴展 + 韓日（亦適用）
-_CJK_RE = re.compile(r"[㐀-鿿㐀-䶿가-힯぀-ヿ]")
+# CJK char range — Hiragana / Katakana / CJK Ext-A + main / Hangul syllables。
+# 用 \u 顯式定義避免重複範圍（CodeQL js/regex/overly-large-range）。
+# - U+3040–U+30FF: 平假名 + 片假名
+# - U+3400–U+9FFF: CJK Extension A + 主 CJK Unified Ideographs
+# - U+AC00–U+D7AF: 韓文 Hangul Syllables
+_CJK_CHARS = "\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af"
+_CJK_RE = re.compile(f"[{_CJK_CHARS}]")
 # 連續 CJK + 單空白 + CJK → 移除空白
-_INTER_CJK_SPACE = re.compile(r"([㐀-鿿㐀-䶿가-힯぀-ヿ])[  \t]+([㐀-鿿㐀-䶿가-힯぀-ヿ])")
+_INTER_CJK_SPACE = re.compile(f"([{_CJK_CHARS}])[\xa0 \t]+([{_CJK_CHARS}])")
 # Private Use Area glyphs (U+E000–U+F8FF, BMP PUA) — 多為 PDF 嵌字 icon font
 # (FontAwesome / Material / 自訂 dingbat) 沒映 ToUnicode 留下的殘留亂碼，對純文字
 # 讀者沒意義；轉成 Word 後直接移除（保留前後空白避免黏字）。
-_PUA_RE = re.compile(r"[\ue000-\uf8ff]+")
+# CodeQL「overly large range」是 by design — PUA 整個區段都要清。
+# lgtm[py/regex/overly-large-range]
+_PUA_RE = re.compile("[\ue000-\uf8ff]+")
 
 
 def _is_listy(p) -> bool:

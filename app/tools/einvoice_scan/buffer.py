@@ -49,7 +49,11 @@ _locks_lock = threading.Lock()
 
 
 def _user_key(user: Optional[Any]) -> str:
-    """Auth ON 用 sha1(username|realm)[:16]；Auth OFF 用 'default'。"""
+    """Auth ON 用 blake2b(username|realm)[:16]；Auth OFF 用 'default'。
+
+    用 BLAKE2b（非密碼學用途，純 derive 檔名 prefix）— 不在 CodeQL weak-hash
+    黑名單，比 sha1 / md5 都快且輸出穩定。digest_size=8 → 16 hex chars。
+    """
     if not user:
         return "default"
     # request.state.user 是 dict（feedback_request_state_user_is_dict.md）
@@ -62,9 +66,23 @@ def _user_key(user: Optional[Any]) -> str:
     if not username:
         return "default"
     raw = f"{username}|{realm}".encode("utf-8")
-    # sha1 在這只用於 derive 檔名 prefix，非密碼學用途；usedforsecurity=False
-    # 明示 CodeQL「weak hashing」掃描不再誤判。改用其他 hash 會讓既有使用者
-    # 的 buffer 檔名變動 → 設定 / 發票全找不到 → 不能改 algo。
+    return hashlib.blake2b(raw, digest_size=8).hexdigest()
+
+
+def _legacy_sha1_user_key(user: Optional[Any]) -> str:
+    """v1.8.53 之前用 sha1(...)[:16] 當 prefix；保留以便 backward-compat 讀舊 buffer。
+    新寫一律用 _user_key (blake2b)；read 路徑找不到時 fallback 嘗試 legacy。"""
+    if not user:
+        return "default"
+    if isinstance(user, dict):
+        username = user.get("username", "")
+        realm = user.get("realm", user.get("source", ""))
+    else:
+        username = getattr(user, "username", "")
+        realm = getattr(user, "realm", getattr(user, "source", ""))
+    if not username:
+        return "default"
+    raw = f"{username}|{realm}".encode("utf-8")
     return hashlib.sha1(raw, usedforsecurity=False).hexdigest()[:16]
 
 
@@ -75,7 +93,18 @@ def _buffer_dir() -> Path:
 
 
 def _buffer_path(user: Optional[Any]) -> Path:
-    return _buffer_dir() / f"{_user_key(user)}.json"
+    """新寫一律用 blake2b key。但若新檔不存在、舊 sha1-prefix 檔還在 → 自動
+    rename 過來（一次性 migrate），讓既有使用者升級後不會遺失 buffer。"""
+    new_path = _buffer_dir() / f"{_user_key(user)}.json"
+    if not new_path.exists():
+        legacy_path = _buffer_dir() / f"{_legacy_sha1_user_key(user)}.json"
+        if legacy_path.exists() and legacy_path != new_path:
+            try:
+                legacy_path.rename(new_path)
+            except OSError:
+                # rename 失敗就直接讀舊檔（讓系統繼續運作；下次寫會建新檔）
+                return legacy_path
+    return new_path
 
 
 def _get_lock(key: str) -> threading.Lock:

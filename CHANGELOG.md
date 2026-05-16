@@ -4,6 +4,14 @@
 
 ---
 
+## [1.8.54] - 2026-05-16
+
+### 安全
+
+- **pyzipper 升 0.4.0**：修上游 small-file encryption bypass (Dependabot #45 Moderate)。`pyproject.toml` / `requirements.txt` / `uv.lock` 同步。
+- **`einvoice_scan/buffer.py` user key 從 SHA-1 改 BLAKE2b**：CodeQL #92 「broken/weak crypto hash」即使 `usedforsecurity=False` 仍被 flag；改用 `hashlib.blake2b(raw, digest_size=8)` 同等長度（16 hex chars）非密碼學用途也不會被 flag。`_legacy_sha1_user_key` 保留做 backward-compat：第一次讀取找不到新檔時自動 rename 舊 sha1 prefix 檔過來，既有使用者升級不會遺失 buffer。
+- **`cjk_typography.py` regex 重寫去重複 range**：CodeQL #93 / #96 / #97「overly large range」— 原本 `[㐀-鿿㐀-䶿가-힯぀-ヿ]` 含 `㐀-鿿` 與 `㐀-䶿` 兩個 overlap 的範圍。改用 `぀-ヿ㐀-鿿가-힯` 顯式定義單一非重疊區段。PUA regex 保留 `-` 但加 `# lgtm` suppression 註明 by-design。
+
 ## [1.8.53] - 2026-05-16
 
 ### 修復
