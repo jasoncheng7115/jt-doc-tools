@@ -4,6 +4,18 @@
 
 ---
 
+## [1.8.57] - 2026-05-16
+
+### 新增 (pdf-to-office Sprint A — 4 項快速戰)
+
+- **#4 `page_geometry` fixer**：從 PDFTruth 拿 dominant 頁面尺寸 + 平均 margins 寫進 docx 的 `<w:sectPr>`，pt → twips 換算（× 20）；landscape 自動加 `<w:orient>`。修「pdf2docx 預設給 A4 → A3 / B5 / Letter / 客製尺寸 PDF 轉完跑版」。
+- **#7 `font_normalize` 加 lang-specific CJK fallback**：讀 PDFTruth.language_guess (zh-Hant / zh-Hans / ja / ko)，當原本要用「新細明體」fallback 時改套對應的 Noto Sans CJK 變體（TC / SC / JP / KR）。簡中 / 日文 PDF 不再被硬塞繁中字型。
+- **#10 `list_detect` 巢狀層級增補**：加 9 個 pattern — `(a)/(A)` / `a.` / 小寫羅馬數字 `i. ii. iii.` / `(I)(II)` / em-dash `—` / 多級複合編號 `1.1 / 1.2.3` / 中文公文「第 N 章 / 條 / 項」。
+- **#13 fixer chip hover 詳情**：每個 chip 加 `title` attr 把該 fixer 所有非 trivial 欄位拼成 `key=value · key=value`，滑鼠停下立刻看到細節（debug 友善 — 不用打開 dev tools）。
+
+### 內部
+- pipeline.py 加 `enable_page_geometry`（預設 True），總 fixer 數 16 → 17。
+
 ## [1.8.56] - 2026-05-16
 
 ### 新增 (pdf-to-office bbox/位置感知 — Sprint 4 開頭)

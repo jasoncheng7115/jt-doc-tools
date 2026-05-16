@@ -306,12 +306,23 @@ const jp = new JobProgress($('p2oJob'), {
           table_dedup_cells:   ['表格合併cell', (f.horizontal_merges||0)+(f.vertical_merges||0)],
           title_split:         ['標題拆段',   f.split],
           bbox_layout:         ['版面分析',   (f.multi_column_pages?.length||0) + (f.out_of_order_paragraphs||0)],
+          page_geometry:       ['頁面幾何',   1],
         };
         const m = map[f.fixer];
         if (!m) return null;
         const [label, n] = m;
         if (!n) return null;
-        return `<span class="fixer-chip">${label}<b>${n}</b></span>`;
+        // hover detail：把該 fixer 的所有非 trivial 欄位拼成 "k=v · k=v"
+        const detail = Object.entries(f)
+          .filter(([k, v]) => k !== 'fixer' && v !== 0 && v !== '' && v !== null && v !== undefined && (typeof v !== 'object' || (Array.isArray(v) && v.length > 0)))
+          .map(([k, v]) => {
+            if (Array.isArray(v)) return `${k}=${v.length}`;
+            if (typeof v === 'object') return `${k}=${JSON.stringify(v).slice(0,40)}`;
+            return `${k}=${String(v).slice(0,30)}`;
+          })
+          .join(' · ');
+        const titleAttr = detail ? ` title="${detail.replace(/"/g, '&quot;')}"` : '';
+        return `<span class="fixer-chip"${titleAttr}>${label}<b>${n}</b></span>`;
       }).filter(Boolean);
       rows.push(['修正',
         chips.length

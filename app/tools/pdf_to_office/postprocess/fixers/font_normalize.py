@@ -13,7 +13,7 @@ from docx.oxml.ns import qn
 
 from ...pdf_truth.aligner import DocxToPdfAlignment
 from ..config import (
-    FALLBACK_ASCII_FONT, FALLBACK_CJK_FONT, FONT_MAPPING,
+    CJK_FALLBACK_BY_LANG, FALLBACK_ASCII_FONT, FALLBACK_CJK_FONT, FONT_MAPPING,
     MONOSPACE_FALLBACK, MONOSPACE_HINTS,
 )
 
@@ -87,6 +87,10 @@ def fix_font_normalize(docx_doc, pdf_truth, alignment: DocxToPdfAlignment) -> di
     al_by_di = {a.docx_para_index: a for a in alignment.alignments}
     changes = 0
     pdf_truth_used = 0
+    # 依 PDF 文種覆寫 CJK fallback（v1.8.57+）— 簡中 / 日文 / 韓文 PDF 別用繁中字型
+    lang_specific_cjk = None
+    if pdf_truth and getattr(pdf_truth, "language_guess", None):
+        lang_specific_cjk = CJK_FALLBACK_BY_LANG.get(pdf_truth.language_guess)
 
     for di, p in enumerate(_walk_paragraphs(docx_doc)):
         a = al_by_di.get(di)
@@ -101,6 +105,10 @@ def fix_font_normalize(docx_doc, pdf_truth, alignment: DocxToPdfAlignment) -> di
         if not pdf_font:
             continue
         eastasia, ascii_font = _resolve_font(pdf_font)
+        # 若 PDF 文種跟 fallback 對不上（例如 SC PDF 卻 fallback 給繁中新細明體），
+        # 用 lang-specific CJK 蓋掉
+        if lang_specific_cjk and eastasia == FALLBACK_CJK_FONT:
+            eastasia = lang_specific_cjk
         for run in p.runs:
             _set_run_fonts(run, eastasia, ascii_font)
             changes += 1
@@ -110,4 +118,5 @@ def fix_font_normalize(docx_doc, pdf_truth, alignment: DocxToPdfAlignment) -> di
         "changes": changes,
         "pdf_truth_used": pdf_truth_used,
         "fallback_used": changes - pdf_truth_used,
+        "lang_specific_cjk": lang_specific_cjk or "",
     }

@@ -71,3 +71,13 @@ CLEANUP = {
 # Fallback 字型
 FALLBACK_CJK_FONT = "新細明體"
 FALLBACK_ASCII_FONT = "Times New Roman"
+
+# 按 PDF 文種選 CJK fallback 字型 — `font_normalize` 看 PDFTruth.language_guess
+# 自動切。Word + Mac Pages 在多平台都看得到（macOS / Windows / Linux 字型都會
+# 內建或可裝 Noto 補）。
+CJK_FALLBACK_BY_LANG = {
+    "zh-Hant": "Noto Sans CJK TC",
+    "zh-Hans": "Noto Sans CJK SC",
+    "ja":      "Noto Sans CJK JP",
+    "ko":      "Noto Sans CJK KR",
+}

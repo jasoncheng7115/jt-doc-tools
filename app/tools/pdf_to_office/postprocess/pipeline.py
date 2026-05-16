@@ -27,6 +27,7 @@ from .fixers import (
     fix_title_split,
 )
 from .fixers.bbox_layout import fix_bbox_layout
+from .fixers.page_geometry import fix_page_geometry
 from .style_apply import apply_styles
 
 log = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ def run_postprocess(
     enable_table_dedup_cells: bool = True,
     enable_title_split: bool = True,
     enable_bbox_layout: bool = True,
+    enable_page_geometry: bool = True,
 ) -> dict:
     """主入口。讀 PDF + docx → 跑 fixer → 寫到 docx_output。
 
@@ -179,6 +181,9 @@ def run_postprocess(
     # bbox layout 分析（最後跑 — 純 detect / report，不改文字內容）
     if enable_bbox_layout:
         fixer_specs.append(("bbox_layout", fix_bbox_layout))
+    # 頁面尺寸 + 邊界從 PDF 真值套上（避免 docx 都用 A4 預設）
+    if enable_page_geometry:
+        fixer_specs.append(("page_geometry", fix_page_geometry))
 
     for name, fn in fixer_specs:
         if pdf_truth is None or alignment is None:

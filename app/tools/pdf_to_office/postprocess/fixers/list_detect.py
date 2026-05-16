@@ -27,6 +27,15 @@ _LIST_PATTERNS: list[tuple[str, "re.Pattern", str]] = [
     ("bullet_dash",    re.compile(r"^[-–]\s+(.+)"),                   "List Bullet"),
     ("bullet_star",    re.compile(r"^\*\s+(.+)"),                     "List Bullet"),
     ("bullet_dot",     re.compile(r"^[•‧·▪◆■□◇○●]\s*(.+)"),           "List Bullet"),
+    # v1.8.57+ 巢狀層級增補
+    ("alpha_lower_paren", re.compile(r"^\(([a-z])\)\s+(.+)"),         "List Number"),
+    ("alpha_upper_paren", re.compile(r"^\(([A-Z])\)\s+(.+)"),         "List Number"),
+    ("alpha_lower_dot",   re.compile(r"^([a-z])\.\s+(.+)"),           "List Number"),
+    ("roman_lower",       re.compile(r"^(i{1,3}|iv|v|vi{1,3}|ix|x{1,3})\.\s+(.+)", re.I), "List Number"),
+    ("roman_upper_paren", re.compile(r"^\((I{1,3}|IV|V|VI{1,3}|IX|X{1,3})\)\s+(.+)"), "List Number"),
+    ("dash_em",           re.compile(r"^—\s+(.+)"),                   "List Bullet"),
+    ("multi_level",       re.compile(r"^(\d+(?:\.\d+){1,3})\.?\s+(.+)"), "List Number"),
+    ("ch_chapter",        re.compile(r"^(第\s*[0-9一二三四五六七八九十百零兩]+\s*[章節條項款目])\s*(.+)"), "List Number"),
 ]
 
 # 「保留字面」的台灣公文層級（不要剝離 "壹、" "一、"）
