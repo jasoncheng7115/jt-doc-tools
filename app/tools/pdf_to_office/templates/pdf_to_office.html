@@ -123,7 +123,7 @@
   <h2 style="margin-top:14px;">3. 進階選項</h2>
   <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13.5px;">
     <input type="checkbox" id="enablePost" checked>
-    啟用智慧後處理（10 個 fixer 修字型 / 段落 / 標題 / 清單 / 表格 / 雜訊）— 建議開啟
+    用 <b>jtdt-refine</b> 後處理引擎（18+ 條 fixer：字型 / 段落 / 標題 / 清單 / 表格 / 雜訊 / bbox 版面校正）— 建議開啟
   </label>
 
   <details class="p2o-fixers">
@@ -275,9 +275,18 @@ const jp = new JobProgress($('p2oJob'), {
     $('rDownload').href = `/api/jobs/${jobData.id}/download`;
     $('rReport').href = `/tools/pdf-to-office/report/${jobData.id}`;
     const rows = [];
-    rows.push(['引擎', `<b>${sm.engine || '-'}</b>`]);
+    // 兩段引擎分開顯示：上游 (pdf2docx / libreoffice) + 本專案規則引擎 (jtdt-refine)
+    const primaryEng = rep.primary_engine || sm.engine || '-';
+    const postEng = rep.postprocess_engine || '';
+    const postVer = rep.postprocess_engine_version || '';
+    const fixersN = rep.postprocess_fixers_count || (rep.fixers ? rep.fixers.length : 0);
+    rows.push(['主引擎', `<b>${primaryEng}</b>　<span style="color:#64748b;font-size:12.5px;">(上游轉檔)</span>`]);
+    if (postEng) {
+      rows.push(['規則引擎', `<b>${postEng}</b>${postVer ? ' v' + postVer : ''}　<span style="color:#64748b;font-size:12.5px;">(本專案 ${fixersN} 條 fixer / bbox 真值校正)</span>`]);
+    } else {
+      rows.push(['規則引擎', '<span style="color:#94a3b8;">未啟用</span>']);
+    }
     rows.push(['格式', `<b>${(sm.output_format||'').toUpperCase()}</b>`]);
-    rows.push(['後處理', sm.postprocess_done ? '是' : '否']);
     if (rep.diagnosis && rep.diagnosis.summary) {
       const ds = rep.diagnosis.summary;
       rows.push(['語言', ds.language_guess || '-']);

@@ -12,6 +12,25 @@
   本機 / LAN 上需有運行中的 LLM backend (Ollama / vLLM / LM Studio / jan.ai 皆可)。
 </p>
 
+<div style="background:#fef2f2; border:2px solid #ef4444; border-left-width:6px; border-radius:6px; padding:12px 18px; margin:14px 0 18px; box-shadow:0 1px 3px rgba(239,68,68,0.1);">
+  <div style="display:flex; align-items:flex-start; gap:10px;">
+    <span style="font-size:22px; line-height:1;">⚠</span>
+    <div style="flex:1; font-size:13.5px; line-height:1.7; color:#7f1d1d;">
+      <b style="font-size:14.5px;">使用反向代理（nginx / Caddy）必看 — 504 Gateway Timeout 預防</b><br>
+      LLM 推理單筆常 <b>5-15 分鐘</b>（翻譯 / 視覺校驗 / 大模型）。若 jt-doc-tools 放在 nginx 後面，
+      <b>nginx 預設 60 秒就會回 504</b>，下方 Timeout 設多少都救不了。
+      <ul style="margin:6px 0 0 0; padding-left:22px; line-height:1.8;">
+        <li>nginx 設 <code>proxy_read_timeout 900s;</code> + <code>proxy_send_timeout 900s;</code>（≥ 下方 Timeout 值 + 60s 緩衝）</li>
+        <li><b>多層反向代理</b>（例：自架 LLM proxy 在前 + jt-doc-tools 在後，各自有 nginx）：<b>每一層 nginx 都要設</b>，任一層用預設就斷</li>
+        <li>Caddy 對應加 <code>read_timeout 900s</code> / <code>write_timeout 900s</code></li>
+      </ul>
+      <div style="margin-top:6px;">
+        詳見 <a href="https://github.com/jasoncheng7115/jt-doc-tools/blob/main/OPS.md#504-gateway-timeout-排錯流程" target="_blank" style="color:#b91c1c; text-decoration:underline;">OPS.md 504 排錯流程</a>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="panel">
   <h2 style="margin-top:0;">1. 啟用</h2>
   <div class="form-row">
@@ -65,10 +84,17 @@
   </div>
   <div class="form-row">
     <label>單次 Timeout</label>
-    <div class="field" style="display:flex; gap:8px; align-items:center;">
-      <input type="number" id="timeout_seconds" min="10" max="600" step="5"
+    <div class="field" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <input type="number" id="timeout_seconds" min="10" max="1800" step="5"
              value="{{ settings.timeout_seconds }}" style="width:100px;" />
-      <span class="muted" style="font-size:12px;">秒（單次 HTTP call 上限；冷啟動 model 可能要 30-90s）</span>
+      <span class="muted" style="font-size:12px;">秒（單次 HTTP call 上限；翻譯 / 視覺校驗 / 大模型推理常 5-15 分鐘）</span>
+      <div style="background:#fef3c7; border-left:3px solid #f59e0b; padding:8px 12px; margin-top:6px; font-size:12px; color:#78350f; border-radius:4px; line-height:1.6; flex:1 1 100%;">
+        <b>⚠ 反向代理（nginx / Caddy）對應設定一定要一起改：</b><br>
+        若 jt-doc-tools 在 nginx 後面，nginx 的 <code>proxy_read_timeout</code> + <code>proxy_send_timeout</code>
+        必須 <b>≥ 此 Timeout 值 + 60s 緩衝</b>（建議 900s）。<br>
+        若有「LLM proxy 也在另一台 nginx 後面」這類多層架構，<b>每一層 nginx 都要設</b> — 任何一層用預設 60s 就會 504。
+        詳見 <a href="https://github.com/jasoncheng7115/jt-doc-tools/blob/main/OPS.md#504-gateway-timeout-排錯流程" target="_blank">OPS.md 504 排錯流程</a>。
+      </div>
     </div>
   </div>
 </div>

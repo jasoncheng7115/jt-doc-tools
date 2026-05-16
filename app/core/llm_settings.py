@@ -38,10 +38,11 @@ DEFAULT_SETTINGS: dict = {
     # 翻譯並行數 — 逐句翻譯每句一個 prompt 序列送 LLM 太慢；並行能 4-8 倍速。
     # 過高會壓垮本機 Ollama 或讓 GPU OOM；admin 自己依 LLM server 體質設。
     "translate_concurrency": 4,
-    "timeout_seconds": 300,          # single HTTP call ceiling — vision + reasoning easily >120s
-    # (default 300 because vision cold start + image processing + reasoning
-    #  often exceeds 120s; even with streaming the socket can stay silent
-    #  >30-60s while the model "reads" the image)
+    "timeout_seconds": 600,          # single HTTP call ceiling — 翻譯 / vision / reasoning 可能 5-10 分鐘
+    # 預設拉到 600s（v1.8.58 起，舊 300s）— 客戶實測 gemma 大模型推理單筆 8m+，
+    # 加上 reverse proxy 多層 timeout 任一斬掉就 504。要再長就 admin UI 改。
+    # nginx 端要同步設 proxy_read_timeout 900s（比這個寬一點當 buffer）。
+    # 看 OPS.md「504 Gateway Timeout 排錯流程」。
     "default_review_rounds": 2,      # 1-5
     "confidence_threshold": 0.6,     # corrections below this are shown as low-confidence suggestions
     "consecutive_required": 2,       # same correction must appear N rounds in a row

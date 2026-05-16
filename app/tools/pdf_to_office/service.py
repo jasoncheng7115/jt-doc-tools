@@ -77,7 +77,12 @@ def convert_pdf_to_office(
             )
         engine_used = "libreoffice"
 
-    # ----- Step 2: postprocess -----
+    # ----- Step 2: postprocess (jtdt-refine 規則引擎) -----
+    # 兩段引擎分離回報：
+    #   primary_engine  = pdf2docx / libreoffice  (上游 raw 轉檔)
+    #   postprocess_engine = jtdt-refine v<X>  (本專案 17+ 個 fixer / bbox 真值校正)
+    JTDT_POSTPROC_ENGINE = "jtdt-refine"
+    JTDT_POSTPROC_VERSION = "1.0"
     report: dict = {}
     if enable_postprocess:
         try:
@@ -90,6 +95,11 @@ def convert_pdf_to_office(
     else:
         import shutil
         shutil.copy2(str(raw_docx), str(final_docx))
+    # 標記後處理引擎資訊（給 UI 顯示）
+    report["primary_engine"] = engine_used
+    report["postprocess_engine"] = JTDT_POSTPROC_ENGINE if enable_postprocess else ""
+    report["postprocess_engine_version"] = JTDT_POSTPROC_VERSION if enable_postprocess else ""
+    report["postprocess_fixers_count"] = len(report.get("fixers", []))
 
     # ----- Step 3: format conversion -----
     if output_format == "docx":

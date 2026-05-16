@@ -52,8 +52,14 @@ server {
     # 必設：上傳大檔需要
     client_max_body_size 100M;
 
-    # 保險：未來 LLM 校驗會跑比較久
-    proxy_read_timeout 300s;
+    # 必設：LLM 工具（翻譯 / OCR 校驗 / 視覺校驗）單筆推理可能 5-15 分鐘
+    # 預設 60s 會 504；建議 ≥ 900s（並跟 admin → LLM 設定的 timeout 對齊）
+    proxy_read_timeout    900s;
+    proxy_send_timeout    900s;
+    proxy_connect_timeout 60s;
+
+    # 翻譯回應慢慢吐 — 關 buffering 讓 client 即時看到進度
+    proxy_buffering       off;
 
     location / {
         proxy_pass http://127.0.0.1:8765/;
@@ -71,6 +77,10 @@ server {
 docs.example.com {
     reverse_proxy 127.0.0.1:8765 {
         flush_interval -1
+        transport http {
+            read_timeout 900s
+            write_timeout 900s
+        }
     }
     request_body {
         max_size 100MB
@@ -82,8 +92,28 @@ docs.example.com {
 
 1. **`client_max_body_size 100M`**：上傳大檔必設
 2. **必須掛根路徑** `/`（不能 `/jtdt/`）— 所有頁面用絕對路徑
-3. **`proxy_read_timeout 300s`** 保險（未來 LLM 校驗會用到）
-4. WebSocket 暫時沒用，不需特別 headers
+3. **`proxy_read_timeout 900s`** + **`proxy_send_timeout 900s`** 一起設 — LLM 工具（翻譯 / OCR 校驗 / pdf-fill LLM review）單筆 LLM 呼叫常 5-15 分鐘。`300s` 都不夠用。
+4. **`proxy_buffering off`** — 翻譯 / 校驗 streaming 友善，不會卡住等整個 response
+5. WebSocket 暫時沒用，不需特別 headers
+
+#### 504 Gateway Timeout 排錯流程
+
+如果使用者翻譯 / OCR 校驗看到 504：
+
+```bash
+# 1. 是不是 jt-doc-tools 的 nginx 自己 timeout？
+sudo grep "upstream timed out" /var/log/nginx/error.log | tail -5
+
+# 2. 看當前設定值（必須 ≥ 900s）
+sudo grep -E "proxy_read_timeout|proxy_send_timeout" /etc/nginx/sites-enabled/
+
+# 3. 設不夠 → 加 / 改成 900s，reload
+sudo nginx -t && sudo nginx -s reload
+```
+
+**多層反向代理情境**（例：你有獨立 LLM proxy 在前，jt-doc-tools 在後）：**每一層 nginx 都要設**（一層用 60s 預設整鏈就斷），且建議從外到內遞增（client → nginx_jtdt 900s → jtdt → nginx_llm 900s → LLM backend）。
+
+**admin → LLM 設定**內也要把「Timeout（秒）」設 ≥ 900（預設 600，舊版 300）。jtdt 自己的 httpx timeout 短於 nginx 反而會先斬。
 
 ## 監聽位置
 

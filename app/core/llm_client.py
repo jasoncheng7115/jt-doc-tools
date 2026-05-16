@@ -258,10 +258,14 @@ class LLMClient:
             "messages": messages,
         }
         if not think:
-            # Ollama-specific knobs (extras ignored by other backends).
+            # Ollama / OpenAI-compat 服務對額外欄位的接受度不一：
+            # - Ollama: 看到 `options` / `chat_template_kwargs` 會印 WARN
+            #   "invalid option provided" (jtdt 客戶 Ollama log 觀察到)，
+            #   但 `think=false` 本身被 Ollama 0.4+ 支援
+            # - OpenAI / LiteLLM: 忽略不認的欄位
+            # 結論：只送 `think=false`（最 portable），其他 Ollama-specific
+            # 欄位移除避免 log 噪音 (v1.8.58+)
             payload["think"] = False
-            payload["options"] = {"think": False}
-            payload["chat_template_kwargs"] = {"enable_thinking": False}
             # Some OpenAI reasoning models honour reasoning_effort
             payload["reasoning_effort"] = "none"
         if max_tokens:

@@ -499,10 +499,12 @@ sudo systemctl start jt-doc-tools
 目前**沒有內建** rate limit。建議部署時用反向代理（nginx / Caddy）加：
 
 - `client_max_body_size 100M`（必設，否則 PDF 大檔會被拒）
-- `proxy_read_timeout 300s`（保險，校驗 / 翻譯可能 >120s）
+- `proxy_read_timeout 900s` + `proxy_send_timeout 900s`（必設 — LLM 工具單筆推理常 5-15 分鐘，預設 60s 必定 504）
+- `proxy_buffering off`（LLM streaming 友善）
+- **多層 nginx 情境（自架 LLM proxy + jt-doc-tools 兩台 nginx）每一層都要設**，一層用預設整鏈就斷
 - 如有公開暴露需求，建議加上 `limit_req_zone` 防濫用
 
-詳見 [README.md](./README.md) 的「反向代理」段。
+詳見 [OPS.md](./OPS.md) 的「反向代理」段與「504 Gateway Timeout 排錯流程」。
 
 ---
 

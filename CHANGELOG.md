@@ -4,6 +4,20 @@
 
 ---
 
+## [1.8.58] - 2026-05-16
+
+### 修復 / 增強 (LLM proxy 504 防護一條龍)
+
+- **`translate-doc` 加 proxy error page 偵測 + retry**：偵測譯文若為 nginx / cloudflare 504 / 502 / bad gateway HTML body（pattern：`<html...> + <title>5xx ...</title>` 或 `cloudflare error`），自動 retry 2 次；仍失敗該欄顯示「⚠ LLM 上游錯誤 (504)：請檢查 LLM proxy 設定」而**不污染譯文**。先前會把 nginx 整個 HTML error page 當成翻譯結果存進並排對照表。
+- **`llm_client.py text_query` 清掉 Ollama 不認的欄位**：之前送 `options.think` / `chat_template_kwargs` 給 Ollama，會在 Ollama log 印 WARN「invalid option provided」。改成只送 `think=false`（Ollama 0.4+ 原生支援），減少 Ollama log 雜訊。其他 OpenAI / LiteLLM 後端忽略不認的欄位不影響。
+- **`llm_settings` 預設 timeout 300s → 600s**：客戶實測 Ollama 大模型（gemma4:26b 等）單筆推理可達 5-11 分鐘，舊 300s 必斬。**既有 install 不會自動覆寫，admin 自己調整**。
+- **admin → LLM 設定頁加紅字警示**：說明 reverse proxy `proxy_read_timeout` 必須 ≥ LLM Timeout 值 + 60s 緩衝（建議 900s），且多層 nginx 架構（自架 LLM proxy 在前 + jt-doc-tools 在後）每一層都要設。
+
+### 文件
+
+- **`OPS.md` 反向代理段大幅強化**：nginx config 範例 `proxy_read_timeout` 從 300s 改 900s，加 `proxy_send_timeout` / `proxy_connect_timeout` / `proxy_buffering off`。Caddy 範例也加 `read_timeout 900s`。新增「504 Gateway Timeout 排錯流程」三步診斷指令 + 多層反向代理情境提醒（每層都要設）。
+- **`API.md` § 8 速率限制段**：timeout 同步調 900s，補多層 nginx 警示。
+
 ## [1.8.57] - 2026-05-16
 
 ### 新增 (pdf-to-office Sprint A — 4 項快速戰)

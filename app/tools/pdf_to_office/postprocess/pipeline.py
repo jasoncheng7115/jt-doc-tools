@@ -27,6 +27,7 @@ from .fixers import (
     fix_title_split,
 )
 from .fixers.bbox_layout import fix_bbox_layout
+from .fixers.over_indent_cleanup import fix_over_indent_cleanup
 from .fixers.page_geometry import fix_page_geometry
 from .style_apply import apply_styles
 
@@ -56,6 +57,7 @@ def run_postprocess(
     enable_title_split: bool = True,
     enable_bbox_layout: bool = True,
     enable_page_geometry: bool = True,
+    enable_over_indent_cleanup: bool = True,
 ) -> dict:
     """主入口。讀 PDF + docx → 跑 fixer → 寫到 docx_output。
 
@@ -184,6 +186,10 @@ def run_postprocess(
     # 頁面尺寸 + 邊界從 PDF 真值套上（避免 docx 都用 A4 預設）
     if enable_page_geometry:
         fixer_specs.append(("page_geometry", fix_page_geometry))
+    # over-indent 清理 — 修 pdf2docx 對標題 / 短段落亂加超大 left/right indent
+    # 造成中文標題被迫折行斷字。必須 page_geometry 之後跑（用 sectPr 算 content width）。
+    if enable_over_indent_cleanup:
+        fixer_specs.append(("over_indent_cleanup", fix_over_indent_cleanup))
 
     for name, fn in fixer_specs:
         if pdf_truth is None or alignment is None:

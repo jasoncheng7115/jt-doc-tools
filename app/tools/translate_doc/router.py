@@ -306,42 +306,80 @@ def _split_line_prefix(src: str) -> tuple[str, str]:
     return prefix, body
 
 
+def _looks_like_proxy_error_page(text: str) -> str:
+    """偵測譯文其實是 reverse proxy (nginx / cloudflare / haproxy) 的錯誤頁，
+    LLM proxy 上游 timeout 時有些設定會回 200 + 錯誤 HTML body（LiteLLM 某些
+    `fallbacks` / `return_response_on_error` 設定），jtdt 端不可把這當譯文存。
+    回 status 字串（"504"/"502"/"...") 或 "" 表示正常。"""
+    if not text:
+        return ""
+    t = text.lstrip()[:500].lower()
+    # 1) 明顯的 HTML wrapper
+    if not (t.startswith("<html") or t.startswith("<!doctype") or
+            t.startswith("<head") or "<title>" in t[:200]):
+        return ""
+    # 2) 找錯誤碼 — 5xx / 4xx gateway / bad gateway / timeout
+    import re as _re
+    m = _re.search(r"(\b50[02-4]\b|\b40[0-9]\b)\s*(gateway|server error|timeout|unavailable|bad|forbidden|too many)", t)
+    if m:
+        return m.group(1)
+    if "gateway time-out" in t or "bad gateway" in t or "service unavailable" in t:
+        m2 = _re.search(r"\b(50[02-4])\b", t)
+        return m2.group(1) if m2 else "5xx"
+    if "cloudflare" in t and ("error" in t or "timeout" in t):
+        return "cf-error"
+    # 3) HTML 但不認得錯誤類型 — 仍視為異常（譯文絕不會回 HTML）
+    return "html-body"
+
+
+_MAX_TRANSLATE_RETRY = 2
+
+
 def _translate_one(client, model: str, src: str,
                    source_lang: str, target_lang: str,
                    domain: str = "") -> dict:
     """單句翻譯 worker（給並行 executor 用）。
     空字串直接回 empty，不發 LLM call。任何 exception 回 error 字串，
-    不 raise — caller 用 list 收集所有結果。"""
+    不 raise — caller 用 list 收集所有結果。
+    收到 reverse proxy HTML error page (如 nginx 504) 自動 retry 一次，
+    再失敗就回 error 不污染譯文欄。"""
     if not src.strip():
         return {"src": src, "translated": "", "error": ""}
-    # 「填寫位」(form blank fields like ___________) 與 markdown 標記行
-    # （``` / ~~~ / *** / 純符號 / URL / 表格分隔線）不送 LLM — 直接 passthrough，
-    # 譯文欄維持空白（前端會顯示「（填寫位）」），保留原文版面對齊。送 LLM 反而
-    # 會回「Please provide the text to translate」之類雜訊。
     if _is_no_translate(src):
         return {"src": src, "translated": "", "error": "", "skipped": "filler"}
-    # 抽出 markdown / 列表行首符號（如 "- "、"1. "、"> "、"## "），只送 body 給 LLM，
-    # 譯文回來後再補回行首符號 — 不然 LLM 常會吃掉行首符號只翻內容。
     prefix, body = _split_line_prefix(src)
     if not body.strip():
-        # 整行就是個行首符號（例 "- " 後面什麼都沒）— 不送 LLM
         return {"src": src, "translated": "", "error": "", "skipped": "filler"}
     prompt = _build_prompt(body, source_lang, target_lang, domain=domain)
-    try:
-        resp = client.text_query(
-            prompt=prompt, model=model, temperature=0.0, think=False,
-        )
-        translated = (resp or "").strip()
-        translated = re.sub(r"^(翻譯[:：]?\s*|Translation:\s*)",
-                            "", translated, flags=re.IGNORECASE)
-        # 防 LLM 自己又加上同樣的行首符號 → 重複
-        if prefix and translated.startswith(prefix.strip()):
-            translated = translated[len(prefix.strip()):].lstrip()
-        if prefix:
-            translated = prefix + translated
-        return {"src": src, "translated": translated, "error": ""}
-    except Exception as e:
-        return {"src": src, "translated": "", "error": f"LLM 失敗：{e}"}
+    last_error = ""
+    for attempt in range(_MAX_TRANSLATE_RETRY + 1):
+        try:
+            resp = client.text_query(
+                prompt=prompt, model=model, temperature=0.0, think=False,
+            )
+            translated = (resp or "").strip()
+            translated = re.sub(r"^(翻譯[:：]?\s*|Translation:\s*)",
+                                "", translated, flags=re.IGNORECASE)
+            # === 防 proxy error page 污染譯文（v1.8.58+）===
+            proxy_err = _looks_like_proxy_error_page(translated)
+            if proxy_err:
+                last_error = f"LLM proxy 回錯誤頁 ({proxy_err})；嘗試 {attempt + 1}/{_MAX_TRANSLATE_RETRY + 1}"
+                if attempt < _MAX_TRANSLATE_RETRY:
+                    continue  # retry
+                return {"src": src, "translated": "",
+                        "error": f"⚠ LLM 上游錯誤 ({proxy_err})：請檢查 LLM proxy 設定 (gateway timeout)；此句未翻譯"}
+            # 防 LLM 自己又加上同樣的行首符號 → 重複
+            if prefix and translated.startswith(prefix.strip()):
+                translated = translated[len(prefix.strip()):].lstrip()
+            if prefix:
+                translated = prefix + translated
+            return {"src": src, "translated": translated, "error": ""}
+        except Exception as e:
+            last_error = f"LLM 失敗：{e}"
+            if attempt < _MAX_TRANSLATE_RETRY:
+                continue
+            return {"src": src, "translated": "", "error": last_error}
+    return {"src": src, "translated": "", "error": last_error or "未知失敗"}
 
 
 def _warmup_llm(client, model: str) -> None:
