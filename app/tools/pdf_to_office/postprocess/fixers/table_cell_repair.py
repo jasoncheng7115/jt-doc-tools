@@ -110,9 +110,9 @@ def _repair_via_pdf_truth_blocks(docx_doc, pdf_truth) -> int:
     PDFTruth blocks 找含這些內容的 block (block.text 含 \\n 多行)。block 內 lines
     跟 row cells 數一致時，把 block 對應位置的 line 填回空 cell。
 
-    例：○○單 docx row [1,'','','○○','(稅率)','NT$ ○○○']
-    對應 PDF block.text = '1\\n技術服務\\n1 單位\\n○○\\n(稅率)\\nNT$ ○○○'
-    block.lines = 6 行 = row.cells = 6 → 對應 c1='技術服務', c2='1 單位' 補上
+    通用情境：item-line 表格（編號 / 品項 / 數量 / 單價 / 稅項 / 金額）等 N 欄
+    結構，pdf2docx 對 PDF item block (各欄文字以同 block 多 line 形式存在) 偵測
+    cell 邊界錯位 → 部份欄被誤判為空。本 fallback 用 PDF 真值 block 補回。
     """
     if not pdf_truth or not pdf_truth.pages:
         return 0
@@ -130,6 +130,20 @@ def _repair_via_pdf_truth_blocks(docx_doc, pdf_truth) -> int:
     filled = 0
     consumed_blocks: set[int] = set()  # 每個 PDF block 只能用來補一個 row
     for table in docx_doc.tables:
+        # 統計：哪些 tc element 在「不同欄位位置」被多 row reference
+        # 正常 vMerge：同 element 在多 row 但都同一欄位 → 寫入會正確 spread
+        # 不正常 (pdf2docx bug)：同 element 在多 row 不同欄位 → 寫一次 spillover
+        # 後者才禁止填
+        element_col_positions: dict = {}
+        for row in table.rows:
+            seen_in_row = set()
+            for ci, c in enumerate(row.cells):
+                eid = id(c._element)
+                if eid in seen_in_row:
+                    continue
+                seen_in_row.add(eid)
+                element_col_positions.setdefault(eid, set()).add(ci)
+        shared_eids = {eid for eid, cols in element_col_positions.items() if len(cols) >= 2}
         for row in table.rows:
             cells = list(row.cells)
             n_cells = len(cells)
@@ -175,6 +189,10 @@ def _repair_via_pdf_truth_blocks(docx_doc, pdf_truth) -> int:
             block_lines = [_normalize(ln.text or "") for ln in best_block.lines]
             for idx in empty_idxs:
                 if idx < len(block_lines) and block_lines[idx]:
+                    if id(cells[idx]._element) in shared_eids:
+                        # 跨 row 共用 element — 填進去會 spillover 到其他 row
+                        # （pdf2docx 給的 table layout 不健康，保險起見不寫）
+                        continue
                     _set_cell_text(cells[idx], block_lines[idx])
                     filled += 1
             consumed_blocks.add(best_idx)
@@ -201,6 +219,17 @@ def fix_table_cell_repair(docx_doc, pdf_truth, alignment, pdf_path=None) -> dict
     pdf_consumed = set()
     for d_tbl in docx_tables:
         d_text = _docx_table_to_text(d_tbl)
+        # 跨 row 共用 element 偵測（同 _repair_via_pdf_truth_blocks 邏輯）
+        element_col_positions: dict = {}
+        for row in d_tbl.rows:
+            seen_in_row = set()
+            for ci, c in enumerate(row.cells):
+                eid = id(c._element)
+                if eid in seen_in_row:
+                    continue
+                seen_in_row.add(eid)
+                element_col_positions.setdefault(eid, set()).add(ci)
+        shared_eids = {eid for eid, cols in element_col_positions.items() if len(cols) >= 2}
         # 找 best matching pdfplumber table by shape
         best_pi = -1
         for pi, p_tbl in enumerate(pdf_tables):
@@ -231,6 +260,8 @@ def fix_table_cell_repair(docx_doc, pdf_truth, alignment, pdf_path=None) -> dict
                 p_cell_text = (p_cell_text or "").strip()
                 d_cell_text = _normalize(d_cells[ci].text or "")
                 if not d_cell_text and p_cell_text:
+                    if id(d_cells[ci]._element) in shared_eids:
+                        continue  # spillover 風險，不寫
                     _set_cell_text(d_cells[ci], p_cell_text)
                     filled += 1
 

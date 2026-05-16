@@ -3,13 +3,14 @@
 對 docx 段落內含「：」「。」「！」「？」中間不換行的長段，看 PDFTruth 內這些標點
 位置是否該是段落邊界（PDF 內這位置是新 line + y 距離大）→ 在標點後拆段。
 
-修「○○申請表申請日期：年月日 一、申請人資料：」
-這類標題 + 申請日期 + section header 三段被 pdf2docx 黏一起的 case。
+通用情境：表單 / 公文 / 報價 / 申請類 PDF，標題列與欄位列在版面上
+明顯分開（不同 y / 字體 / 區塊），但 pdf2docx 把它們黏成同一段。
+也涵蓋章節 header（一、二、壹、）被黏在前段尾端的情形。
 
 策略（保守）：
-- 段落字數 ≥ 30
-- 含 ≥ 1 個強分隔標點（：。！？）
-- 拆完不可超過 3 段（避免過度切分）
+- 段落字數 ≥ 16（命中 _FORM_TITLE_SUFFIX 時不卡長度）
+- 含 ≥ 1 個強分隔標點（：。！？）或章節 header 或表單標題尾端欄位
+- 拆完不可超過 4 段（避免過度切分）
 - 表格內段落不動
 """
 from __future__ import annotations
@@ -26,7 +27,7 @@ _STRONG_SEP = re.compile(r"([：。！？!?])")
 # 中文 section header 起頭模式 — 在這字前一定該換段
 _SECTION_HEAD = re.compile(r"([一二三四五六七八九十]+、|[壹貳參肆伍陸柒捌玖拾]+、)")
 
-# 表單標題後緊接「申請日期：/編號：/日期：/簽收日期：」之類欄位 → 強制拆段
+# 表單標題尾端緊接「申請日期：/編號：/日期：/簽收日期：」之類欄位 → 強制拆段
 # 實務常見「○○申請表申請日期：」「○○單編號：」「訂購單日期：」等被 pdf2docx 黏一起
 _FORM_TITLE_SUFFIX = re.compile(
     r"(表|書|單|單據|證|證明|報告|清冊|憑證)"
@@ -57,7 +58,7 @@ def _split_at_separators(text: str, max_pieces: int = 4) -> list[str]:
     if m_meas:
         text = text[m_meas.end():]
     # 0.5) 在表單標題 + 欄位名稱黏一起時，於欄位名前插斷點
-    # e.g. "○○申請表申請日期：" → 強制拆成 ["...申請表", "申請日期："]
+    # e.g. 「○○表申請日期：」/「○○單編號：」→ 強制拆成 ["...表", "申請日期："]
     HARD = "HARDBREAK"
     text2 = _FORM_TITLE_SUFFIX.sub(lambda m: m.group(1) + HARD + m.group(2), text)
     initial_chunks = [c for c in text2.split(HARD) if c.strip()] if HARD in text2 else [text]
@@ -128,12 +129,12 @@ def fix_title_split(docx_doc, pdf_truth, alignment) -> dict:
                 p._element.remove(r)
             text = new_text
             measure_stripped += 1
-        # 表單標題後綴 pattern 命中時不卡長度（短的「○○申請表\n\t申請日期:」也要拆）
-        has_form_suffix = bool(_FORM_TITLE_SUFFIX.search(text))
-        if not has_form_suffix and len(text) < 16:
+        # 表單標題尾端欄位 pattern 命中時不卡長度（短標題「○○表\n\t申請日期:」也要拆）
+        has_form_tail = bool(_FORM_TITLE_SUFFIX.search(text))
+        if not has_form_tail and len(text) < 16:
             continue
-        # 必須含強分隔 + section header pattern + 表單標題後綴
-        if not (_STRONG_SEP.search(text) or _SECTION_HEAD.search(text) or has_form_suffix):
+        # 必須含強分隔 + section header pattern + 表單標題尾端欄位
+        if not (_STRONG_SEP.search(text) or _SECTION_HEAD.search(text) or has_form_tail):
             continue
         pieces = _split_at_separators(text)
         if len(pieces) < 2:

@@ -132,8 +132,8 @@ def _split_block_by_y_gap(lines: list[PDFLine], dominant_size: float,
 
 def _dedup_consecutive_lines(lines: list[PDFLine]) -> list[PDFLine]:
     """連續完全相同文字的 PDFLine 去重（PDF 用 stroke+fill 多層渲染粗體效果時，
-    PyMuPDF 會抽出重複行，例如「彰化縣\\n彰化縣\\n彰化縣\\n彰化縣」— pdf2docx 把
-    重複內容塞進 docx 看起來就是字疊字 / 重複段落）。
+    PyMuPDF 會把同一行抽出 N 次形成重複序列；pdf2docx 把重複內容塞進 docx 看
+    起來就是字疊字 / 重複段落）。
 
     判定：相鄰兩 line 的 text 完全相同 → 後面的合併到前面（保留前者 bbox/font）。
     """

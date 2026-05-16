@@ -157,9 +157,9 @@ _VAT_RE = re.compile(r"(?:統編|統一編號|VAT|統一編號)\s*[:：]?\s*\d{6
 def _looks_like_pure_footer(txt: str) -> bool:
     """段落整段就是 footer — ≥ 2 個 contact 證據 + 全段不長 (純 footer，無正文)。
 
-    重要：不能只看 contact pattern 數量。pdf2docx 會把 footer 黏到客戶資訊段
-    內，那段含「○○有限公司,○○○\\n台中市...\\n台灣 (電話)」
-    contact 證據齊全但**前面有真實正文**。對這種 case 必須剝離不是整段刪。
+    重要：不能只看 contact pattern 數量。pdf2docx 會把 footer 黏到收件方資訊
+    或正文段內，整段同時含「公司名 + 地址 + 電話 + 信箱」這類聯絡欄位但
+    **前面有真實業務內容**。這種 case 必須剝離 footer 不是整段刪。
 
     判定為「純 footer 段」(可整段刪)：
     - 長度 ≤ 80 字 (短，沒有實質正文夾雜)

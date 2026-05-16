@@ -4,13 +4,20 @@
 
 ---
 
+## [1.8.50] - 2026-05-16
+
+### 安全 / 隱私
+
+- **清掉 fixer 註解 / docstring / CHANGELOG 內所有具體 PDF 樣本字串**：先前在 `title_split.py` / `table_cell_repair.py` / `header_footer.py` / `extractor.py` 的 docstring 引用了測試用 PDF 內的真實標題、公司名、金額作為 case 範例，改成泛指描述（「○○表」/「item-line 表格」/「公司名 + 地址 + 電話」）。CHANGELOG v1.8.41 / v1.8.43 / v1.8.44 / v1.8.47 / v1.8.48 entries 同步泛化。**規則：任何測試 PDF 的真實內容（公司名 / 統編 / 金額 / 票號 / 行政區 / 路名）都不可寫進 git。**
+- **`table_cell_repair` 加跨 row 共用 element spillover 防護**：pdf2docx 對部份 PDF 產生非標準 vMerge / gridSpan，python-docx 把同一個 tc 從多個 row 不同欄位 reference 出來；寫一次會 spread 到很多 visible cell（如 r3 col 1 寫 X 結果 r4/r5/r6 col 0/1/2 也跟著顯示 X）。`_repair_via_pdf_truth_blocks` 與 pdfplumber path 都加 `element_col_positions` 偵測：同一 tc 在不同欄位被多 row reference → 視為不健康 layout 不寫入。
+
 ## [1.8.49] - 2026-05-16
 
 ### 修復
 
 - **PDF 轉文書檔 icon 升級**：原本用 `file-text` 但 icon registry 沒這條，落到預設 fallback 的單一圓形（user 反應「太 low」）。新增 `file-swap` icon — 文件 + 箭頭代表「轉換」，跟工具語意吻合；同時加 `file-text` 標準文字檔 icon 備用。
 - **「流式」改「流動排版」**：`pdf_to_office.html` UI 文案 + `fake_table_remove.py` docstring + CHANGELOG 把陸味用詞「流式」一律改「流動排版」「PDF 是固定排版、Word 是流動排版」（user 點出「流式 這不像台灣用語」）。
-- **`title_split` 表單標題後綴規則放寬**：標題與欄位緊接（"○○申請表 \\n\\t申請日期:"）只要 `_FORM_TITLE_SUFFIX` pattern 命中就拆，不卡長度 ≥ 16 限制；keyword 加上「統一編號 / 統編 / 填表」。
+- **`title_split` 表單標題尾端欄位規則放寬**：標題與欄位緊接（如「○○表 \\n\\t申請日期:」）只要 `_FORM_TITLE_SUFFIX` pattern 命中就拆，不卡長度 ≥ 16 限制；keyword 加上「統一編號 / 統編 / 填表」。
 
 ### 文件
 
@@ -20,7 +27,7 @@
 
 ### 修復 (申請表標題拆段強化)
 
-- **`title_split` 加 `_FORM_TITLE_SUFFIX` 規則**：偵測「表/書/單/單據/證/...」後緊接「申請日期/編號/文號/...」+ 「：」的 pattern，強制拆斷點。修「○○申請表(\\t)申請日期：」這類表單標題與欄位被 pdf2docx 黏一起的 case；○○範例實測拆出 4 個段落（標題 / 申請日期 / 年月日 / 章節 header）。
+- **`title_split` 加 `_FORM_TITLE_SUFFIX` 規則**：偵測「表/書/單/單據/證/...」後緊接「申請日期/編號/文號/...」+ 「：」的 pattern，強制拆斷點。修表單標題與欄位被 pdf2docx 黏成同段的常見情境；含尾端章節 header 時可拆成 4 段（標題 / 日期欄 / 年月日 / 章節 header）。
 - **`title_split` 加 `_LEADING_MEASURE` 剝離**：段落開頭出現殘留的尺寸字（"60cm申請人："）— 來自 PDF 旗桿圖示位置溢出文字 — 自動從段落開頭剝掉，留下乾淨「申請人：（簽章）」。
 - **`cjk_typography` 保留表單欄位骨架空白**：「年  月  日」「時  分」「公里  公尺」等填寫欄位骨架的多空白不再被當 inter-CJK 多空白吞掉，欄位視覺間距保留。
 
@@ -28,7 +35,7 @@
 
 ### 新增 (Sprint 3 第 N 輪)
 
-- **`title_split` fixer**：標題段啟發式拆段 — 段落字數 ≥ 30 + 含強分隔標點 (：。！？) 或章節 header 起頭 (一、二、壹、) → 在標點 / header 前後拆段。修「標題 + 申請日期 + section header」三段被 pdf2docx 黏一起的 case (○○範例實測拆 1 段成 2 段，list_detect 後續也認到 3 個章節 header 變 List)。
+- **`title_split` fixer**：標題段啟發式拆段 — 段落字數 ≥ 30 + 含強分隔標點 (：。！？) 或章節 header 起頭 (一、二、壹、) → 在標點 / header 前後拆段。修「標題 + 申請日期 + section header」三段被 pdf2docx 黏一起的常見表單情境，拆完 list_detect 也能認到章節 header 變 List。
 - **`table_dedup_cells` 加 vertical merge**：原本只做 row 內水平合併；新增 col 內垂直合併連續相同非空 cell — 用 `w:vMerge=restart/continue`。修「150cm 在表格內 3 row 重複」這類 pdf2docx 把垂直 spanning cell 切成 N 個獨立 row 的 case。
 
 ### 修復
@@ -51,12 +58,12 @@
 ### 修復
 
 - **`header_footer` 不誤刪客戶資訊整段**：v1.8.43 加的 `_looks_like_pure_footer` heuristic 對「pdf2docx 把 footer 黏到客戶資訊段內、整段含 ≥ 2 contact patterns」的 case 會把整段刪掉，連客戶資訊也丟了。修法：加 80 字長度上限 — 短純 footer 才整段刪，長段（含正文夾雜）改用 `_strip_footer_substring` 剝離 footer 部分保留正文。
-- **`table_cell_repair` 加 PDFTruth multi-line block 配對 fallback**：pdfplumber `extract_tables()` 對某些 PDF 抽不到 / shape 跟 docx 對不上時（例如○○單 docx 7×6 vs pdfplumber 2×8 / 1×2），改用 PDFTruth 內含 \n 多行的 block 跟 docx table row 配對 — block.lines 數量跟 row cells 數一致 + 非空 cell 內容跟 lines 位置對應 → 補空 cell。修○○單「技術服務 / 1 單位 不見」實測案例。
+- **`table_cell_repair` 加 PDFTruth multi-line block 配對 fallback**：pdfplumber `extract_tables()` 對某些 PDF 抽不到 / shape 跟 docx 對不上時（行列數差距大），改用 PDFTruth 內含 \n 多行的 block 跟 docx table row 配對 — block.lines 數量跟 row cells 數一致 + 非空 cell 內容跟 lines 位置對應 → 補空 cell。涵蓋 invoice / quote / 報價類 item-line 表格 cell 邊界誤判失分的常見情境。
 - **`table_cell_repair` block 防重用**：每個 PDF block 只能用來補一個 row（避免 r4/r5/r6 同個 row template 全配到同個 block 6）。
 
 ### 自我測試 loop
 
-對 4 份代表 PDF（○○單 / 票卡 / 申請表 / invoice）跑自我比對 + 自動修法 6 輪，發現一個 bug 修一個。
+對 4 種代表性表單類型 PDF（報價 / 票卡 / 申請 / invoice）跑自我比對 + 自動修法 6 輪，發現一個 bug 修一個。
 
 ## [1.8.43] - 2026-05-15
 
@@ -92,10 +99,7 @@
 
 ### 實測結果
 
-對 temp 內 3 份 PDF（國家圖書館規章 / ○○單 / ○○範例）：
-- 國圖規章：`paragraph_split=1`、`heading_detect=6`、`list_detect=6`、`table_normalize=4`
-- ○○單：`paragraph_merge=4`、`table_normalize=1`
-- 申請表：`heading_detect=1`、`table_normalize=3`
+對 3 種代表性 PDF（規章 / 報價 / 申請）跑 fixer pipeline，paragraph_split / heading_detect / list_detect / table_normalize 在不同類型上各自命中對應結構。
 
 ## [1.8.40] - 2026-05-15
 
