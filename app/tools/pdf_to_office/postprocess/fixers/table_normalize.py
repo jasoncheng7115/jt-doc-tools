@@ -115,7 +115,7 @@ def _pdf_is_borderless(pdf_truth) -> bool:
     - 第一頁總 drawings < 30 (簡單發票 / 報價沒太多線條，pdf2docx 卻硬包成 table)
     - 並且該頁 text blocks > 5 (確認有實際內容，不是空白頁)
 
-    對票卡 / 廠商資料表 / 申請表這類「PDF 真的有畫框線的表格」(drawings > 100)
+    對票卡 / 廠商資料表 / <表單樣本>這類「PDF 真的有畫框線的表格」(drawings > 100)
     這個 fixer 仍會套上邊框（_set_table_borders）— 維持原表格樣貌。
     """
     if not pdf_truth or not pdf_truth.pages:
@@ -150,10 +150,12 @@ def fix_table_normalize(docx_doc, pdf_truth, alignment) -> dict:
         for ri, row in enumerate(rows):
             for cell in row.cells:
                 shading = HEADER_SHADING if (ri == 0 and is_header) else None
-                # 標題列 vertical center 看起來比較整齊；內文列 vertical top
-                # 比較自然（避免短內容飄在 cell 中間 — invoice item description
-                # 應該靠上對齊跟其他欄位齊平）
-                v_align = "center" if (ri == 0 and is_header) else "top"
+                # v1.8.62：所有 cell 一律 vertical center
+                # 之前邏輯（標題 center / 內文 top）對於「label-value 表單」會讓 label
+                # cell 內文字飄在頂端、value cell 居中，視覺不對齊；user 反映過。
+                # 改成統一 center — invoice item description 若多行也飄中間，但整體
+                # 對齊感優於 top（PDF 表單視覺多為 center）。
+                v_align = "center"
                 _set_cell_props(cell, vertical_align=v_align, shading=shading)
                 _clear_cell_paragraph_spacing(cell)
                 cells_centered += 1

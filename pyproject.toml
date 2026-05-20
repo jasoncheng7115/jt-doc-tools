@@ -1,6 +1,6 @@
 [project]
 name = "jt-doc-tools"
-version = "1.8.58"
+version = "1.9.102"
 description = "Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台"
 authors = [{ name = "Jason Cheng (Jason Tools)", email = "jason@jason.tools" }]
 requires-python = ">=3.10"
@@ -43,6 +43,13 @@ dependencies = [
     "pdf2docx>=0.5.13,<0.6",
     # rapidfuzz — pdf-to-office 的 docx↔PDFTruth alignment 模糊比對引擎（比 difflib 快 10x+）。
     "rapidfuzz>=3.0,<4",
+    # numpy — 直接 import：pdf-to-office table_borders_from_image fixer（頂層）+
+    # ocr_engine 影像前處理。原本靠 easyocr/opencv 的 transitive 帶入，但程式直接
+    # 使用，須顯式宣告（避免日後 transitive 變動破壞）。
+    "numpy>=1.26,<3",
+    # lxml — 直接 import：pdf-to-office docx_builder 寫 w:drawing anchor XML。
+    # 原本靠 python-docx transitive 帶入，直接使用須顯式宣告。
+    "lxml>=4.9,<7",
     "ldap3>=2.9.1,<3",
     # OCR — soft optional. Used by pdf-editor when extracting text from
     # PDFs whose Identity-H subset font has a missing/identity ToUnicode CMap

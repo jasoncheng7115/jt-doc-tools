@@ -121,6 +121,73 @@ def _reading_minutes(cjk_chars: int, en_words: int) -> float:
     return round(cjk_chars / 300 + en_words / 200, 1)
 
 
+_SUPPORTED_EXTS = (".pdf", ".txt", ".md", ".csv", ".log", ".rtf",
+                    ".html", ".htm", ".xml", ".json")
+
+
+def _is_supported(filename: str) -> bool:
+    return (filename or "").lower().endswith(_SUPPORTED_EXTS)
+
+
+def _analyze_doc(data: bytes, filename: str = "document.pdf") -> dict:
+    """通用文件分析：PDF 走 PyMuPDF，純文字 (.txt/.md/.csv/...) 直接 decode。
+    回統計 dict 跟 _analyze_pdf 同 schema。
+    """
+    if not data:
+        raise HTTPException(400, "empty file")
+    name = (filename or "").lower()
+    if name.endswith(".pdf"):
+        return _analyze_pdf(data, filename)
+    # 純文字：guess encoding (utf-8 / utf-8-sig / cp950 / big5)
+    text = None
+    for enc in ("utf-8-sig", "utf-8", "cp950", "big5", "latin-1"):
+        try:
+            text = data.decode(enc)
+            break
+        except Exception:
+            continue
+    if text is None:
+        text = data.decode("utf-8", errors="replace")
+    pc = _count_text(text)
+    freq = _top_freq(text, top=20)
+    page = {
+        "page": 1,
+        "char_total": pc["char_total"],
+        "char_no_ws": pc["char_no_ws"],
+        "cjk_chars": pc["cjk_chars"],
+        "en_words": pc["en_words"],
+        "word_total": pc["word_total"],
+        "paragraphs": pc["paragraphs"],
+        "sentences": pc["sentences"],
+        "lines": pc["lines"],
+    }
+    avg_sent_len = (
+        round(pc["char_no_ws"] / pc["sentences"], 1) if pc["sentences"] else 0
+    )
+    return {
+        "filename": filename,
+        "page_count": 1,
+        "summary": {
+            "char_total":   pc["char_total"],
+            "char_no_ws":   pc["char_no_ws"],
+            "cjk_chars":    pc["cjk_chars"],
+            "en_words":     pc["en_words"],
+            "numbers":      pc["numbers"],
+            "word_total":   pc["word_total"],
+            "paragraphs":   pc["paragraphs"],
+            "sentences":    pc["sentences"],
+            "lines":        pc["lines"],
+            "avg_per_page": pc["word_total"],
+            "avg_sent_len": avg_sent_len,
+            "reading_min":  _reading_minutes(pc["cjk_chars"], pc["en_words"]),
+            "has_text":     pc["word_total"] > 0,
+        },
+        "char_breakdown": pc["chars"],
+        "pages": [page],
+        "freq": freq,
+    }
+
+
 def _analyze_pdf(data: bytes, filename: str = "document.pdf") -> dict:
     """Open PDF bytes, extract text per page, compute all stats."""
     if not data:
@@ -204,13 +271,13 @@ async def analyze(
     file: UploadFile = File(...),
     llm_summarize: str = Form(""),  # "1" → 加 LLM 摘要 + 關鍵字
 ):
-    if not (file.filename or "").lower().endswith(".pdf"):
-        raise HTTPException(400, "只支援 PDF")
+    if not _is_supported(file.filename or ""):
+        raise HTTPException(400, "支援的格式：PDF / TXT / MD / CSV / 等純文字")
     data = await file.read()
-    result = _analyze_pdf(data, file.filename or "document.pdf")
+    result = _analyze_doc(data, file.filename or "document.pdf")
     if str(llm_summarize).lower() in ("1", "true", "on", "yes"):
         try:
-            llm_extra = await _llm_summarize(data)
+            llm_extra = await _llm_summarize(data, file.filename or "document.pdf")
             if llm_extra:
                 result["llm"] = llm_extra
         except Exception as exc:
@@ -220,9 +287,94 @@ async def analyze(
     return JSONResponse(result)
 
 
-async def _llm_summarize(pdf_bytes: bytes) -> dict:
+@router.post("/analyze-text")
+async def analyze_text(
+    text: str = Form(...),
+    llm_summarize: str = Form(""),
+):
+    """直接貼文字統計 — 無檔案上傳。回 JSON 同 /analyze 格式。"""
+    if not text or not text.strip():
+        raise HTTPException(400, "請提供文字內容")
+    # 用 utf-8 編碼後走 _analyze_doc 的純文字路徑
+    data = text.encode("utf-8")
+    result = _analyze_doc(data, "貼上文字.txt")
+    if str(llm_summarize).lower() in ("1", "true", "on", "yes"):
+        try:
+            llm_extra = await _llm_summarize(data, "貼上文字.txt")
+            if llm_extra:
+                result["llm"] = llm_extra
+        except Exception as exc:
+            import logging as _lg
+            _lg.getLogger(__name__).warning("LLM summarize failed: %s", exc)
+            result["llm"] = {"error": str(exc)}
+    return JSONResponse(result)
+
+
+@router.post("/analyze-multi")
+async def analyze_multi(files: list[UploadFile] = File(...)):
+    """多檔字數統計：對每檔回個別 stats + 跨檔聚合 + 排行。"""
+    if not files:
+        raise HTTPException(400, "請選擇至少一個檔案")
+    per_file: list[dict] = []
+    skipped: list[str] = []
+    for f in files:
+        fname = f.filename or "document"
+        if not _is_supported(fname):
+            skipped.append(fname)
+            continue
+        try:
+            data = await f.read()
+            per_file.append(_analyze_doc(data, fname))
+        except HTTPException as exc:
+            skipped.append(f"{fname}（{exc.detail}）")
+        except Exception as exc:
+            skipped.append(f"{fname}（{exc}）")
+    if not per_file:
+        raise HTTPException(400, "沒有可分析的檔案；支援格式：PDF / TXT / MD / CSV / 等純文字")
+    # 跨檔聚合
+    agg = {
+        "char_total": 0, "char_no_ws": 0, "cjk_chars": 0, "en_words": 0,
+        "numbers": 0, "word_total": 0, "paragraphs": 0, "sentences": 0,
+        "lines": 0, "reading_min": 0.0,
+    }
+    page_total = 0
+    for r in per_file:
+        s = r["summary"]
+        for k in agg:
+            if k == "reading_min":
+                agg[k] = round(agg[k] + s.get(k, 0), 1)
+            else:
+                agg[k] += int(s.get(k, 0))
+        page_total += r.get("page_count", 1)
+    # 排行（依字數降序）
+    ranking = sorted(
+        [{"filename": r["filename"], "page_count": r["page_count"],
+          "word_total": r["summary"]["word_total"],
+          "char_total": r["summary"]["char_total"],
+          "char_no_ws": r["summary"]["char_no_ws"],
+          "cjk_chars": r["summary"]["cjk_chars"],
+          "en_words": r["summary"]["en_words"],
+          "reading_min": r["summary"]["reading_min"]}
+         for r in per_file],
+        key=lambda x: x["word_total"], reverse=True,
+    )
+    return JSONResponse({
+        "file_count": len(per_file),
+        "skipped": skipped,
+        "aggregate": {
+            **agg,
+            "page_total": page_total,
+            "avg_words_per_file": round(agg["word_total"] / max(len(per_file), 1), 1),
+        },
+        "ranking": ranking,
+        "files": per_file,
+    })
+
+
+async def _llm_summarize(data: bytes, filename: str = "document.pdf") -> dict:
     """Extract document text + ask LLM for summary + keywords. Returns
-    {summary: str, keywords: [str], model: str} or empty dict on failure."""
+    {summary: str, keywords: [str], model: str} or empty dict on failure。
+    支援 PDF + 純文字 (TXT/MD/CSV/...)。"""
     from ...core.llm_settings import llm_settings as _llms
     import asyncio as _asyncio
     client = _llms.make_client()
@@ -230,15 +382,35 @@ async def _llm_summarize(pdf_bytes: bytes) -> dict:
         return {}
     model = _llms.get_model_for("pdf-wordcount")
     # Extract text
-    import fitz
-    text_parts = []
-    try:
-        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-            for page in doc:
-                text_parts.append(page.get_text("text") or "")
-    except Exception:
-        return {}
-    full_text = "\n\n".join(text_parts).strip()
+    name = (filename or "").lower()
+    full_text = ""
+    if name.endswith(".pdf"):
+        import fitz
+        text_parts = []
+        try:
+            from ...core.bad_cmap import is_bad_cmap_text, clean_pdf_text
+            with fitz.open(stream=data, filetype="pdf") as doc:
+                for page in doc:
+                    t = page.get_text("text") or ""
+                    # v1.9.38：跳過 bad-CMap 段落避免字數重複計算
+                    cleaned_lines = []
+                    for ln in t.split("\n"):
+                        if ln and not is_bad_cmap_text(ln):
+                            cleaned_lines.append(clean_pdf_text(ln))
+                    text_parts.append("\n".join(cleaned_lines))
+        except Exception:
+            return {}
+        full_text = "\n\n".join(text_parts).strip()
+    else:
+        for enc in ("utf-8-sig", "utf-8", "cp950", "big5", "latin-1"):
+            try:
+                full_text = data.decode(enc)
+                break
+            except Exception:
+                continue
+        if not full_text:
+            full_text = data.decode("utf-8", errors="replace")
+        full_text = full_text.strip()
     if not full_text:
         return {}
     # Truncate to manageable size for LLM
@@ -280,19 +452,19 @@ async def _llm_summarize(pdf_bytes: bytes) -> dict:
 
 @router.post("/api/pdf-wordcount")
 async def api_wordcount(file: UploadFile = File(...)):
-    """Public API endpoint returning JSON stats."""
-    if not (file.filename or "").lower().endswith(".pdf"):
-        raise HTTPException(400, "only PDF supported")
+    """Public API endpoint returning JSON stats. 支援 PDF / TXT / MD / CSV 等純文字。"""
+    if not _is_supported(file.filename or ""):
+        raise HTTPException(400, "supported: PDF / TXT / MD / CSV / plain text")
     data = await file.read()
-    return JSONResponse(_analyze_pdf(data, file.filename or "document.pdf"))
+    return JSONResponse(_analyze_doc(data, file.filename or "document.pdf"))
 
 
 @router.post("/export-csv")
 async def export_csv(file: UploadFile = File(...)):
-    if not (file.filename or "").lower().endswith(".pdf"):
-        raise HTTPException(400, "只支援 PDF")
+    if not _is_supported(file.filename or ""):
+        raise HTTPException(400, "支援的格式：PDF / TXT / MD / CSV / 等純文字")
     data = await file.read()
-    result = _analyze_pdf(data, file.filename or "document.pdf")
+    result = _analyze_doc(data, file.filename or "document.pdf")
     buf = io.StringIO()
     buf.write("﻿")  # UTF-8 BOM for Excel
     writer = csv.writer(buf)

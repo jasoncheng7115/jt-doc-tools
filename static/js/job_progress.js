@@ -27,6 +27,11 @@
     }
     _stop() { if (this._timer) { clearInterval(this._timer); this._timer = null; } }
     track(jobId) {
+      // 重設前次 run 的殘留狀態（進度條 / 下載按鈕 / 錯誤色），避免顯示 stale UI
+      this.bar.style.width = '0%';
+      this.bar.style.background = '';
+      this.dlBtn.hidden = true;
+      if (this.dlPngBtn) this.dlPngBtn.hidden = true;
       this.show();
       this.status.textContent = '處理中…';
       this._stop();

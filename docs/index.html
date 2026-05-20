@@ -27,21 +27,54 @@
         <div class="brand-sub">jt-doc-tools</div>
       </div>
     </a>
-    <nav class="topnav">
-      <a href="#why">為什麼自架</a>
-      <a href="#features">功能</a>
-      <a href="#llm">AI 加值</a>
-      <a href="#screenshots">畫面</a>
-      <a href="#enterprise">企業管理</a>
-      <a href="#disclaimer">免責</a>
-      <a href="#install">安裝</a>
-      <a class="btn btn-outline" href="https://github.com/jasoncheng7115/jt-doc-tools" target="_blank" rel="noopener">
+    <nav class="topnav" id="topnav">
+      <a href="#why" class="nav-link">為什麼自架</a>
+      <a href="#features" class="nav-link">功能</a>
+      <a href="#llm" class="nav-link">AI 加值</a>
+      <a href="#screenshots" class="nav-link">畫面</a>
+      <a href="#enterprise" class="nav-link">企業管理</a>
+      <a href="#disclaimer" class="nav-link">免責</a>
+      <a href="#install" class="nav-link">安裝</a>
+      <a href="api.html" class="nav-link">API</a>
+      <a class="btn btn-outline nav-github" href="https://github.com/jasoncheng7115/jt-doc-tools" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.2 1.9 1.2 1.1 1.9 2.9 1.4 3.6 1 .1-.8.4-1.4.8-1.7-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2 0-.4-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>
         GitHub
       </a>
     </nav>
+    <button class="nav-toggle" id="navToggle" type="button" aria-label="展開選單" aria-controls="topnav" aria-expanded="false">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
   </div>
 </header>
+<script>
+(function () {
+  var toggle = document.getElementById('navToggle');
+  var nav = document.getElementById('topnav');
+  if (!toggle || !nav) return;
+  toggle.addEventListener('click', function () {
+    var open = nav.classList.toggle('open');
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  // Click a link closes the menu (on mobile)
+  nav.addEventListener('click', function (e) {
+    if (e.target.closest('a') && nav.classList.contains('open')) {
+      nav.classList.remove('open');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+  });
+  // Click outside closes
+  document.addEventListener('click', function (e) {
+    if (!nav.contains(e.target) && !toggle.contains(e.target) && nav.classList.contains('open')) {
+      nav.classList.remove('open');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+  });
+})();
+</script>
 
 <!-- ======== Hero ======== -->
 <section id="top" class="hero">
@@ -975,6 +1008,7 @@
     </div>
     <div class="footer-col">
       <div class="footer-h">連結</div>
+      <a href="api.html">API 手冊</a>
       <a href="https://github.com/jasoncheng7115/jt-doc-tools" target="_blank" rel="noopener">原始碼庫</a>
       <a href="https://github.com/jasoncheng7115/jt-doc-tools/blob/main/github/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
       <a href="https://github.com/jasoncheng7115/jt-doc-tools/issues" target="_blank" rel="noopener">回報問題</a>
@@ -983,7 +1017,7 @@
       <div class="footer-h">作者</div>
       <p>
         <strong>Jason Cheng</strong><br>
-        <a href="https://www.jason.tools" target="_blank" rel="noopener">Jason Tools</a>
+        <a href="https://[網址]" target="_blank" rel="noopener">Jason Tools</a>
       </p>
     </div>
     <div class="footer-col">
@@ -1025,6 +1059,45 @@ document.querySelectorAll('.copy-btn').forEach(function (btn) {
     }, 1500);
   });
 });
+</script>
+
+<!-- 截圖放大 lightbox -->
+<div class="lightbox" id="lightbox" aria-hidden="true">
+  <button class="lightbox-close" id="lightboxClose" type="button" aria-label="關閉">&times;</button>
+  <img class="lightbox-img" id="lightboxImg" src="" alt="">
+</div>
+<script>
+(function () {
+  var box = document.getElementById('lightbox');
+  var boxImg = document.getElementById('lightboxImg');
+  var closeBtn = document.getElementById('lightboxClose');
+  if (!box || !boxImg) return;
+  // 可放大的圖：截圖牆 + hero 主圖
+  var imgs = document.querySelectorAll('.ss-img img, .hero-shot img');
+  imgs.forEach(function (im) {
+    im.classList.add('zoomable');
+    im.addEventListener('click', function () {
+      boxImg.src = im.currentSrc || im.src;
+      boxImg.alt = im.alt || '';
+      box.classList.add('open');
+      box.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+    });
+  });
+  function closeBox() {
+    box.classList.remove('open');
+    box.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    boxImg.src = '';
+  }
+  box.addEventListener('click', function (e) {
+    if (e.target === box || e.target === boxImg || e.target === closeBtn) closeBox();
+  });
+  closeBtn.addEventListener('click', closeBox);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && box.classList.contains('open')) closeBox();
+  });
+})();
 </script>
 
 </body>

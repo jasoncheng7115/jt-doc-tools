@@ -142,17 +142,35 @@ def _extract_text_from_file(filename: str, data: bytes) -> str:
         except ImportError:
             raise HTTPException(500, "PyMuPDF not available")
         try:
+            from ...core.bad_cmap import is_bad_cmap_text, clean_pdf_text
             with fitz.open(stream=data, filetype="pdf") as doc:
                 paras: list[str] = []
                 for page in doc:
                     text = page.get_text("text") or ""
-                    # PyMuPDF separates paragraphs with blank lines; split on
-                    # 2+ newlines to keep paragraph boundaries intact while
-                    # merging soft line wraps within a paragraph.
-                    for chunk in re.split(r"\n\s*\n+", text):
+                    # v1.9.39：OCR 過的 PDF 兩層文字（原 garbage + OCR 乾淨）
+                    # 常混在同一個 chunk 內（沒 blank-line 分隔）。先逐 LINE 過
+                    # 濾掉 bad-CMap noise，再做 chunk-split paragraph 合併。
+                    clean_lines = []
+                    for ln in text.split("\n"):
+                        if ln and is_bad_cmap_text(ln):
+                            continue
+                        clean_lines.append(clean_pdf_text(ln))
+                    cleaned_text = "\n".join(clean_lines)
+                    for chunk in re.split(r"\n\s*\n+", cleaned_text):
                         chunk = chunk.replace("\n", " ").strip()
-                        if chunk:
-                            paras.append(chunk)
+                        # v1.9.48：跳過 < 3 字短噪音段（bad CMap PDF 殘留 'x' / 'F' 類）
+                        # 並對合併後 chunk 再做一次 bad-CMap 檢查（短 line 個別逃過時
+                        # 合併後總體可能達門檻）
+                        if not chunk or len(chunk) < 3:
+                            continue
+                        if is_bad_cmap_text(chunk):
+                            continue
+                        # v1.9.48 加：若整段沒任何 ≥ 3 連續 letter 的「詞」且也沒
+                        # CJK chars，視為噪音（'F x F' / 'd/E' / 'x x' 類）
+                        has_word = bool(re.search(r"[A-Za-z]{3,}|[㐀-鿿가-힯]", chunk))
+                        if not has_word:
+                            continue
+                        paras.append(chunk)
                 return "\n\n".join(_merge_list_markers(paras))
         except Exception as e:
             raise HTTPException(400, f"PDF parse failed: {e}")

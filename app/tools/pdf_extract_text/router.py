@@ -77,6 +77,10 @@ def _extract_structured(src: Path) -> dict:
                 if not lines:
                     continue
                 # Flatten lines → joined text + average font size for this block.
+                # v1.9.38：bad-CMap PDF（OCR 過或無 ToUnicode）會回亂碼字
+                # 段落，混在正常文字裡疊兩次。用 core.bad_cmap helper 過濾。
+                from ...core.bad_cmap import is_bad_cmap_text, clean_pdf_text
+
                 joined_lines: list[str] = []
                 sizes: list[float] = []
                 bolds: list[bool] = []
@@ -84,8 +88,10 @@ def _extract_structured(src: Path) -> dict:
                     parts: list[str] = []
                     for span in line.get("spans", []):
                         t = span.get("text", "")
+                        if t and is_bad_cmap_text(t):
+                            continue  # 跳過 bad-CMap 噪音
                         if t:
-                            parts.append(t)
+                            parts.append(clean_pdf_text(t))
                         if span.get("size"):
                             sizes.append(float(span.get("size", 0)))
                             all_sizes.append(float(span.get("size", 0)))
@@ -228,13 +234,15 @@ def _render_docx(doc: dict, out: Path) -> bool:
         from docx import Document  # type: ignore
     except Exception:
         return False
+    from ...core.bad_cmap import xml_safe
     d = Document()
     for p in doc["pages"]:
         for b in p["blocks"]:
+            text = xml_safe(b["text"])
             if b["type"] == "heading":
-                d.add_heading(b["text"], level=max(1, min(9, b["level"])))
+                d.add_heading(text, level=max(1, min(9, b["level"])))
             else:
-                d.add_paragraph(b["text"])
+                d.add_paragraph(text)
     d.save(str(out))
     return True
 

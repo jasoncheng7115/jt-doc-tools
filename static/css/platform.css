@@ -471,6 +471,7 @@ input.field:focus, select.field:focus, textarea.field:focus {
 .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
 .btn-primary:hover { background: var(--primary-dark); }
 .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn-danger:hover { background: #b91c1c; border-color: #b91c1c; color: #fff; }
 .btn-small { padding: 4px 10px; font-size: 12px; }
 .btn.saved-flash { background: #16a34a !important; border-color: #16a34a !important; color: #fff !important; }
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -2px; margin-right: 6px; }

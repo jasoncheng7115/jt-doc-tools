@@ -58,6 +58,23 @@
 }
 .p2o-result .fixer-chip b { color:#047857; font-weight:700; }
 
+/* 進階選項 disabled 狀態（jtdt-reform 引擎時整個 4. 進階選項區無作用） */
+.p2o-adv-disabled { opacity:0.45; pointer-events:none; user-select:none; }
+.p2o-adv-disabled summary { cursor:default; }
+
+/* 前後對照 PNG 預覽（第 1 頁） */
+.p2o-preview { margin-top:14px; padding-top:12px; border-top:1px dashed #86efac; }
+.p2o-preview .preview-header { font-size:13px; font-weight:600; color:#047857; margin-bottom:8px; }
+.p2o-preview .preview-grid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+.p2o-preview .preview-cell { background:#fff; border:1px solid #86efac; border-radius:8px;
+  padding:8px; display:flex; flex-direction:column; gap:6px; }
+.p2o-preview .preview-label { font-size:11.5px; font-weight:600; color:#065f46; text-align:center; }
+.p2o-preview .preview-cell img { width:100%; height:auto; display:block;
+  border:1px solid #d1fae5; border-radius:4px; background:#fafafa; }
+@media (max-width: 720px) {
+  .p2o-preview .preview-grid { grid-template-columns: 1fr; }
+}
+
 /* per-fixer toggle 進階選項 */
 .p2o-fixers { background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px;
   padding:10px 12px; margin-top:10px; }
@@ -108,22 +125,40 @@
 <div class="panel" id="optsPanel" hidden>
   <h2>2. 選擇輸出格式</h2>
   <div class="p2o-fmt">
-    <input type="radio" name="fmt" id="fmtDocx" value="docx" checked>
-    <label for="fmtDocx" data-fmt="docx">
-      <div class="ttl"><span class="ic-doc docx">W</span>Word (.docx)</div>
-      <div class="desc">Microsoft Word 原生格式，全球使用率最高。</div>
-    </label>
-    <input type="radio" name="fmt" id="fmtOdt" value="odt">
+    <input type="radio" name="fmt" id="fmtOdt" value="odt" checked>
     <label for="fmtOdt" data-fmt="odt">
       <div class="ttl"><span class="ic-doc odt">O</span>OpenDocument (.odt)</div>
       <div class="desc">LibreOffice / OxOffice 原生格式，開源開放。</div>
     </label>
+    <input type="radio" name="fmt" id="fmtDocx" value="docx">
+    <label for="fmtDocx" data-fmt="docx">
+      <div class="ttl"><span class="ic-doc docx">W</span>Word (.docx)</div>
+      <div class="desc">Microsoft Word 原生格式，使用率最廣。</div>
+    </label>
   </div>
+</div>
 
-  <h2 style="margin-top:14px;">3. 進階選項</h2>
+<div class="panel" id="enginePanel" hidden>
+  <h2>3. 轉換引擎</h2>
+  <div class="p2o-fmt" style="grid-template-columns: 1fr 1fr; display:grid; gap:10px;">
+    <input type="radio" name="engine" id="engPdf2docx" value="pdf2docx-refine" checked>
+    <label for="engPdf2docx">
+      <div class="ttl"><b>pdf2docx</b> <span style="background:#dcfce7;color:#166534;padding:1px 6px;border-radius:4px;font-size:11px;margin-left:6px;">預設</span></div>
+      <div class="desc">經典引擎：Artifex pdf2docx 抽結構，跨平台穩定相容性高。可在進階選項勾啟 jtdt-refine 後處理。</div>
+    </label>
+    <input type="radio" name="engine" id="engJtdtReform" value="jtdt-reform">
+    <label for="engJtdtReform">
+      <div class="ttl"><b>jtdt-reform</b> <span style="background:#e5e7eb;color:#6b7280;padding:1px 6px;border-radius:4px;font-size:11px;margin-left:6px;">實驗</span></div>
+      <div class="desc">自家開發引擎：從 PDF 真值按幾何規則 re-form 出 docx / odt。某些 layout 細節仍在改善。</div>
+    </label>
+  </div>
+</div>
+
+<div class="panel" id="advPanel" hidden>
+  <h2>4. 進階選項</h2>
   <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13.5px;">
-    <input type="checkbox" id="enablePost" checked>
-    用 <b>jtdt-refine</b> 後處理引擎（18+ 條 fixer：字型 / 段落 / 標題 / 清單 / 表格 / 雜訊 / bbox 版面校正）— 建議開啟
+    <input type="checkbox" id="enablePost">
+    用 <b>jtdt-refine</b> 後處理引擎（25 條 fixer：字型 / 段落 / 標題 / 清單 / 表格 / 雜訊 / bbox 版面校正）— 僅對 pdf2docx 引擎有效。預設不勾，需要時手動啟用。
   </label>
 
   <details class="p2o-fixers">
@@ -146,10 +181,10 @@
       <label><input type="checkbox" id="fx_title_split" checked>標題段啟發式拆段</label>
     </div>
   </details>
+</div>
 
-  <div style="margin-top:14px;">
-    <button class="btn btn-primary" id="btnConvert">{{ icon('file-text', size=14) }} 開始轉換</button>
-  </div>
+<div class="panel" id="convertPanel" hidden>
+  <button class="btn btn-primary" id="btnConvert">{{ icon('file-text', size=14) }} 開始轉換</button>
 </div>
 
 {% with progress_id='p2oJob' %}{% include "components/job_progress.html" %}{% endwith %}
@@ -159,12 +194,11 @@
   <div class="meta" id="rMeta"></div>
   <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
     <a class="btn btn-primary" id="rDownload" download>{{ icon('download', size=14) }} 下載</a>
-    <a class="btn" id="rReport" download style="background:#f0fdf4;border:1px solid #86efac;color:#065f46;">{{ icon('file-text', size=14) }} 下載改善報告 (Markdown)</a>
   </div>
-  <details class="p2o-report" id="rReportWrap" hidden>
-    <summary>檢視原始 JSON 報告（給工程師除錯用）</summary>
-    <pre id="rReportRaw"></pre>
-  </details>
+  <div class="p2o-preview" id="rPreview" hidden>
+    <div class="preview-header" id="rPreviewHeader">前後對照（DPI 90）</div>
+    <div id="rPreviewPages"></div>
+  </div>
 </div>
 {% endblock %}
 
@@ -203,18 +237,60 @@ function setBtnBusy(btn, busy, label) {
   }
 }
 
+// 引擎切換時，「4. 進階選項」（jtdt-refine 後處理 + 個別 fixer）只對
+// pdf2docx 引擎有效；選 jtdt-reform 時整區灰掉不可互動。
+function syncAdvancedPanelEnabled() {
+  const engine = document.querySelector('input[name="engine"]:checked')?.value || 'jtdt-reform';
+  const panel = $('advPanel');
+  if (!panel) return;
+  if (engine === 'pdf2docx-refine') {
+    panel.classList.remove('p2o-adv-disabled');
+    panel.querySelectorAll('input').forEach(el => { el.disabled = false; });
+  } else {
+    panel.classList.add('p2o-adv-disabled');
+    panel.querySelectorAll('input').forEach(el => { el.disabled = true; });
+  }
+}
+document.querySelectorAll('input[name="engine"]').forEach(r => {
+  r.addEventListener('change', syncAdvancedPanelEnabled);
+});
+
+// 記住「輸出格式」選擇 — 預設 .odt，使用者改過就用 localStorage 記住
+(function rememberFormat() {
+  const KEY = 'pdf-to-office.output_format';
+  const saved = (function(){ try { return localStorage.getItem(KEY); } catch(e) { return null; }})();
+  if (saved === 'docx' || saved === 'odt') {
+    const r = document.querySelector(`input[name="fmt"][value="${saved}"]`);
+    if (r) r.checked = true;
+  }
+  document.querySelectorAll('input[name="fmt"]').forEach(r => {
+    r.addEventListener('change', () => {
+      try { localStorage.setItem(KEY, r.value); } catch(e) {}
+    });
+  });
+})();
+syncAdvancedPanelEnabled();  // 初始狀態
+
 const fu = new FileUpload($('p2oUpload'), async (f) => {
   if (!f) {
     $('warnZone').innerHTML = '';
     $('statBox').hidden = true;
     $('optsPanel').hidden = true;
+    $('enginePanel').hidden = true;
+    $('advPanel').hidden = true;
+    $('convertPanel').hidden = true;
     $('resultPanel').hidden = true;
+    jp.hide();
     return;
   }
   $('warnZone').innerHTML = '';
   $('statBox').hidden = true;
   $('optsPanel').hidden = true;
+  $('enginePanel').hidden = true;
+  $('advPanel').hidden = true;
   $('resultPanel').hidden = true;
+  // 重設前次轉換的 job progress 面板（進度條 / 完成狀態 / 處理新檔案 按鈕）
+  jp.hide();
   const fd = new FormData();
   fd.append('file', f);
   const r = await fu.upload('/tools/pdf-to-office/upload', fd, {processingLabel: '解析 PDF 中…'});
@@ -232,6 +308,9 @@ const fu = new FileUpload($('p2oUpload'), async (f) => {
     $('warnZone').innerHTML = `<div class="p2o-warn">⚠ 偵測到此 PDF 沒有文字層（多半是掃描檔）。轉檔結果會是空白的，請先用「OCR 文字辨識」工具把它變成可選取文字 PDF 後再回來。</div>`;
   }
   $('optsPanel').hidden = false;
+  $('enginePanel').hidden = false;
+  $('advPanel').hidden = false;
+  $('convertPanel').hidden = false;
 });
 
 $('btnConvert').addEventListener('click', async () => {
@@ -239,6 +318,8 @@ $('btnConvert').addEventListener('click', async () => {
   const btn = $('btnConvert');
   if (btn.disabled) return;
   const fmt = document.querySelector('input[name=fmt]:checked').value;
+  const engine = (document.querySelector('input[name=engine]:checked') || {}).value || 'pdf2docx-refine';
+  // v1.9.81: 預設引擎切回 pdf2docx；若選 pdf2docx 則 enablePost 預設 false (使用者覺得 jtdt-refine 在某些 PDF 上反而劣化)
   const enablePost = $('enablePost').checked;
   // 收集 per-fixer toggle 狀態
   const fixerOpts = {};
@@ -252,7 +333,7 @@ $('btnConvert').addEventListener('click', async () => {
   try {
     r = await fetch('/tools/pdf-to-office/submit', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({upload_id: uploadId, output_format: fmt, enable_postprocess: enablePost, fixer_opts: fixerOpts}),
+      body: JSON.stringify({upload_id: uploadId, output_format: fmt, engine: engine, enable_postprocess: enablePost, fixer_opts: fixerOpts}),
     });
   } catch (e) {
     setBtnBusy(btn, false);
@@ -272,20 +353,15 @@ const jp = new JobProgress($('p2oJob'), {
     const meta = jobData.meta || {};
     const sm = meta.summary || {};
     const rep = sm.report || {};
-    $('rDownload').href = `/api/jobs/${jobData.id}/download`;
-    $('rReport').href = `/tools/pdf-to-office/report/${jobData.id}`;
+    // v1.9.15：把 result_filename 嵌進 URL（路徑最後一段）+ 同步 download
+    // attr — 避免 server 回 404 時 browser fallback 用 URL 末段「download」
+    // + Content-Type=json 取名為 "download.json"。
+    const _fn = jobData.result_filename || `${(sm.output_format||'odt')}-result.${(sm.output_format||'odt')}`;
+    $('rDownload').href = `/api/jobs/${jobData.id}/download/${encodeURIComponent(_fn)}`;
+    $('rDownload').setAttribute('download', _fn);
     const rows = [];
-    // 兩段引擎分開顯示：上游 (pdf2docx / libreoffice) + 本專案規則引擎 (jtdt-refine)
     const primaryEng = rep.primary_engine || sm.engine || '-';
-    const postEng = rep.postprocess_engine || '';
-    const postVer = rep.postprocess_engine_version || '';
-    const fixersN = rep.postprocess_fixers_count || (rep.fixers ? rep.fixers.length : 0);
-    rows.push(['主引擎', `<b>${primaryEng}</b>　<span style="color:#64748b;font-size:12.5px;">(上游轉檔)</span>`]);
-    if (postEng) {
-      rows.push(['規則引擎', `<b>${postEng}</b>${postVer ? ' v' + postVer : ''}　<span style="color:#64748b;font-size:12.5px;">(本專案 ${fixersN} 條 fixer / bbox 真值校正)</span>`]);
-    } else {
-      rows.push(['規則引擎', '<span style="color:#94a3b8;">未啟用</span>']);
-    }
+    rows.push(['引擎', `<b>${primaryEng}</b>`]);
     rows.push(['格式', `<b>${(sm.output_format||'').toUpperCase()}</b>`]);
     if (rep.diagnosis && rep.diagnosis.summary) {
       const ds = rep.diagnosis.summary;
@@ -343,8 +419,59 @@ const jp = new JobProgress($('p2oJob'), {
       rows.map(([k, v]) => `<div class="lbl">${k}</div><div class="val">${v}</div>`).join('') +
       '</div>';
     $('rMeta').innerHTML = html;
-    $('rReportRaw').textContent = JSON.stringify(rep, null, 2);
-    $('rReportWrap').hidden = false;
+    // v1.9.36：多頁前後對照 — 一律顯示前 6 頁
+    const previewWrap = $('rPreview');
+    const pagesContainer = $('rPreviewPages');
+    const header = $('rPreviewHeader');
+    const pv = (meta.preview || {});
+    let pageIdxs = (pv.page_indices || []); // 0-based
+    if (!pageIdxs.length) pageIdxs = [0];
+    const nOrig = pv.orig_pages || pageIdxs.length;
+    if (header) {
+      header.textContent = (nOrig <= 6)
+        ? `全部 ${nOrig} 頁前後對照（DPI 90）`
+        : `前後對照（DPI 90）— 共 ${nOrig} 頁，顯示前 6 頁`;
+    }
+    const fmt = (sm.output_format||'').toLowerCase();
+    pagesContainer.innerHTML = '';
+    const origChars = pv.orig_chars || {};
+    const resultChars = pv.result_chars || {};
+    pageIdxs.forEach((pi) => {
+      const p1 = pi + 1;  // 1-based
+      const oc = origChars[String(pi)];
+      const rc = resultChars[String(pi)];
+      // v1.9.79：左右標題顯示「擷取 N 字」幫助使用者驗證內容完整度
+      const ocLabel = (oc !== undefined && oc !== null)
+        ? ` <span style="color:#475569;font-weight:normal;">— 擷取 ${oc} 字</span>` : '';
+      const rcLabel = (rc !== undefined && rc !== null)
+        ? ` <span style="color:#475569;font-weight:normal;">— 擷取 ${rc} 字</span>` : '';
+      // 若結果字數遠少於原始 (< 50% 且原始 > 50)，警示紅色
+      let rcExtra = '';
+      if (oc !== undefined && rc !== undefined && oc > 50 && rc < oc * 0.5) {
+        rcExtra = ` <span style="color:#dc2626;font-weight:normal;">⚠ 內容大量遺失</span>`;
+      }
+      const block = document.createElement('div');
+      block.style.marginBottom = '14px';
+      block.innerHTML = `
+        <div class="preview-label" style="font-size:12px;font-weight:600;color:#065f46;margin-bottom:4px;">第 ${p1} 頁</div>
+        <div class="preview-grid">
+          <div class="preview-cell">
+            <div class="preview-label">原 PDF${ocLabel}</div>
+            <img alt="原 PDF 第 ${p1} 頁" data-kind="orig" data-page="${p1}" />
+          </div>
+          <div class="preview-cell">
+            <div class="preview-label">轉換結果（${fmt}）${rcLabel}${rcExtra}</div>
+            <img alt="轉換結果第 ${p1} 頁" data-kind="result" data-page="${p1}" />
+          </div>
+        </div>`;
+      pagesContainer.appendChild(block);
+    });
+    previewWrap.hidden = false;
+    // 等 unhide 後再設 src（避免 hidden 時 lazy load catch-22）
+    pagesContainer.querySelectorAll('img').forEach(img => {
+      img.onerror = () => { img.style.display = 'none'; };
+      img.src = `/tools/pdf-to-office/preview/${jobData.id}/${img.dataset.kind}/${img.dataset.page}`;
+    });
     $('resultPanel').hidden = false;
     $('resultPanel').scrollIntoView({behavior:'smooth', block:'end'});
   },

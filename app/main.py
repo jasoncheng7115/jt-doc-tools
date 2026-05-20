@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.8.58"
+VERSION = "1.9.102"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -222,9 +222,9 @@ templates.env.globals["nav_settings"] = [
     {"icon": "page", "name": "表單範本", "description": "已記住的表單版型",
      "url": "/admin/templates",
      "keywords": "template form layout 表單 範本 樣板"},
-    {"icon": "gear", "name": "轉檔設定", "description": "LibreOffice / OxOffice 路徑與順序",
+    {"icon": "gear", "name": "轉檔引擎設定", "description": "LibreOffice / OxOffice 路徑與順序",
      "url": "/admin/conversion",
-     "keywords": "conversion office libreoffice oxoffice path 轉檔 路徑"},
+     "keywords": "conversion office libreoffice oxoffice path engine 轉檔 引擎 路徑"},
     {"icon": "gear", "name": "LLM 設定", "description": "10 個工具的 LLM AI 加值（附加功能，預設關閉）",
      "url": "/admin/llm-settings",
      "keywords": "llm ai ollama qwen vision review 校驗 模型 大語言模型"},
@@ -850,15 +850,38 @@ async def api_convert_to_pdf(file: UploadFile = File(...)):
 
 
 @app.get("/api/jobs/{job_id}/download")
-async def api_job_download(job_id: str):
+@app.get("/api/jobs/{job_id}/download/{_filename}")
+async def api_job_download(job_id: str, _filename: str | None = None):
+    """v1.9.15：accept optional trailing filename segment so browser saves
+    file with proper extension even if response degrades to JSON 404.
+
+    v1.9.32：服務重啟後 in-memory job state 會清空，原本回 404 → 使用者
+    看到「無法在網站上讀取檔案」。改用 fallback：若 in-memory 找不到 job
+    但傳入 _filename，掃描 temp_dir/*_work/<filename> 直接送檔。
+    """
     job = job_manager.get(job_id)
-    if not job or not job.result_path or not job.result_path.exists():
-        return JSONResponse({"error": "no result"}, status_code=404)
-    return FileResponse(
-        path=str(job.result_path),
-        filename=job.result_filename or job.result_path.name,
-        media_type="application/octet-stream",
-    )
+    if job and job.result_path and job.result_path.exists():
+        return FileResponse(
+            path=str(job.result_path),
+            filename=job.result_filename or job.result_path.name,
+            media_type="application/octet-stream",
+        )
+    # fallback：掃 temp_dir 任何 *_work/ 內同名檔（重啟後 in-memory 丟失情境）
+    if _filename:
+        from urllib.parse import unquote
+        safe_name = unquote(_filename)
+        # path traversal 防護：只允許 basename，不含 /
+        if "/" in safe_name or ".." in safe_name:
+            return JSONResponse({"error": "invalid filename"}, status_code=400)
+        for work_dir in settings.temp_dir.glob("*_work"):
+            candidate = work_dir / safe_name
+            if candidate.exists() and candidate.is_file():
+                return FileResponse(
+                    path=str(candidate),
+                    filename=safe_name,
+                    media_type="application/octet-stream",
+                )
+    return JSONResponse({"error": "no result"}, status_code=404)
 
 
 @app.post("/api/llm-review")

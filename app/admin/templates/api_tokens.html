@@ -2,10 +2,18 @@
 {% from "components/icons.html" import icon %}
 {% block title %}API Token · {{ app_name }}{% endblock %}
 {% block content %}
-<h1>{{ icon('gear', size=22) }} API Token</h1>
+<h1 style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+  {{ icon('gear', size=22) }} API Token
+  <a class="btn btn-small" href="https://jasoncheng7115.github.io/jt-doc-tools/api.html"
+     target="_blank" rel="noopener" style="font-weight:600;">
+    {{ icon('book', size=14) }} API 使用說明
+  </a>
+</h1>
 <p class="muted">
   呼叫本工具的 REST API（<code>/api/*</code>、<code>/tools/*/submit</code> 等）時要帶的 bearer token。
   使用方式：<code>Authorization: Bearer &lt;token&gt;</code>。
+  完整端點、請求／回應格式與整合範例請見
+  <a href="https://jasoncheng7115.github.io/jt-doc-tools/api.html" target="_blank" rel="noopener">API 使用手冊</a>。
 </p>
 
 <div class="panel">

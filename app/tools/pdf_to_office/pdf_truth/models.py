@@ -58,12 +58,16 @@ class PDFImage:
 
 @dataclass
 class PDFDrawing:
-    """繪圖物件，用於表格偵測（線條/矩形構成的網格）。"""
+    """繪圖物件，用於表格偵測（線條/矩形構成的網格）+ 背景色塊 (fill rect)。"""
     type: Literal["line", "rect", "curve"]
     bbox: BBox
     page_num: int
     stroke_color: str = "#000000"
     stroke_width: float = 0.0
+    fill_color: str = ""  # 空表示無填色；'#RRGGBB' 表示有填色
+    # polygon vertices（含曲線 approximation 成 short segments），給 banner 等非矩形
+    # filled polygon 渲染用。空 list = 不是 polygon，純 rect。
+    path_points: list[tuple[float, float]] = field(default_factory=list)
 
 
 @dataclass

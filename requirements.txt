@@ -38,3 +38,9 @@ pyzbar>=0.1.9,<0.2
 # rapidfuzz 給 docx↔PDFTruth 模糊比對
 pdf2docx>=0.5.13,<0.6
 rapidfuzz>=3.0,<4
+# translate-doc xlsx 匯出（v1.7.51）— pyproject 有但本檔之前漏列
+openpyxl>=3.1,<4
+# 直接 import 的套件，顯式鎖版（numpy: pdf-to-office fixer + ocr 前處理；
+# lxml: pdf-to-office docx anchor XML）。原本只靠 transitive 帶入。
+numpy>=1.26,<3
+lxml>=4.9,<7

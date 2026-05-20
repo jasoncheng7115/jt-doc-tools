@@ -199,7 +199,7 @@ async def detect(
         except RuntimeError:
             raise HTTPException(
                 500,
-                "找不到 Office 轉檔引擎（OxOffice / LibreOffice）。請到「轉檔設定」確認。",
+                "找不到 Office 轉檔引擎（OxOffice / LibreOffice）。請到「轉檔引擎設定」確認。",
             )
         except Exception as exc:
             raise HTTPException(500, f"Office 轉 PDF 失敗：{exc}")
@@ -255,7 +255,12 @@ async def detect(
                 "page": pno + 1,
                 "count": len(page_findings),
             })
-            page_texts.append(page.get_text("text") or "")
+            # v1.9.38：跳過 bad-CMap noise，避免誤報識別物
+            from ...core.bad_cmap import is_bad_cmap_text, clean_pdf_text
+            _t = page.get_text("text") or ""
+            _cleaned = "\n".join(clean_pdf_text(ln) for ln in _t.split("\n")
+                                   if ln and not is_bad_cmap_text(ln))
+            page_texts.append(_cleaned)
 
     # === LLM 補偵測（v1.4.27）===
     # regex 抓不到的 context-sensitive 案例（人名「王經理」「Dr. Chen」、

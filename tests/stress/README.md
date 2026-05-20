@@ -22,7 +22,7 @@ uv run python tests/stress/run_stress.py --users 50 --duration 120
 
 # 打遠端
 uv run python tests/stress/run_stress.py --users 10 --duration 60 \
-    --base-url http://192.168.1.30:8765
+    --base-url http://your-server:8765
 
 # auth-on 環境
 uv run python tests/stress/run_stress.py --users 10 --duration 60 \

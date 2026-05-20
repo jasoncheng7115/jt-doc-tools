@@ -27,6 +27,104 @@ router = APIRouter()
 _UPLOAD_PREFIX = "p2o"
 
 
+def _pick_preview_pages(n_pages: int) -> list[int]:
+    """選擇要預覽的 page index (0-based)。
+    v1.9.36：永遠取前 6 頁（user：「轉換後的預覽 改為只顯示最多前 6 頁」）"""
+    if n_pages <= 0:
+        return []
+    return list(range(min(n_pages, 6)))
+
+
+def _generate_preview_pngs(src_pdf: Path, dst_doc: Path, work_dir: Path,
+                            dpi: int = 90) -> dict:
+    """產出多頁 PNG：preview_orig_N.png / preview_result_N.png。
+    回 {orig_pages, result_pages, page_indices, orig_chars, result_chars}
+    其中 orig_chars / result_chars 是 dict[str, int] (str page index → 字數)
+    給前端 UI 顯示「擷取 N 字」對照（v1.9.79 加，使用者驗證內容完整度）。"""
+    import fitz  # PyMuPDF
+    info: dict = {"orig_pages": 0, "result_pages": 0, "page_indices": [],
+                  "orig_chars": {}, "result_chars": {}}
+    # 1) 取得 orig PDF 頁數，挑要 preview 的 page index
+    try:
+        d = fitz.open(str(src_pdf))
+        n_orig = len(d)
+        picks = _pick_preview_pages(n_orig)
+        info["page_indices"] = picks
+        for pi in picks:
+            try:
+                pg = d.load_page(pi)
+                pix = pg.get_pixmap(dpi=dpi)
+                pix.save(str(work_dir / f"preview_orig_{pi+1}.png"))
+                # 計算字數（剔空白）
+                txt = (pg.get_text() or "").strip()
+                info["orig_chars"][str(pi)] = len(txt.replace(" ", "").replace("\n", "").replace("\t", ""))
+            except Exception as e:
+                logger.debug("orig page %d render failed: %s", pi, e)
+        info["orig_pages"] = n_orig
+        d.close()
+    except Exception as e:
+        logger.debug("orig PDF render failed: %s", e)
+        return info
+    # 2) docx/odt → PDF via soffice → PNG
+    import subprocess, shutil
+    soffice = None
+    # v1.8.94：優先 OxOffice
+    for candidate in (
+        "/opt/oxoffice/program/soffice",
+        "/Applications/OxOffice.app/Contents/MacOS/soffice",
+        "C:\\Program Files\\OxOffice\\program\\soffice.exe",
+        "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+        shutil.which("soffice"), shutil.which("libreoffice"),
+    ):
+        if candidate and Path(candidate).exists():
+            soffice = candidate
+            break
+    if not soffice:
+        logger.debug("soffice not found, skip result preview")
+        return info
+    try:
+        tmp_pdf_dir = work_dir / "_preview"
+        tmp_pdf_dir.mkdir(exist_ok=True)
+        profile_dir = work_dir / "_so_profile"
+        profile_dir.mkdir(exist_ok=True)
+        subprocess.run(
+            [soffice, "--headless",
+             f"-env:UserInstallation=file://{profile_dir}",
+             "--convert-to", "pdf",
+             "--outdir", str(tmp_pdf_dir), str(dst_doc)],
+            capture_output=True, timeout=180,
+        )
+        rendered_pdf = tmp_pdf_dir / (dst_doc.stem + ".pdf")
+        if rendered_pdf.exists():
+            d2 = fitz.open(str(rendered_pdf))
+            n_result = len(d2)
+            info["result_pages"] = n_result
+            # render result 對應 orig picks 的「同 page index」，但 clamp 在
+            # n_result 內
+            for pi in picks:
+                rpi = min(pi, n_result - 1)
+                try:
+                    pg2 = d2.load_page(rpi)
+                    pix2 = pg2.get_pixmap(dpi=dpi)
+                    pix2.save(str(work_dir / f"preview_result_{pi+1}.png"))
+                    # 計算結果頁字數
+                    txt = (pg2.get_text() or "").strip()
+                    info["result_chars"][str(pi)] = len(txt.replace(" ", "").replace("\n", "").replace("\t", ""))
+                except Exception as e:
+                    logger.debug("result page %d render failed: %s", pi, e)
+            d2.close()
+            try:
+                rendered_pdf.unlink()
+                tmp_pdf_dir.rmdir()
+            except Exception:
+                pass
+    except subprocess.TimeoutExpired:
+        logger.debug("soffice render timeout")
+    except Exception as e:
+        logger.debug("result render failed: %s", e)
+    return info
+
+
 def _src_path(uid: str) -> Path:
     return settings.temp_dir / f"{_UPLOAD_PREFIX}_{uid}_in.pdf"
 
@@ -52,6 +150,33 @@ async def index(request: Request):
         "pdf_to_office.html",
         {"request": request},
     )
+
+
+@router.get("/preview/{job_id}/{kind}")
+@router.get("/preview/{job_id}/{kind}/{page}")
+async def preview_png(request: Request, job_id: str, kind: str,
+                       page: int | None = None):
+    """前後對照 PNG。kind = 'orig' 或 'result'；page = 1-based 頁碼（預設 1）。"""
+    if kind not in ("orig", "result"):
+        raise HTTPException(400, "kind must be orig or result")
+    require_uuid_hex(job_id, "job_id")
+    job = job_manager.get(job_id)
+    if not job:
+        raise HTTPException(404, "job 不存在")
+    if not job.result_path:
+        raise HTTPException(404, "結果未就緒")
+    work_dir = Path(job.result_path).parent
+    p_num = page or 1
+    # 新檔名 preview_{kind}_{N}.png；舊單頁 fallback preview_{kind}.png
+    png = work_dir / f"preview_{kind}_{p_num}.png"
+    if not png.exists():
+        legacy = work_dir / f"preview_{kind}.png"
+        if legacy.exists() and p_num == 1:
+            png = legacy
+        else:
+            raise HTTPException(404, "preview PNG 不存在")
+    from fastapi.responses import FileResponse
+    return FileResponse(str(png), media_type="image/png")
 
 
 @router.get("/report/{job_id}")
@@ -119,7 +244,15 @@ async def submit(request: Request):
     output_format: Literal["docx", "odt"] = (body.get("output_format") or "docx").lower()
     if output_format not in ("docx", "odt"):
         raise HTTPException(400, "output_format 必須是 docx 或 odt")
-    enable_postprocess = bool(body.get("enable_postprocess", True))
+    enable_postprocess = bool(body.get("enable_postprocess", False))
+    # engine 選擇：v1.9.81 起 pdf2docx-refine 為預設（穩定 / 跨平台 / 結構保留好）；
+    # jtdt-reform 為實驗引擎。v1.8.72 ~ v1.9.80 jtdt-reform 為預設。
+    engine = (body.get("engine") or "pdf2docx-refine").strip()
+    # 舊 alias 給 API 相容
+    if engine in ("jtdt-native", "jtreform"):
+        engine = "jtdt-reform"
+    if engine not in ("pdf2docx-refine", "jtdt-reform"):
+        engine = "pdf2docx-refine"
     # Per-fixer toggle dict（key 例：enable_font_normalize）— 白名單過濾，不接 unknown
     raw_opts = body.get("fixer_opts") or {}
     _ALLOWED_FIXER_KEYS = {
@@ -142,7 +275,8 @@ async def submit(request: Request):
     def run(job):
         from .service import convert_pdf_to_office
 
-        job.message = "PDF 轉換中…（pdf2docx + 後處理）"
+        engine_label = "jtdt-reform (Beta)" if engine == "jtdt-reform" else "pdf2docx + 後處理"
+        job.message = f"PDF 轉換中…（{engine_label}）"
         job.progress = 0.1
         work_dir = settings.temp_dir / f"{_UPLOAD_PREFIX}_{uid}_work"
         work_dir.mkdir(exist_ok=True)
@@ -151,6 +285,7 @@ async def submit(request: Request):
             enable_postprocess=enable_postprocess,
             keep_intermediate=False,
             fixer_opts=fixer_opts,
+            engine=engine,
         )
         if not result.ok:
             raise RuntimeError(result.error or "轉換失敗")
@@ -165,6 +300,15 @@ async def submit(request: Request):
 
         job.result_path = dst
         job.result_filename = dst_name
+
+        # 產出前後對照 PNG — 給 UI 比對用。v1.9.15：多頁 preview，
+        # ≤ 6 頁全部 / > 6 頁前 2 + 中 2 + 後 2
+        preview_info = {}
+        try:
+            preview_info = _generate_preview_pngs(src, dst, work_dir) or {}
+        except Exception as e:
+            logger.warning("preview png generation failed: %s", e)
+
         job.progress = 1.0
         report = result.report or {}
         msg_parts = [f"完成：{dst.stat().st_size // 1024} KB"]
@@ -180,6 +324,7 @@ async def submit(request: Request):
                         msg_parts.append(f"清空段 {f['removed_empty_paragraphs']}")
         job.message = "、".join(msg_parts)
         job.meta = dict(job.meta or {})
+        job.meta["preview"] = preview_info  # {orig_pages, result_pages, page_indices}
         job.meta["summary"] = {
             "engine": result.engine_used,
             "output_format": output_format,

@@ -1,23 +1,34 @@
-"""bbox / 位置感知 layout fixer (Sprint 4 + 5)。
+"""bbox / 位置感知 layout fixer（Sprint B #1 + #8）。
 
-依 user 反饋：「重點不是拆什麼資料文，是排版是位置」。前面 fixer 都著重 text
-regex 拆段，這支改用 PDFTruth bbox 真值座標分析 + 修正版面：
+依 user 反饋「重點不是拆什麼資料文，是排版是位置」，本 fixer 用 PDFTruth bbox
+真值座標分析 + 修正版面：
 
-1) **多欄偵測**：blocks 的 bbox X 中心點若呈雙峰（左半 + 右半 中間有 gap）→
+1) **多欄偵測**：blocks 的 bbox X 中心點若呈雙峰（左半 + 右半中間有 gap）→
    視為 2-column layout。
 
-2) **多欄 linearize 修正**（Sprint B #1）：對多欄頁，重排 docx body paragraphs
-   讓「左欄全部由上而下 → 右欄全部由上而下」（標準閱讀順序）。pdf2docx 對多
-   欄常按 Y 單一維度線性化，導致左右欄交錯亂跳。
+2) **form-vs-article 啟發式**（Sprint B 新加）：對每頁判定是「表單 / 表格類」
+   還是「文章類」。表單類即使被誤判為多欄也不重排，因為表單裡同列左右兩欄
+   是同筆資料（標籤 + 值），重排會把整份排版搞錯。
 
-3) **Y-序段落 reorder**（Sprint B #8）：對單欄頁，docx paragraphs 對應 PDF
-   block 的 (page, y_top) 鍵不單調遞增 → 重新排序 docx 段落。
+   form 訊號（任一觸發即判 form）：
+   - drawings 數量 > 60（線條 / 矩形密度高 → 真實表格）
+   - 80% 以上 text block 是「≤ 2 行 + 文字 < 30 字元」短欄位（典型表單標籤 / 值）
+   - 真實有表格畫格（矩形 drawings 總面積 > 頁面 25%）
+   - 多欄偵測時，任一 text block 橫跨 boundary_x 且寬度 > 頁寬 60%（橫貫整頁
+     的標題 / 段落出現在「多欄」頁，幾乎一定不是真的多欄）
 
-策略：
-- 表格段落不動（pdf2docx 對表內已拆好，亂動會破壞）
-- match_rate > 0.5 才 reorder（沒對齊就別亂動）
-- reorder 是 in-place XML element 移動（_element 從 parent 拔起後 insert 新位置）
-- table 元素 + 完全沒 match 的 paragraph 都不動
+3) **多欄 linearize 修正**：對 article-like 多欄頁，重排 docx 段落讓「左欄全部
+   由上而下 → 右欄全部由上而下」（正常閱讀順序）。
+
+4) **Y-序段落 reorder**：對 article-like 頁，docx paragraphs 對應 PDF block 的
+   (page, y_top) 鍵不單調遞增 → 重排。
+
+**安全 reorder 規則**：
+- 只重排「連續 matched paragraphs」run — 中間若插入表格 / 未 match 段落就斷
+  run，run 內各自獨立排序，不跨 run 搬。降低破壞性
+- 表格 element 永不動
+- match_rate < 0.5 整支 skip
+- form-classified 頁的段落不參與 reorder
 """
 from __future__ import annotations
 
@@ -28,6 +39,8 @@ from docx.oxml.ns import qn
 log = logging.getLogger(__name__)
 
 
+# --- helpers -----------------------------------------------------------------
+
 def _block_x_center(block) -> float:
     x0, _, x1, _ = block.bbox
     return (x0 + x1) / 2.0
@@ -37,7 +50,13 @@ def _block_y_top(block) -> float:
     return block.bbox[1]
 
 
-def _detect_multi_column(blocks, page_width: float, gap_threshold_ratio: float = 0.15) -> dict:
+def _block_width(block) -> float:
+    x0, _, x1, _ = block.bbox
+    return max(0.0, x1 - x0)
+
+
+def _detect_multi_column(blocks, page_width: float,
+                         gap_threshold_ratio: float = 0.15) -> dict:
     """偵測 2-column layout — block X 中心若分兩峰 + 中間 gap > 頁寬 15%。"""
     if len(blocks) < 6 or page_width <= 0:
         return {"is_multi_column": False, "column_count": 1}
@@ -47,12 +66,12 @@ def _detect_multi_column(blocks, page_width: float, gap_threshold_ratio: float =
     diffs = [(centers[i + 1] - centers[i], i) for i in range(len(centers) - 1)]
     max_gap, idx = max(diffs)
     if max_gap < page_width * gap_threshold_ratio:
-        return {"is_multi_column": False, "column_count": 1, "max_gap_pt": max_gap}
+        return {"is_multi_column": False, "column_count": 1,
+                "max_gap_pt": max_gap}
     left = centers[: idx + 1]
     right = centers[idx + 1:]
     if len(left) < 2 or len(right) < 2:
         return {"is_multi_column": False, "column_count": 1}
-    # 分界 X = max(left) + (min(right) - max(left)) / 2
     boundary_x = (max(left) + min(right)) / 2.0
     return {
         "is_multi_column": True,
@@ -64,8 +83,70 @@ def _detect_multi_column(blocks, page_width: float, gap_threshold_ratio: float =
     }
 
 
-def _docx_paragraph_text(p) -> str:
-    return " ".join((p.text or "").split())
+def _classify_form_or_article(page, text_blocks, mc_info: dict) -> dict:
+    """form-vs-article 啟發式。回 {is_form, reasons[]}。"""
+    reasons: list[str] = []
+    page_w = float(page.width) if page.width else 0.0
+    page_h = float(page.height) if page.height else 0.0
+    page_area = page_w * page_h
+    is_form = False
+
+    # 訊號 A：drawings 密度高
+    n_drawings = len(page.drawings or [])
+    if n_drawings > 60:
+        reasons.append(f"drawings>{60}({n_drawings})")
+        is_form = True
+
+    # 訊號 B：短欄位 block 比例高（典型表單）
+    if text_blocks:
+        short_count = 0
+        for b in text_blocks:
+            n_lines = len(b.lines)
+            n_chars = len((b.text or "").strip())
+            if n_lines <= 2 and n_chars < 30:
+                short_count += 1
+        short_ratio = short_count / len(text_blocks)
+        if short_ratio >= 0.8 and len(text_blocks) >= 5:
+            reasons.append(f"short_blocks={short_ratio:.2f}")
+            is_form = True
+
+    # 訊號 C：矩形 drawing 總面積佔頁 > 25%（畫了大表格框）
+    if page_area > 0:
+        rect_area = 0.0
+        for drw in page.drawings or []:
+            if drw.type == "rect":
+                x0, y0, x1, y1 = drw.bbox
+                w = max(0.0, x1 - x0)
+                h = max(0.0, y1 - y0)
+                rect_area += w * h
+        rect_ratio = rect_area / page_area
+        if rect_ratio > 0.25:
+            reasons.append(f"rect_area={rect_ratio:.2f}")
+            is_form = True
+
+    # 訊號 D：當宣稱多欄時，任一 block 橫跨 boundary 且寬度 > 頁寬 60%
+    # → 是橫貫整頁的標題/段落，假多欄
+    if mc_info.get("is_multi_column"):
+        boundary = mc_info.get("boundary_x", 0)
+        if boundary > 0 and page_w > 0:
+            for b in text_blocks:
+                x0, _, x1, _ = b.bbox
+                if x0 < boundary - 5 and x1 > boundary + 5:  # 真的跨界
+                    if (x1 - x0) > page_w * 0.6:
+                        reasons.append(f"wide_block_crosses_boundary")
+                        is_form = True
+                        break
+
+    return {"is_form": is_form, "reasons": reasons}
+
+
+def _docx_para_text(child) -> str:
+    texts = []
+    for r in child.findall(qn("w:r")):
+        for t in r.findall(qn("w:t")):
+            if t.text:
+                texts.append(t.text)
+    return " ".join(" ".join(texts).split())
 
 
 def _find_best_pdf_block(text: str, blocks, used: set) -> tuple:
@@ -84,94 +165,160 @@ def _find_best_pdf_block(text: str, blocks, used: set) -> tuple:
 
 
 def _compute_reading_order_key(block, page_info: dict) -> tuple:
-    """產生「閱讀順序」排序鍵 — 多欄頁優先依「欄序 → Y」，單欄純 Y。
-
-    回 (page_num, column_index, y_top)。column_index 0=left, 1=right。
-    """
+    """產生「閱讀順序」排序鍵。多欄頁優先「欄序 → Y」；單欄純 Y。
+    回 (page_num, column_index, y_top)。column_index 0=left, 1=right。"""
     page_num = block.page_num
     col_idx = 0
-    if page_info.get("is_multi_column"):
+    if page_info.get("is_multi_column") and not page_info.get("is_form"):
         boundary = page_info.get("boundary_x", 0)
         if _block_x_center(block) > boundary:
             col_idx = 1
     return (page_num, col_idx, _block_y_top(block))
 
 
+def _group_consecutive_runs(matched: list[tuple],
+                             matched_idx_set: set) -> list[list[tuple]]:
+    """把 matched paragraphs（依 child_idx 升序）切成「連續 run」list。
+    run 定義：相鄰 matched item 之間，所有 child idx 都在 matched_idx_set 內
+    （亦即中間沒有 table / 未 match paragraph）。"""
+    runs: list[list[tuple]] = []
+    cur: list[tuple] = []
+    last_ci = None
+    for m in sorted(matched, key=lambda x: x[0]):
+        ci = m[0]
+        if last_ci is None:
+            cur = [m]
+        else:
+            gap_ok = all((j in matched_idx_set) for j in range(last_ci + 1, ci))
+            if gap_ok:
+                cur.append(m)
+            else:
+                if len(cur) >= 2:
+                    runs.append(cur)
+                cur = [m]
+        last_ci = ci
+    if len(cur) >= 2:
+        runs.append(cur)
+    return runs
+
+
+def _safe_reorder_runs(body, children: list, matched: list[tuple]) -> int:
+    """對連續 matched paragraphs 的每個 run 依 sort_key 排序，回實際被移動的段落數。
+
+    用 list-of-children 重排，避免邊 remove 邊 insert 的 index shift。"""
+    if not matched:
+        return 0
+    matched_idx_set = {m[0] for m in matched}
+    runs = _group_consecutive_runs(matched, matched_idx_set)
+    moved = 0
+    # 直接在 children list 上 swap，最後用 children list 重設 body 順序
+    children_mut = list(children)
+    any_changed = False
+    for run in runs:
+        positions = sorted(m[0] for m in run)
+        sorted_run = sorted(run, key=lambda x: x[2])
+        new_elements = [children[m[0]] for m in sorted_run]
+        if [m[0] for m in run] == [m[0] for m in sorted_run]:
+            continue  # 已是排好的
+        for pos, el in zip(positions, new_elements):
+            if children_mut[pos] is not el:
+                moved += 1
+            children_mut[pos] = el
+        any_changed = True
+    if not any_changed:
+        return 0
+    # 把 body 內的 child 全 detach，按 children_mut 順序重 append
+    for el in list(body):
+        body.remove(el)
+    for el in children_mut:
+        body.append(el)
+    return moved
+
+
+# --- 主入口 ------------------------------------------------------------------
+
 def fix_bbox_layout(docx_doc, pdf_truth, alignment) -> dict:
-    """主入口。"""
     if not pdf_truth or not pdf_truth.pages:
         return {"fixer": "bbox_layout", "skipped": "no pdf_truth"}
 
-    # -- 1) 多欄偵測 (per page) — 順便算 boundary_x 給 reorder 用 --
+    # -- 1) 多欄偵測 + form/article 分類（per page）--
     page_layout: dict[int, dict] = {}
-    multi_column_pages = []
+    multi_column_pages: list[dict] = []
+    form_pages: list[int] = []
     for pg in pdf_truth.pages:
-        text_blocks = [b for b in pg.blocks if b.block_type == "text" and b.text.strip()]
-        info = _detect_multi_column(text_blocks, pg.width)
+        text_blocks = [b for b in pg.blocks
+                       if b.block_type == "text" and (b.text or "").strip()]
+        mc = _detect_multi_column(text_blocks, pg.width)
+        cls = _classify_form_or_article(pg, text_blocks, mc)
+        info = dict(mc)
+        info["is_form"] = cls["is_form"]
+        info["form_reasons"] = cls["reasons"]
         page_layout[pg.page_num] = info
-        if info.get("is_multi_column"):
-            multi_column_pages.append({"page": pg.page_num + 1, "gap_pt": info["gap_pt"]})
+        if cls["is_form"]:
+            form_pages.append(pg.page_num + 1)
+        if mc.get("is_multi_column") and not cls["is_form"]:
+            multi_column_pages.append({
+                "page": pg.page_num + 1,
+                "gap_pt": mc["gap_pt"],
+            })
 
-    # -- 2) docx body paragraph 對 PDF block 比對 + 排序鍵 --
-    # body element 上的「子元素順序」是真實 docx render 順序；不是只看 doc.paragraphs
-    # （後者跳過 tables）。table 元素在 reorder 中固定不動 — 只搬 paragraph。
+    # -- 2) docx body paragraph 對 PDF block 比對 + 計算排序鍵 --
     body = docx_doc.element.body
-    children = list(body)  # ElementTree 直接子元素，含 <w:p> + <w:tbl> + <w:sectPr> 等
+    children = list(body)
     para_tag = qn("w:p")
-    table_tag = qn("w:tbl")
 
     all_blocks = pdf_truth.all_blocks
     used: set = set()
-    matched: list[tuple] = []  # [(child_idx, block_obj, sort_key)]
-    para_text_by_idx: dict[int, str] = {}
+    matched: list[tuple] = []  # (child_idx, block, sort_key)
+    n_eligible = 0
     for ci, child in enumerate(children):
         if child.tag != para_tag:
             continue
-        # 用 docx-paragraph-style 文字
-        texts = []
-        for r in child.findall(qn("w:r")):
-            for t in r.findall(qn("w:t")):
-                if t.text:
-                    texts.append(t.text)
-        text = " ".join(" ".join(texts).split())
-        para_text_by_idx[ci] = text
+        text = _docx_para_text(child)
         if not text or len(text) < 4:
             continue
+        n_eligible += 1
         bi, blk = _find_best_pdf_block(text, all_blocks, used)
-        if blk is not None:
-            used.add(bi)
-            sort_key = _compute_reading_order_key(blk, page_layout.get(blk.page_num, {}))
-            matched.append((ci, blk, sort_key))
+        if blk is None:
+            continue
+        page_info = page_layout.get(blk.page_num, {})
+        # form-classified 頁的段落不參與 reorder（標 form_skip）
+        if page_info.get("is_form"):
+            continue
+        used.add(bi)
+        sort_key = _compute_reading_order_key(blk, page_info)
+        matched.append((ci, blk, sort_key))
 
-    # -- 3) Out-of-order 計數 --
-    out_of_order_count = 0
-    sort_keys = [m[2] for m in matched]
-    for i in range(1, len(sort_keys)):
-        if sort_keys[i] < sort_keys[i - 1]:
-            out_of_order_count += 1
+    # -- 3) Out-of-order 計數（排序前）--
+    out_of_order = 0
+    for i in range(1, len(matched)):
+        if matched[i][2] < matched[i - 1][2]:
+            out_of_order += 1
 
-    # -- 4) Reorder — 安全版：在「matched paragraphs 之間」依新順序 swap，
-    # 表格 / 未 match paragraph / sectPr 全當 anchor 不動。
+    match_rate = (len(matched) / n_eligible) if n_eligible else 0.0
+
+    # -- 4) Reorder 條件：match_rate >= 0.5 + 有亂序 + matched >= 3 --
     reordered = 0
-    match_rate = 0.0
-    n_eligible_paras = sum(1 for ci in para_text_by_idx if para_text_by_idx[ci])
-    if n_eligible_paras > 0:
-        match_rate = len(matched) / n_eligible_paras
+    if out_of_order > 0 and match_rate >= 0.5 and len(matched) >= 3:
+        try:
+            reordered = _safe_reorder_runs(body, children, matched)
+        except Exception as e:
+            log.warning("safe_reorder failed: %s", e)
+            reordered = 0
 
-    # v1.8.57 早期實驗：reorder 在「表單類 PDF（有大段空白被誤判成多欄）」
-    # 會把段落順序搞錯（敬啟者跳到標題前），暫時 disable reorder，只 detect
-    # 報告。後續加 form-vs-article 啟發式（單欄 form 不該重排）才開回。
-    # 條件原為：if out_of_order_count > 0 and match_rate >= 0.5 and len(matched) >= 3:
+    warnings: list[str] = []
+    if multi_column_pages:
+        warnings.append(f"多欄頁 {len(multi_column_pages)} 個已嘗試 linearize")
+    if form_pages:
+        warnings.append(f"form-class 頁 {len(form_pages)} 個未參與 reorder（保留原序）")
 
     return {
         "fixer": "bbox_layout",
         "matched_paragraphs": len(matched),
-        "out_of_order_paragraphs": out_of_order_count,
+        "out_of_order_paragraphs": out_of_order,
         "match_rate": round(match_rate, 2),
         "reordered_paragraphs": reordered,
         "multi_column_pages": multi_column_pages,
-        "warning": (
-            f"PDF 含 {len(multi_column_pages)} 個多欄頁，已嘗試 linearize"
-            if multi_column_pages else ""
-        ),
+        "form_pages": form_pages,
+        "warning": "；".join(warnings),
     }

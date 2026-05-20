@@ -109,6 +109,17 @@ code {
   color: var(--text-2); font-size: 14px; font-weight: 500;
 }
 .topnav a:hover { color: var(--indigo); }
+/* Hamburger toggle button — visible only on narrow screens */
+.nav-toggle {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--text-1);
+}
+.nav-toggle:hover { background: #f1f5f9; }
 
 /* ===== Buttons ===== */
 .btn {
@@ -1039,10 +1050,49 @@ code {
 }
 
 /* ===== Misc small-screen tweaks ===== */
+/* v1.9.83: nav 寬度不夠時收成 hamburger menu。break point 提早到 980px
+   ( 8 個 nav item + brand 在 1000px 以下會擠不下 ) */
+@media (max-width: 980px) {
+  .nav-toggle { display: inline-flex; align-items: center; justify-content: center; }
+  .topnav {
+    position: absolute; top: 100%; right: 16px;
+    flex-direction: column; align-items: stretch;
+    gap: 0;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+    padding: 8px;
+    min-width: 200px;
+    transform: translateY(-8px);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .15s ease, transform .15s ease;
+    z-index: 100;
+  }
+  .topnav.open {
+    opacity: 1; visibility: visible;
+    transform: translateY(4px);
+  }
+  .topnav a {
+    display: block;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 14.5px;
+    color: var(--text-1);
+  }
+  .topnav a:hover { background: #f1f5f9; }
+  .topnav .nav-github {
+    margin-top: 6px;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+  .topbar-inner { position: relative; }
+}
 @media (max-width: 700px) {
   .topbar-inner { height: 56px; }
-  .topnav { gap: 14px; }
-  .topnav a:not(.btn) { display: none; }
   .brand-sub { display: none; }
   .section { padding: 70px 0; }
   .hero { padding: 70px 0 50px; }
@@ -1204,3 +1254,248 @@ code {
   border-radius: 3px;
   font-size: 12.5px;
 }
+
+/* ============ API 手冊頁（左欄章節 + 中間單章 + 右欄本章目錄） ============ */
+.doc-page { background: var(--bg-soft); min-height: 100vh; padding: 32px 0 64px; }
+.doc-shell {
+  max-width: 1300px; margin: 0 auto; padding: 0 24px;
+  display: grid; grid-template-columns: 252px minmax(0, 1fr) 184px; gap: 30px;
+  align-items: start;
+}
+/* 左欄：章節導覽 */
+.doc-nav {
+  position: sticky; top: 84px; align-self: start;
+  max-height: calc(100vh - 104px); overflow-y: auto;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 12px; box-shadow: var(--shadow);
+}
+.doc-nav-h {
+  font-size: 13px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border-soft);
+}
+.doc-search { position: relative; margin-bottom: 10px; }
+.doc-search input {
+  width: 100%; box-sizing: border-box; padding: 7px 28px 7px 12px;
+  border: 1px solid var(--border); border-radius: 8px;
+  font-size: 13px; color: var(--text); background: var(--bg-soft);
+  font-family: inherit;
+}
+.doc-search input:focus {
+  outline: none; border-color: var(--indigo); background: #fff;
+  box-shadow: 0 0 0 3px var(--indigo-light);
+}
+.doc-search-clear {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; border: none; background: none; cursor: pointer;
+  color: var(--muted); font-size: 18px; line-height: 1; border-radius: 4px;
+}
+.doc-search-clear:hover { color: var(--text); background: var(--border-soft); }
+.doc-search-empty {
+  font-size: 12.5px; color: var(--muted); padding: 8px 12px; text-align: center;
+}
+.nav-group[hidden], .nav-ep[hidden] { display: none; }
+.doc-nav-list { display: flex; flex-direction: column; gap: 1px; }
+.doc-nav-list a {
+  display: block; padding: 6px 12px; border-radius: 7px;
+  color: var(--text-2); text-decoration: none; font-size: 13.5px; line-height: 1.45;
+  border-left: 2px solid transparent;
+}
+.doc-nav-list a:hover { background: var(--indigo-light); color: var(--indigo-dark); }
+.doc-nav-list a.active {
+  background: var(--indigo-light); color: var(--indigo-dark);
+  border-left-color: var(--indigo); font-weight: 600;
+}
+/* 階層：章 (nav-ch) + 端點 (nav-ep)，可收折 */
+.nav-group { display: flex; flex-direction: column; }
+/* 章節標題列：全寬淺底色帶（延伸到左右邊）清楚分隔各章 */
+.nav-group-head,
+.nav-group-flat {
+  margin: 2px -12px;
+  background: var(--bg-soft);
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+}
+/* 有端點的章：三角 + 標題（flex 排版） */
+.nav-group-head {
+  display: flex; align-items: center; gap: 1px; padding: 5px 12px;
+  cursor: pointer; user-select: none;
+}
+.nav-group-head:hover { background: #eef1f6; }
+.nav-group-head .nav-ch {
+  flex: 1 1 auto; font-weight: 700; border-radius: 0;
+  font-size: 13px; white-space: nowrap; text-align: left;
+}
+.nav-ch-toggle { cursor: pointer; padding: 0; }   /* 章名：純收折，非連結 */
+.nav-group-head .nav-ch:hover { background: transparent; }
+/* 無端點的扁平章：block 排版，左內距對齊有三角的章標題（12 + 19） */
+.nav-group-flat { padding: 0 12px; }
+.nav-group-flat .nav-ch {
+  display: block; padding: 5px 0 5px 19px;
+  font-weight: 700; font-size: 13px; text-align: left; border-radius: 0;
+}
+.nav-group-flat .nav-ch:hover { background: transparent; color: var(--indigo-dark); }
+.nav-ch { color: var(--text); }
+/* 目前章節：只給細微標示（粗體 + indigo 文字），不用整塊背景條 */
+.doc-nav-list a.nav-ch.nav-current {
+  background: transparent; border-left-color: transparent;
+  color: var(--indigo-dark); font-weight: 700;
+}
+.toc-toggle {
+  flex: 0 0 auto; width: 19px; height: 24px; padding: 0; margin: 0;
+  border: none; background: none; cursor: pointer; color: var(--muted-2);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.toc-toggle::before {
+  content: ""; width: 0; height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transform: rotate(90deg); transition: transform 0.15s ease;
+}
+.nav-group.collapsed .toc-toggle::before { transform: rotate(0deg); }
+.toc-toggle:hover { color: var(--indigo); }
+.nav-children { display: flex; flex-direction: column; }
+.nav-children .nav-ep {
+  padding-left: 28px; font-size: 12.5px; color: var(--muted);
+}
+.nav-group.collapsed .nav-children { display: none; }
+/* 右欄：本章目錄（on this page） */
+.doc-otp {
+  position: sticky; top: 84px; align-self: start;
+  max-height: calc(100vh - 104px); overflow-y: auto;
+}
+.doc-otp.is-empty { visibility: hidden; }
+.otp-h {
+  font-size: 12px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;
+}
+.otp-list { display: flex; flex-direction: column; gap: 1px;
+  border-left: 1px solid var(--border); }
+.otp-list a {
+  display: block; padding: 4px 12px; margin-left: -1px;
+  color: var(--muted); text-decoration: none; font-size: 12.5px; line-height: 1.5;
+  border-left: 2px solid transparent;
+}
+.otp-list a:hover { color: var(--indigo-dark); }
+.otp-list a.active {
+  color: var(--indigo-dark); border-left-color: var(--indigo); font-weight: 600;
+}
+/* 中間：內容 */
+.doc-content {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 36px 44px;
+  box-shadow: var(--shadow); min-width: 0;
+}
+.doc-section[hidden] { display: none; }
+/* 端點頁的章節導覽路徑 */
+.doc-crumb {
+  font-size: 12.5px; font-weight: 600; color: var(--indigo);
+  letter-spacing: 0.02em; margin-bottom: 6px;
+}
+/* 上一章 / 下一章 */
+.doc-prevnext {
+  display: flex; justify-content: space-between; gap: 16px;
+  margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--border);
+}
+.doc-prevnext .pn {
+  display: flex; flex-direction: column; gap: 4px; text-decoration: none;
+  padding: 12px 18px; border: 1px solid var(--border); border-radius: var(--radius);
+  min-width: 0; max-width: 48%; transition: border-color 0.15s, background 0.15s;
+}
+.doc-prevnext .pn:hover { border-color: var(--indigo); background: var(--indigo-light); }
+.doc-prevnext .pn span { font-size: 12px; color: var(--muted); }
+.doc-prevnext .pn b { font-size: 14.5px; color: var(--indigo-dark); font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-prevnext .pn-next { text-align: right; margin-left: auto; }
+.doc-prevnext .pn[hidden] { display: none; }
+.doc-content h2 {
+  font-size: 27px; margin: 0 0 18px; padding-bottom: 12px;
+  border-bottom: 2px solid var(--border); color: var(--text);
+}
+.doc-content h3 {
+  font-size: 21px; margin: 40px 0 12px; color: var(--text);
+  scroll-margin-top: 90px;
+}
+.doc-content h4 {
+  font-size: 16.5px; margin: 26px 0 10px; color: var(--text-2);
+  scroll-margin-top: 90px;
+}
+.doc-content p { margin: 12px 0; line-height: 1.75; color: var(--text-2); }
+.doc-content a { color: var(--blue); text-decoration: none; }
+.doc-content a:hover { text-decoration: underline; }
+.doc-content ul, .doc-content ol { margin: 12px 0; padding-left: 24px; line-height: 1.75; color: var(--text-2); }
+.doc-content li { margin: 4px 0; }
+.doc-content hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+.doc-content code {
+  font-family: var(--font-mono); font-size: 13px;
+  background: #eef2f7; color: #b91c1c; padding: 1.5px 6px; border-radius: 4px;
+}
+.doc-content pre {
+  background: #0f172a; color: #e2e8f0; border-radius: 10px;
+  padding: 16px 18px; overflow-x: auto; margin: 14px 0; line-height: 1.6;
+}
+.doc-content pre code {
+  background: none; color: inherit; padding: 0; font-size: 13px;
+}
+/* 程式碼語法上色（深色底） */
+.doc-content pre .hl-cmt { color: #7c8aa5; font-style: italic; }
+.doc-content pre .hl-str { color: #9ece6a; }
+.doc-content pre .hl-key { color: #7dcfff; }
+.doc-content pre .hl-num { color: #ff9e64; }
+.doc-content pre .hl-bool { color: #bb9af7; }
+.doc-content pre .hl-url { color: #73daca; }
+.doc-content pre .hl-method { color: #f7768e; font-weight: 700; }
+.doc-content pre .hl-flag { color: #e0af68; }
+.doc-content blockquote {
+  margin: 16px 0; padding: 12px 18px;
+  background: var(--indigo-light); border-left: 4px solid var(--indigo);
+  border-radius: 0 8px 8px 0; color: var(--text-2);
+}
+.doc-content blockquote p { margin: 0; }
+.doc-content .table-wrap { overflow-x: auto; margin: 16px 0; }
+.doc-content table {
+  border-collapse: collapse; width: 100%; font-size: 13.5px;
+}
+.doc-content th, .doc-content td {
+  border: 1px solid var(--border); padding: 8px 12px; text-align: left;
+  vertical-align: top; line-height: 1.6;
+}
+.doc-content th { background: var(--bg-soft); font-weight: 700; color: var(--text); }
+.doc-content tbody tr:nth-child(even) { background: #fbfcfe; }
+@media (max-width: 1080px) {
+  .doc-shell { grid-template-columns: 200px minmax(0, 1fr); }
+  .doc-otp { display: none; }
+}
+@media (max-width: 760px) {
+  .doc-shell { grid-template-columns: 1fr; gap: 18px; }
+  .doc-nav {
+    position: static; max-height: none; order: -1;
+  }
+  .doc-content { padding: 24px 20px; }
+}
+
+/* ============ 截圖放大 lightbox ============ */
+.zoomable { cursor: zoom-in; }
+.lightbox {
+  position: fixed; inset: 0; z-index: 3000;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(8, 15, 30, 0.88);
+  padding: 40px; cursor: zoom-out;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.lightbox.open { display: flex; animation: lb-fade 0.15s ease; }
+@keyframes lb-fade { from { opacity: 0; } to { opacity: 1; } }
+.lightbox-img {
+  max-width: 96vw; max-height: 92vh; width: auto; height: auto;
+  border-radius: 10px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  cursor: zoom-out; object-fit: contain;
+}
+.lightbox-close {
+  position: absolute; top: 18px; right: 24px;
+  width: 44px; height: 44px; border: none; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12); color: #fff;
+  font-size: 28px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.lightbox-close:hover { background: rgba(255, 255, 255, 0.25); }

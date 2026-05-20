@@ -197,6 +197,16 @@ def _extract_page(page) -> PDFPage:
                     pua_count += len(_PUA_RE.findall(txt))
                     total_char_count += len(txt)
                 line_text = "".join(line_text_parts)
+                # v1.9.35：strip 私用區字符（FontAwesome 等 icon font 在 PDF
+                # 內以 - 範圍存放，內嵌字型缺失時 ODT 渲染為亂碼
+                # 噪音 + 旁邊字疊到一起；移除後 footer「電話/郵件/統編」純淨）
+                # v1.9.42：PUA 處理 — 之前一律 strip 會把 checkbox 「☐」「☑」
+                # 等 Wingdings 字元也丟掉（402386974「機密等級 □一般 ■限閱」
+                # case 變「一般 ■限閱」）。改用對照表 — 已知 Wingdings
+                # codepoint 換成標準 Unicode 符號；未知 PUA strip。
+                if line_text:
+                    from ._pua_map import replace_pua_chars
+                    line_text = replace_pua_chars(line_text)
                 if not line_text and not chars_in_line:
                     continue
                 dom_font, dom_size = _dominant(line_font_items)
@@ -268,11 +278,77 @@ def _extract_page(page) -> PDFPage:
     except Exception as e:
         log.warning("page %d get_images failed: %s", page_num, e)
 
-    # ------ drawings（線條 / 矩形 → 表格偵測） -------
+    # ------ drawings（線條 / 矩形 → 表格偵測 + 背景色塊） -------
+    def _rgb_to_hex(c) -> str:
+        """PyMuPDF fill / color 為 tuple (r,g,b) 0..1 → '#RRGGBB'。"""
+        if c is None:
+            return ""
+        try:
+            r, g, b = c[0], c[1], c[2]
+            return "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+        except Exception:
+            return ""
+
     try:
         for drw in page.get_drawings():
-            # drw['type'] = 'f' (fill), 's' (stroke), 'fs'。我們只關心 path 種類
+            # drw['type'] = 'f' (fill), 's' (stroke), 'fs'
+            stroke_hex = _rgb_to_hex(drw.get("color"))
+            fill_hex = _rgb_to_hex(drw.get("fill"))
             items = drw.get("items") or []
+            dtype = drw.get("type") or ""
+            has_fill = bool(fill_hex) and ("f" in dtype)
+
+            # ----- polygon-with-fill 偵測（banner 常見：4 條 line 組成封閉填色形狀）-----
+            # 整個 path 是 fill type 且全由 line / curve 組成（沒有 re 子項）→
+            # 把 path 整體 bbox 視為一個填色矩形（rect）。否則 banner 等填色多邊形會消失。
+            # 另存 path_points 為 polygon 真實 vertices（曲線拆 8 段近似），給 docx
+            # 渲染端用 PIL 重畫真實 polygon 形狀（含切角 / 圓角）。
+            line_kinds = [it[0] for it in items if it]
+            if has_fill and line_kinds and all(k in ("l", "c", "qu") for k in line_kinds):
+                # 依 path 順序串點（contour 順序，curve 用線性近似 8 段）
+                path_pts: list[tuple[float, float]] = []
+                def _add_pt(p):
+                    pt = (float(p.x), float(p.y))
+                    if not path_pts or path_pts[-1] != pt:
+                        path_pts.append(pt)
+                for it in items:
+                    k = it[0] if it else ""
+                    if k == "l" and len(it) >= 3:
+                        _add_pt(it[1]); _add_pt(it[2])
+                    elif k == "c" and len(it) >= 5:
+                        # cubic bezier p0, c1, c2, p1 — 近似 8 段
+                        p0, c1, c2, p1 = it[1], it[2], it[3], it[4]
+                        _add_pt(p0)
+                        for s in range(1, 8):
+                            t = s / 8.0
+                            mt = 1 - t
+                            x = mt**3 * p0.x + 3*mt**2*t*c1.x + 3*mt*t**2*c2.x + t**3*p1.x
+                            y = mt**3 * p0.y + 3*mt**2*t*c1.y + 3*mt*t**2*c2.y + t**3*p1.y
+                            path_pts.append((x, y))
+                        _add_pt(p1)
+                    elif k == "qu" and len(it) >= 4:
+                        # quad bezier p0, c, p1 — 近似 6 段
+                        p0, c, p1 = it[1], it[2], it[3]
+                        _add_pt(p0)
+                        for s in range(1, 6):
+                            t = s / 6.0
+                            mt = 1 - t
+                            x = mt**2 * p0.x + 2*mt*t*c.x + t**2*p1.x
+                            y = mt**2 * p0.y + 2*mt*t*c.y + t**2*p1.y
+                            path_pts.append((x, y))
+                        _add_pt(p1)
+                if path_pts:
+                    xs = [p[0] for p in path_pts]; ys = [p[1] for p in path_pts]
+                    poly_bbox = (min(xs), min(ys), max(xs), max(ys))
+                    drawings_out.append(PDFDrawing(
+                        type="rect", bbox=poly_bbox, page_num=page_num,
+                        stroke_color=stroke_hex or "",
+                        stroke_width=float(drw.get("width") or 0),
+                        fill_color=fill_hex,
+                        path_points=path_pts,
+                    ))
+                    continue  # 不再展開 line 子項（避免重複當 stroke 算進邊框偵測）
+
             for it in items:
                 kind = it[0] if it else ""
                 if kind == "l":  # line: ('l', p0, p1)
@@ -283,6 +359,7 @@ def _extract_page(page) -> PDFPage:
                     )
                     drawings_out.append(PDFDrawing(
                         type="line", bbox=bbox, page_num=page_num,
+                        stroke_color=stroke_hex or "#000000",
                         stroke_width=float(drw.get("width") or 0),
                     ))
                 elif kind == "re":  # rect: ('re', rect)
@@ -290,7 +367,9 @@ def _extract_page(page) -> PDFPage:
                     bbox = (r.x0, r.y0, r.x1, r.y1)
                     drawings_out.append(PDFDrawing(
                         type="rect", bbox=bbox, page_num=page_num,
+                        stroke_color=stroke_hex or "#000000",
                         stroke_width=float(drw.get("width") or 0),
+                        fill_color=fill_hex,
                     ))
                 elif kind == "c":  # bezier curve
                     pass  # 曲線通常不是表格線，跳過

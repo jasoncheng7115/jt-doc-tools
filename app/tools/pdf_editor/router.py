@@ -89,7 +89,7 @@ def _extract_image_with_alpha(doc: "fitz.Document", xref: int,
 
 # Western fonts — when a span uses one of these, OCR with eng-only is far
 # more accurate than chi_tra+eng (the latter sometimes hallucinates CJK
-# strokes into ASCII letters: "Proxmox" → "ProXimoxX").
+# strokes into ASCII letters: "通告文件" → "ProXimoxX").
 _WESTERN_FONT_HINTS = (
     "helvetica", "arial", "times", "courier", "verdana", "tahoma",
     "georgia", "calibri", "cambria", "consolas", "roboto", "opensans",
@@ -143,7 +143,7 @@ def _ocr_bbox(page: "fitz.Page", bbox, lang: str = "chi_tra+eng") -> str:
         bh = max(y1 - y0, 1.0)
         # Padding strategy:
         #  - Horizontal: tiny (2pt) — bigger pad caught adjacent spans on the
-        #    same line (e.g. "Proxmox VE" + "網路基本設定" sit next to each
+        #    same line (e.g. "通告文件 VE" + "網路基本設定" sit next to each
         #    other and got merged into "VE 網路基本設定").
         #  - Vertical: small fraction (10% or 2pt min) — just enough for
         #    descenders / accents but not enough to grab the underline below

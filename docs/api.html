@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Jason Tools 文件工具箱 API 使用手冊：所有工具的 REST API 端點、認證方式、請求／回應格式與整合範例（cURL / Python / Node.js / CI）。">
+<title>API 使用手冊 — Jason Tools 文件工具箱</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="container topbar-inner">
+    <a class="brand" href="index.html#top">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <div class="brand-name">Jason Tools 文件工具箱</div>
+        <div class="brand-sub">jt-doc-tools</div>
+      </div>
+    </a>
+    <nav class="topnav" id="topnav">
+      <a href="index.html#features" class="nav-link">功能</a>
+      <a href="index.html#install" class="nav-link">安裝</a>
+      <a href="api.html" class="nav-link">API</a>
+      <a class="btn btn-outline nav-github" href="https://github.com/jasoncheng7115/jt-doc-tools" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.2 1.9 1.2 1.1 1.9 2.9 1.4 3.6 1 .1-.8.4-1.4.8-1.7-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2 0-.4-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>
+        GitHub
+      </a>
+    </nav>
+    <button class="nav-toggle" id="navToggle" type="button" aria-label="展開選單" aria-controls="topnav" aria-expanded="false">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+  </div>
+</header>
+<script>
+(function () {
+  var toggle = document.getElementById('navToggle');
+  var nav = document.getElementById('topnav');
+  if (!toggle || !nav) return;
+  toggle.addEventListener('click', function () {
+    var open = nav.classList.toggle('open');
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  nav.addEventListener('click', function (e) {
+    if (e.target.closest('a') && nav.classList.contains('open')) {
+      nav.classList.remove('open');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+  });
+})();
+</script>
+
+<main class="doc-page">
+  <div class="doc-shell">
+    <aside class="doc-nav" id="docNav">
+      <div class="doc-nav-h">API 手冊</div>
+      <div class="doc-search">
+        <input type="search" id="docSearch" placeholder="搜尋工具 / 端點…"
+               autocomplete="off" aria-label="搜尋 API 端點">
+        <button type="button" id="docSearchClear" class="doc-search-clear"
+                aria-label="清除" hidden>&times;</button>
+      </div>
+      <div class="doc-search-empty" id="docSearchEmpty" hidden>找不到符合的項目</div>
+      <nav class="doc-nav-list">
+        <div class="nav-group nav-group-flat">
+          <a class="nav-ch" href="#intro">簡介</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-head" role="button" tabindex="0" aria-expanded="true">
+            <button class="toc-toggle" type="button" tabindex="-1" aria-hidden="true"></button>
+            <span class="nav-ch nav-ch-toggle">1. 認證</span>
+          </div>
+          <div class="nav-children">
+            <a class="nav-ep" href="#不啟用認證預設">不啟用認證（預設）</a>
+            <a class="nav-ep" href="#啟用-api-token">啟用 API token</a>
+          </div>
+        </div>
+        <div class="nav-group nav-group-flat">
+          <a class="nav-ch" href="#2-通用約定">2. 通用約定</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-head" role="button" tabindex="0" aria-expanded="true">
+            <button class="toc-toggle" type="button" tabindex="-1" aria-hidden="true"></button>
+            <span class="nav-ch nav-ch-toggle">3. 文件轉換 API</span>
+          </div>
+          <div class="nav-children">
+            <a class="nav-ep" href="#文書轉-pdf">文書轉 PDF</a>
+            <a class="nav-ep" href="#圖片轉-pdf">圖片轉 PDF</a>
+            <a class="nav-ep" href="#pdf-轉圖片">PDF 轉圖片</a>
+            <a class="nav-ep" href="#pdf-轉-office">PDF 轉 Office</a>
+          </div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-head" role="button" tabindex="0" aria-expanded="true">
+            <button class="toc-toggle" type="button" tabindex="-1" aria-hidden="true"></button>
+            <span class="nav-ch nav-ch-toggle">4. PDF 編修 API</span>
+          </div>
+          <div class="nav-children">
+            <a class="nav-ep" href="#pdf-合併">PDF 合併</a>
+            <a class="nav-ep" href="#pdf-分割">PDF 分割</a>
+            <a class="nav-ep" href="#pdf-頁面處理">PDF 頁面處理</a>
+            <a class="nav-ep" href="#pdf-旋轉">PDF 旋轉</a>
+            <a class="nav-ep" href="#pdf-加頁碼">PDF 加頁碼</a>
+            <a class="nav-ep" href="#pdf-多頁合一n-up">PDF 多頁合一（N-up）</a>
+            <a class="nav-ep" href="#pdf-壓縮">PDF 壓縮</a>
+          </div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-head" role="button" tabindex="0" aria-expanded="true">
+            <button class="toc-toggle" type="button" tabindex="-1" aria-hidden="true"></button>
+            <span class="nav-ch nav-ch-toggle">5. PDF 擷取與分析 API</span>
+          </div>
+          <div class="nav-children">
+            <a class="nav-ep" href="#pdf-文字擷取">PDF 文字擷取</a>
+            <a class="nav-ep" href="#pdf-圖片擷取">PDF 圖片擷取</a>
+            <a class="nav-ep" href="#pdf-附件擷取">PDF 附件擷取</a>
+            <a class="nav-ep" href="#pdf-中繼資料">PDF 中繼資料</a>
+            <a class="nav-ep" href="#pdf-字數統計">PDF 字數統計</a>
+            <a class="nav-ep" href="#pdf-ocr">PDF OCR</a>
+            <a class="nav-ep" href="#pdf-註解整理">PDF 註解整理</a>
+            <a class="nav-ep" href="#pdf-註解清除">PDF 註解清除</a>
+            <a class="nav-ep" href="#pdf-註解平面化">PDF 註解平面化</a>
+            <a class="nav-ep" href="#pdf-隱藏內容掃描">PDF 隱藏內容掃描</a>
+          </div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-head" role="button" tabindex="0" aria-expanded="true">
+            <button class="toc-toggle" type="button" tabindex="-1" aria-hidden="true"></button>
+            <span class="nav-ch nav-ch-toggle">6. 表單與簽章 API</span>
+          </div>
+          <div class="nav-children">
+            <a class="nav-ep" href="#pdf-表單填寫">PDF 表單填寫</a>
+            <a class="nav-ep" href="#pdf-用印--簽名">PDF 用印 / 簽名</a>
+            <a class="nav-ep" href="#pdf-浮水印">PDF 浮水印</a>
+            <a class="nav-ep" href="#pdf-編輯器">PDF 編輯器</a>
+          </div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-head" role="button" tabindex="0" aria-expanded="true">
+            <button class="toc-toggle" type="button" tabindex="-1" aria-hidden="true"></button>
+            <span class="nav-ch nav-ch-toggle">7. 安全與隱私 API</span>
+          </div>
+          <div class="nav-children">
+            <a class="nav-ep" href="#pdf-加密">PDF 加密</a>
+            <a class="nav-ep" href="#pdf-解密">PDF 解密</a>
+            <a class="nav-ep" href="#文件去識別化">文件去識別化</a>
+            <a class="nav-ep" href="#文字去識別化">文字去識別化</a>
+          </div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-head" role="button" tabindex="0" aria-expanded="true">
+            <button class="toc-toggle" type="button" tabindex="-1" aria-hidden="true"></button>
+            <span class="nav-ch nav-ch-toggle">8. 文字與比對 API</span>
+          </div>
+          <div class="nav-children">
+            <a class="nav-ep" href="#文字差異比對">文字差異比對</a>
+            <a class="nav-ep" href="#文件差異比對">文件差異比對</a>
+            <a class="nav-ep" href="#清單處理">清單處理</a>
+            <a class="nav-ep" href="#逐句翻譯">逐句翻譯</a>
+          </div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-head" role="button" tabindex="0" aria-expanded="true">
+            <button class="toc-toggle" type="button" tabindex="-1" aria-hidden="true"></button>
+            <span class="nav-ch nav-ch-toggle">9. 商務查詢 API</span>
+          </div>
+          <div class="nav-children">
+            <a class="nav-ep" href="#統編查詢單筆">統編查詢（單筆）</a>
+            <a class="nav-ep" href="#統編查詢path-style">統編查詢（path style）</a>
+            <a class="nav-ep" href="#統編查詢批次">統編查詢（批次）</a>
+            <a class="nav-ep" href="#電子發票掃描">電子發票掃描</a>
+            <a class="nav-ep" href="#電子發票後端狀態">電子發票後端狀態</a>
+            <a class="nav-ep" href="#送件前檢核--自家公司主檔">送件前檢核 — 自家公司主檔</a>
+          </div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-head" role="button" tabindex="0" aria-expanded="true">
+            <button class="toc-toggle" type="button" tabindex="-1" aria-hidden="true"></button>
+            <span class="nav-ch nav-ch-toggle">10. Job 模式 API</span>
+          </div>
+          <div class="nav-children">
+            <a class="nav-ep" href="#llm-校驗pdf-fill">LLM 校驗（pdf-fill）</a>
+            <a class="nav-ep" href="#查-job-狀態">查 job 狀態</a>
+            <a class="nav-ep" href="#下載-job-結果">下載 job 結果</a>
+            <a class="nav-ep" href="#下載-job-結果為-png">下載 job 結果為 PNG</a>
+          </div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-head" role="button" tabindex="0" aria-expanded="true">
+            <button class="toc-toggle" type="button" tabindex="-1" aria-hidden="true"></button>
+            <span class="nav-ch nav-ch-toggle">11. 管理端 API</span>
+          </div>
+          <div class="nav-children">
+            <a class="nav-ep" href="#列出資產">列出資產</a>
+            <a class="nav-ep" href="#讀取--更新-llm-設定">讀取 / 更新 LLM 設定</a>
+            <a class="nav-ep" href="#測試-llm-連線">測試 LLM 連線</a>
+            <a class="nav-ep" href="#抓-llm-模型清單">抓 LLM 模型清單</a>
+            <a class="nav-ep" href="#系統相依套件狀態">系統相依套件狀態</a>
+            <a class="nav-ep" href="#企業-logo-狀態">企業 logo 狀態</a>
+            <a class="nav-ep" href="#設定匯出清單">設定匯出清單</a>
+            <a class="nav-ep" href="#token-管理">Token 管理</a>
+          </div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-head" role="button" tabindex="0" aria-expanded="true">
+            <button class="toc-toggle" type="button" tabindex="-1" aria-hidden="true"></button>
+            <span class="nav-ch nav-ch-toggle">12. 整合範例</span>
+          </div>
+          <div class="nav-children">
+            <a class="nav-ep" href="#gitlab-ci--github-actions把-word-文件自動轉-pdf">GitLab CI / GitHub Actions：把 Word 文件自動轉 PDF</a>
+            <a class="nav-ep" href="#python-客戶端批次清掉-pdf-註解">Python 客戶端：批次清掉 PDF 註解</a>
+            <a class="nav-ep" href="#shell監看-job-完成後下載">Shell：監看 job 完成後下載</a>
+            <a class="nav-ep" href="#nodejs逐句翻譯">Node.js：逐句翻譯</a>
+          </div>
+        </div>
+        <div class="nav-group nav-group-flat">
+          <a class="nav-ch" href="#13-cli-管理-token">13. CLI 管理 token</a>
+        </div>
+        <div class="nav-group nav-group-flat">
+          <a class="nav-ch" href="#14-速率限制--大檔上限">14. 速率限制 / 大檔上限</a>
+        </div>
+        <div class="nav-group nav-group-flat">
+          <a class="nav-ch" href="#15-變更歷史">15. 變更歷史</a>
+        </div>
+      </nav>
+    </aside>
+    <article class="doc-content">
+      <section class="doc-section" data-sec="intro" data-title="簡介">
+<h2 id="api-使用手冊">API 使用手冊</h2>
+<p>Jason Tools 文件工具箱對外提供 RESTful API，所有工具皆有對應 endpoint，可整合到自動化流程、自家系統或排程工作。</p>
+<blockquote><p><strong>基本原則</strong>：API 預設可不認證（與 web UI 同步開放）；需要鎖時管理員到 admin 「API Token」頁開啟 enforce 模式並核發 bearer token。</p></blockquote>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="不啟用認證預設" data-title="不啟用認證（預設）" hidden>
+<div class="doc-crumb">1. 認證</div>
+<h4 id="不啟用認證預設">不啟用認證（預設）</h4>
+<p>新安裝預設不啟用認證，所有 <code>/api/*</code> 直接可用，無需 token。</p>
+      </section>
+      <section class="doc-section" data-sec="啟用-api-token" data-title="啟用 API token" hidden>
+<div class="doc-crumb">1. 認證</div>
+<h4 id="啟用-api-token">啟用 API token</h4>
+<p>管理員到 <code>admin → API Token</code>：</p>
+<ol>
+<li>點「核發新 token」→ 輸入用途名稱（例 <code>gitlab-ci</code>）→ 拿到 64 字 hex token（<strong>只顯示一次，存好</strong>）</li>
+<li>勾選「Enforce — 沒帶 token 一律拒絕」並儲存</li>
+</ol>
+<p>之後所有 <code>/api/*</code> 必須帶以下任一形式：</p>
+<pre><code class="lang-http">Authorization: Bearer 64char-hex-token-here</code></pre>
+<p>或 query string：</p>
+<pre><code class="lang-http"><span class="hl-method">GET</span> /api/jobs/abc123?token=64char-hex-token-here</code></pre>
+<p>未帶或 token 無效 → <code>401 Unauthorized</code> JSON：</p>
+<pre><code class="lang-json">{<span class="hl-key">&quot;ok&quot;</span>: <span class="hl-bool">false</span>, <span class="hl-key">&quot;detail&quot;</span>: <span class="hl-str">&quot;需要有效的 API token（Authorization: Bearer ...）&quot;</span>}</code></pre>
+<blockquote><p>Token 透過 admin / <code>jtdt</code> CLI 管理，與 web 認證 (<code>jtdt-admin</code> / LDAP / AD) 完全獨立。</p></blockquote>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="2-通用約定" data-title="2. 通用約定" hidden>
+<h3 id="2-通用約定">2. 通用約定</h3>
+<div class="table-wrap"><table><thead><tr><th>項目</th><th>說明</th></tr></thead><tbody><tr><td>Base URL</td><td><code>http://your-server:8765</code>（依 <code>JTDT_HOST</code> / <code>JTDT_PORT</code> 而定，以下範例用 <code>localhost:8765</code>）</td></tr><tr><td>Content-Type</td><td>上傳檔案：<code>multipart/form-data</code>；JSON：<code>application/json</code></td></tr><tr><td>認證標頭</td><td><code>-H &quot;Authorization: Bearer YOUR_TOKEN&quot;</code>（未啟用 enforce 時可省略）</td></tr><tr><td>回應格式</td><td>JSON（除非明確回 PDF / PNG / ZIP 二進位資料）</td></tr><tr><td>錯誤格式</td><td><code>{&quot;detail&quot;: &quot;錯誤訊息&quot;}</code> + 對應 HTTP 4xx/5xx</td></tr><tr><td>大檔處理</td><td>大型 / 耗時操作走 <strong>job 模式</strong>：先回 <code>{&quot;job_id&quot;: &quot;...&quot;}</code>，再用 <code>/api/jobs/{job_id}</code> 輪詢，完成後 <code>/api/jobs/{job_id}/download</code> 取結果</td></tr></tbody></table></div>
+<blockquote><p>以下每個端點都附 <code>curl</code> 範例。回傳檔案的端點用 <code>--output 檔名</code> 存檔；回傳 JSON 的端點可接 <code>| jq</code> 美化。</p></blockquote>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="文書轉-pdf" data-title="文書轉 PDF" hidden>
+<div class="doc-crumb">3. 文件轉換 API</div>
+<h4 id="文書轉-pdf">文書轉 PDF</h4>
+<p>把 Word / Excel / PowerPoint / ODF 轉成 PDF（走 OxOffice / LibreOffice 引擎）。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /api/convert-to-pdf</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>Word / Excel / PowerPoint / ODF 文件</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/api/convert-to-pdf</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@報告.docx&quot;</span> \
+  <span class="hl-flag">--output</span> 報告.pdf</code></pre>
+<p>回應：PDF 二進位（<code>application/pdf</code>）。失敗 4xx + JSON <code>{&quot;detail&quot;: &quot;...&quot;}</code>。</p>
+      </section>
+      <section class="doc-section" data-sec="圖片轉-pdf" data-title="圖片轉 PDF" hidden>
+<div class="doc-crumb">3. 文件轉換 API</div>
+<h4 id="圖片轉-pdf">圖片轉 PDF</h4>
+<p>把一張或多張圖片合併成單一 PDF。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/image-to-pdf/api/image-to-pdf</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>files</code></td><td>file（可多個）</td><td>✓</td><td>PNG / JPG / GIF / TIFF / WebP / HEIC</td></tr><tr><td><code>page_size</code></td><td>str</td><td></td><td><code>A4</code>（預設）/ <code>A3</code> / <code>A5</code> / <code>B5</code> / <code>Letter</code> / <code>Legal</code> / <code>Tabloid</code> / <code>original</code></td></tr><tr><td><code>margin_mm</code></td><td>float</td><td></td><td>邊距（mm），預設 <code>0</code></td></tr><tr><td><code>rotations</code></td><td>str</td><td></td><td>各圖旋轉角度 CSV（對應上傳順序），例 <code>0,90,0</code></td></tr><tr><td><code>filename</code></td><td>str</td><td></td><td>輸出檔名</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/image-to-pdf/api/image-to-pdf</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@p1.jpg&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@p2.png&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;page_size=A4&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;margin_mm=5&quot;</span> \
+  <span class="hl-flag">--output</span> album.pdf</code></pre>
+<p>回應：PDF 二進位。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-轉圖片" data-title="PDF 轉圖片" hidden>
+<div class="doc-crumb">3. 文件轉換 API</div>
+<h4 id="pdf-轉圖片">PDF 轉圖片</h4>
+<p>把 PDF 每頁轉成 PNG（多頁自動打包 ZIP）。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-to-image/convert</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>dpi</code></td><td>int</td><td></td><td>解析度，預設 <code>150</code></td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-to-image/convert</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@document.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;dpi=200&quot;</span> \
+  <span class="hl-flag">--output</span> pages.zip</code></pre>
+<p>回應：單頁回 PNG，多頁回 ZIP。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-轉-office" data-title="PDF 轉 Office" hidden>
+<div class="doc-crumb">3. 文件轉換 API</div>
+<h4 id="pdf-轉-office">PDF 轉 Office</h4>
+<p>把 PDF 反轉成 Word（.docx）或 OpenDocument（.odt）。走 job 模式回 <code>job_id</code>。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-to-office/convert</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>output_format</code></td><td>str</td><td></td><td><code>docx</code>（預設）/ <code>odt</code></td></tr><tr><td><code>enable_postprocess</code></td><td>bool</td><td></td><td>是否套 jtdt-refine 後處理，預設 <code>false</code></td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-to-office/convert</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@form.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;output_format=docx&quot;</span> \
+  | jq
+<span class="hl-cmt"># → {&quot;job_id&quot;: &quot;...&quot;}；之後用第 10 章的 job API 取結果</span></code></pre>
+<p>回應：<code>{&quot;job_id&quot;: &quot;...&quot;}</code>（見第 10 章「Job 模式 API」）。</p>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="pdf-合併" data-title="PDF 合併" hidden>
+<div class="doc-crumb">4. PDF 編修 API</div>
+<h4 id="pdf-合併">PDF 合併</h4>
+<p>把多份 PDF 依上傳順序合併為一份。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-merge/api/pdf-merge</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>files</code></td><td>file（可多個）</td><td>✓</td><td>兩份以上 PDF</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-merge/api/pdf-merge</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@a.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@b.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@c.pdf&quot;</span> \
+  <span class="hl-flag">--output</span> merged.pdf</code></pre>
+<p>回應：合併後的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-分割" data-title="PDF 分割" hidden>
+<div class="doc-crumb">4. PDF 編修 API</div>
+<h4 id="pdf-分割">PDF 分割</h4>
+<p>依頁數 / 範圍切分 PDF。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-split/api/pdf-split</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>mode</code></td><td>str</td><td>✓</td><td><code>ranges</code>（依範圍）/ <code>every</code>（每 N 頁切一份）/ <code>single</code>（每頁一份）</td></tr><tr><td><code>ranges</code></td><td>str</td><td></td><td>mode=ranges 時的範圍，例 <code>1-3,5,7-9</code>；mode=every 時填數字 N</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-split/api/pdf-split</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@big.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;mode=ranges&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;ranges=1-3,8-10&quot;</span> \
+  <span class="hl-flag">--output</span> parts.zip</code></pre>
+<p>回應：切出的 PDF（多份打包 ZIP）。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-頁面處理" data-title="PDF 頁面處理" hidden>
+<div class="doc-crumb">4. PDF 編修 API</div>
+<h4 id="pdf-頁面處理">PDF 頁面處理</h4>
+<p>刪除 / 抽取 / 重排頁面。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-pages/api/pdf-pages</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>mode</code></td><td>str</td><td>✓</td><td><code>keep</code>（只留）/ <code>delete</code>（刪除）/ <code>reorder</code>（重排）</td></tr><tr><td><code>spec</code></td><td>str</td><td>✓</td><td>頁碼規格，例 <code>1,3,5-8</code></td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-pages/api/pdf-pages</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@document.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;mode=keep&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;spec=1,3,5-8&quot;</span> \
+  <span class="hl-flag">--output</span> picked.pdf</code></pre>
+<p>回應：處理後的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-旋轉" data-title="PDF 旋轉" hidden>
+<div class="doc-crumb">4. PDF 編修 API</div>
+<h4 id="pdf-旋轉">PDF 旋轉</h4>
+<p>旋轉指定頁面。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-rotate/api/pdf-rotate</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>angle</code></td><td>int</td><td>✓</td><td><code>90</code> / <code>180</code> / <code>270</code></td></tr><tr><td><code>pages</code></td><td>str</td><td></td><td>套用頁碼，例 <code>1,3-5</code>；空白 = 全部</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-rotate/api/pdf-rotate</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@scan.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;angle=90&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;pages=1-4&quot;</span> \
+  <span class="hl-flag">--output</span> rotated.pdf</code></pre>
+<p>回應：旋轉後的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-加頁碼" data-title="PDF 加頁碼" hidden>
+<div class="doc-crumb">4. PDF 編修 API</div>
+<h4 id="pdf-加頁碼">PDF 加頁碼</h4>
+<p>在頁面指定位置加頁碼。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-pageno/api/pdf-pageno</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>position</code></td><td>str</td><td></td><td><code>bottom-center</code>（預設）/ <code>bottom-right</code> / <code>bottom-left</code> / <code>top-*</code></td></tr><tr><td><code>fmt</code></td><td>str</td><td></td><td>格式樣板，例 <code>第 {n} 頁</code> / <code>{n} / {total}</code></td></tr><tr><td><code>start</code></td><td>int</td><td></td><td>起始頁碼，預設 <code>1</code></td></tr><tr><td><code>font_size</code></td><td>float</td><td></td><td>字級，預設 <code>10</code></td></tr><tr><td><code>margin_mm</code></td><td>float</td><td></td><td>邊距（mm）</td></tr><tr><td><code>color</code></td><td>str</td><td></td><td>文字顏色 hex，例 <code>#000000</code></td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-pageno/api/pdf-pageno</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@report.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;position=bottom-center&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;fmt=第 {n} / {total} 頁&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;start=1&quot;</span> \
+  <span class="hl-flag">--output</span> numbered.pdf</code></pre>
+<p>回應：加完頁碼的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-多頁合一n-up" data-title="PDF 多頁合一（N-up）" hidden>
+<div class="doc-crumb">4. PDF 編修 API</div>
+<h4 id="pdf-多頁合一n-up">PDF 多頁合一（N-up）</h4>
+<p>把多頁縮排到單頁（2-up / 4-up 等）。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-nup/api/pdf-nup</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>cols</code></td><td>int</td><td>✓</td><td>每頁欄數</td></tr><tr><td><code>rows</code></td><td>int</td><td>✓</td><td>每頁列數</td></tr><tr><td><code>paper</code></td><td>str</td><td></td><td>紙張，<code>A4</code>（預設）/ <code>A3</code> / <code>Letter</code> ...</td></tr><tr><td><code>orientation</code></td><td>str</td><td></td><td><code>portrait</code> / <code>landscape</code></td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-nup/api/pdf-nup</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@slides.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;cols=2&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;rows=2&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;paper=A4&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;orientation=landscape&quot;</span> \
+  <span class="hl-flag">--output</span> 4up.pdf</code></pre>
+<p>回應：N-up 後的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-壓縮" data-title="PDF 壓縮" hidden>
+<div class="doc-crumb">4. PDF 編修 API</div>
+<h4 id="pdf-壓縮">PDF 壓縮</h4>
+<p>縮小 PDF 檔案大小。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-compress/api/pdf-compress</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>preset</code></td><td>str</td><td></td><td><code>screen</code>（最小）/ <code>ebook</code>（預設）/ <code>printer</code> / <code>prepress</code></td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-compress/api/pdf-compress</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@large.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;preset=ebook&quot;</span> \
+  <span class="hl-flag">--output</span> small.pdf</code></pre>
+<p>回應：壓縮後的 PDF。</p>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="pdf-文字擷取" data-title="PDF 文字擷取" hidden>
+<div class="doc-crumb">5. PDF 擷取與分析 API</div>
+<h4 id="pdf-文字擷取">PDF 文字擷取</h4>
+<p>抽出 PDF 內所有文字（自動處理壞 CMap / OCR 雙層）。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-extract-text/api/pdf-extract-text</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-extract-text/api/pdf-extract-text</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@document.pdf&quot;</span> | jq</code></pre>
+<p>回應 JSON：逐頁文字 + 全文。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-圖片擷取" data-title="PDF 圖片擷取" hidden>
+<div class="doc-crumb">5. PDF 擷取與分析 API</div>
+<h4 id="pdf-圖片擷取">PDF 圖片擷取</h4>
+<p>抽出 PDF 內嵌的所有圖片。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-extract-images/api/pdf-extract-images</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-extract-images/api/pdf-extract-images</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@document.pdf&quot;</span> \
+  <span class="hl-flag">--output</span> images.zip</code></pre>
+<p>回應：圖片打包 ZIP。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-附件擷取" data-title="PDF 附件擷取" hidden>
+<div class="doc-crumb">5. PDF 擷取與分析 API</div>
+<h4 id="pdf-附件擷取">PDF 附件擷取</h4>
+<p>列出 / 抽出 PDF 內嵌附件（embedded files）。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-attachments/api/pdf-attachments</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-attachments/api/pdf-attachments</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@with_attachments.pdf&quot;</span> \
+  <span class="hl-flag">--output</span> attachments.zip</code></pre>
+<p>回應：附件清單 + 內容（ZIP）。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-中繼資料" data-title="PDF 中繼資料" hidden>
+<div class="doc-crumb">5. PDF 擷取與分析 API</div>
+<h4 id="pdf-中繼資料">PDF 中繼資料</h4>
+<p>讀取 / 清除 PDF metadata、XMP、書籤、註解、表單。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-metadata/api/pdf-metadata</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>clear_info</code></td><td>bool</td><td></td><td>清除文件資訊（作者 / 標題 / 軟體等）</td></tr><tr><td><code>clear_xmp</code></td><td>bool</td><td></td><td>清除 XMP metadata</td></tr><tr><td><code>clear_toc</code></td><td>bool</td><td></td><td>清除書籤 / 目錄</td></tr><tr><td><code>clear_annots</code></td><td>bool</td><td></td><td>清除註解</td></tr><tr><td><code>clear_forms</code></td><td>bool</td><td></td><td>清除表單欄位</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-metadata/api/pdf-metadata</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@document.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;clear_info=true&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;clear_xmp=true&quot;</span> \
+  <span class="hl-flag">--output</span> cleaned.pdf</code></pre>
+<p>回應：未帶 clear_* 旗標 → 回 metadata JSON；帶旗標 → 回清除後的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-字數統計" data-title="PDF 字數統計" hidden>
+<div class="doc-crumb">5. PDF 擷取與分析 API</div>
+<h4 id="pdf-字數統計">PDF 字數統計</h4>
+<p>統計頁數、字數、詞數、閱讀時間與高頻詞。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-wordcount/api/pdf-wordcount</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-wordcount/api/pdf-wordcount</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@document.pdf&quot;</span> | jq</code></pre>
+<p>回應 JSON（節錄）：</p>
+<pre><code class="lang-json">{
+  <span class="hl-key">&quot;filename&quot;</span>: <span class="hl-str">&quot;document.pdf&quot;</span>,
+  <span class="hl-key">&quot;page_count&quot;</span>: <span class="hl-num">12</span>,
+  <span class="hl-key">&quot;char_count&quot;</span>: <span class="hl-num">18342</span>,
+  <span class="hl-key">&quot;word_count&quot;</span>: <span class="hl-num">3521</span>,
+  <span class="hl-key">&quot;estimated_reading_minutes&quot;</span>: <span class="hl-num">12.5</span>,
+  <span class="hl-key">&quot;per_page_chars&quot;</span>: [<span class="hl-cmt">/* ... */</span>],
+  <span class="hl-key">&quot;top_words_zh2&quot;</span>: [<span class="hl-cmt">/* ... */</span>], <span class="hl-key">&quot;top_words_en&quot;</span>: [<span class="hl-cmt">/* ... */</span>]
+}</code></pre>
+      </section>
+      <section class="doc-section" data-sec="pdf-ocr" data-title="PDF OCR" hidden>
+<div class="doc-crumb">5. PDF 擷取與分析 API</div>
+<h4 id="pdf-ocr">PDF OCR</h4>
+<p>對掃描 PDF 做文字辨識，加上可選取的文字層。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-ocr/api/pdf-ocr</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>lang</code></td><td>str</td><td></td><td>語言，例 <code>chi_tra+eng</code>（預設）/ <code>eng</code> / <code>chi_sim</code></td></tr><tr><td><code>dpi</code></td><td>int</td><td></td><td>渲染解析度，預設 <code>300</code></td></tr><tr><td><code>skip_pages_with_text</code></td><td>bool</td><td></td><td>已有文字層的頁略過，預設 <code>true</code></td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-ocr/api/pdf-ocr</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@scan.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;lang=chi_tra+eng&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;dpi=300&quot;</span> \
+  <span class="hl-flag">--output</span> ocr.pdf</code></pre>
+<p>回應：加上文字層的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-註解整理" data-title="PDF 註解整理" hidden>
+<div class="doc-crumb">5. PDF 擷取與分析 API</div>
+<h4 id="pdf-註解整理">PDF 註解整理</h4>
+<p>列出 PDF 所有註解（頁碼、類型、作者、內容、座標、時間）。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-annotations/api/pdf-annotations</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-annotations/api/pdf-annotations</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@reviewed.pdf&quot;</span> | jq</code></pre>
+<p>回應 JSON：每筆註解的詳細資訊。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-註解清除" data-title="PDF 註解清除" hidden>
+<div class="doc-crumb">5. PDF 擷取與分析 API</div>
+<h4 id="pdf-註解清除">PDF 註解清除</h4>
+<p>移除 PDF 註解（可依類型 / 作者篩選）。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-annotations-strip/api/pdf-annotations-strip</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>types</code></td><td>str</td><td></td><td>只清這些類型 CSV（<code>Highlight</code> / <code>Text</code> / <code>FreeText</code> ...），空白 = 全清</td></tr><tr><td><code>authors</code></td><td>str</td><td></td><td>只清這些作者 CSV，空白 = 全清</td></tr><tr><td><code>mode</code></td><td>str</td><td></td><td>處理模式</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-annotations-strip/api/pdf-annotations-strip</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@reviewed.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;types=Highlight,Text&quot;</span> \
+  <span class="hl-flag">--output</span> clean.pdf</code></pre>
+<p>回應：清除後的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-註解平面化" data-title="PDF 註解平面化" hidden>
+<div class="doc-crumb">5. PDF 擷取與分析 API</div>
+<h4 id="pdf-註解平面化">PDF 註解平面化</h4>
+<p>把註解燒進頁面內容流（收件方無法移除；表單欄位仍可填）。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-annotations-flatten/api/pdf-annotations-flatten</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-annotations-flatten/api/pdf-annotations-flatten</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@annotated.pdf&quot;</span> \
+  <span class="hl-flag">--output</span> flattened.pdf</code></pre>
+<p>回應：平面化後的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-隱藏內容掃描" data-title="PDF 隱藏內容掃描" hidden>
+<div class="doc-crumb">5. PDF 擷取與分析 API</div>
+<h4 id="pdf-隱藏內容掃描">PDF 隱藏內容掃描</h4>
+<p>掃描 PDF 內可能洩漏的隱藏內容（中繼資料、被遮蓋文字、圖層、附件等）。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-hidden-scan/api/pdf-hidden-scan</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-hidden-scan/api/pdf-hidden-scan</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@document.pdf&quot;</span> | jq</code></pre>
+<p>回應 JSON：各類隱藏內容的偵測結果。</p>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="pdf-表單填寫" data-title="PDF 表單填寫" hidden>
+<div class="doc-crumb">6. 表單與簽章 API</div>
+<h4 id="pdf-表單填寫">PDF 表單填寫</h4>
+<p>自動辨識表單欄位並填入公司主檔資料。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-fill/api/pdf-fill</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>待填的 PDF 表單</td></tr><tr><td><code>company_id</code></td><td>str</td><td></td><td>公司主檔 ID（admin 端建立）</td></tr><tr><td><code>font_id</code></td><td>str</td><td></td><td>填寫字型 ID</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-fill/api/pdf-fill</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@vendor_form.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;company_id=acme&quot;</span> \
+  <span class="hl-flag">--output</span> filled.pdf</code></pre>
+<p>回應：填好的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-用印--簽名" data-title="PDF 用印 / 簽名" hidden>
+<div class="doc-crumb">6. 表單與簽章 API</div>
+<h4 id="pdf-用印--簽名">PDF 用印 / 簽名</h4>
+<p>在 PDF 上疊加印章 / 簽名圖。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-stamp/api/pdf-stamp</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>stamp_image</code></td><td>file</td><td>✓</td><td>印章 / 簽名圖（透明 PNG 佳）</td></tr><tr><td><code>x_mm</code></td><td>float</td><td>✓</td><td>左下角 X 位置（mm）</td></tr><tr><td><code>y_mm</code></td><td>float</td><td>✓</td><td>左下角 Y 位置（mm）</td></tr><tr><td><code>width_mm</code></td><td>float</td><td>✓</td><td>寬度（mm）</td></tr><tr><td><code>height_mm</code></td><td>float</td><td>✓</td><td>高度（mm）</td></tr><tr><td><code>rotation_deg</code></td><td>float</td><td></td><td>旋轉角度，預設 <code>0</code></td></tr><tr><td><code>page_mode</code></td><td>str</td><td></td><td><code>all</code>（每頁）/ <code>first</code> / <code>last</code> / 指定頁</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-stamp/api/pdf-stamp</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@contract.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;stamp_image=@chop.png&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;x_mm=150&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;y_mm=30&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;width_mm=30&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;height_mm=30&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;page_mode=last&quot;</span> \
+  <span class="hl-flag">--output</span> stamped.pdf</code></pre>
+<p>回應：蓋章後的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-浮水印" data-title="PDF 浮水印" hidden>
+<div class="doc-crumb">6. 表單與簽章 API</div>
+<h4 id="pdf-浮水印">PDF 浮水印</h4>
+<p>加文字浮水印。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-watermark/api/pdf-watermark</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>text</code></td><td>str</td><td>✓</td><td>浮水印文字</td></tr><tr><td><code>opacity</code></td><td>float</td><td></td><td>透明度 0–1，預設 <code>0.15</code></td></tr><tr><td><code>rotation_deg</code></td><td>float</td><td></td><td>旋轉角度，預設 <code>45</code></td></tr><tr><td><code>mode</code></td><td>str</td><td></td><td><code>tile</code>（平鋪）/ <code>center</code>（置中）</td></tr><tr><td><code>text_color</code></td><td>str</td><td></td><td>文字顏色 hex</td></tr><tr><td><code>text_size_pt</code></td><td>float</td><td></td><td>字級（pt）</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-watermark/api/pdf-watermark</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@document.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;text=機密&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;opacity=0.12&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;mode=tile&quot;</span> \
+  <span class="hl-flag">--output</span> watermarked.pdf</code></pre>
+<p>回應：加浮水印後的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-編輯器" data-title="PDF 編輯器" hidden>
+<div class="doc-crumb">6. 表單與簽章 API</div>
+<h4 id="pdf-編輯器">PDF 編輯器</h4>
+<p>依 overlay JSON 模型把文字 / 圖片 / 形狀 / 遮罩燒進 PDF（含真刪 redaction）。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-editor/api/pdf-editor</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>原 PDF</td></tr><tr><td><code>model</code></td><td>str (JSON)</td><td>✓</td><td>overlay 物件模型 JSON 字串</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-editor/api/pdf-editor</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@document.pdf&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&#x27;model={&quot;version&quot;:1,&quot;pages&quot;:[{&quot;page&quot;:0,&quot;objects&quot;:[{&quot;id&quot;:&quot;o1&quot;,&quot;type&quot;:&quot;text&quot;,&quot;x&quot;:100,&quot;y&quot;:200,&quot;w&quot;:120,&quot;h&quot;:20,&quot;text&quot;:&quot;已蓋章&quot;,&quot;font&quot;:&quot;Noto Sans TC&quot;,&quot;size&quot;:14,&quot;color&quot;:&quot;#cc0000&quot;}]}]}&#x27;</span> \
+  <span class="hl-flag">--output</span> edited.pdf</code></pre>
+<p>回應：套用 overlay 後的 PDF。模型格式詳見 web UI 的 pdf-editor。</p>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="pdf-加密" data-title="PDF 加密" hidden>
+<div class="doc-crumb">7. 安全與隱私 API</div>
+<h4 id="pdf-加密">PDF 加密</h4>
+<p>加使用者 / 擁有者密碼並設定權限。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-encrypt/api/pdf-encrypt</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>user_pw</code></td><td>str</td><td></td><td>開啟密碼</td></tr><tr><td><code>owner_pw</code></td><td>str</td><td></td><td>權限密碼</td></tr><tr><td><code>algorithm</code></td><td>str</td><td></td><td>加密演算法，例 <code>AES-256</code></td></tr><tr><td><code>allow_print</code></td><td>bool</td><td></td><td>允許列印</td></tr><tr><td><code>allow_copy</code></td><td>bool</td><td></td><td>允許複製內容</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-encrypt/api/pdf-encrypt</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@document.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;user_pw=open123&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;owner_pw=admin456&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;algorithm=AES-256&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;allow_print=true&quot;</span> \
+  <span class="hl-flag">--output</span> encrypted.pdf</code></pre>
+<p>回應：加密後的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="pdf-解密" data-title="PDF 解密" hidden>
+<div class="doc-crumb">7. 安全與隱私 API</div>
+<h4 id="pdf-解密">PDF 解密</h4>
+<p>用密碼移除 PDF 加密。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-decrypt/api/pdf-decrypt</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>加密的 PDF</td></tr><tr><td><code>password</code></td><td>str</td><td>✓</td><td>開啟密碼</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-decrypt/api/pdf-decrypt</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@encrypted.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;password=open123&quot;</span> \
+  <span class="hl-flag">--output</span> decrypted.pdf</code></pre>
+<p>回應：解密後的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="文件去識別化" data-title="文件去識別化" hidden>
+<div class="doc-crumb">7. 安全與隱私 API</div>
+<h4 id="文件去識別化">文件去識別化</h4>
+<p>對 Word / PDF 文件偵測並遮蔽個資（regex / 可選 LLM）。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/doc-deident/api/doc-deident</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF / Word 文件</td></tr><tr><td><code>types</code></td><td>str</td><td></td><td>要偵測的 PII 類型 CSV（身分證 / 電話 / email / 地址 ...），空白 = 預設集</td></tr><tr><td><code>mode</code></td><td>str</td><td></td><td><code>mask</code>（遮罩，預設）/ <code>redact</code>（真刪）</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/doc-deident/api/doc-deident</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@contract.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;mode=mask&quot;</span> \
+  <span class="hl-flag">--output</span> deidentified.pdf</code></pre>
+<p>回應：去識別化後的檔案。</p>
+      </section>
+      <section class="doc-section" data-sec="文字去識別化" data-title="文字去識別化" hidden>
+<div class="doc-crumb">7. 安全與隱私 API</div>
+<h4 id="文字去識別化">文字去識別化</h4>
+<p>對純文字偵測並遮蔽個資。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/text-deident/api/text-deident</code></pre>
+<p>Body（JSON）：</p>
+<div class="table-wrap"><table><thead><tr><th>欄位</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>text</code></td><td>str</td><td>✓</td><td>待處理文字</td></tr><tr><td><code>mode</code></td><td>str</td><td></td><td><code>mask</code>（預設）/ <code>redact</code></td></tr><tr><td><code>types</code></td><td>array</td><td></td><td>要偵測的 PII 類型 ID 陣列，省略 = 預設集</td></tr><tr><td><code>custom_regex</code></td><td>str</td><td></td><td>自訂偵測 regex</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/text-deident/api/text-deident</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Content-Type: application/json&quot;</span> \
+  <span class="hl-flag">-d</span> <span class="hl-str">&#x27;{&quot;text&quot;:&quot;我的電話是 0912345678，身分證 A123456789&quot;,&quot;mode&quot;:&quot;mask&quot;}&#x27;</span></code></pre>
+<p>回應 JSON：遮蔽後文字 + 命中的 PII 清單。</p>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="文字差異比對" data-title="文字差異比對" hidden>
+<div class="doc-crumb">8. 文字與比對 API</div>
+<h4 id="文字差異比對">文字差異比對</h4>
+<p>比對兩段文字差異。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/text-diff/api/text-diff</code></pre>
+<p>Body（JSON）：</p>
+<div class="table-wrap"><table><thead><tr><th>欄位</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>text_a</code></td><td>str</td><td>✓</td><td>舊版文字</td></tr><tr><td><code>text_b</code></td><td>str</td><td>✓</td><td>新版文字</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/text-diff/api/text-diff</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Content-Type: application/json&quot;</span> \
+  <span class="hl-flag">-d</span> <span class="hl-str">&#x27;{&quot;text_a&quot;:&quot;原始內容\n第二行&quot;,&quot;text_b&quot;:&quot;修改內容\n第二行&quot;}&#x27;</span></code></pre>
+<p>回應 JSON：每段差異的類型（<code>equal</code> / <code>insert</code> / <code>delete</code> / <code>replace</code>）與內容。</p>
+      </section>
+      <section class="doc-section" data-sec="文件差異比對" data-title="文件差異比對" hidden>
+<div class="doc-crumb">8. 文字與比對 API</div>
+<h4 id="文件差異比對">文件差異比對</h4>
+<p>比對兩份文件（PDF / Word）內容差異。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/doc-diff/api/doc-diff</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file_a</code></td><td>file</td><td>✓</td><td>舊版文件</td></tr><tr><td><code>file_b</code></td><td>file</td><td>✓</td><td>新版文件</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/doc-diff/api/doc-diff</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file_a=@v1.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;file_b=@v2.pdf&quot;</span> | jq</code></pre>
+<p>回應 JSON：逐段差異結構。</p>
+      </section>
+      <section class="doc-section" data-sec="清單處理" data-title="清單處理" hidden>
+<div class="doc-crumb">8. 文字與比對 API</div>
+<h4 id="清單處理">清單處理</h4>
+<p>對文字清單做去重、排序、計數、集合運算等管線處理。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/text-list/api/text-list</code></pre>
+<p>Body（JSON）：</p>
+<div class="table-wrap"><table><thead><tr><th>欄位</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>text</code></td><td>str</td><td>✓</td><td>每行一筆的清單文字</td></tr><tr><td><code>ops</code></td><td>array</td><td></td><td>處理管線，每個元素 <code>{&quot;op&quot;: &quot;...&quot;}</code>；op 可為 <code>dedup</code> / <code>sort</code> / <code>count</code> / <code>exclude</code> / <code>lower</code> / <code>upper</code> / <code>title</code> 等</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/text-list/api/text-list</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Content-Type: application/json&quot;</span> \
+  <span class="hl-flag">-d</span> <span class="hl-str">&#x27;{&quot;text&quot;:&quot;banana\napple\napple\ncherry&quot;,&quot;ops&quot;:[{&quot;op&quot;:&quot;dedup&quot;},{&quot;op&quot;:&quot;sort&quot;}]}&#x27;</span></code></pre>
+<p>回應 JSON：<code>{&quot;lines&quot;: [...], &quot;count&quot;: N, &quot;original_count&quot;: M, ...}</code>。</p>
+      </section>
+      <section class="doc-section" data-sec="逐句翻譯" data-title="逐句翻譯" hidden>
+<div class="doc-crumb">8. 文字與比對 API</div>
+<h4 id="逐句翻譯">逐句翻譯</h4>
+<p>走本地端 LLM 逐句翻譯。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/translate-doc/api/translate-doc</code></pre>
+<p>Body（JSON）：</p>
+<div class="table-wrap"><table><thead><tr><th>欄位</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>text</code></td><td>str</td><td>✓</td><td>待翻譯文字</td></tr><tr><td><code>source_lang</code></td><td>str</td><td></td><td><code>auto</code>（預設）/ <code>en</code> / <code>zh</code> / <code>ja</code> / <code>ko</code> ...</td></tr><tr><td><code>target_lang</code></td><td>str</td><td></td><td>目標語言，預設 <code>zh-TW</code></td></tr><tr><td><code>domain</code></td><td>str</td><td></td><td>領域提示（提升專業詞彙準確度）</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/translate-doc/api/translate-doc</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Content-Type: application/json&quot;</span> \
+  <span class="hl-flag">-d</span> <span class="hl-str">&#x27;{&quot;text&quot;:&quot;Hello world. This is a test.&quot;,&quot;source_lang&quot;:&quot;auto&quot;,&quot;target_lang&quot;:&quot;zh-TW&quot;}&#x27;</span></code></pre>
+<p>回應 JSON：</p>
+<pre><code class="lang-json">{
+  <span class="hl-key">&quot;source_lang&quot;</span>: <span class="hl-str">&quot;en&quot;</span>,
+  <span class="hl-key">&quot;target_lang&quot;</span>: <span class="hl-str">&quot;zh-TW&quot;</span>,
+  <span class="hl-key">&quot;results&quot;</span>: [
+    {<span class="hl-key">&quot;src&quot;</span>: <span class="hl-str">&quot;Hello world.&quot;</span>, <span class="hl-key">&quot;translated&quot;</span>: <span class="hl-str">&quot;你好，世界。&quot;</span>, <span class="hl-key">&quot;error&quot;</span>: <span class="hl-str">&quot;&quot;</span>},
+    {<span class="hl-key">&quot;src&quot;</span>: <span class="hl-str">&quot;This is a test.&quot;</span>, <span class="hl-key">&quot;translated&quot;</span>: <span class="hl-str">&quot;這是一個測試。&quot;</span>, <span class="hl-key">&quot;error&quot;</span>: <span class="hl-str">&quot;&quot;</span>}
+  ]
+}</code></pre>
+<blockquote><p>需 admin 啟用 LLM 服務（<code>/admin/llm-settings</code>）。未啟用回 <code>503</code>。</p></blockquote>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="統編查詢單筆" data-title="統編查詢（單筆）" hidden>
+<div class="doc-crumb">9. 商務查詢 API</div>
+<h4 id="統編查詢單筆">統編查詢（單筆）</h4>
+<p>依 8 位統一編號反查公司 / 機關名稱、地址、行業類別。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/vat-lookup/api/vat-lookup</code></pre>
+<p>Body（JSON）：<code>{&quot;vat&quot;: &quot;12345678&quot;}</code></p>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/vat-lookup/api/vat-lookup</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Content-Type: application/json&quot;</span> \
+  <span class="hl-flag">-d</span> <span class="hl-str">&#x27;{&quot;vat&quot;:&quot;12345678&quot;}&#x27;</span> | jq</code></pre>
+<p>回應 JSON：公司名稱 / 地址 / 行業等。找不到回 <code>404</code>。</p>
+      </section>
+      <section class="doc-section" data-sec="統編查詢path-style" data-title="統編查詢（path style）" hidden>
+<div class="doc-crumb">9. 商務查詢 API</div>
+<h4 id="統編查詢path-style">統編查詢（path style）</h4>
+<p>同上，但用 GET + path 參數。</p>
+<pre><code class="lang-text"><span class="hl-method">GET</span> /api/vat-lookup/{vat}</code></pre>
+<pre><code class="lang-bash">curl <span class="hl-url">http://localhost:8765/api/vat-lookup/12345678</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> | jq</code></pre>
+<p>回應 JSON：同單筆查詢。</p>
+      </section>
+      <section class="doc-section" data-sec="統編查詢批次" data-title="統編查詢（批次）" hidden>
+<div class="doc-crumb">9. 商務查詢 API</div>
+<h4 id="統編查詢批次">統編查詢（批次）</h4>
+<p>一次查多筆統編。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/vat-lookup/api/vat-lookup/batch</code></pre>
+<p>Body（JSON）：<code>{&quot;vats&quot;: [&quot;12345678&quot;, &quot;23456789&quot;]}</code></p>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/vat-lookup/api/vat-lookup/batch</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Content-Type: application/json&quot;</span> \
+  <span class="hl-flag">-d</span> <span class="hl-str">&#x27;{&quot;vats&quot;:[&quot;12345678&quot;,&quot;23456789&quot;]}&#x27;</span> | jq</code></pre>
+<p>回應 JSON：每筆查詢結果陣列。</p>
+      </section>
+      <section class="doc-section" data-sec="電子發票掃描" data-title="電子發票掃描" hidden>
+<div class="doc-crumb">9. 商務查詢 API</div>
+<h4 id="電子發票掃描">電子發票掃描</h4>
+<p>解析電子發票 QR Code 內容。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/einvoice-scan/api/einvoice-scan</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>含發票 QR Code 的圖片 / PDF</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/einvoice-scan/api/einvoice-scan</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@invoice.jpg&quot;</span> | jq</code></pre>
+<p>回應 JSON：發票號碼、日期、金額、賣方統編等。</p>
+      </section>
+      <section class="doc-section" data-sec="電子發票後端狀態" data-title="電子發票後端狀態" hidden>
+<div class="doc-crumb">9. 商務查詢 API</div>
+<h4 id="電子發票後端狀態">電子發票後端狀態</h4>
+<p>查 QR Code 解碼後端（zbar）是否可用。</p>
+<pre><code class="lang-text"><span class="hl-method">GET</span> /tools/einvoice-scan/api/backend-status</code></pre>
+<pre><code class="lang-bash">curl <span class="hl-url">http://localhost:8765/tools/einvoice-scan/api/backend-status</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> | jq</code></pre>
+<p>回應 JSON：<code>{&quot;available&quot;: true/false, ...}</code>。</p>
+      </section>
+      <section class="doc-section" data-sec="送件前檢核--自家公司主檔" data-title="送件前檢核 — 自家公司主檔" hidden>
+<div class="doc-crumb">9. 商務查詢 API</div>
+<h4 id="送件前檢核--自家公司主檔">送件前檢核 — 自家公司主檔</h4>
+<p>管理送件前檢核用的自家公司實體（CRUD）。</p>
+<pre><code class="lang-text"><span class="hl-method">GET</span>    /tools/submission-check/api/self-entities
+<span class="hl-method">POST</span>   /tools/submission-check/api/self-entities
+<span class="hl-method">PUT</span>    /tools/submission-check/api/self-entities/{entity_id}
+<span class="hl-method">DELETE</span> /tools/submission-check/api/self-entities/{entity_id}</code></pre>
+<p>POST / PUT 參數：<code>name</code>、<code>tax_id</code>、<code>address</code>、<code>aliases</code>、<code>type</code>、<code>note</code>。</p>
+<pre><code class="lang-bash"><span class="hl-cmt"># 列出</span>
+curl <span class="hl-url">http://localhost:8765/tools/submission-check/api/self-entities</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> | jq
+
+<span class="hl-cmt"># 新增</span>
+curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/submission-check/api/self-entities</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;name=Acme 股份有限公司&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;tax_id=12345678&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;address=台北市...&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;type=company&quot;</span>
+
+<span class="hl-cmt"># 更新</span>
+curl <span class="hl-flag">-X</span> <span class="hl-method">PUT</span> <span class="hl-url">http://localhost:8765/tools/submission-check/api/self-entities/abc123</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;name=Acme 國際&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;tax_id=12345678&quot;</span>
+
+<span class="hl-cmt"># 刪除</span>
+curl <span class="hl-flag">-X</span> <span class="hl-method">DELETE</span> <span class="hl-url">http://localhost:8765/tools/submission-check/api/self-entities/abc123</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span></code></pre>
+<p>回應 JSON：實體清單 / 操作結果。</p>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="llm-校驗pdf-fill" data-title="LLM 校驗（pdf-fill）" hidden>
+<div class="doc-crumb">10. Job 模式 API</div>
+<p>長時間或批次操作走 job queue。流程：</p>
+<ol>
+<li>呼叫對應工具的提交 endpoint → 拿到 <code>{&quot;job_id&quot;: &quot;...&quot;}</code></li>
+<li>輪詢 <code>GET /api/jobs/{job_id}</code> 直到 <code>status == &quot;completed&quot;</code></li>
+<li>下載 <code>GET /api/jobs/{job_id}/download</code> 取結果（單檔 PDF / 多檔 ZIP）</li>
+</ol>
+<h4 id="llm-校驗pdf-fill">LLM 校驗（pdf-fill）</h4>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /api/llm-review</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF（已填好欄位，準備校驗）</td></tr><tr><td><code>template_id</code></td><td>str</td><td>✓</td><td>範本 ID（admin 端記住的版型）</td></tr><tr><td><code>rounds</code></td><td>int</td><td></td><td>審查輪數，預設讀 admin 設定</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/api/llm-review</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@filled.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;template_id=vendor_form_v3&quot;</span> \
+  | jq
+<span class="hl-cmt"># → {&quot;job_id&quot;: &quot;...&quot;}</span></code></pre>
+<p>回應：<code>{&quot;job_id&quot;: &quot;...&quot;}</code>。</p>
+      </section>
+      <section class="doc-section" data-sec="查-job-狀態" data-title="查 job 狀態" hidden>
+<div class="doc-crumb">10. Job 模式 API</div>
+<h4 id="查-job-狀態">查 job 狀態</h4>
+<pre><code class="lang-text"><span class="hl-method">GET</span> /api/jobs/{job_id}</code></pre>
+<pre><code class="lang-bash">curl <span class="hl-url">http://localhost:8765/api/jobs/abc123</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> | jq</code></pre>
+<p>回應：</p>
+<pre><code class="lang-json">{
+  <span class="hl-key">&quot;job_id&quot;</span>: <span class="hl-str">&quot;abc123...&quot;</span>,
+  <span class="hl-key">&quot;status&quot;</span>: <span class="hl-str">&quot;running&quot;</span>,
+  <span class="hl-key">&quot;progress&quot;</span>: <span class="hl-num">0.65</span>,
+  <span class="hl-key">&quot;message&quot;</span>: <span class="hl-str">&quot;校驗第 5 / 12 欄位&quot;</span>,
+  <span class="hl-key">&quot;error&quot;</span>: <span class="hl-bool">null</span>,
+  <span class="hl-key">&quot;tool&quot;</span>: <span class="hl-str">&quot;pdf-fill-llm&quot;</span>
+}</code></pre>
+<p><code>status</code>：<code>pending</code> / <code>running</code> / <code>completed</code> / <code>failed</code>。</p>
+      </section>
+      <section class="doc-section" data-sec="下載-job-結果" data-title="下載 job 結果" hidden>
+<div class="doc-crumb">10. Job 模式 API</div>
+<h4 id="下載-job-結果">下載 job 結果</h4>
+<pre><code class="lang-text"><span class="hl-method">GET</span> /api/jobs/{job_id}/download</code></pre>
+<pre><code class="lang-bash">curl <span class="hl-url">http://localhost:8765/api/jobs/abc123/download</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">--output</span> result.pdf</code></pre>
+<p>回應：結果檔（PDF / ZIP）。未完成（<code>status != completed</code>）回 <code>409</code>。</p>
+      </section>
+      <section class="doc-section" data-sec="下載-job-結果為-png" data-title="下載 job 結果為 PNG" hidden>
+<div class="doc-crumb">10. Job 模式 API</div>
+<h4 id="下載-job-結果為-png">下載 job 結果為 PNG</h4>
+<pre><code class="lang-text"><span class="hl-method">GET</span> /api/jobs/{job_id}/download-png</code></pre>
+<pre><code class="lang-bash">curl <span class="hl-url">http://localhost:8765/api/jobs/abc123/download-png</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">--output</span> result.zip</code></pre>
+<p>回應：把 job 的 PDF 結果 render 成 PNG（多頁 / 多檔自動打 ZIP）。</p>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="列出資產" data-title="列出資產" hidden>
+<div class="doc-crumb">11. 管理端 API</div>
+<p>需 admin 登入或 admin role token。</p>
+<h4 id="列出資產">列出資產</h4>
+<p>列出所有印章 / 簽名 / Logo / 浮水印資產。</p>
+<pre><code class="lang-text"><span class="hl-method">GET</span> /admin/api/assets</code></pre>
+<pre><code class="lang-bash">curl <span class="hl-url">http://localhost:8765/admin/api/assets</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer ADMIN_TOKEN&quot;</span> | jq</code></pre>
+      </section>
+      <section class="doc-section" data-sec="讀取--更新-llm-設定" data-title="讀取 / 更新 LLM 設定" hidden>
+<div class="doc-crumb">11. 管理端 API</div>
+<h4 id="讀取--更新-llm-設定">讀取 / 更新 LLM 設定</h4>
+<pre><code class="lang-text"><span class="hl-method">GET</span>  /admin/api/llm/settings
+<span class="hl-method">POST</span> /admin/api/llm/settings</code></pre>
+<pre><code class="lang-bash"><span class="hl-cmt"># 讀取</span>
+curl <span class="hl-url">http://localhost:8765/admin/api/llm/settings</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer ADMIN_TOKEN&quot;</span> | jq
+
+<span class="hl-cmt"># 更新</span>
+curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/admin/api/llm/settings</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer ADMIN_TOKEN&quot;</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Content-Type: application/json&quot;</span> \
+  <span class="hl-flag">-d</span> <span class="hl-str">&#x27;{&quot;enabled&quot;:true,&quot;base_url&quot;:&quot;http://localhost:11434&quot;,&quot;model&quot;:&quot;gemma4:26b&quot;}&#x27;</span></code></pre>
+      </section>
+      <section class="doc-section" data-sec="測試-llm-連線" data-title="測試 LLM 連線" hidden>
+<div class="doc-crumb">11. 管理端 API</div>
+<h4 id="測試-llm-連線">測試 LLM 連線</h4>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /admin/api/llm/test-connection</code></pre>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/admin/api/llm/test-connection</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer ADMIN_TOKEN&quot;</span> | jq</code></pre>
+      </section>
+      <section class="doc-section" data-sec="抓-llm-模型清單" data-title="抓 LLM 模型清單" hidden>
+<div class="doc-crumb">11. 管理端 API</div>
+<h4 id="抓-llm-模型清單">抓 LLM 模型清單</h4>
+<pre><code class="lang-text"><span class="hl-method">GET</span> /admin/api/llm/models</code></pre>
+<pre><code class="lang-bash">curl <span class="hl-url">http://localhost:8765/admin/api/llm/models</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer ADMIN_TOKEN&quot;</span> | jq</code></pre>
+      </section>
+      <section class="doc-section" data-sec="系統相依套件狀態" data-title="系統相依套件狀態" hidden>
+<div class="doc-crumb">11. 管理端 API</div>
+<h4 id="系統相依套件狀態">系統相依套件狀態</h4>
+<pre><code class="lang-text"><span class="hl-method">GET</span> /admin/api/sys-deps</code></pre>
+<pre><code class="lang-bash">curl <span class="hl-url">http://localhost:8765/admin/api/sys-deps</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer ADMIN_TOKEN&quot;</span> | jq</code></pre>
+      </section>
+      <section class="doc-section" data-sec="企業-logo-狀態" data-title="企業 logo 狀態" hidden>
+<div class="doc-crumb">11. 管理端 API</div>
+<h4 id="企業-logo-狀態">企業 logo 狀態</h4>
+<pre><code class="lang-text"><span class="hl-method">GET</span> /admin/api/branding</code></pre>
+<pre><code class="lang-bash">curl <span class="hl-url">http://localhost:8765/admin/api/branding</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer ADMIN_TOKEN&quot;</span> | jq</code></pre>
+      </section>
+      <section class="doc-section" data-sec="設定匯出清單" data-title="設定匯出清單" hidden>
+<div class="doc-crumb">11. 管理端 API</div>
+<h4 id="設定匯出清單">設定匯出清單</h4>
+<pre><code class="lang-text"><span class="hl-method">GET</span> /admin/api/settings-export/summary</code></pre>
+<pre><code class="lang-bash">curl <span class="hl-url">http://localhost:8765/admin/api/settings-export/summary</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer ADMIN_TOKEN&quot;</span> | jq</code></pre>
+      </section>
+      <section class="doc-section" data-sec="token-管理" data-title="Token 管理" hidden>
+<div class="doc-crumb">11. 管理端 API</div>
+<h4 id="token-管理">Token 管理</h4>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /admin/api/tokens/create    <span class="hl-cmt"># 核發新 token</span>
+<span class="hl-method">POST</span> /admin/api/tokens/revoke    <span class="hl-cmt"># 撤銷 token</span>
+<span class="hl-method">POST</span> /admin/api/tokens/enforce   <span class="hl-cmt"># 開關 enforce 模式</span></code></pre>
+<pre><code class="lang-bash"><span class="hl-cmt"># 核發</span>
+curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/admin/api/tokens/create</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer ADMIN_TOKEN&quot;</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Content-Type: application/json&quot;</span> \
+  <span class="hl-flag">-d</span> <span class="hl-str">&#x27;{&quot;label&quot;:&quot;gitlab-ci&quot;}&#x27;</span> | jq
+
+<span class="hl-cmt"># 開啟 enforce</span>
+curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/admin/api/tokens/enforce</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer ADMIN_TOKEN&quot;</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Content-Type: application/json&quot;</span> \
+  <span class="hl-flag">-d</span> <span class="hl-str">&#x27;{&quot;enforce&quot;:true}&#x27;</span></code></pre>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="gitlab-ci--github-actions把-word-文件自動轉-pdf" data-title="GitLab CI / GitHub Actions：把 Word 文件自動轉 PDF" hidden>
+<div class="doc-crumb">12. 整合範例</div>
+<h4 id="gitlab-ci--github-actions把-word-文件自動轉-pdf">GitLab CI / GitHub Actions：把 Word 文件自動轉 PDF</h4>
+<pre><code class="lang-yaml"><span class="hl-cmt"># .gitlab-ci.yml</span>
+convert-docs:
+  script:
+    - |
+      for f in docs/*.docx; do
+        curl <span class="hl-flag">-fsSL</span> <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-str">&quot;http://jtdt.internal:8765/api/convert-to-pdf&quot;</span> \
+          <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer $JTDT_TOKEN&quot;</span> \
+          <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@$f&quot;</span> \
+          <span class="hl-flag">--output</span> <span class="hl-str">&quot;build/$(basename &quot;</span>$f<span class="hl-str">&quot; .docx).pdf&quot;</span>
+      done
+  artifacts:
+    paths: [build/]</code></pre>
+      </section>
+      <section class="doc-section" data-sec="python-客戶端批次清掉-pdf-註解" data-title="Python 客戶端：批次清掉 PDF 註解" hidden>
+<div class="doc-crumb">12. 整合範例</div>
+<h4 id="python-客戶端批次清掉-pdf-註解">Python 客戶端：批次清掉 PDF 註解</h4>
+<pre><code class="lang-python">import requests
+from pathlib import Path
+
+API = <span class="hl-str">&quot;http://localhost:8765&quot;</span>
+TOKEN = <span class="hl-str">&quot;YOUR_64_HEX_TOKEN&quot;</span>
+H = {<span class="hl-str">&quot;Authorization&quot;</span>: f<span class="hl-str">&quot;Bearer {TOKEN}&quot;</span>}
+
+for pdf in Path(<span class="hl-str">&quot;incoming/&quot;</span>).glob(<span class="hl-str">&quot;*.pdf&quot;</span>):
+    with pdf.open(<span class="hl-str">&quot;rb&quot;</span>) as f:
+        r = requests.post(
+            f<span class="hl-str">&quot;{API}/tools/pdf-annotations-strip/api/pdf-annotations-strip&quot;</span>,
+            headers=H,
+            files={<span class="hl-str">&quot;file&quot;</span>: (pdf.name, f, <span class="hl-str">&quot;application/pdf&quot;</span>)},
+        )
+    r.raise_for_status()
+    (Path(<span class="hl-str">&quot;clean/&quot;</span>) / pdf.name).write_bytes(r.content)
+    print(f<span class="hl-str">&quot;OK {pdf.name}&quot;</span>)</code></pre>
+      </section>
+      <section class="doc-section" data-sec="shell監看-job-完成後下載" data-title="Shell：監看 job 完成後下載" hidden>
+<div class="doc-crumb">12. 整合範例</div>
+<h4 id="shell監看-job-完成後下載">Shell：監看 job 完成後下載</h4>
+<pre><code class="lang-bash"><span class="hl-cmt">#!/bin/bash</span>
+TOKEN=<span class="hl-str">&quot;YOUR_TOKEN&quot;</span>
+API=<span class="hl-str">&quot;http://localhost:8765&quot;</span>
+
+JOB=$(curl <span class="hl-flag">-fsSL</span> <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-str">&quot;$API/api/llm-review&quot;</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer $TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@filled.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;template_id=vendor_form_v3&quot;</span> \
+  | jq <span class="hl-flag">-r</span> .job_id)
+
+echo <span class="hl-str">&quot;Job: $JOB&quot;</span>
+
+while :; do
+  S=$(curl <span class="hl-flag">-fsSL</span> <span class="hl-str">&quot;$API/api/jobs/$JOB&quot;</span> <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer $TOKEN&quot;</span>)
+  STATE=$(echo <span class="hl-str">&quot;$S&quot;</span> | jq <span class="hl-flag">-r</span> .status)
+  PROG=$(echo <span class="hl-str">&quot;$S&quot;</span> | jq <span class="hl-flag">-r</span> .progress)
+  echo <span class="hl-str">&quot;  $STATE  $PROG&quot;</span>
+  [ <span class="hl-str">&quot;$STATE&quot;</span> = <span class="hl-str">&quot;completed&quot;</span> ] &amp;&amp; break
+  [ <span class="hl-str">&quot;$STATE&quot;</span> = <span class="hl-str">&quot;failed&quot;</span> ] &amp;&amp; { echo <span class="hl-str">&quot;Failed&quot;</span>; exit <span class="hl-num">1</span>; }
+  sleep <span class="hl-num">2</span>
+done
+
+curl <span class="hl-flag">-fsSL</span> <span class="hl-str">&quot;$API/api/jobs/$JOB/download&quot;</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer $TOKEN&quot;</span> \
+  <span class="hl-flag">--output</span> reviewed.pdf
+echo <span class="hl-str">&quot;Saved: reviewed.pdf&quot;</span></code></pre>
+      </section>
+      <section class="doc-section" data-sec="nodejs逐句翻譯" data-title="Node.js：逐句翻譯" hidden>
+<div class="doc-crumb">12. 整合範例</div>
+<h4 id="nodejs逐句翻譯">Node.js：逐句翻譯</h4>
+<pre><code class="lang-js">const r = await fetch(
+  <span class="hl-str">&#x27;http://localhost:8765/tools/translate-doc/api/translate-doc&#x27;</span>,
+  {
+    method: <span class="hl-str">&#x27;POST&#x27;</span>,
+    headers: {
+      <span class="hl-str">&#x27;Content-Type&#x27;</span>: <span class="hl-str">&#x27;application/json&#x27;</span>,
+      <span class="hl-str">&#x27;Authorization&#x27;</span>: <span class="hl-str">&#x27;Bearer YOUR_TOKEN&#x27;</span>,
+    },
+    body: JSON.stringify({
+      text: <span class="hl-str">&#x27;Hello world. This is a test.&#x27;</span>,
+      source_lang: <span class="hl-str">&#x27;auto&#x27;</span>,
+      target_lang: <span class="hl-str">&#x27;zh-TW&#x27;</span>,
+    }),
+  }
+);
+const j = await r.json();
+console.log(j.results);
+// [{src: <span class="hl-str">&#x27;Hello world.&#x27;</span>, translated: <span class="hl-str">&#x27;你好，世界。&#x27;</span>, error: <span class="hl-str">&#x27;&#x27;</span>}, ...]</code></pre>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="13-cli-管理-token" data-title="13. CLI 管理 token" hidden>
+<h3 id="13-cli-管理-token">13. CLI 管理 token</h3>
+<pre><code class="lang-bash"><span class="hl-cmt"># 列出</span>
+sudo jtdt auth show
+
+<span class="hl-cmt"># 直接讀檔可看（unhash 不可逆）：</span>
+sudo cat /var/lib/jt-doc-tools/data/api_tokens.json
+
+<span class="hl-cmt"># 撤銷（CLI 沒提供撤銷，必要時直接清掉檔案後重啟服務）：</span>
+sudo systemctl stop jt-doc-tools
+sudo rm /var/lib/jt-doc-tools/data/api_tokens.json
+sudo systemctl start jt-doc-tools
+<span class="hl-cmt"># 重啟後 admin UI 重新核發</span></code></pre>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="14-速率限制--大檔上限" data-title="14. 速率限制 / 大檔上限" hidden>
+<h3 id="14-速率限制--大檔上限">14. 速率限制 / 大檔上限</h3>
+<p>目前<strong>沒有內建</strong> rate limit。建議部署時用反向代理（nginx / Caddy）加：</p>
+<ul>
+<li><code>client_max_body_size 100M</code>（必設，否則 PDF 大檔會被拒）</li>
+<li><code>proxy_read_timeout 900s</code> + <code>proxy_send_timeout 900s</code>（必設 — LLM 工具單筆推理常 5-15 分鐘，預設 60s 必定 504）</li>
+<li><code>proxy_buffering off</code>（LLM streaming 友善）</li>
+<li><strong>多層 nginx 情境（自架 LLM proxy + jt-doc-tools 兩台 nginx）每一層都要設</strong>，一層用預設整鏈就斷</li>
+<li>如有公開暴露需求，建議加上 <code>limit_req_zone</code> 防濫用</li>
+</ul>
+<p>詳見 <a href="./OPS.md" target="_blank" rel="noopener">OPS.md</a> 的「反向代理」段與「504 Gateway Timeout 排錯流程」。</p>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="15-變更歷史" data-title="15. 變更歷史" hidden>
+<h3 id="15-變更歷史">15. 變更歷史</h3>
+<p>API 介面遵循 SemVer：minor 版本（如 1.4.x → 1.5.x）保證<strong>後相容</strong>；major 版本（1.x → 2.x）才會 breaking。新加 endpoint 不算 breaking。</p>
+<p>完整變更紀錄見 <a href="./CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG.md</a>。</p>
+      </section>
+      <nav class="doc-prevnext" id="docPrevNext">
+        <a class="pn pn-prev" href="#" hidden><span>上一頁</span><b></b></a>
+        <a class="pn pn-next" href="#" hidden><span>下一頁</span><b></b></a>
+      </nav>
+    </article>
+    <aside class="doc-otp is-empty" id="docOtp">
+      <div class="otp-h">本節細項</div>
+      <nav class="otp-list" id="otpList"></nav>
+    </aside>
+  </div>
+</main>
+<script>
+(function () {
+  // 左欄：章節 + 其下各端點（可收折）。每「章」一頁切換。
+  // 右欄：只放「目前章節內更細的小標題」(h5)，沒有就隱藏。
+  var sections = Array.prototype.slice.call(
+    document.querySelectorAll('.doc-section'));
+  var navLinks = Array.prototype.slice.call(
+    document.querySelectorAll('.doc-nav-list a'));
+  var otpHost = document.getElementById('docOtp');
+  var otpList = document.getElementById('otpList');
+  var pnPrev = document.querySelector('.pn-prev');
+  var pnNext = document.querySelector('.pn-next');
+  if (!sections.length) return;
+  var order = sections.map(function (s) { return s.dataset.sec; });
+  var spyHandler = null;
+
+  // 章節收折：點整列章名（或前方三角）即可收折，章名本身不連到任何頁面
+  function toggleGroup(head) {
+    var grp = head.closest('.nav-group');
+    if (!grp) return;
+    var c = grp.classList.toggle('collapsed');
+    head.setAttribute('aria-expanded', c ? 'false' : 'true');
+  }
+  document.querySelectorAll('.nav-group-head').forEach(function (head) {
+    head.addEventListener('click', function (e) {
+      e.preventDefault();
+      toggleGroup(head);
+    });
+    head.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleGroup(head);
+      }
+    });
+  });
+
+  function buildOtp(sec) {
+    otpList.innerHTML = '';
+    var subs = Array.prototype.slice.call(sec.querySelectorAll('h5[id]'));
+    if (!subs.length) { otpHost.classList.add('is-empty'); return []; }
+    otpHost.classList.remove('is-empty');
+    subs.forEach(function (h) {
+      var a = document.createElement('a');
+      a.href = '#' + h.id;
+      a.textContent = h.textContent;
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        history.replaceState(null, '', '#' + h.id);
+      });
+      otpList.appendChild(a);
+    });
+    return subs;
+  }
+
+  function spyTargets(subs) {
+    // 每頁只有單一端點，僅右欄「本節細項」(h5) 隨捲動高亮
+    if (spyHandler) window.removeEventListener('scroll', spyHandler);
+    if (!subs.length) return;
+    var otpLinks = Array.prototype.slice.call(otpList.querySelectorAll('a'));
+    spyHandler = function () {
+      var top = window.scrollY + 130;
+      var cur = subs[0].id;
+      subs.forEach(function (h) { if (h.offsetTop <= top) cur = h.id; });
+      otpLinks.forEach(function (a) {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + cur);
+      });
+    };
+    window.addEventListener('scroll', spyHandler, { passive: true });
+    spyHandler();
+  }
+
+  function setPrevNext(idx) {
+    if (idx > 0) {
+      pnPrev.hidden = false;
+      pnPrev.setAttribute('href', '#' + sections[idx - 1].dataset.sec);
+      pnPrev.querySelector('b').textContent = sections[idx - 1].dataset.title;
+    } else { pnPrev.hidden = true; }
+    if (idx < sections.length - 1) {
+      pnNext.hidden = false;
+      pnNext.setAttribute('href', '#' + sections[idx + 1].dataset.sec);
+      pnNext.querySelector('b').textContent = sections[idx + 1].dataset.title;
+    } else { pnNext.hidden = true; }
+  }
+
+  function activate(id, opts) {
+    opts = opts || {};
+    var el = id ? document.getElementById(id) : null;
+    var sec = el ? el.closest('.doc-section') : null;
+    if (!sec) {
+      for (var i = 0; i < sections.length; i++) {
+        if (sections[i].dataset.sec === id) { sec = sections[i]; break; }
+      }
+    }
+    if (!sec) sec = sections[0];
+    sections.forEach(function (s) { s.hidden = (s !== sec); });
+    var slug = sec.dataset.sec;
+    navLinks.forEach(function (a) { a.classList.remove('active', 'nav-current'); });
+    var activeLink = navLinks.filter(function (a) {
+      return a.getAttribute('href') === '#' + slug;
+    })[0];
+    if (activeLink) {
+      activeLink.classList.add('active');
+      var grp = activeLink.closest('.nav-group');
+      if (grp) {
+        grp.classList.remove('collapsed');
+        // 端點頁 → 父章節給細微標示（粗體），提供章節脈絡
+        var chLink = grp.querySelector('.nav-ch');
+        if (chLink && chLink !== activeLink) chLink.classList.add('nav-current');
+      }
+    }
+    var subs = buildOtp(sec);
+    spyTargets(subs);
+    setPrevNext(order.indexOf(slug));
+    if (!opts.keepScroll) window.scrollTo({ top: 0 });
+  }
+
+  function curHash() {
+    try { return decodeURIComponent(location.hash.slice(1)); }
+    catch (e) { return location.hash.slice(1); }
+  }
+  function onClick(e) {
+    var a = e.currentTarget;
+    var id = decodeURIComponent(a.getAttribute('href').slice(1));
+    if (!id) return;
+    e.preventDefault();
+    if (curHash() === id) activate(id);
+    else location.hash = id;
+  }
+  navLinks.forEach(function (a) { a.addEventListener('click', onClick); });
+  pnPrev.addEventListener('click', onClick);
+  pnNext.addEventListener('click', onClick);
+  window.addEventListener('hashchange', function () { activate(curHash()); });
+  activate(curHash(), { keepScroll: !!location.hash });
+
+  // 搜尋 / 過濾左欄章節與端點
+  var searchEl = document.getElementById('docSearch');
+  var clearEl = document.getElementById('docSearchClear');
+  var emptyEl = document.getElementById('docSearchEmpty');
+  var groups = Array.prototype.slice.call(document.querySelectorAll('.nav-group'));
+
+  function runFilter(q) {
+    q = (q || '').trim().toLowerCase();
+    clearEl.hidden = !q;
+    var anyShown = false;
+    groups.forEach(function (g) {
+      var chLink = g.querySelector('.nav-ch');
+      var chText = chLink ? chLink.textContent.toLowerCase() : '';
+      var eps = Array.prototype.slice.call(g.querySelectorAll('.nav-ep'));
+      if (!q) {
+        g.hidden = false;
+        eps.forEach(function (a) { a.hidden = false; });
+        return;
+      }
+      var chHit = chText.indexOf(q) >= 0;
+      var epHits = 0;
+      eps.forEach(function (a) {
+        var hit = chHit || a.textContent.toLowerCase().indexOf(q) >= 0;
+        a.hidden = !hit;
+        if (hit) epHits++;
+      });
+      // 章名命中 → 整章顯示；否則只在有端點命中時顯示
+      var show = chHit || epHits > 0;
+      g.hidden = !show;
+      if (show) {
+        anyShown = true;
+        g.classList.remove('collapsed');  // 搜尋時自動展開
+      }
+    });
+    emptyEl.hidden = !q || anyShown;
+  }
+
+  if (searchEl) {
+    searchEl.addEventListener('input', function () { runFilter(searchEl.value); });
+    searchEl.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { searchEl.value = ''; runFilter(''); }
+    });
+  }
+  if (clearEl) {
+    clearEl.addEventListener('click', function () {
+      searchEl.value = ''; runFilter(''); searchEl.focus();
+    });
+  }
+})();
+</script>
+
+<footer class="footer">
+  <div class="container footer-inner">
+    <div class="footer-col">
+      <div class="footer-brand">Jason Tools 文件工具箱</div>
+      <p class="footer-tag">PDF / Office 整合式文件處理平台：不上雲，資料留在自己手中。</p>
+    </div>
+    <div class="footer-col">
+      <div class="footer-h">連結</div>
+      <a href="index.html">介紹網站</a>
+      <a href="https://github.com/jasoncheng7115/jt-doc-tools" target="_blank" rel="noopener">原始碼庫</a>
+      <a href="https://github.com/jasoncheng7115/jt-doc-tools/blob/main/github/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+      <a href="https://github.com/jasoncheng7115/jt-doc-tools/issues" target="_blank" rel="noopener">回報問題</a>
+    </div>
+    <div class="footer-col">
+      <div class="footer-h">作者</div>
+      <p>
+        <strong>Jason Cheng</strong><br>
+        <a href="https://[網址]" target="_blank" rel="noopener">Jason Tools</a>
+      </p>
+    </div>
+    <div class="footer-col">
+      <div class="footer-h">授權</div>
+      <p>Apache License 2.0</p>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="container">
+      © 2026 Jason Tools · Built with HTML & CSS, hosted on GitHub Pages
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

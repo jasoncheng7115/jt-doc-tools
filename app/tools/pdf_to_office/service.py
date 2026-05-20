@@ -14,10 +14,13 @@ from pathlib import Path
 from typing import Literal
 
 from .engines import (
+    convert_via_jtdt_reform,
     convert_via_libreoffice,
     convert_via_pdf2docx,
     docx_to_odt,
 )
+from .engines.jtdt_reform import convert_via_jtdt_reform_to_odt
+from .odt_to_docx import convert_odt_to_docx
 from .postprocess import run_postprocess
 
 log = logging.getLogger(__name__)
@@ -42,6 +45,7 @@ def convert_pdf_to_office(
     enable_postprocess: bool = True,
     keep_intermediate: bool = False,
     fixer_opts: dict | None = None,
+    engine: Literal["pdf2docx-refine", "jtdt-reform"] = "jtdt-reform",
 ) -> ConvertResult:
     """主入口。
 
@@ -51,6 +55,9 @@ def convert_pdf_to_office(
         output_format: "docx" 或 "odt"
         enable_postprocess: 是否跑後處理（False = 純 pdf2docx 原始輸出）
         keep_intermediate: 是否保留 raw_docx 中間檔
+        engine: 轉換引擎
+          - "jtdt-reform" (預設，v1.8.72 起)：從 PDFTruth 重建 docx，不靠 pdf2docx
+          - "pdf2docx-refine" (備用)：pdf2docx + jtdt-refine 後處理（25 fixer）
 
     Returns:
         ConvertResult
@@ -62,7 +69,77 @@ def convert_pdf_to_office(
     raw_docx = work_dir / "raw.docx"
     final_docx = work_dir / "final.docx"
 
-    # ----- Step 1: pdf2docx -----
+    # ----- 分流：jtdt-reform engine（v1.8.82+ 改 ODT-first 路線）-----
+    if engine == "jtdt-reform":
+        log.info("pdf-to-office: converting %s via jtdt-reform (ODT-first)", pdf_path.name)
+        # Safety net 180s timeout
+        import signal as _signal
+        _orig_handler = None
+        if hasattr(_signal, "SIGALRM"):
+            def _to_handler(_sig, _frame):
+                raise TimeoutError(
+                    f"jtdt-reform 處理 {pdf_path.name} 超過 180s — 已中斷以保護機器"
+                )
+            try:
+                _orig_handler = _signal.signal(_signal.SIGALRM, _to_handler)
+                _signal.alarm(180)
+            except (ValueError, OSError):
+                _orig_handler = None
+        final_odt = work_dir / "final.odt"
+        try:
+            res = convert_via_jtdt_reform_to_odt(pdf_path, final_odt)
+        except TimeoutError as e:
+            log.error("jtdt-reform timeout: %s", e)
+            return ConvertResult(
+                ok=False, output_path=None, output_format=output_format,
+                engine_used="jtdt-reform", postprocess_done=False,
+                report={"error": str(e), "primary_engine": "jtdt-reform"},
+                error=str(e),
+            )
+        finally:
+            if hasattr(_signal, "SIGALRM") and _orig_handler is not None:
+                _signal.alarm(0)
+                _signal.signal(_signal.SIGALRM, _orig_handler)
+        if not res.get("ok") or not final_odt.exists():
+            return ConvertResult(
+                ok=False, output_path=None, output_format=output_format,
+                engine_used="jtdt-reform", postprocess_done=False, report=res,
+                error=res.get("error") or "jtdt-reform engine 失敗",
+            )
+        report = {
+            "primary_engine": "jtdt-reform-odt",
+            "postprocess_engine": "",
+            "postprocess_engine_version": "",
+            "postprocess_fixers_count": 0,
+            "native_stats": res,
+        }
+        # ODT 是主輸出；docx 要的話用 soffice convert
+        if output_format == "odt":
+            output_path = final_odt
+        elif output_format == "docx":
+            output_path = work_dir / "final.docx"
+            d_res = convert_odt_to_docx(final_odt, output_path)
+            if not d_res["ok"]:
+                # 失敗 fallback：直接給 ODT
+                log.warning("ODT→docx 失敗，回傳 ODT: %s", d_res.get("error"))
+                return ConvertResult(
+                    ok=True, output_path=final_odt, output_format="odt",
+                    engine_used="jtdt-reform", postprocess_done=False,
+                    report=report,
+                    error=f"ODT→docx 失敗，已改回 ODT 輸出：{d_res.get('error')}",
+                )
+        else:
+            return ConvertResult(
+                ok=False, output_path=None, output_format=output_format,
+                engine_used="jtdt-reform", postprocess_done=False, report=report,
+                error=f"不支援的輸出格式：{output_format}",
+            )
+        return ConvertResult(
+            ok=True, output_path=output_path, output_format=output_format,
+            engine_used="jtdt-reform", postprocess_done=False, report=report,
+        )
+
+    # ----- Step 1: pdf2docx (預設 engine) -----
     log.info("pdf-to-office: converting %s via pdf2docx", pdf_path.name)
     res = convert_via_pdf2docx(pdf_path, raw_docx)
     engine_used = "pdf2docx"
@@ -82,7 +159,7 @@ def convert_pdf_to_office(
     #   primary_engine  = pdf2docx / libreoffice  (上游 raw 轉檔)
     #   postprocess_engine = jtdt-refine v<X>  (本專案 17+ 個 fixer / bbox 真值校正)
     JTDT_POSTPROC_ENGINE = "jtdt-refine"
-    JTDT_POSTPROC_VERSION = "1.0"
+    JTDT_POSTPROC_VERSION = "1.4"
     report: dict = {}
     if enable_postprocess:
         try:

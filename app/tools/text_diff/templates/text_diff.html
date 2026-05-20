@@ -44,14 +44,57 @@
 }
 .td-rows .ln {
   padding: 1px 12px; white-space: pre-wrap; word-break: break-word;
-  min-height: 1.55em;
+  min-height: 1.55em; position: relative;
 }
-.td-rows .ln.left  { border-right: 1px solid #e5e7eb; }
+.td-rows .ln.left  { border-right: 1px solid #e5e7eb; padding-right: 30px; }
+.td-rows .ln.right { padding-right: 30px; }
 .td-rows .ln.equal   { color:#475569; }
 .td-rows .ln.delete  { background: #fee2e2; color:#991b1b; }
 .td-rows .ln.insert  { background: #dcfce7; color:#166534; }
 .td-rows .ln.replace { background: #fef3c7; color:#92400e; }
 .td-rows .ln.blank   { background: #f1f5f9; color:#94a3b8; }
+/* per-cell copy button — hover 浮現 */
+.td-rows .cell-copy {
+  position: absolute; right: 4px; top: 2px;
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid #cbd5e1; border-radius: 4px;
+  background: #fff; color: #475569; opacity: 0; cursor: pointer;
+  transition: opacity 0.12s, background 0.12s;
+  padding: 0;
+}
+.td-rows .ln:hover .cell-copy { opacity: 0.55; }
+.td-rows .cell-copy:hover { opacity: 1 !important; background:#e0e7ff; color:#3730a3; }
+.td-rows .cell-copy.is-copied { opacity: 1 !important; background:#dcfce7; color:#166534; }
+/* 欄位標題（舊版內容 / 新版內容） — sticky 留在 diff box 頂端 */
+.td-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  position: sticky; top: 0; z-index: 5;
+  background: #f8fafc;
+  border-bottom: 2px solid #cbd5e1;
+}
+.td-header .col {
+  padding: 8px 12px;
+  font-size: 13px; font-weight: 600; color: #334155;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.td-header .col.left { border-right: 1px solid #cbd5e1; }
+.td-header .col .col-actions { display: flex; gap: 6px; }
+.td-header .col .col-actions .btn { font-size: 12px; padding: 3px 8px; }
+/* Toast 通知 */
+.td-toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #166534; color: #fff; padding: 10px 18px; border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 999;
+  font-size: 14px; font-weight: 500;
+  transition: opacity 0.2s; opacity: 0;
+}
+.td-toast.show { opacity: 1; }
+.td-rows .cell-copy svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+
+.df-bulkcopy { display: flex; gap: 8px; margin-bottom: 8px; }
+.df-bulkcopy .btn { font-size: 12.5px; padding: 5px 12px; }
 
 .td-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .td-btn-mini { font-size: 11.5px; padding: 3px 8px; background:#f1f5f9;
@@ -98,6 +141,7 @@
   <h2 style="margin-top:0;">2. 比對結果</h2>
   <div id="sumBox" class="df-summary"></div>
   <div id="diffBox"></div>
+  <div id="td-toast" class="td-toast" hidden></div>
 </div>
 
 {% endblock %}
@@ -263,14 +307,102 @@ function renderResult(d) {
   const p = (d.pages && d.pages[0]) || null;
   if (!p) { $('diffBox').innerHTML = ''; return; }
   const n = Math.max(p.diff.a.length, p.diff.b.length);
+  // SVG paperclip icon for per-cell copy buttons (matches translate-doc)
+  const COPY_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" ry="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+  const copyBtn = (text) =>
+    `<button type="button" class="cell-copy" data-act="cell-copy" data-text="${esc(text)}" title="複製此格內容">${COPY_ICON}</button>`;
   let rows = '';
+  // 保留兩邊全文以提供「複製全文」按鈕（去掉 blank 補位）
+  const _oldLines = [], _newLines = [];
   for (let i = 0; i < n; i++) {
     const ra = p.diff.a[i] || {text: '', tag: 'blank'};
     const rb = p.diff.b[i] || {text: '', tag: 'blank'};
-    rows += `<div class="ln left ${ra.tag}">${esc(ra.text || ' ')}</div>` +
-            `<div class="ln right ${rb.tag}">${esc(rb.text || ' ')}</div>`;
+    if (ra.tag !== 'blank') _oldLines.push(ra.text || '');
+    if (rb.tag !== 'blank') _newLines.push(rb.text || '');
+    rows += `<div class="ln left ${ra.tag}">${esc(ra.text || ' ')}${copyBtn(ra.text || '')}</div>` +
+            `<div class="ln right ${rb.tag}">${esc(rb.text || ' ')}${copyBtn(rb.text || '')}</div>`;
   }
-  $('diffBox').innerHTML = `<div class="td-page"><div class="td-rows">${rows}</div></div>`;
+  // v1.9.82：加欄位標題列（舊版內容 / 新版內容）+「複製全文」按鈕放對應欄位內
+  const header = `
+    <div class="td-header">
+      <div class="col left">
+        <span>舊版內容</span>
+        <span class="col-actions">
+          <button class="btn btn-small" type="button" id="btnCopyAllOld" data-text="${esc(_oldLines.join('\\n'))}">{{ icon('paperclip', size=12) }} 複製舊版全文</button>
+        </span>
+      </div>
+      <div class="col right">
+        <span>新版內容</span>
+        <span class="col-actions">
+          <button class="btn btn-small" type="button" id="btnCopyAllNew" data-text="${esc(_newLines.join('\\n'))}">{{ icon('paperclip', size=12) }} 複製新版全文</button>
+        </span>
+      </div>
+    </div>`;
+  $('diffBox').innerHTML = `<div class="td-page">${header}<div class="td-rows">${rows}</div></div>`;
 }
+
+// v1.9.82：toast 通知（每次複製動作都會 pop-up 確認）
+function _showToast(msg) {
+  const t = $('td-toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.hidden = false;
+  // 觸發 reflow 才能執行 transition
+  void t.offsetWidth;
+  t.classList.add('show');
+  clearTimeout(t._hideTimer);
+  t._hideTimer = setTimeout(() => {
+    t.classList.remove('show');
+    setTimeout(() => { t.hidden = true; }, 250);
+  }, 1500);
+}
+
+// 複製到剪貼簿，並讓按鈕短暫變綠表示成功 + toast
+async function _copyAndFlash(btn, text, toastMsg) {
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(text || '');
+    ok = true;
+  } catch (e) {
+    // fallback: 用隱形 textarea
+    const ta = document.createElement('textarea');
+    ta.value = text || '';
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); ok = true; }
+    catch (e2) {}
+    document.body.removeChild(ta);
+  }
+  if (ok) {
+    btn.classList.add('is-copied');
+    setTimeout(() => btn.classList.remove('is-copied'), 800);
+    _showToast(toastMsg || '已複製到剪貼簿');
+  } else {
+    _showToast('複製失敗');
+  }
+}
+
+// per-cell copy delegation
+$('diffBox').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act="cell-copy"]');
+  if (b) {
+    const txt = b.dataset.text || '';
+    const preview = txt.length > 14 ? txt.slice(0, 12) + '…' : txt;
+    _copyAndFlash(b, txt, `已複製：「${preview}」`);
+    return;
+  }
+  // 全文複製按鈕（用 event delegation 因標題在 innerHTML 內動態生成）
+  const allOld = e.target.closest('#btnCopyAllOld');
+  if (allOld) {
+    _copyAndFlash(allOld, allOld.dataset.text || '', '已複製舊版全文');
+    return;
+  }
+  const allNew = e.target.closest('#btnCopyAllNew');
+  if (allNew) {
+    _copyAndFlash(allNew, allNew.dataset.text || '', '已複製新版全文');
+    return;
+  }
+});
 </script>
 {% endblock %}

@@ -17,13 +17,21 @@ from .fixers import (
     fix_header_footer,
     fix_heading_detect,
     fix_image_position_fix,
+    fix_link_text_recovery,
     fix_list_detect,
+    fix_paragraph_line_split,
     fix_paragraph_merge,
     fix_paragraph_split,
     fix_table_autofit,
+    fix_table_bbox_width,
+    fix_table_borders_from_image,
+    fix_table_cell_dedup_text,
     fix_table_cell_repair,
     fix_table_dedup_cells,
+    fix_table_empty_cell_recovery,
     fix_table_normalize,
+    fix_table_unmerge_with_pdf_labels,
+    fix_text_recovery,
     fix_title_split,
 )
 from .fixers.bbox_layout import fix_bbox_layout
@@ -50,6 +58,7 @@ def run_postprocess(
     enable_style_apply: bool = True,
     enable_fake_table_remove: bool = True,
     enable_table_autofit: bool = True,
+    enable_table_bbox_width: bool = True,
     enable_image_position_fix: bool = True,
     enable_table_normalize: bool = True,
     enable_table_cell_repair: bool = True,
@@ -58,6 +67,13 @@ def run_postprocess(
     enable_bbox_layout: bool = True,
     enable_page_geometry: bool = True,
     enable_over_indent_cleanup: bool = True,
+    enable_paragraph_line_split: bool = True,
+    enable_table_cell_dedup_text: bool = True,
+    enable_text_recovery: bool = True,
+    enable_table_borders_from_image: bool = True,
+    enable_table_empty_cell_recovery: bool = True,
+    enable_link_text_recovery: bool = True,
+    enable_table_unmerge_with_pdf_labels: bool = True,
 ) -> dict:
     """主入口。讀 PDF + docx → 跑 fixer → 寫到 docx_output。
 
@@ -151,6 +167,10 @@ def run_postprocess(
         fixer_specs.append(("paragraph_merge", fix_paragraph_merge))
     if enable_paragraph_split:
         fixer_specs.append(("paragraph_split", fix_paragraph_split))
+    # 依 PDF block 內 lines 還原段落內被吃掉的換行（pdf2docx 把同 block 多 line
+    # 合成單段、最後一行被黏進前一行的情況）— 必須在 paragraph_split 之後
+    if enable_paragraph_line_split:
+        fixer_specs.append(("paragraph_line_split", fix_paragraph_line_split))
     # 標題啟發式拆段（強分隔標點 + 章節 header 起頭）— 補 paragraph_split 的不足
     if enable_title_split:
         fixer_specs.append(("title_split", fix_title_split))
@@ -166,20 +186,50 @@ def run_postprocess(
         fixer_specs.append(("cjk_typography", fix_cjk_typography))
     if enable_cleanup:
         fixer_specs.append(("cleanup", fix_cleanup))
+    # 表格 cell 內重複文字去重（pdf2docx stroke+fill 渲染粗體副作用造成 cell 內
+    # 同段落重複）— 早於 cell_repair / autofit / normalize 跑
+    if enable_table_cell_dedup_text:
+        fixer_specs.append(("table_cell_dedup_text", fix_table_cell_dedup_text))
     # 表格 autofit 放最後 — 先讓其他 fixer 動完內容，最後讓表格自動 resize
     # 表格 cell 修復 — 用 pdfplumber 真值補空 cell（早於 autofit / normalize）
+    # D3 vMerge 拆解 — 必須在 table_cell_repair / table_empty_cell_recovery 之前
+    # 跑，這樣後續 fixer 看到的 cell 結構是「該拆已拆」的正確狀態
+    if enable_table_unmerge_with_pdf_labels:
+        fixer_specs.append(("table_unmerge_with_pdf_labels",
+                             fix_table_unmerge_with_pdf_labels))
     if enable_table_cell_repair:
         fixer_specs.append(("table_cell_repair",
                              lambda doc, pt, al: fix_table_cell_repair(doc, pt, al,
                                                                         pdf_path=pdf_path)))
+    # C5 表格 empty cell 用 PDFTruth y-mapping 補回（修「1 單位」等被 pdf2docx
+    # 漏到 empty cell 的文字）— 在 pdfplumber-based cell_repair 之後 + autofit
+    # 之前跑
+    if enable_table_empty_cell_recovery:
+        fixer_specs.append(("table_empty_cell_recovery",
+                             fix_table_empty_cell_recovery))
     if enable_table_autofit:
         fixer_specs.append(("table_autofit", fix_table_autofit))
+    # 表格欄寬從 PDF bbox 真值推導 — 必須在 table_autofit 之後（autofit 會把 tcW
+    # 設為 auto / w=0，本 fixer 改回 type=dxa 並寫入 bbox 真值寬度）。autofit 的
+    # tblLayout=autofit 仍保留，超寬內容仍可撐開
+    if enable_table_bbox_width:
+        fixer_specs.append(("table_bbox_width",
+                             lambda doc, pt, al: fix_table_bbox_width(doc, pt, al,
+                                                                       pdf_path=pdf_path)))
     # 表格相鄰重複 cell 合併（pdf2docx 跨欄合併儲存格抓錯時自救）
     if enable_table_dedup_cells:
         fixer_specs.append(("table_dedup_cells", fix_table_dedup_cells))
     # 表格樣式正規化放最後 — 等所有結構修完才套樣式
     if enable_table_normalize:
         fixer_specs.append(("table_normalize", fix_table_normalize))
+    # C4 從 PDF render 圖像偵測每張 docx table 對應 region 是否有實線；無 → 把
+    # docx table 的 tblBorders 與 tcBorders 全清成 nil（修「PDF 原本無框線但
+    # docx 表加上框線」的情境）。必須在 table_normalize 之後跑 — 否則
+    # normalize 會把我們設的 nil 框線覆寫回 single border
+    if enable_table_borders_from_image:
+        fixer_specs.append(("table_borders_from_image",
+                             lambda doc, pt, al: fix_table_borders_from_image(
+                                 doc, pt, al, pdf_path=pdf_path)))
     # bbox layout 分析（最後跑 — 純 detect / report，不改文字內容）
     if enable_bbox_layout:
         fixer_specs.append(("bbox_layout", fix_bbox_layout))
@@ -190,6 +240,18 @@ def run_postprocess(
     # 造成中文標題被迫折行斷字。必須 page_geometry 之後跑（用 sectPr 算 content width）。
     if enable_over_indent_cleanup:
         fixer_specs.append(("over_indent_cleanup", fix_over_indent_cleanup))
+    # 補回 PDFTruth 內有但 docx 完全找不到的 short text block（absolute-position
+    # 飄浮短文常被 pdf2docx 漏抓 — 簽章 line / footer / 範例標籤等）。放在最後，
+    # 等所有結構性 fixer 跑完後再評估「真的缺哪幾段」
+    if enable_text_recovery:
+        fixer_specs.append(("text_recovery", fix_text_recovery))
+    # D2 超連結文字補回 — PDF link annotation 區域的 text 在 docx 漏抓時，用
+    # PyMuPDF page.get_links() + PDFTruth 補回到對應空 cell。放在 text_recovery
+    # 之後，避免重覆補同字
+    if enable_link_text_recovery:
+        fixer_specs.append(("link_text_recovery",
+                             lambda doc, pt, al: fix_link_text_recovery(
+                                 doc, pt, al, pdf_path=pdf_path)))
 
     for name, fn in fixer_specs:
         if pdf_truth is None or alignment is None:

@@ -3,7 +3,7 @@
 
 Usage:
     python tests/stress/run_stress.py --users 5 --duration 60
-    python tests/stress/run_stress.py --users 30 --duration 120 --base-url http://192.168.1.30:8765
+    python tests/stress/run_stress.py --users 30 --duration 120 --base-url http://your-server:8765
 
 每個 worker 在 duration 秒內輪流呼叫 SCENARIOS 內的工具 endpoint，
 測量 latency / 吞吐 / 錯誤率。輸出 markdown 報告（也可 --csv 匯出）。

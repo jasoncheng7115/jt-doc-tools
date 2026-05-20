@@ -1,4 +1,4 @@
-# Jason Tools 文件工具箱 v1.8.58
+# Jason Tools 文件工具箱 v1.9.102
 
 > 整合式 PDF / Office 文件處理平台，35 個工具一站式解決：**填單用印**、**浮水印**、**多頁合併 / 拆分 / 旋轉 / 整理**、**轉檔**、**去識別化**、**字數統計**、**註解整理**、**差異比對**、**逐句翻譯**、**清單處理**、**電子發票處理**、**統編查詢**、**頁面編輯器**、**加密 / 解密**...
 >
@@ -120,7 +120,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 | **[INSTALL.md](INSTALL.md)** | 三平台詳細安裝、必要工具、安裝位置、系統需求、解除安裝 |
 | **[OPS.md](OPS.md)** | 日常運維：`jtdt` 指令、升級、反向代理(nginx/Caddy)、監聽位置、備份還原、排程清理 |
 | **[AUTH.md](AUTH.md)** | 認證 / RBAC / 內建帳號(jtdt-admin / jtdt-auditor)/ 2FA / 帳號鎖定 / 緊急復原 |
-| **[API.md](API.md)** | REST API:Bearer token、endpoint 一覽、上傳格式、回傳格式、錯誤碼、curl / Python 範例、Job 流程 |
+| **[API.md](API.md)**（[線上網頁版](https://jasoncheng7115.github.io/jt-doc-tools/api.html)）| REST API:Bearer token、endpoint 一覽、上傳格式、回傳格式、錯誤碼、curl / Python 範例、Job 流程 |
 | **[LLM.md](LLM.md)** | LLM AI 加值功能（預設關閉）：10 個工具如何用 LLM、效果範例、部署選項（Ollama / vLLM / DGX Spark） |
 | **[SECURITY.md](SECURITY.md)** | 資安政策、OWASP Top 10 (2025) 對照、漏洞回報管道、GitHub native scan 整合 |
 | **[CHANGELOG.md](CHANGELOG.md)** | 完整更新記錄 |
@@ -185,4 +185,4 @@ Apache License 2.0 — 詳見 [LICENSE](LICENSE)。第三方套件授權見 [THI
 - **原始碼庫**：<https://github.com/jasoncheng7115/jt-doc-tools>
 - **回報問題**：<https://github.com/jasoncheng7115/jt-doc-tools/issues>
 
-**Jason Cheng** (Jason Tools) — jason@jason.tools
+**Jason Cheng** (Jason Tools) — [email]

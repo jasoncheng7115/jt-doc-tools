@@ -96,12 +96,28 @@
 <p class="muted">統計 PDF 中的字數、字元、段落、句子，並繪製每頁字數直條圖、字元類型環圈、中文單字 / 中文雙字 / 英文 三類高頻詞圖表。</p>
 
 <div class="panel">
-  <h2 style="margin-top:0;">1. 上傳 PDF</h2>
-  {% with upload_id='wcUp', accept='application/pdf' %}{% include "components/file_upload.html" %}{% endwith %}
+  <h2 style="margin-top:0;">1. 上傳檔案或貼文字</h2>
+  <p class="muted" style="margin:-4px 0 8px;">支援 PDF、純文字 (.txt / .md / .csv / .log / .json / .xml / .html 等)；或直接貼文字到下方文字框。</p>
+  <div class="wc-tabs" style="display:flex; gap:8px; margin-bottom:10px;">
+    <button type="button" id="wcTabFile" class="wc-tab-btn wc-tab-active" style="padding:6px 14px; border:1px solid #d1d5db; background:#fff; cursor:pointer; border-radius:6px;">上傳檔案</button>
+    <button type="button" id="wcTabPaste" class="wc-tab-btn" style="padding:6px 14px; border:1px solid #d1d5db; background:#f8fafc; cursor:pointer; border-radius:6px;">貼文字</button>
+  </div>
+
+  <div id="wcPanelFile">
+    {% with upload_id='wcUp', accept='application/pdf,.pdf,.txt,.md,.csv,.log,.rtf,.html,.htm,.xml,.json,text/plain,text/csv,text/markdown,text/html,application/xml,application/json', multiple=true %}{% include "components/file_upload.html" %}{% endwith %}
+  </div>
+
+  <div id="wcPanelPaste" hidden>
+    <textarea id="wcPasteText" rows="10" placeholder="貼上要統計的文字…" style="width:100%; padding:10px; font-family:inherit; font-size:14px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;"></textarea>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+      <span class="muted" id="wcPasteHint" style="font-size:12.5px;">0 字元</span>
+      <button type="button" id="wcPasteAnalyze" class="btn btn-primary" style="padding:8px 18px;">分析文字</button>
+    </div>
+  </div>
 
   {{ llm_gate('pdf-wordcount', llm_enabled, llm_model, mode='augment',
               feature_label='LLM 摘要 + 關鍵字',
-              feature_desc='上傳後額外呼叫地端 LLM，產出 3-5 句重點摘要與前 10 大關鍵字（會將文件內容送往設定的 LLM server，請確認為內網地端服務）。',
+              feature_desc='額外呼叫地端 LLM，產出 3-5 句重點摘要與前 10 大關鍵字（會將內容送往設定的 LLM server，請確認為內網地端服務）。',
               input_id='wcLlmSum') }}
 
   <div id="wcLoading" class="muted" style="margin-top:10px; font-size:12.5px;" hidden>
@@ -110,7 +126,44 @@
   <div id="wcError" class="wc-warn" hidden></div>
 </div>
 
-<div id="wcResults" hidden>
+<div id="wcMulti" hidden style="margin-top:16px;">
+  <div class="panel">
+    <h2 style="margin-top:0;">多檔字數統計 <span class="muted" id="wcMultiCount" style="font-size:13px; font-weight:400; margin-left:8px;"></span></h2>
+    <div id="wcMultiSkipped" class="muted" style="margin-bottom:8px;" hidden></div>
+    <div class="wc-stats">
+      <div class="wc-stat wc-stat-1"><div class="lbl">跨檔總字數</div><div class="val" id="mWordTotal">0</div></div>
+      <div class="wc-stat"><div class="lbl">總頁數</div><div class="val" id="mPages">0</div></div>
+      <div class="wc-stat"><div class="lbl">中文字</div><div class="val" id="mCjk">0</div></div>
+      <div class="wc-stat"><div class="lbl">英文單字</div><div class="val" id="mEn">0</div></div>
+      <div class="wc-stat"><div class="lbl">段 / 句</div><div class="val" id="mParaSent">0 / 0</div></div>
+      <div class="wc-stat"><div class="lbl">總字元 (含空白)</div><div class="val" id="mChars">0</div></div>
+      <div class="wc-stat"><div class="lbl">平均每檔字數</div><div class="val" id="mAvgFile">0</div></div>
+      <div class="wc-stat"><div class="lbl">閱讀時間估計</div><div class="val" id="mRead">0 分</div></div>
+    </div>
+  </div>
+  <div class="panel">
+    <h2 style="margin-top:0;">各檔排行（依字數）</h2>
+    <div style="overflow-x:auto;">
+      <table style="width:100%; border-collapse:collapse; font-size:13.5px;">
+        <thead>
+          <tr style="background:#f1f5f9; border-bottom:2px solid #cbd5e1;">
+            <th style="padding:8px; text-align:left;">#</th>
+            <th style="padding:8px; text-align:left;">檔名</th>
+            <th style="padding:8px; text-align:right;">頁數</th>
+            <th style="padding:8px; text-align:right;">字數</th>
+            <th style="padding:8px; text-align:right;">字元</th>
+            <th style="padding:8px; text-align:right;">中文</th>
+            <th style="padding:8px; text-align:right;">英文</th>
+            <th style="padding:8px; text-align:right;">閱讀</th>
+          </tr>
+        </thead>
+        <tbody id="mRankingBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="wcResults" hidden style="margin-top:16px;">
 
 <div class="panel">
   <h2 style="margin-top:0;">統計總覽 <span class="muted" style="font-size:13px; font-weight:400; margin-left:8px;" id="wcFile"></span></h2>
@@ -234,20 +287,99 @@ function hideTT() { TT.classList.remove('show'); }
 
 function fmt(n) { return (n || 0).toLocaleString(); }
 
-const fu = new FileUpload($('wcUp'), async (f) => {
-  if (!f) return;
-  lastFile = f;
+// Tab 切換（上傳檔案 / 貼文字）
+(function setupTabs() {
+  const tabFile = $('wcTabFile');
+  const tabPaste = $('wcTabPaste');
+  const panelFile = $('wcPanelFile');
+  const panelPaste = $('wcPanelPaste');
+  function setActive(which) {
+    if (which === 'file') {
+      tabFile.classList.add('wc-tab-active');
+      tabFile.style.background = '#fff';
+      tabPaste.classList.remove('wc-tab-active');
+      tabPaste.style.background = '#f8fafc';
+      panelFile.hidden = false;
+      panelPaste.hidden = true;
+    } else {
+      tabPaste.classList.add('wc-tab-active');
+      tabPaste.style.background = '#fff';
+      tabFile.classList.remove('wc-tab-active');
+      tabFile.style.background = '#f8fafc';
+      panelFile.hidden = true;
+      panelPaste.hidden = false;
+    }
+  }
+  tabFile.addEventListener('click', () => setActive('file'));
+  tabPaste.addEventListener('click', () => setActive('paste'));
+  // 字數提示
+  const ta = $('wcPasteText');
+  const hint = $('wcPasteHint');
+  ta.addEventListener('input', () => {
+    hint.textContent = `${ta.value.length.toLocaleString()} 字元`;
+  });
+})();
+
+// 貼文字 → 分析
+$('wcPasteAnalyze').addEventListener('click', async () => {
+  const text = $('wcPasteText').value;
+  if (!text.trim()) {
+    $('wcError').textContent = '請先貼上要統計的文字';
+    $('wcError').hidden = false;
+    return;
+  }
+  $('wcResults').hidden = true;
+  $('wcMulti').hidden = true;
+  $('wcError').hidden = true;
+  $('wcLoading').hidden = false;
+  const fd = new FormData();
+  fd.append('text', text);
+  const llmCb = $('wcLlmSum');
+  if (llmCb && llmCb.checked) fd.append('llm_summarize', '1');
+  let resp;
+  try {
+    resp = await fetch('/tools/pdf-wordcount/analyze-text', { method: 'POST', body: fd });
+  } catch (err) {
+    $('wcLoading').hidden = true;
+    $('wcError').textContent = '網路錯誤：' + err.message;
+    $('wcError').hidden = false;
+    return;
+  }
+  $('wcLoading').hidden = true;
+  if (!resp.ok) {
+    let msg = 'HTTP ' + resp.status;
+    try { msg = (await resp.json()).detail || msg; } catch (e) {}
+    $('wcError').textContent = '分析失敗：' + msg;
+    $('wcError').hidden = false;
+    return;
+  }
+  lastResult = await resp.json();
+  render(lastResult);
+});
+
+const fu = new FileUpload($('wcUp'), async (files) => {
+  // multiple=true，files 為陣列；單檔 / 多檔 dispatch 不同 endpoint
+  const arr = Array.isArray(files) ? files : [files];
+  if (!arr.length) return;
+  lastFile = arr[0];
   $('wcResults').hidden = true;
   $('wcError').hidden = true;
   $('wcLoading').hidden = false;
 
   const fd = new FormData();
-  fd.append('file', f);
-  const llmCb = $('wcLlmSum');
-  if (llmCb && llmCb.checked) fd.append('llm_summarize', '1');
+  let endpoint;
+  if (arr.length === 1) {
+    fd.append('file', arr[0]);
+    const llmCb = $('wcLlmSum');
+    if (llmCb && llmCb.checked) fd.append('llm_summarize', '1');
+    endpoint = '/tools/pdf-wordcount/analyze';
+  } else {
+    arr.forEach(f => fd.append('files', f));
+    endpoint = '/tools/pdf-wordcount/analyze-multi';
+  }
   let resp;
   try {
-    resp = await fetch('/tools/pdf-wordcount/analyze', { method: 'POST', body: fd });
+    resp = await fetch(endpoint, { method: 'POST', body: fd });
   } catch (err) {
     $('wcLoading').hidden = true;
     $('wcError').textContent = '網路錯誤:' + err.message;
@@ -263,10 +395,57 @@ const fu = new FileUpload($('wcUp'), async (f) => {
     return;
   }
   lastResult = await resp.json();
-  render(lastResult);
+  if (arr.length > 1) {
+    renderMulti(lastResult);
+  } else {
+    render(lastResult);
+  }
 });
 
+function renderMulti(r) {
+  $('wcResults').hidden = true;
+  $('wcMulti').hidden = false;
+  $('wcMultiCount').textContent = `共 ${r.file_count} 個檔案`;
+  const skipEl = $('wcMultiSkipped');
+  if (r.skipped && r.skipped.length) {
+    skipEl.textContent = `已跳過 ${r.skipped.length} 個檔案：` + r.skipped.join('、');
+    skipEl.hidden = false;
+  } else {
+    skipEl.hidden = true;
+  }
+  const a = r.aggregate;
+  $('mWordTotal').textContent = fmt(a.word_total);
+  $('mPages').textContent = fmt(a.page_total);
+  $('mCjk').textContent = fmt(a.cjk_chars);
+  $('mEn').textContent = fmt(a.en_words);
+  $('mParaSent').textContent = fmt(a.paragraphs) + ' / ' + fmt(a.sentences);
+  $('mChars').textContent = fmt(a.char_total);
+  $('mAvgFile').textContent = fmt(a.avg_words_per_file);
+  const m = a.reading_min;
+  $('mRead').textContent = m < 1 ? '<1 分' : (m >= 60 ? (Math.floor(m/60)+'時'+Math.round(m%60)+'分') : (m + ' 分'));
+  const tb = $('mRankingBody');
+  tb.innerHTML = '';
+  r.ranking.forEach((row, i) => {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid #e2e8f0';
+    const rd = row.reading_min;
+    const rdTxt = rd < 1 ? '<1 分' : (rd >= 60 ? (Math.floor(rd/60)+'時'+Math.round(rd%60)+'分') : (rd + ' 分'));
+    tr.innerHTML = `
+      <td style="padding:6px 8px;">${i+1}</td>
+      <td style="padding:6px 8px; word-break:break-all;">${row.filename.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</td>
+      <td style="padding:6px 8px; text-align:right;">${fmt(row.page_count)}</td>
+      <td style="padding:6px 8px; text-align:right; font-weight:600;">${fmt(row.word_total)}</td>
+      <td style="padding:6px 8px; text-align:right;">${fmt(row.char_total)}</td>
+      <td style="padding:6px 8px; text-align:right;">${fmt(row.cjk_chars)}</td>
+      <td style="padding:6px 8px; text-align:right;">${fmt(row.en_words)}</td>
+      <td style="padding:6px 8px; text-align:right;">${rdTxt}</td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+
 function render(r) {
+  $('wcMulti').hidden = true;
   $('wcResults').hidden = false;
   $('wcFile').textContent = r.filename || '';
 
@@ -524,7 +703,7 @@ $('btnCsv').addEventListener('click', async () => {
 
 $('btnJson').addEventListener('click', () => {
   if (!lastResult) return;
-  const base = (lastResult.filename || 'document').replace(/\.pdf$/i, '');
+  const base = (lastResult.filename || 'document').replace(/\.(pdf|txt|md|csv|log|rtf|html|htm|xml|json)$/i, '');
   download(base + '_wordcount.json',
     JSON.stringify(lastResult, null, 2), 'application/json');
 });
@@ -563,7 +742,7 @@ $('btnMd').addEventListener('click', () => {
     r.freq.en_words.map(d => `- ${d.term}: ${d.count}`).join('\n') || '(無)',
     '',
   ];
-  const base = (r.filename || 'document').replace(/\.pdf$/i, '');
+  const base = (r.filename || 'document').replace(/\.(pdf|txt|md|csv|log|rtf|html|htm|xml|json)$/i, '');
   download(base + '_wordcount.md', lines.join('\n'), 'text/markdown');
 });
 </script>

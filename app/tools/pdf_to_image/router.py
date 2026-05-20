@@ -89,7 +89,7 @@ async def convert(
             except RuntimeError:
                 raise HTTPException(
                     500,
-                    "找不到 Office 轉檔引擎（OxOffice / LibreOffice）。請到「轉檔設定」確認安裝路徑。",
+                    "找不到 Office 轉檔引擎（OxOffice / LibreOffice）。請到「轉檔引擎設定」確認安裝路徑。",
                 )
             except Exception as e:
                 raise HTTPException(500, f"轉檔失敗：{e}")

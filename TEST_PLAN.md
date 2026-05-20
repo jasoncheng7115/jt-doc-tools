@@ -55,7 +55,7 @@
 ### 2.1 填單用印
 
 #### PDF 表單填寫 (pdf-fill)
-- [ ] 上傳廠商 PDF（華儲 / Macpower / momo / Tigerair）
+- [ ] 上傳廠商 PDF（[樣本 Q] / [樣本 P] / [樣本 O] / [樣本 N]）
 - [ ] 自動偵測欄位且公司資料正確帶入
 - [ ] 切換第二公司不會 500
 - [ ] 拖曳藍框微調位置 → 套用新位置
@@ -287,7 +287,7 @@ done
 
 # 打遠端 (.30 / .154)
 uv run python tests/stress/run_stress.py --users 10 --duration 60 \
-    --base-url http://192.168.1.30:8765
+    --base-url http://your-server:8765
 ```
 
 涵蓋 5 個工具（wordcount / annotations / annot-strip / text-deident / text-diff），新增工具請改 `tests/stress/run_stress.py` 內 `SCENARIOS`。樣本 PDF 首次跑時 PyMuPDF 自動生成。
@@ -344,13 +344,13 @@ uv run python tests/stress/run_stress.py --users 10 --duration 60 \
 ### 6.1 pdf-editor
 
 - [ ] **OCR 中文亂碼擷取** (v1.2.4 / v1.2.5)
-  - 上傳 `~/Nextcloud/文件檔/Proxmox VE 手冊/1 Proxmox VE 準備與安裝.pdf`
+  - 上傳 `~/Nextcloud/文件檔/通告文件範例.pdf`
   - 點選原 PDF 上「網路基本設定」→ 應顯示「網路基本設定」（非「翕⊕ㄱ」之類）
   - 點選「登入系統」→ 應顯示「登入系統」
   - 預期：自動 OCR 重建、訊息「已用 OCR 自動辨識…」
 
 - [ ] **OCR 西文字型用 eng-only** (v1.3.1)
-  - 同上 PDF，點選「Proxmox VE」(OpenSans-Bold 字型) → 應顯示「Proxmox VE」(非「ProXimoxX VE」)
+  - 同上 PDF，點選「通告文件」(OpenSans-Bold 字型) → 應顯示「通告文件」(非「通告文檔」)
 
 - [ ] **OCR 短標題 padding 不抓鄰近 span** (v1.2.5)
   - 「網路基本設定」OCR 結果不應含前後鄰近文字（不是「VE 網路基本設定一」）

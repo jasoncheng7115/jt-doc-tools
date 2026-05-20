@@ -23,9 +23,52 @@ from docx.oxml.ns import qn
 log = logging.getLogger(__name__)
 
 MAX_CELL_TEXT_FOR_FAKE = 200  # 1-row 表格內所有文字 < 此字數視為「其實是一段」
+HEAVY_EMPTY_RATIO = 0.70      # 表格 cell 70% 以上為空白 → 候選假表格
+HEAVY_EMPTY_MIN_CELLS = 4     # cell 數至少 4 才考慮（避免誤殺 2x1 / 1x2）
+HEAVY_EMPTY_MAX_NONEMPTY = 5  # 非空 cell 不超過 5 個（總文字也稀疏）
 
 
-def _is_fake_table(table) -> tuple[bool, str]:
+def _count_cells_with_text(table) -> tuple[int, int, int]:
+    """回 (total_cells, non_empty_cells, total_text_len)，跨 merged cell 只算一次。"""
+    seen: set = set()
+    total = 0
+    non_empty = 0
+    total_text_len = 0
+    for row in table.rows:
+        for cell in row.cells:
+            cid = id(cell._element)
+            if cid in seen:
+                continue
+            seen.add(cid)
+            total += 1
+            text = (cell.text or "").strip()
+            if text:
+                non_empty += 1
+                total_text_len += len(text)
+    return total, non_empty, total_text_len
+
+
+def _pdf_has_rect_near(pdf_truth, ratio_threshold: float = 0.001) -> bool:
+    """快速 proxy：PDFTruth 全文有沒有任何「夠大」的矩形 drawing。沒有 → 多數
+    docx 表格都是 pdf2docx 編造的假表，可較積極移除。"""
+    if not pdf_truth or not pdf_truth.pages:
+        return False
+    for pg in pdf_truth.pages:
+        page_area = float(pg.width or 0) * float(pg.height or 0)
+        if page_area <= 0:
+            continue
+        for drw in pg.drawings or []:
+            if drw.type != "rect":
+                continue
+            x0, y0, x1, y1 = drw.bbox
+            w = max(0.0, x1 - x0)
+            h = max(0.0, y1 - y0)
+            if (w * h) / page_area >= ratio_threshold:
+                return True
+    return False
+
+
+def _is_fake_table(table, *, pdf_has_real_table: bool) -> tuple[bool, str]:
     """回 (is_fake, reason)。"""
     rows = list(table.rows)
     cols = list(table.columns) if rows else []
@@ -45,6 +88,22 @@ def _is_fake_table(table) -> tuple[bool, str]:
     if len(rows) == 1 and len(all_text) < MAX_CELL_TEXT_FOR_FAKE:
         return True, "1-row short text"
 
+    # 重空 + 稀疏 — 大量空 cell + 內容很少（典型 pdf2docx 把分散 short text
+    # 編成表格的副作用）
+    total, non_empty, total_text_len = _count_cells_with_text(table)
+    if total >= HEAVY_EMPTY_MIN_CELLS:
+        empty_ratio = 1.0 - (non_empty / total)
+        if (empty_ratio >= HEAVY_EMPTY_RATIO
+                and non_empty <= HEAVY_EMPTY_MAX_NONEMPTY
+                and total_text_len < MAX_CELL_TEXT_FOR_FAKE):
+            # 對 PDF 內**無真實表格**的整份文件，更積極移除；有真實表格的文件
+            # 仍可移除但要求更稀疏（避免把真的 sparse 表格吃掉）
+            if not pdf_has_real_table:
+                return True, "heavy_empty_no_pdf_table"
+            # 有 PDF 表格時更謹慎：empty_ratio >= 0.85 才動
+            if empty_ratio >= 0.85 and non_empty <= 3:
+                return True, "heavy_empty_strict"
+
     return False, ""
 
 
@@ -54,9 +113,11 @@ def fix_fake_table_remove(docx_doc, pdf_truth, alignment) -> dict:
     removed = 0
     flattened_paragraphs = 0
     reasons: dict[str, int] = {}
+    pdf_has_real_table = _pdf_has_rect_near(pdf_truth)
 
     for table in list(docx_doc.tables):
-        is_fake, reason = _is_fake_table(table)
+        is_fake, reason = _is_fake_table(
+            table, pdf_has_real_table=pdf_has_real_table)
         if not is_fake:
             continue
         # 收集 table 內所有段落 element 副本（保留字型 / 樣式）
