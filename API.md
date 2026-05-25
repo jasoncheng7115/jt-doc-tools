@@ -124,30 +124,6 @@ curl -X POST http://localhost:8765/tools/image-to-pdf/api/image-to-pdf \
 
 回應：PDF 二進位。
 
-### 掃描拼合
-
-把多張掃描（如證件正、反面）中「有內容的區塊」自動偵測出來、保留原彩色，依其在原掃描中的相對位置合成到同一張 A4 白底 PDF。重疊時保留原位置不自動重排（需拖曳微調請改用網頁介面）。
-
-```text
-POST /tools/scan-merge/api/scan-merge
-```
-
-| 參數 | 類型 | 必填 | 說明 |
-|---|---|---|---|
-| `files` | file（可多個） | ✓ | 掃描檔，PDF / PNG / JPG / TIFF / WebP，各含一塊內容 |
-| `whiten` | bool | | 是否把淡灰 / 微黃的掃描底色提亮成純白（不影響彩色內容），預設 `true` |
-| `filename` | str | | 輸出檔名，預設 `scan-merge.pdf` |
-
-```bash
-curl -X POST http://localhost:8765/tools/scan-merge/api/scan-merge \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -F "files=@id-front.jpg" -F "files=@id-back.jpg" \
-  -F "whiten=true" \
-  --output id-merged.pdf
-```
-
-回應：單張 A4 白底 PDF 二進位。
-
 ### PDF 轉圖片
 
 把 PDF 每頁轉成 PNG（多頁自動打包 ZIP）。
@@ -393,6 +369,30 @@ curl -X POST http://localhost:8765/tools/pdf-compress/api/pdf-compress \
 ```
 
 回應：壓縮後的 PDF。
+
+### 掃描拼合
+
+把多張掃描（如證件正、反面）中「有內容的區塊」自動偵測出來、保留原彩色，依其在原掃描中的相對位置合成到同一張 A4 白底 PDF。重疊時保留原位置不自動重排（需拖曳微調請改用網頁介面）。
+
+```text
+POST /tools/scan-merge/api/scan-merge
+```
+
+| 參數 | 類型 | 必填 | 說明 |
+|---|---|---|---|
+| `files` | file（可多個） | ✓ | 掃描檔，PDF / PNG / JPG / TIFF / WebP，各含一塊內容 |
+| `whiten` | bool | | 是否把淡灰 / 微黃的掃描底色提亮成純白（不影響彩色內容），預設 `true` |
+| `filename` | str | | 輸出檔名，預設 `scan-merge.pdf` |
+
+```bash
+curl -X POST http://localhost:8765/tools/scan-merge/api/scan-merge \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "files=@id-front.jpg" -F "files=@id-back.jpg" \
+  -F "whiten=true" \
+  --output id-merged.pdf
+```
+
+回應：單張 A4 白底 PDF 二進位。
 
 ---
 

@@ -4,6 +4,14 @@
 
 ---
 
+## [1.11.5] - 2026-05-24
+
+### 安全 — 相依套件升級
+
+- `idna` 升至 3.16（修 CVE-2026-45409 / CWE-1333：`idna.encode()` 對特製輸入耗大量資源的 DoS；為 httpx / fastapi / starlette 的 transitive dep）。pyproject 加明確下限 `idna>=3.15`，requirements.txt 同步。install / update 走 `uv sync` 會自動套用，無須改安裝腳本。
+
+---
+
 ## [1.11.4] - 2026-05-24
 
 ### 改善 — 掃描拼合歸類

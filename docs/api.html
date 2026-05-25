@@ -95,7 +95,6 @@
           <div class="nav-children">
             <a class="nav-ep" href="#文書轉-pdf">文書轉 PDF</a>
             <a class="nav-ep" href="#圖片轉-pdf">圖片轉 PDF</a>
-            <a class="nav-ep" href="#掃描拼合">掃描拼合</a>
             <a class="nav-ep" href="#pdf-轉圖片">PDF 轉圖片</a>
             <a class="nav-ep" href="#pdf-轉-office">PDF 轉 Office</a>
           </div>
@@ -113,6 +112,7 @@
             <a class="nav-ep" href="#pdf-加頁碼">PDF 加頁碼</a>
             <a class="nav-ep" href="#pdf-多頁合一n-up">PDF 多頁合一（N-up）</a>
             <a class="nav-ep" href="#pdf-壓縮">PDF 壓縮</a>
+            <a class="nav-ep" href="#掃描拼合">掃描拼合</a>
           </div>
         </div>
         <div class="nav-group">
@@ -294,19 +294,6 @@
   <span class="hl-flag">--output</span> album.pdf</code></pre>
 <p>回應：PDF 二進位。</p>
       </section>
-      <section class="doc-section" data-sec="掃描拼合" data-title="掃描拼合" hidden>
-<div class="doc-crumb">3. 文件轉換 API</div>
-<h4 id="掃描拼合">掃描拼合</h4>
-<p>把多張掃描（如證件正、反面）中「有內容的區塊」自動偵測出來、保留原彩色，依其在原掃描中的相對位置合成到同一張 A4 白底 PDF。重疊時保留原位置不自動重排（需拖曳微調請改用網頁介面）。</p>
-<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/scan-merge/api/scan-merge</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>files</code></td><td>file（可多個）</td><td>✓</td><td>掃描檔，PDF / PNG / JPG / TIFF / WebP，各含一塊內容</td></tr><tr><td><code>whiten</code></td><td>bool</td><td></td><td>是否把淡灰 / 微黃的掃描底色提亮成純白（不影響彩色內容），預設 <code>true</code></td></tr><tr><td><code>filename</code></td><td>str</td><td></td><td>輸出檔名，預設 <code>scan-merge.pdf</code></td></tr></tbody></table></div>
-<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/scan-merge/api/scan-merge</span> \
-  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
-  <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@id-front.jpg&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@id-back.jpg&quot;</span> \
-  <span class="hl-flag">-F</span> <span class="hl-str">&quot;whiten=true&quot;</span> \
-  <span class="hl-flag">--output</span> id-merged.pdf</code></pre>
-<p>回應：單張 A4 白底 PDF 二進位。</p>
-      </section>
       <section class="doc-section" data-sec="pdf-轉圖片" data-title="PDF 轉圖片" hidden>
 <div class="doc-crumb">3. 文件轉換 API</div>
 <h4 id="pdf-轉圖片">PDF 轉圖片</h4>
@@ -437,6 +424,19 @@ curl <span class="hl-flag">-s</span> <span class="hl-url">http://localhost:8765/
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@large.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;preset=ebook&quot;</span> \
   <span class="hl-flag">--output</span> small.pdf</code></pre>
 <p>回應：壓縮後的 PDF。</p>
+      </section>
+      <section class="doc-section" data-sec="掃描拼合" data-title="掃描拼合" hidden>
+<div class="doc-crumb">4. PDF 編修 API</div>
+<h4 id="掃描拼合">掃描拼合</h4>
+<p>把多張掃描（如證件正、反面）中「有內容的區塊」自動偵測出來、保留原彩色，依其在原掃描中的相對位置合成到同一張 A4 白底 PDF。重疊時保留原位置不自動重排（需拖曳微調請改用網頁介面）。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/scan-merge/api/scan-merge</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>files</code></td><td>file（可多個）</td><td>✓</td><td>掃描檔，PDF / PNG / JPG / TIFF / WebP，各含一塊內容</td></tr><tr><td><code>whiten</code></td><td>bool</td><td></td><td>是否把淡灰 / 微黃的掃描底色提亮成純白（不影響彩色內容），預設 <code>true</code></td></tr><tr><td><code>filename</code></td><td>str</td><td></td><td>輸出檔名，預設 <code>scan-merge.pdf</code></td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/scan-merge/api/scan-merge</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@id-front.jpg&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@id-back.jpg&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;whiten=true&quot;</span> \
+  <span class="hl-flag">--output</span> id-merged.pdf</code></pre>
+<p>回應：單張 A4 白底 PDF 二進位。</p>
 <hr>
       </section>
       <section class="doc-section" data-sec="pdf-文字擷取" data-title="PDF 文字擷取" hidden>
