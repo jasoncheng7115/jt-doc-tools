@@ -1,4 +1,4 @@
-# Jason Tools 文件工具箱 v1.11.17
+# Jason Tools 文件工具箱 v1.11.18
 
 > 整合式 PDF / Office 文件處理平台，37 個工具一站式解決：**填單用印**、**浮水印**、**多頁合併 / 拆分 / 旋轉 / 整理**、**轉檔**、**掃描拼合**、**去識別化**、**字數統計**、**註解整理**、**差異比對**、**逐句翻譯**、**清單處理**、**電子發票處理**、**統編查詢**、**頁面編輯器**、**加密 / 解密**。。。
 >
@@ -37,7 +37,7 @@
 > - **安裝完成後常駐 ~3 GB**：Python 環境 ~1.5 GB（含 PyTorch / EasyOCR 主 OCR 引擎）+ tesseract trained data ~80 MB（chi_tra fast+best 雙變體 + eng）+ OxOffice/LibreOffice ~1 GB。EasyOCR 模型首次 OCR 時再下載 ~150 MB。
 > - **資料目錄成長**：使用者上傳檔案 + 稽核記錄 + 歷史會持續累積。如資料磁碟吃緊，可用 `JTDT_DATA_DIR=/mnt/big-disk/jtdt curl ... | sudo -E bash` 改裝到別處。
 >
-> **LXC / VM 配置建議**：12 GB 是會通過的底線(OS 2 GB + 峰值 8 GB + 緩衝 2 GB)，正式使用至少給 20 GB 才不會 3 個月後再爆。**8 GB LXC 一定裝不下**（已有客戶踩到）。
+> **LXC / VM 配置建議**：12 GB 是會通過的底線（OS 2 GB + 峰值 8 GB + 緩衝 2 GB），正式使用至少給 20 GB 才不會 3 個月後再爆。**8 GB LXC 一定裝不下**（已有客戶踩到）。
 
 ### 一行指令
 
@@ -46,7 +46,7 @@
 curl -fsSL https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/install.sh | sudo bash
 ```
 
-**Windows 10 / 11**（以系統管理員身分執行 PowerShell):
+**Windows 10 / 11**（以系統管理員身分執行 PowerShell）:
 ```powershell
 $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.net/gh/jasoncheng7115/jt-doc-tools@main/install.ps1' -OutFile $f -UseBasicParsing -TimeoutSec 15 -ErrorAction Stop; powershell -NoProfile -ExecutionPolicy Bypass -File $f } catch { Write-Host "[X] 下載安裝腳本失敗：$($_.Exception.Message)" -ForegroundColor Red }; Read-Host '按 Enter 關閉'
 ```
