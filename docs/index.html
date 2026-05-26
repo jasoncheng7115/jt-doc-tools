@@ -507,7 +507,7 @@
         <div class="ss-text">
           <div class="ss-num">08</div>
           <h3>OCR 文字辨識（掃描檔變可選取）</h3>
-          <p>把<b>掃描 PDF / 圖片變成可以選取、可搜尋的文字 PDF</b> — 跟 macOS 預覽程式 Live Text 同概念，但跑在你自己機房。雙引擎（<b>EasyOCR</b> 預設 / <b>Tesseract</b> 備援），中日韓辨識準確度高；OCR 完直接在頁內預覽並用滑鼠拖選驗證；最終 PDF 可直接下載拿去 Adobe Reader / Preview / 任何 PDF 工具裡選字 / 複製 / 全文搜尋。<br><br><b>外部 GPU 識別伺服器（速度 10× 以上）</b>：把 EasyOCR 部署到 GPU 主機（DGX Spark / H100 / H200 / 4090 等），jtdt 透過 HTTP 呼叫遠端。每頁辨識時間從 CPU 上的 <b>8-15 秒</b>降到 GPU 上的 <b>0.3-0.8 秒</b>。管理介面下載 install.sh 一鍵部署，DGX Spark（aarch64 + Blackwell GB10）已實測通過。連不上自動退回本機。</p>
+          <p>把<b>掃描 PDF / 圖片變成可以選取、可搜尋的文字 PDF</b> — 同 macOS Live Text 概念但跑在你自己機房。雙引擎（<b>EasyOCR</b> 預設 / <b>Tesseract</b> 備援），中日韓準確度高；頁內直接預覽拖選驗證。<br><br><b>外部 GPU 識別伺服器</b>：管理介面下載 install.sh 一鍵部署到 GPU 主機（DGX Spark / H100 / 4090 等），每頁從 CPU 的 <b>8-15 秒</b>降到 GPU 的 <b>0.3-0.8 秒</b>（<b>10× 以上</b>）。連不上自動退回本機。</p>
           <div class="ss-tags">
             <span class="tag">掃描檔變可選取</span>
             <span class="tag">EasyOCR + Tesseract 雙引擎</span>
