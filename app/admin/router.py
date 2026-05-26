@@ -1341,16 +1341,31 @@ def build_router(templates) -> APIRouter:
         }
         if host in BLOCKED_HOSTS:
             raise HTTPException(400, "禁止連到 cloud metadata 端點")
+        # 額外 host 驗證:hostname / IP literal 字元白名單(數字 / 字母 / `.` / `-` / `:`)
+        # 任何 fragment / query / path 從 user URL 一律拋棄,避免 path traversal / open redirect
+        import re as _re_host
+        if not _re_host.fullmatch(r"[A-Za-z0-9.\-:\[\]]+", host):
+            raise HTTPException(400, "URL hostname 含非法字元")
+        # 重組「乾淨 base URL」— 只用驗證過的 scheme + host + port,
+        # 路徑寫死 /healthz / /version,完全切斷 user-controlled URL 對 cli.get() 的 taint flow
+        port = parsed.port
+        clean_base = f"{parsed.scheme}://{host}"
+        if port:
+            if not (1 <= port <= 65535):
+                raise HTTPException(400, "port 超出合法範圍")
+            clean_base += f":{port}"
+        healthz_url = clean_base + "/healthz"
+        version_url = clean_base + "/version"
         try:
             with httpx.Client(timeout=10.0, follow_redirects=False) as cli:
                 # /healthz 不需 auth
-                r = cli.get(f"{url}/healthz")
+                r = cli.get(healthz_url)
                 if r.status_code != 200:
                     return {"ok": False, "error": f"healthz HTTP {r.status_code}"}
                 info = r.json()
                 # 若 token 也填了,順便驗 /version(要 auth)
                 if token:
-                    rv = cli.get(f"{url}/version",
+                    rv = cli.get(version_url,
                                   headers={"Authorization": f"Bearer {token}"})
                     if rv.status_code == 401:
                         _ors.update_test_result(ok=False, info={"error": "token invalid"})

@@ -4,6 +4,21 @@
 
 ---
 
+## [1.11.27] - 2026-05-26
+
+### 安全 — 進一步切斷 ocr_external_test 的 SSRF taint flow
+
+v1.11.26 的 URL 驗證雖加了 scheme 白名單 + cloud metadata 黑名單，但 CodeQL 仍偵測到 `cli.get(f"{url}/healthz")` 直接帶 user-controlled `url` 字串，taint flow 未中斷（#103, #107）。
+
+**進一步修補**：
+- 改用 **urlparse 拆出 scheme / hostname / port 個別驗證** 後重組「乾淨 base URL」
+- hostname 加正規白名單 `[A-Za-z0-9.\-:\[\]]+`（拒絕含 `/`、`?`、`#` 等 path / query 字元）
+- port 範圍驗證（1-65535）
+- 路徑寫死 `/healthz` `/version`，完全切斷 user URL 對 `cli.get()` 的 taint flow
+- 副效果：拋棄 user URL 的 path / query / fragment，避免 open redirect / path traversal
+
+---
+
 ## [1.11.26] - 2026-05-26
 
 ### 安全 — 修補 v1.11.24 GPU OCR 部署相關 CodeQL 警示
