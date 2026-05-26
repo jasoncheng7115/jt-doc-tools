@@ -74,7 +74,17 @@ def _normalize_langs(langs: str) -> list[str]:
     """Accept "ch_tra+en" or "ch_tra,en" or "ch_tra en" -> ["ch_tra", "en"]."""
     raw = langs.replace(",", "+").replace(" ", "+")
     out = [l.strip() for l in raw.split("+") if l.strip()]
+    # Whitelist: only lowercase ascii letters and underscores (matches EasyOCR codes).
+    # Anything containing CR/LF or other characters is rejected (prevents log injection).
+    import re as _re
+    out = [c for c in out if _re.fullmatch(r"[a-z_]{2,10}", c)]
     return out or ["en"]
+
+
+def _safe_log_str(s) -> str:
+    """Strip CR/LF and limit length for safe logging (prevents log injection)."""
+    text = str(s)[:200]
+    return text.replace("\r", "?").replace("\n", "?")
 
 
 def _get_reader(langs_list: list[str]):
@@ -87,10 +97,12 @@ def _get_reader(langs_list: list[str]):
         return _readers[key]
 
     gpu_ok = torch.cuda.is_available()
-    log.info("Loading EasyOCR Reader for langs=%s (gpu=%s)", langs_list, gpu_ok)
+    safe_langs = _safe_log_str(langs_list)
+    safe_key = _safe_log_str(key)
+    log.info("Loading EasyOCR Reader for langs=%s (gpu=%s)", safe_langs, gpu_ok)
     t0 = time.time()
     reader = easyocr.Reader(langs_list, gpu=gpu_ok, verbose=False)
-    log.info("Reader for %s loaded in %.1fs", key, time.time() - t0)
+    log.info("Reader for %s loaded in %.1fs", safe_key, time.time() - t0)
     _readers[key] = reader
     return reader
 
@@ -113,7 +125,7 @@ def healthz() -> JSONResponse:
         info["cuda_available"] = torch.cuda.is_available()
         if torch.cuda.is_available():
             info["gpu"] = torch.cuda.get_device_name(0)
-            # mem_get_info may fail if other processes (Ollama etc.) saturated VRAM —
+            # mem_get_info may fail if other processes (Ollama etc.) saturated VRAM -
             # don't treat as a hard error, just skip VRAM stats.
             try:
                 free, total = torch.cuda.mem_get_info(0)
@@ -170,8 +182,8 @@ async def ocr(
     try:
         reader = _get_reader(langs_list)
     except Exception as e:
-        log.exception("Reader load failed for langs=%s", langs_list)
-        raise HTTPException(500, f"reader load failed: {e}") from e
+        log.exception("Reader load failed for langs=%s", _safe_log_str(langs_list))
+        raise HTTPException(500, "reader load failed") from e
 
     # Decode image with PIL -> numpy for EasyOCR
     try:

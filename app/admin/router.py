@@ -1310,18 +1310,43 @@ def build_router(templates) -> APIRouter:
         """測試連接外部 OCR server — 呼叫 /healthz 取 GPU 資訊。
         允許 body 傳 url + token override(讓 admin 還沒 save 就能 test)。"""
         import httpx
+        import logging as _lg
+        from urllib.parse import urlparse
         from ..core import ocr_remote_settings as _ors
+        _log = _lg.getLogger("app.admin.ocr_external_test")
         body = await request.json()
         d = _ors.get()
         url = (body.get("url") or d.get("url") or "").strip().rstrip("/")
         token = (body.get("token") or d.get("token") or "").strip()
         if not url:
             raise HTTPException(400, "URL 未填")
+        # SSRF 防護: 限定 http/https,拒絕 cloud metadata / 帶 credentials 的 URL
         try:
-            with httpx.Client(timeout=10.0) as cli:
+            parsed = urlparse(url)
+        except Exception:
+            raise HTTPException(400, "URL 格式錯誤")
+        if parsed.scheme not in ("http", "https"):
+            raise HTTPException(400, "僅支援 http / https URL")
+        if parsed.username or parsed.password:
+            raise HTTPException(400, "URL 不可內嵌帳密")
+        host = (parsed.hostname or "").strip().lower()
+        if not host:
+            raise HTTPException(400, "URL 缺 hostname")
+        # 拒絕 cloud metadata service IPs(避免 admin 帳號被滲透後從這跳板抓 metadata)
+        BLOCKED_HOSTS = {
+            "169.254.169.254",     # AWS / GCP / Azure IMDS
+            "100.100.100.200",     # Alibaba Cloud metadata
+            "metadata.google.internal",
+            "metadata",
+        }
+        if host in BLOCKED_HOSTS:
+            raise HTTPException(400, "禁止連到 cloud metadata 端點")
+        try:
+            with httpx.Client(timeout=10.0, follow_redirects=False) as cli:
+                # /healthz 不需 auth
                 r = cli.get(f"{url}/healthz")
                 if r.status_code != 200:
-                    raise HTTPException(502, f"healthz HTTP {r.status_code}")
+                    return {"ok": False, "error": f"healthz HTTP {r.status_code}"}
                 info = r.json()
                 # 若 token 也填了,順便驗 /version(要 auth)
                 if token:
@@ -1335,8 +1360,10 @@ def build_router(templates) -> APIRouter:
                 _ors.update_test_result(ok=True, info=info)
                 return {"ok": True, "healthz": info}
         except httpx.RequestError as e:
-            _ors.update_test_result(ok=False, info={"error": str(e)})
-            return {"ok": False, "error": f"連線失敗: {e}"}
+            # 完整錯誤只進 log,response 給 user 一律泛用訊息(避免 info leak)
+            _log.warning("ocr_external_test request failed: %s", e)
+            _ors.update_test_result(ok=False, info={"error": e.__class__.__name__})
+            return {"ok": False, "error": "連線失敗(網路 / DNS / timeout)"}
 
     # ─── 統編資料庫管理 (M4) ─────────────────────────────────────────
     @router.get("/vat-db", response_class=HTMLResponse)

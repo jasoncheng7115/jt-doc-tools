@@ -4,6 +4,26 @@
 
 ---
 
+## [1.11.26] - 2026-05-26
+
+### 安全 — 修補 v1.11.24 GPU OCR 部署相關 CodeQL 警示
+
+針對 v1.11.24 新加的「外部 GPU 識別伺服器」相關程式碼，CodeQL 偵測到 5 個 issue（admin-only endpoint，但仍補上 defence-in-depth）：
+
+**SSRF（Critical）— `admin/router.py` ocr_external_test**
+- 加 URL 驗證：限定 `http` / `https` scheme、拒絕內嵌 credentials、明確拒絕 cloud metadata 端點（AWS IMDS `169.254.169.254`、GCP `metadata.google.internal`、Alibaba `100.100.100.200`）
+- `httpx.Client(follow_redirects=False)` 防 redirect 跳板
+
+**Info exposure（Medium）— 同上 endpoint**
+- exception 詳細內容只進 log，回 client 一律泛用訊息「連線失敗（網路 / DNS / timeout）」+ 例外 class name
+
+**Log injection（Medium × 3）— `ocr_remote_deploy/server_template.py`**
+- `_normalize_langs()` 加白名單：只接受 `[a-z_]{2,10}` 的語言碼，拒絕含 CR/LF 等 control char 的輸入
+- 加 `_safe_log_str()` helper：log 任何來自外部輸入的值都先 strip `\r` `\n` + 限長 200 字元
+- 改 `HTTPException(500, "reader load failed")`，不把例外原文回傳給 client
+
+---
+
 ## [1.11.25] - 2026-05-26
 
 ### 修正 — 插入頁碼在旋轉過的頁面位置錯誤（[issue #21](https://github.com/jasoncheng7115/jt-doc-tools/issues/21)）
