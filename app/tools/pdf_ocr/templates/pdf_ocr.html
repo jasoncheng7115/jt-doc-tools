@@ -186,6 +186,9 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
 .po-toggle-disabled { opacity:.55; cursor:not-allowed; background:#f1f5f9; border-style:dashed; }
 .po-toggle-disabled label { cursor:not-allowed; }
 .po-toggle-disabled input { cursor:not-allowed; }
+/* 整個語言區段反灰（勾選 LLM 直接辨識時，OCR 引擎不會用到） */
+.po-field-disabled { opacity:.5; pointer-events:none; user-select:none; }
+.po-field-disabled #poLangDisabledNote { display:inline !important; pointer-events:auto; }
 .po-toggle-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:8px; }
 .po-toggle-tag {
   display:inline-flex; align-items:center;
@@ -292,9 +295,10 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
 <details class="panel" open>
   <summary>2. 設定</summary>
   <div class="po-fields">
-    <div class="po-field" style="grid-column: 1 / -1;">
+    <div class="po-field" style="grid-column: 1 / -1;" id="poLangSection">
       <label>OCR 語言
         <span class="muted">（點選要辨識的語言；多選會增加處理時間。{% if current_engine == 'easyocr' %}<b>目前引擎：EasyOCR</b>，首次使用某語言會自動下載 ~150MB 模型{% else %}<b>目前引擎：Tesseract</b>{% endif %}，引擎切換在 <a href="/admin/ocr-langs">OCR 引擎管理</a>）</span>
+        <span id="poLangDisabledNote" class="muted" style="display:none; color:#a16207; margin-left:8px;">（已勾選 LLM 直接辨識，OCR 引擎不會用到，語言設定僅在 LLM 失敗自動退回 EasyOCR 時生效）</span>
       </label>
       {% if installed_langs %}
       <div class="po-langs-wrap" id="poLangsBox">
@@ -440,7 +444,7 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
               {% if llm_vision_ok %}<span class="po-toggle-badge">{{ llm_vision_model }}</span>{% endif %}
             </span>
             {% if llm_vision_ok %}
-            <span class="po-toggle-hint">勾選後<b>跳過 EasyOCR / Tesseract</b>,直接交給 vision LLM 做 OCR。對複雜版面 / 手寫 / 特殊字型最準;較慢、耗 VRAM。<b>若 LLM 連不上或回空白,會自動退回 EasyOCR</b>。需 vision 模型(gemma4:26b、qwen3-vl 等)。</span>
+            <span class="po-toggle-hint">勾選後<b>跳過 EasyOCR / Tesseract</b>,直接交給 vision LLM 做 OCR。對複雜版面 / 手寫 / 特殊字型最準；較慢、耗 VRAM。<b>若 LLM 連不上或回空白,會自動退回 EasyOCR</b>。需 vision 模型(gemma4:26b、qwen3-vl 等)。</span>
             {% else %}
             <span class="po-toggle-hint" style="color:#ef4444;">未指定 vision 模型 — 請至 <a href="/admin/llm-settings">LLM 設定</a> 為「OCR 文字辨識（LLM 視覺校對）」指派 vision 模型</span>
             {% endif %}
@@ -450,7 +454,7 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
 
       <details class="po-llm-details">
         <summary style="cursor:pointer;font-size:13px;color:#475569;padding:8px 12px;background:#f1f5f9;border-radius:6px;user-select:none;font-weight:600;">
-          LLM 後處理 <span class="muted" style="font-weight:normal;">（選用 — 預設關閉;EasyOCR 中文已夠強,需要時點開;選了上面的「LLM 直接辨識」時以下不適用）</span>
+          LLM 後處理 <span class="muted" style="font-weight:normal;">（選用 — 預設關閉；EasyOCR 中文已夠強，需要時點開；選了上面的「LLM 直接辨識」時以下不適用）</span>
         </summary>
         <div style="margin-top:10px;">
       <div style="background:#fef2f2; border-left:3px solid #ef4444; padding:8px 12px; margin-bottom:8px; font-size:12px; color:#991b1b; border-radius:4px; line-height:1.6;">
@@ -510,7 +514,9 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
   const $ = (id) => document.getElementById(id);
   let uploadId = null;
 
-  // LLM 直接辨識 ↔ 後處理校對 互斥：選了主辨識,校對自動 disable+uncheck
+  // LLM 直接辨識 ↔ 後處理校對 互斥：選了主辨識,校對自動 disable+uncheck;
+  // 並把 OCR 語言區塊反灰（LLM 直接辨識用 vision 模型,引擎語言設定不會用到,
+  // 僅在 LLM 失敗自動退回 EasyOCR 時才會生效，留著但反灰提示）。
   function syncLlmDirectMutex() {
     const direct = $('poUseLlmDirect');
     const vision = $('poUseLlmVision');
@@ -534,6 +540,13 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
         }
       }
     });
+    // 語言區塊反灰 / 還原
+    const langSection = $('poLangSection');
+    const langNote = $('poLangDisabledNote');
+    if (langSection) {
+      langSection.classList.toggle('po-field-disabled', on);
+      if (langNote) langNote.style.display = on ? 'inline' : 'none';
+    }
   }
   document.addEventListener('DOMContentLoaded', () => {
     const d = document.getElementById('poUseLlmDirect');
