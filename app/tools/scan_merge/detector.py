@@ -115,6 +115,55 @@ def _dilate(mask: np.ndarray, iters: int = 2) -> np.ndarray:
     return m
 
 
+def _merge_aligned_components(
+    comps: list[tuple[int, int, int, int, int]],
+    *,
+    y_overlap_frac: float = 0.5,
+    gap_frac_of_height: float = 0.6,
+) -> list[tuple[int, int, int, int, int]]:
+    """合併「Y 範圍重疊大、X 間距小」的元件 — 同一張卡片內的文字 / 照片可能被
+    細白縫切成兩塊（例：健保卡的卡身 + 大頭照），這層補回成一塊。
+
+    條件：兩塊 Y 重疊 >= y_overlap_frac × 較矮的那塊；X 間距
+    <= gap_frac_of_height × 較矮的那塊。重複到不再合併為止。
+
+    比起無腦放大 dilation kernel 安全：真正分開的兩張卡片（左右並排）X 間距通常
+    遠大於卡片高度的 60%，不會誤合。
+    """
+    items = list(comps)
+    changed = True
+    while changed:
+        changed = False
+        for i in range(len(items)):
+            for j in range(i + 1, len(items)):
+                a_area, ax0, ay0, ax1, ay1 = items[i]
+                b_area, bx0, by0, bx1, by1 = items[j]
+                # Y 重疊（區段相交長度）
+                yov = max(0, min(ay1, by1) - max(ay0, by0) + 1)
+                yhmin = min(ay1 - ay0 + 1, by1 - by0 + 1)
+                if yov < y_overlap_frac * yhmin:
+                    continue
+                # X 間距（負值代表已重疊）
+                if ax1 < bx0:
+                    gap = bx0 - ax1 - 1
+                elif bx1 < ax0:
+                    gap = ax0 - bx1 - 1
+                else:
+                    gap = -1
+                if gap > gap_frac_of_height * yhmin:
+                    continue
+                # 合併
+                merged = (a_area + b_area,
+                          min(ax0, bx0), min(ay0, by0),
+                          max(ax1, bx1), max(ay1, by1))
+                items = [c for k, c in enumerate(items) if k != i and k != j] + [merged]
+                changed = True
+                break
+            if changed:
+                break
+    return items
+
+
 def _label_components(mask: np.ndarray) -> list[tuple[int, int, int, int, int]]:
     """4-連通元件標記（BFS）。回傳每塊 (area, x0, y0, x1, y1)（含界）。"""
     h, w = mask.shape
@@ -192,6 +241,9 @@ def detect_regions(
 
     small = _dilate(small, iters=2)
     comps = _label_components(small)
+    # 同一張卡片內常有細白縫（卡身 + 大頭照、姓名 + 條碼分塊等）會被切成多個
+    # connected component，這層把 Y 排成同高 + X 間距很近的合起來。
+    comps = _merge_aligned_components(comps)
     small_area = sw * sh
     pad_px = pad_frac * long_edge
 

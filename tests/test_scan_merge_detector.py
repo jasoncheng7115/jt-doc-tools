@@ -131,6 +131,31 @@ def test_crop_card_whiten_keeps_card_opaque_color():
     assert red.sum() > 500
 
 
+def test_card_body_and_photo_merge_into_one_region():
+    """健保卡有卡身（文字 / logo）+ 右側大頭照，中間留白縫。應視為「一張卡」
+    而非兩塊。健保卡實掃案例 v1.11.12 修。"""
+    img = _blank(700, 1000)
+    # 模擬卡身（左、稍寬）
+    _paste_block(img, (80, 320, 320, 480), (40, 110, 50))   # 綠色卡身
+    # 模擬右側大頭照（Y 範圍與卡身大致重疊，X 間距小）
+    _paste_block(img, (350, 330, 470, 470), (200, 150, 120))  # 棕色照片
+    regions = detect_regions(img)
+    assert len(regions) == 1, f"應合成一張，實得 {len(regions)} 塊"
+    r = regions[0]
+    # 合併後外框涵蓋兩塊
+    assert r.x0 <= 90 and r.x1 >= 460
+    assert r.y0 <= 330 and r.y1 >= 470
+
+
+def test_two_separate_cards_far_apart_not_merged():
+    """兩張完全分開（上下相距 > 卡片高度）的卡片不可被合併。"""
+    img = _blank(700, 1200)
+    _paste_block(img, (80, 80, 380, 220), (40, 110, 50))      # 上卡
+    _paste_block(img, (80, 800, 380, 940), (40, 110, 200))    # 下卡（相隔 580px）
+    regions = detect_regions(img)
+    assert len(regions) == 2
+
+
 def test_whiten_does_not_desaturate_light_colors():
     # 全幅淡彩（淡藍，飽和度足夠）不該被當背景清掉
     light_blue = Image.new("RGB", (80, 80), (190, 210, 245))
