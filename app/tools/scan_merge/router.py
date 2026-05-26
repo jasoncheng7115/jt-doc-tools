@@ -57,6 +57,14 @@ def _crop_path(cid: str, variant: str) -> Path:
     return _work_dir() / f"crop_{cid}{suffix}.png"
 
 
+def _source_path(sid: str) -> Path:
+    """來源頁縮圖（供上傳區預覽用，最長邊 ~600px）。"""
+    return _work_dir() / f"source_{sid}.png"
+
+
+_SOURCE_THUMB_MAX = 600
+
+
 def _render_pages(raw: bytes, ext: str) -> list[Image.Image]:
     """把一個輸入檔轉成一串 PIL 影像（PDF 逐頁 render，圖片就是單張）。"""
     pages: list[Image.Image] = []
@@ -129,7 +137,23 @@ async def upload(request: Request, file: UploadFile = File(...)):
         raise HTTPException(400, "檔案無內容")
 
     crops: list[dict] = []
+    sources: list[dict] = []
     for page_idx, page_img in enumerate(pages):
+        # 為每個來源頁存縮圖（供上傳區預覽原始檔內容用）
+        sid = uuid.uuid4().hex
+        _uo.record(sid, request)
+        src_thumb = page_img.copy()
+        src_thumb.thumbnail((_SOURCE_THUMB_MAX, _SOURCE_THUMB_MAX), Image.LANCZOS)
+        src_thumb.save(str(_source_path(sid)), format="PNG", optimize=True)
+        sources.append({
+            "source_id": sid,
+            "filename": name,
+            "page": page_idx + 1,
+            "natural_w": page_img.width,
+            "natural_h": page_img.height,
+            "url": f"/tools/scan-merge/source/{sid}",
+        })
+
         regions = detect_regions(page_img)
         for r in regions:
             if len(crops) >= _MAX_CROPS_PER_UPLOAD:
@@ -149,7 +173,19 @@ async def upload(request: Request, file: UploadFile = File(...)):
 
     if not crops:
         raise HTTPException(422, "這個檔裡找不到內容區塊（可能整頁空白）")
-    return {"filename": name, "crops": crops}
+    return {"filename": name, "sources": sources, "crops": crops}
+
+
+@router.get("/source/{sid}")
+async def source_png(sid: str, request: Request):
+    """來源頁縮圖（上傳區預覽用），ACL 保護。"""
+    require_uuid_hex(sid, "source_id")
+    _uo.require(sid, request)
+    p = _source_path(sid)
+    if not p.exists():
+        raise HTTPException(404, "來源縮圖不存在或已過期")
+    return FileResponse(str(p), media_type="image/png",
+                        headers={"Cache-Control": "max-age=3600"})
 
 
 @router.get("/crop/{cid}/{variant}")

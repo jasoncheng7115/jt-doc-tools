@@ -4,6 +4,27 @@
 
 ---
 
+## [1.11.7] - 2026-05-26
+
+### 修 — Linux 安裝在 LXC / 精簡容器 / 受限環境上的健全性
+
+客戶在 Debian 13 LXC 上以 `curl ... | sudo bash` 安裝後，遇到：
+- `/var/lib/jt-doc-tools/data/` 沒建（`mkdir: Disk quota exceeded`）
+- systemd 服務 `jt-doc-tools.service` 不存在
+- `jtdt: command not found`
+
+根因：原本 `install.sh` 任一步失敗（Office 安裝、`mkdir`、`systemctl`）都會 `set -e` 中止整個 install，連最後才執行的 `install_cli`（建 `/usr/local/bin/jtdt`）都跑不到，使用者連 debug 都沒工具。
+
+修法：
+- **`install_cli` 移到 `prepare_data` 之前**：不論後續資料目錄 / 服務是否成功，`jtdt` CLI 一定先裝好。
+- **`prepare_data` 抓 `mkdir` 失敗**：磁碟 quota 用滿、唯讀檔系等情境改為警告 + 提示「可改用 `JTDT_DATA_DIR=/path` 重跑」，不再中止 install。
+- **`JTDT_DATA_DIR` / `JTDT_INSTALL_DIR` 環境變數覆蓋**：允許安裝時改變預設路徑（`JTDT_DATA_DIR=/opt/jtdt-data curl ... | sudo -E bash`）。
+- **`install_service_linux` 偵測 systemd**：若 `/run/systemd/system` 不存在（unprivileged LXC / chroot / Docker）跳過 systemd 設定 + 印手動啟動指令。資料目錄缺失也跳過。
+- **`ensure_office` 兩種 Office 都裝失敗時不再 exit**：改為警告 + 繼續（37 個工具中 26 個不需 Office 引擎,仍可運作）。
+- **`health_check` 在沒有服務時跳過**，不再傻等 30 秒。
+
+---
+
 ## [1.11.6] - 2026-05-26
 
 ### 改善 — 掃描拼合上傳區改為縮圖卡片網格

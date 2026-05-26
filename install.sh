@@ -106,8 +106,10 @@ ok "網路 OK"
 # --------------------------------------------------------------------- 路徑
 
 if [ "$PLATFORM" = "linux" ]; then
-    INSTALL_DIR=/opt/jt-doc-tools
-    DATA_DIR=/var/lib/jt-doc-tools/data
+    INSTALL_DIR="${JTDT_INSTALL_DIR:-/opt/jt-doc-tools}"
+    # 預設 /var/lib/jt-doc-tools/data；若該位置磁碟 quota / 空間不足，
+    # 可在安裝前 export JTDT_DATA_DIR=/path/with/space 覆蓋
+    DATA_DIR="${JTDT_DATA_DIR:-/var/lib/jt-doc-tools/data}"
     LOG_DIR=/var/log
     SVC_FILE=/etc/systemd/system/jt-doc-tools.service
     SVC_USER=jtdt
@@ -460,11 +462,12 @@ ensure_office() {
 
     if ! detect_office; then
         echo
-        warn "OxOffice 與 LibreOffice 都自動安裝失敗。"
-        warn "請手動安裝後再重跑安裝腳本："
+        warn "OxOffice 與 LibreOffice 都自動安裝失敗（常見於 LXC / 精簡容器 / 無 X11 環境）。"
+        warn "繼續安裝；本工具 37 個工具中有 26 個不需要 Office 引擎，仍可正常運作。"
+        warn "若需要 Office 轉檔 / PDF 轉文書檔等 11 個工具，請手動安裝後重啟服務："
         warn "  • OxOffice：    https://github.com/OSSII/OxOffice/releases"
         warn "  • LibreOffice： https://www.libreoffice.org/download/"
-        exit 1
+        return 0
     fi
     ok "Office 引擎安裝完成：$DETECTED_OFFICE"
 }
@@ -722,8 +725,23 @@ setup_python() {
 
 prepare_data() {
     log "準備資料目錄 $DATA_DIR ..."
-    mkdir -p "$DATA_DIR"
-    mkdir -p "$LOG_DIR"
+    # 建 data dir 失敗（常見原因：磁碟 quota 用滿、唯讀檔系、權限不足）。
+    # 不能直接 die — 這時雖然服務跑不起來，但 CLI 還是要裝好讓使用者能 debug。
+    if ! mkdir -p "$DATA_DIR" 2>/dev/null; then
+        local err
+        err="$(mkdir -p "$DATA_DIR" 2>&1 || true)"
+        warn "無法建立資料目錄 $DATA_DIR：$err"
+        warn "常見原因："
+        warn "  • LXC / 容器磁碟 quota 用滿 → 增加 quota 或清出空間"
+        warn "  • 路徑唯讀 / 沒寫入權限"
+        warn "可指定其他位置重跑安裝："
+        warn "  JTDT_DATA_DIR=/path/with/space curl -fsSL ... | sudo -E bash"
+        warn "本次跳過資料目錄與服務設定，jtdt CLI 仍會安裝供你 debug。"
+        DATA_DIR_OK=0
+        return 0
+    fi
+    DATA_DIR_OK=1
+    mkdir -p "$LOG_DIR" 2>/dev/null || true
     # 把 repo 裡的種子 data 複製過去（只在 DATA_DIR 不存在或為空時）
     if [ -d "$INSTALL_DIR/data" ] && [ -z "$(ls -A "$DATA_DIR" 2>/dev/null)" ]; then
         cp -a "$INSTALL_DIR/data/." "$DATA_DIR/"
@@ -745,6 +763,20 @@ prepare_data() {
 # --------------------------------------------------------------------- 服務
 
 install_service_linux() {
+    # 資料目錄沒建起來（quota / 唯讀）→ 服務跑不起來，跳過。
+    if [ "${DATA_DIR_OK:-1}" -eq 0 ]; then
+        warn "資料目錄缺失，跳過 systemd 服務安裝。"
+        return 0
+    fi
+    # systemd 偵測：/run/systemd/system 是 systemd 啟動時建的；
+    # 不存在 → 此環境沒跑 systemd（多半是 unprivileged LXC / chroot / Docker）。
+    # 此時不裝 unit、不執行 systemctl，避免 install 整個 abort。
+    if [ ! -d /run/systemd/system ]; then
+        warn "未偵測到 systemd（容器 / LXC / chroot 環境？）跳過服務安裝。"
+        warn "請手動啟動：sudo -u $SVC_USER $INSTALL_DIR/.venv/bin/python -m app.main"
+        warn "或自行配置 supervisord / openrc / runit 等 init 系統。"
+        return 0
+    fi
     log "安裝 systemd 服務 $SVC_FILE ..."
     cat > "$SVC_FILE" <<EOF
 [Unit]
@@ -931,6 +963,11 @@ install_cli() {
 # --------------------------------------------------------------------- 健康檢查
 
 health_check() {
+    # 沒裝服務（缺資料夾 / 容器無 systemd）就沒東西可檢
+    if [ "${DATA_DIR_OK:-1}" -eq 0 ] || [ ! -f "$SVC_FILE" -a "$PLATFORM" = "linux" ]; then
+        warn "未啟動 systemd 服務，跳過健康檢查。"
+        return 0
+    fi
     log "等待服務啟動 ..."
     # Always probe via 127.0.0.1 — even if BIND_HOST=0.0.0.0, localhost
     # still routes to the listener.
@@ -965,9 +1002,12 @@ main() {
     fetch_code
     install_uv
     setup_python
+    # 先裝 jtdt CLI — 它只是寫一個 /usr/local/bin/jtdt 包到 venv 的 wrapper，
+    # 不需要資料目錄 / 服務 / 健康檢查。先裝好可確保即使後續步驟失敗
+    # （磁碟 quota、無 systemd 等），使用者仍能用 `jtdt status` / `jtdt logs` debug。
+    install_cli
     prepare_data
     install_service
-    install_cli
     health_check
 
     echo
