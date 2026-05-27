@@ -4,6 +4,46 @@
 
 ---
 
+## [1.11.29] - 2026-05-27
+
+### 新增 — 用印與簽名工具：插入手寫風日期
+
+`pdf-stamp` 工具加新區段「**1b。 插入日期**」（可折疊，預設摺疊）。蓋章時可同步在 PDF 加入手寫風日期，獨立於印章拖拉 / 縮放 / 旋轉。
+
+**功能**：
+- **內建兩套手寫字型**（OFL 自由授權）：
+  - **LXGW 文楷 TC**（毛筆手寫感，~15 MB）— 預設
+  - **Klee One**（鉛筆手寫感，~8.7 MB）
+- **字型粗細**：細 / 標準 / 中粗 / 粗 / 特粗（5 段，透過 PIL `stroke_width` 模擬）
+- **日期格式 13 種**：西元 ISO `2026-05-26` / `2026/05/26` / `2026.05.26` / `2026 年 05 月 26 日` 等；民國 `民國 115 年 05 月 26 日` / `115/05/26` / `115.05.26` 等；含 padding 零與不 padding 版本
+- **手寫質感** 4 層 jitter：
+  - 每字 ±2° 隨機旋轉
+  - 每字 ±0.5 px 隨機位移
+  - 每字 95-105% 隨機 scale
+  - 每字 88-100% 隨機 alpha（模擬墨水深淺）
+- **邊緣粗糙度** 4 級（無 / 輕 / 中 / 重）：偵測筆畫邊緣 pixel 隨機降 alpha + 筆畫內部隨機戳小洞，模擬「墨水滲紙 / 提筆斷墨」的真實手寫感
+- **字級** 24-200 px、**顏色** picker、**今天** 一鍵填入
+- **拖拉 / 縮放**：日期蓋上後在預覽區出現綠虛線框，可獨立於印章拖拉 + 4 角縮放
+- **自動排版**：啟用時自動放在印章右側 5 mm 間距處
+- **同步套用頁面**：跟印章一致（所有頁 / 首頁 / 末頁）
+
+**技術實作**：
+- `app/tools/pdf_stamp/date_render.py` — PIL 渲染引擎，per-char baseline-aligned 解決 dash 浮高問題
+- `app/tools/pdf_stamp/fonts/` — 內建 LXGW + Klee TTF
+- `POST /tools/pdf-stamp/render-date` — JSON 進，PNG base64 出
+- `static/js/stamp_date_overlay.js` — 第二個獨立 draggable item，跟主編輯器共用 paper canvas
+- `submit` 接 `extras_json` array 支援多 item（backward compat：legacy 單印章流程不變）
+
+---
+
+## [1.11.28] - 2026-05-27
+
+### 改善 — pdf-stamp 內部架構支援多 item
+
+`pdf-stamp` submit endpoint 新增 `extras_json` 參數接 item array，每個 item 是 `{png_b64, x_mm, y_mm, width_mm, height_mm, rotation_deg}`。primary 印章寫入後，依序 chain stamping 每個 extra item。為日期插入功能（1.11.29）+ 未來多元素蓋章鋪路。Backward compatible：未傳 `extras_json` 走原有單印章流程。
+
+---
+
 ## [1.11.27] - 2026-05-26
 
 ### 安全 — 進一步切斷 ocr_external_test 的 SSRF taint flow

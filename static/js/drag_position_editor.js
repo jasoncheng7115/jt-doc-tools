@@ -333,6 +333,17 @@
         lock_aspect: this.lockAspect,
       };
     }
+    // For secondary overlays that share the same paper canvas:
+    getMmPerPx() { return this.mmPerPx; }
+    getPaperEl() { return this.$paper; }
+    getPaper() { return { w: this.paper.w, h: this.paper.h }; }
+    onRelayout(fn) { this._relayoutListeners = (this._relayoutListeners || []); this._relayoutListeners.push(fn); }
   }
+  // Hook _relayout to notify listeners (subclasses / overlays)
+  const origRelayout = DragPositionEditor.prototype._relayout;
+  DragPositionEditor.prototype._relayout = function () {
+    origRelayout.call(this);
+    if (this._relayoutListeners) this._relayoutListeners.forEach(fn => { try { fn(this.mmPerPx); } catch(e){} });
+  };
   window.DragPositionEditor = DragPositionEditor;
 })();

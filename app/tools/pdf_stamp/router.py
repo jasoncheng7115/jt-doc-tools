@@ -16,8 +16,79 @@ from ...core.asset_manager import asset_manager
 from ...core.job_manager import job_manager
 from ...core import pdf_preview
 from . import service
+from . import date_render as _date_render
 
 router = APIRouter()
+
+
+@router.post("/render-date")
+async def render_date_endpoint(request: Request):
+    """Generate a transparent PNG containing a date / short text with optional
+    handwriting-style jitter. Returns base64 PNG + dimensions so the frontend
+    can place it like a stamp asset.
+
+    Input (JSON):
+        text:       str — the literal text to render (already formatted)
+        font_style: str — "klee" (default) or "system"
+        font_size_px: int — render size in pixels (default 72)
+        color_hex:  str — "#1a1a2e" etc.
+        jitter:     bool — handwriting jitter (default True)
+    Output:
+        { "png_b64": str, "width_px": int, "height_px": int,
+          "suggested_width_mm": float, "suggested_height_mm": float }
+    """
+    import base64
+    body = await request.json()
+    text = str(body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "text 不可為空")
+    if len(text) > 80:
+        raise HTTPException(400, "text 過長(最多 80 字)")
+    font_style = str(body.get("font_style") or "lxgw")
+    if font_style not in ("lxgw", "klee", "system"):
+        font_style = "lxgw"
+    weight = str(body.get("weight") or "regular").lower()
+    if weight not in ("light", "regular", "medium", "bold", "heavy"):
+        weight = "regular"
+    try:
+        font_size_px = int(body.get("font_size_px") or 72)
+    except Exception:
+        font_size_px = 72
+    font_size_px = max(16, min(200, font_size_px))
+    color_hex = str(body.get("color_hex") or "#1a1a2e")
+    # Sanitize color
+    import re as _re
+    if not _re.fullmatch(r"#?[0-9a-fA-F]{3,8}", color_hex):
+        color_hex = "#1a1a2e"
+    jitter = bool(body.get("jitter", True))
+    texture = str(body.get("texture") or "medium").lower()
+    if texture not in ("none", "light", "medium", "heavy"):
+        texture = "medium"
+    try:
+        png_bytes, w, h = _date_render.render_date_png(
+            text,
+            font_style=font_style,
+            weight=weight,
+            font_size_px=font_size_px,
+            color_hex=color_hex,
+            jitter=jitter,
+            texture=texture,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"render failed: {e.__class__.__name__}") from e
+    # Suggested mm size: ~6mm font height (typical handwriting on paper)
+    # Convert px → mm: at 72 dpi, 72px = 25.4mm so 1px ≈ 0.353mm
+    # We choose target height_mm = font_size_px * 0.353 * 0.6 (compress for handwriting feel)
+    target_height_mm = font_size_px * 0.353 * 0.55
+    aspect = (w / h) if h else 1.0
+    target_width_mm = target_height_mm * aspect
+    return {
+        "png_b64": base64.b64encode(png_bytes).decode("ascii"),
+        "width_px": w,
+        "height_px": h,
+        "suggested_width_mm": round(target_width_mm, 1),
+        "suggested_height_mm": round(target_height_mm, 1),
+    }
 
 
 # 臨時資產 (#7, v1.3.16)
@@ -141,8 +212,13 @@ async def submit(
     override: Optional[str] = Form(None),
     page_mode: str = Form("all"),  # "all" | "first" | "last"
     temp_asset_file: Optional[UploadFile] = File(None),
+    extras_json: Optional[str] = Form(None),
 ):
-    """Stamp one or many PDFs. Single-file result → PDF; multi → ZIP."""
+    """Stamp one or many PDFs. Single-file result → PDF; multi → ZIP.
+
+    extras_json: optional list of additional items to stamp on top of the
+    primary stamp. Each item: {png_b64, x_mm, y_mm, width_mm, height_mm,
+    rotation_deg}. Used by the 日期插入 feature (1b)."""
     from ...core import sessions as _sessions
     actor = _sessions.user_label(getattr(request.state, "user", None))
     stamp_png, preset_dict = await _resolve_stamp_source(
@@ -170,6 +246,42 @@ async def submit(
         src_path = batch_dir / f"{i:03d}_{safe}"
         src_path.write_bytes(data)
         saved.append((src_path, safe))
+
+    # Parse extras (date / future text items). Each saved to a temp PNG so
+    # the stamp pipeline can place them just like images.
+    extra_items: list[dict] = []
+    if extras_json:
+        try:
+            import base64
+            raw_items = json.loads(extras_json)
+            if not isinstance(raw_items, list):
+                raise ValueError("extras_json not a list")
+            for idx, it in enumerate(raw_items):
+                png_b64 = it.get("png_b64")
+                if not png_b64 or not isinstance(png_b64, str):
+                    continue
+                if len(png_b64) > 5_000_000:  # ~3.5MB after b64 decode
+                    raise HTTPException(400, "extras 圖過大")
+                try:
+                    png_bytes = base64.b64decode(png_b64, validate=True)
+                except Exception:
+                    raise HTTPException(400, "extras png_b64 解碼失敗")
+                if not png_bytes.startswith(b"\x89PNG"):
+                    raise HTTPException(400, "extras 必須是 PNG")
+                extra_png = batch_dir / f"extra_{idx:02d}.png"
+                extra_png.write_bytes(png_bytes)
+                extra_items.append({
+                    "png_path": extra_png,
+                    "x_mm": float(it.get("x_mm", 150)),
+                    "y_mm": float(it.get("y_mm", 250)),
+                    "width_mm": float(it.get("width_mm", 50)),
+                    "height_mm": float(it.get("height_mm", 12)),
+                    "rotation_deg": float(it.get("rotation_deg", 0)),
+                })
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(400, f"extras_json 解析失敗: {e.__class__.__name__}")
 
     # Resolve placement params (shared by all files). preset_dict comes
     # from _resolve_stamp_source — empty dict for temp assets means
@@ -211,6 +323,21 @@ async def submit(
                 rotation_deg=p_rot, pages=pages,
             )
             service.stamp(src_path, dst, stamp_png, params)
+            # Apply extra items (date, etc.) on top of the primary stamp
+            for ex in extra_items:
+                tmp_dst = batch_dir / f"{src_path.stem}_extra_{uuid.uuid4().hex[:8]}.pdf"
+                ex_params = service.StampParams(
+                    x_mm=ex["x_mm"], y_mm=ex["y_mm"],
+                    width_mm=ex["width_mm"], height_mm=ex["height_mm"],
+                    rotation_deg=ex["rotation_deg"], pages=pages,
+                )
+                service.stamp(dst, tmp_dst, ex["png_path"], ex_params)
+                # Replace dst with the new file (chained stamping)
+                try:
+                    dst.unlink()
+                except Exception:
+                    pass
+                tmp_dst.rename(dst)
             stamped_paths.append((dst, _result_filename(orig_name)))
 
         if len(stamped_paths) == 1:

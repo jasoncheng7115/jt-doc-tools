@@ -46,6 +46,107 @@
   </div>
 </div>
 
+<details class="panel" id="date-panel">
+  <summary>1b. 插入日期
+    <span style="font-size:11px; font-weight:600; color:#065f46; background:#d1fae5; padding:2px 9px; border-radius:10px; margin-left:6px;">選用</span>
+    <span id="date-summary-status" style="font-size:13px; color:#94a3b8; font-weight:400;"> — 未啟用</span>
+  </summary>
+  <div>
+      <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:12px; cursor:pointer;">
+        <input type="checkbox" id="date-enabled">
+        <span><b>啟用日期蓋章</b>（會跟印章同步套用至每一頁設定）</span>
+      </label>
+
+      <div id="date-form" style="display:none; padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;">
+        <div style="display:grid; grid-template-columns:max-content 1fr; gap:10px 14px; align-items:center; max-width:780px;">
+          <label style="font-size:13px;">日期</label>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <input type="date" id="date-value" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:13px;">
+            <button type="button" id="date-today" class="btn" style="background:#fff; border:1px solid #d1d5db; font-size:12px; padding:5px 12px;">今天</button>
+          </div>
+
+          <label style="font-size:13px;">格式</label>
+          <select id="date-format" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:13px; max-width:380px;">
+            <optgroup label="西元（ISO 風 / 中文）">
+              <option value="iso">2026-05-26</option>
+              <option value="iso-noz">2026-5-26</option>
+              <option value="slash">2026/05/26</option>
+              <option value="slash-noz">2026/5/26</option>
+              <option value="dot">2026.05.26</option>
+              <option value="cjk">2026 年 05 月 26 日</option>
+              <option value="cjk-noz">2026 年 5 月 26 日</option>
+              <option value="md-slash">5/26</option>
+            </optgroup>
+            <optgroup label="民國">
+              <option value="roc">民國 115 年 05 月 26 日</option>
+              <option value="roc-noz">民國 115 年 5 月 26 日</option>
+              <option value="roc-slash">115/05/26</option>
+              <option value="roc-slash-noz">115/5/26</option>
+              <option value="roc-dot">115.05.26</option>
+            </optgroup>
+          </select>
+
+          <label style="font-size:13px;">字型</label>
+          <select id="date-font" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:13px; max-width:280px;">
+            <option value="lxgw" selected>文楷 LXGW（毛筆手寫感）</option>
+            <option value="klee">Klee One（鉛筆手寫感）</option>
+          </select>
+
+          <label style="font-size:13px;">粗細</label>
+          <select id="date-weight" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:13px; max-width:160px;">
+            <option value="light">細</option>
+            <option value="regular" selected>標準</option>
+            <option value="medium">中粗</option>
+            <option value="bold">粗</option>
+            <option value="heavy">特粗</option>
+          </select>
+
+          <label style="font-size:13px;">字級</label>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <input type="number" id="date-fontsize" value="96" min="24" max="200" step="4" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:13px; width:90px;">
+            <span class="muted" style="font-size:12px;">px（render 端；最終 PDF 看拖拉的 mm 寬度）</span>
+          </div>
+
+          <label style="font-size:13px;">顏色</label>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <input type="color" id="date-color" value="#1a1a2e" style="border:1px solid #d1d5db; border-radius:4px; width:48px; height:28px; padding:0;">
+            <span class="muted" style="font-size:12px;">建議深色（黑、藍墨水）</span>
+          </div>
+
+          <label style="font-size:13px;">手寫質感</label>
+          <label style="font-size:13px; cursor:pointer;">
+            <input type="checkbox" id="date-jitter" checked style="margin-right:6px;">
+            隨機旋轉 / 字距 / 墨水深淺
+          </label>
+
+          <label style="font-size:13px;">邊緣粗糙</label>
+          <select id="date-texture" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:13px; max-width:160px;">
+            <option value="none">無（乾淨）</option>
+            <option value="light">輕（微毛邊）</option>
+            <option value="medium" selected>中（毛邊 + 缺口）</option>
+            <option value="heavy">重（明顯毛邊 + 多缺口）</option>
+          </select>
+        </div>
+
+        <div style="margin-top:14px; display:flex; gap:14px; align-items:flex-start;">
+          <button type="button" id="date-regen" class="btn btn-primary" style="font-size:12px; padding:6px 12px;">
+            {{ icon('refresh', size=12) }} 重新生成
+          </button>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:11px; color:#64748b; margin-bottom:4px;">預覽</div>
+            <div style="background:#fff; border:1px dashed #cbd5e1; border-radius:4px; padding:8px; min-height:60px; display:flex; align-items:center; justify-content:center;">
+              <img id="date-preview" style="max-width:100%; max-height:80px;" alt="日期預覽">
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:10px; padding:8px 12px; background:#fffbeb; border-left:3px solid #f59e0b; font-size:12px; color:#78350f;">
+          啟用後可在下方預覽區獨立拖拉日期（綠虛線框）+ 4 角縮放。預設位置：印章右側自動排。
+        </div>
+      </div>
+    </div>
+  </details>
+
 <div class="panel">
   <h2 style="margin-top:0;">2. 上傳 PDF</h2>
   {% with upload_id='pdfUpload', accept='application/pdf', multiple=True, hint='支援單/多檔；多檔會打包為 ZIP 下載' %}
@@ -130,10 +231,15 @@
 <script src="/static/js/file_upload.js"></script>
 <script src="/static/js/job_progress.js"></script>
 <script src="/static/js/drag_position_editor.js"></script>
+<script src="/static/js/stamp_date_overlay.js"></script>
 <script>
 let pickedFiles = [];   // all picked PDFs
 let editor = null;
 let previewInfo = null; // { preview_url, paper_w_mm, paper_h_mm } for the FIRST file
+let dateOverlay = null; // StampDateOverlay (when 日期 enabled)
+let dateRenderedAspect = 4;  // png aspect (W/H) from server
+let dateRenderedBase64 = null;
+let dateRenderTimer = null;
 
 const fu = new FileUpload(document.getElementById('pdfUpload'), async (_first, files) => {
   pickedFiles = Array.isArray(files) ? files : (files ? [files] : []);
@@ -434,6 +540,9 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
   for (const f of pickedFiles) fd.append('file', f);
   fd.append('page_mode', document.getElementById('page-mode').value);
   if (editor) fd.append('override', JSON.stringify(editor.getValue()));
+  // Date overlay extra item — backend treats it as a secondary stamp
+  const dateItem = window.__dateOverlayState__ ? window.__dateOverlayState__() : null;
+  if (dateItem) fd.append('extras_json', JSON.stringify([dateItem]));
   const r = await fu.upload('/tools/pdf-stamp/submit', fd, {processingLabel: '排隊用印中…'});
   if (!r.ok) {
     const txt = await r.text();
@@ -511,5 +620,176 @@ document.getElementById('btnTempRemove').addEventListener('click', async () => {
 
 // Cache stamp presets into page for the editor
 window.__STAMPS__ = {{ stamps | tojson }} ;
+
+// ============== 日期蓋章 (1b) ==============
+function _isoToday() {
+  const t = new Date();
+  return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0')
+                          + '-' + String(t.getDate()).padStart(2, '0');
+}
+
+function _formatDateText(iso, fmt) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(s => parseInt(s, 10));
+  const mm = String(m).padStart(2, '0');
+  const dd = String(d).padStart(2, '0');
+  const rocY = y - 1911;
+  switch (fmt) {
+    case 'iso':         return `${y}-${mm}-${dd}`;
+    case 'iso-noz':     return `${y}-${m}-${d}`;
+    case 'slash':       return `${y}/${mm}/${dd}`;
+    case 'slash-noz':   return `${y}/${m}/${d}`;
+    case 'dot':         return `${y}.${mm}.${dd}`;
+    case 'cjk':         return `${y} 年 ${mm} 月 ${dd} 日`;
+    case 'cjk-noz':     return `${y} 年 ${m} 月 ${d} 日`;
+    case 'md-slash':    return `${m}/${d}`;
+    case 'roc':         return `民國 ${rocY} 年 ${mm} 月 ${dd} 日`;
+    case 'roc-noz':     return `民國 ${rocY} 年 ${m} 月 ${d} 日`;
+    case 'roc-slash':   return `${rocY}/${mm}/${dd}`;
+    case 'roc-slash-noz':return `${rocY}/${m}/${d}`;
+    case 'roc-dot':     return `${rocY}.${mm}.${dd}`;
+    default:            return `${y}-${mm}-${dd}`;
+  }
+}
+
+function _dateGetParams() {
+  return {
+    iso:       document.getElementById('date-value').value || _isoToday(),
+    fmt:       document.getElementById('date-format').value || 'iso',
+    fontStyle: document.getElementById('date-font').value || 'lxgw',
+    weight:    document.getElementById('date-weight').value || 'regular',
+    fontPx:    parseInt(document.getElementById('date-fontsize').value || '96', 10),
+    colorHex:  document.getElementById('date-color').value || '#1a1a2e',
+    jitter:    document.getElementById('date-jitter').checked,
+    texture:   document.getElementById('date-texture').value || 'medium',
+  };
+}
+
+async function _dateFetchPng() {
+  const p = _dateGetParams();
+  const text = _formatDateText(p.iso, p.fmt);
+  if (!text) return null;
+  const r = await fetch('/tools/pdf-stamp/render-date', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: text,
+      font_style: p.fontStyle,
+      weight: p.weight,
+      font_size_px: p.fontPx,
+      color_hex: p.colorHex,
+      jitter: p.jitter,
+      texture: p.texture,
+    }),
+  });
+  if (!r.ok) return null;
+  const j = await r.json();
+  return j;
+}
+
+async function _dateRegen({ silent } = {}) {
+  const data = await _dateFetchPng();
+  if (!data) return;
+  const dataUri = 'data:image/png;base64,' + data.png_b64;
+  dateRenderedBase64 = data.png_b64;
+  dateRenderedAspect = data.width_px / Math.max(1, data.height_px);
+  const previewEl = document.getElementById('date-preview');
+  if (previewEl) previewEl.src = dataUri;
+  if (dateOverlay) {
+    dateOverlay.setPng(dataUri, { aspect: dateRenderedAspect });
+  }
+  if (!silent) {
+    document.getElementById('date-summary-status').textContent =
+        '— ' + _formatDateText(_dateGetParams().iso, _dateGetParams().fmt);
+  }
+  return { dataUri, ...data };
+}
+
+function _dateScheduleRegen() {
+  if (dateRenderTimer) clearTimeout(dateRenderTimer);
+  dateRenderTimer = setTimeout(() => _dateRegen({ silent: false }), 250);
+}
+
+function _dateEnsureOverlay() {
+  if (!editor) return;
+  if (dateOverlay) return;
+  const data = dateRenderedBase64;
+  if (!data) return;
+  const dataUri = 'data:image/png;base64,' + data;
+  // Initial size: ~50mm wide, height by aspect (later auto-fit)
+  const initW = 50;
+  const initH = initW / dateRenderedAspect;
+  dateOverlay = new StampDateOverlay({
+    editor: editor,
+    png_src: dataUri,
+    value: { x_mm: 150, y_mm: 250, width_mm: initW, height_mm: initH, rotation_deg: 0 },
+    onChange: () => {},
+  });
+  // Auto-position right of the primary stamp on first mount
+  try {
+    const primary = editor.getValue();
+    const paper = editor.getPaper();
+    dateOverlay.autoPositionRightOf(primary, paper, 5);
+  } catch (e) {}
+}
+
+function _dateRemoveOverlay() {
+  if (dateOverlay) { dateOverlay.destroy(); dateOverlay = null; }
+}
+
+// Init date controls
+(function initDate() {
+  const today = _isoToday();
+  const $val = document.getElementById('date-value');
+  if ($val) $val.value = today;
+
+  document.getElementById('date-today').addEventListener('click', () => {
+    $val.value = _isoToday();
+    _dateScheduleRegen();
+  });
+  document.getElementById('date-value').addEventListener('change', _dateScheduleRegen);
+  document.getElementById('date-format').addEventListener('change', _dateScheduleRegen);
+  document.getElementById('date-font').addEventListener('change', _dateScheduleRegen);
+  document.getElementById('date-weight').addEventListener('change', _dateScheduleRegen);
+  document.getElementById('date-fontsize').addEventListener('change', _dateScheduleRegen);
+  document.getElementById('date-color').addEventListener('change', _dateScheduleRegen);
+  document.getElementById('date-jitter').addEventListener('change', _dateScheduleRegen);
+  document.getElementById('date-texture').addEventListener('change', _dateScheduleRegen);
+  document.getElementById('date-regen').addEventListener('click', () => _dateRegen({ silent: false }));
+
+  document.getElementById('date-enabled').addEventListener('change', async (e) => {
+    const form = document.getElementById('date-form');
+    if (e.target.checked) {
+      form.style.display = 'block';
+      await _dateRegen({ silent: true });
+      _dateEnsureOverlay();
+      document.getElementById('date-summary-status').textContent = '— 已啟用';
+    } else {
+      form.style.display = 'none';
+      _dateRemoveOverlay();
+      document.getElementById('date-summary-status').textContent = '— 未啟用';
+    }
+  });
+
+  // Pre-render preview on load (silent)
+  _dateRegen({ silent: true });
+})();
+
+// Expose for submit handler integration
+window.__dateOverlayState__ = function () {
+  if (!document.getElementById('date-enabled').checked) return null;
+  if (!dateRenderedBase64) return null;
+  const overlay = dateOverlay;
+  const pos = overlay ? overlay.getValue()
+                       : { x_mm: 150, y_mm: 250, width_mm: 50, height_mm: 12, rotation_deg: 0 };
+  return {
+    png_b64: dateRenderedBase64,
+    x_mm: pos.x_mm,
+    y_mm: pos.y_mm,
+    width_mm: pos.width_mm,
+    height_mm: pos.height_mm,
+    rotation_deg: pos.rotation_deg,
+  };
+};
 </script>
 {% endblock %}
