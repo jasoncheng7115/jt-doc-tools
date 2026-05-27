@@ -991,6 +991,15 @@ const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
           statusEl.textContent = stalled >= 5
             ? `${jj.message}（已等 ${stalled}s）`
             : jj.message;
+        } else if (jj.status === 'running') {
+          // job 已啟動但 OCR core 還沒呼叫第一次 progress_cb
+          // 常見原因：遠端 GPU EasyOCR server 第一次載 model（5-30 秒）
+          //          / httpx 等不通的遠端 timeout / PDF 開檔 + LLM profile preamble
+          const elapsed = Math.round((Date.now() - t0) / 1000);
+          statusEl.textContent = `啟動中（首次載入模型約 5-30 秒）… 已等 ${elapsed}s`;
+        } else if (jj.status === 'pending') {
+          const elapsed = Math.round((Date.now() - t0) / 1000);
+          statusEl.textContent = elapsed >= 3 ? `排隊中… 已等 ${elapsed}s` : '排隊中…';
         }
         if (jj.status === 'done') {
           progressInner.style.width = '100%';

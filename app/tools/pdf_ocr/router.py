@@ -462,6 +462,9 @@ async def run_ocr(upload_id: str, request: Request,
         pass
 
     def _run(job: "_jm.Job") -> None:
+        # 立刻設一個訊息，避免前端在 progress_cb 第一次呼叫前看到空白卡住
+        # (遠端 GPU EasyOCR 首次載 model 可能 5-30 秒，這段時間需明示 user)
+        job.message = "準備中…（載入引擎 / 連線遠端 OCR Server）"
         def _progress(cur, total, msg):
             # 使用者按「停止辨識」→ job.cancelled = True → raise 觸發 _run 跳出
             # JobManager._run 偵測 job.cancelled 後會把 status 設成 'cancelled'
@@ -646,6 +649,7 @@ async def api_pdf_ocr(
     dpi_val = max(72, min(int(dpi), 600))
 
     def _run(job: "_jm.Job") -> None:
+        job.message = "準備中…（載入引擎 / 連線遠端 OCR Server）"
         def _progress(cur, total, msg):
             if job.cancelled:
                 raise RuntimeError("__cancelled_by_user__")

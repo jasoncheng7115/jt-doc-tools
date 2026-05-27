@@ -4,6 +4,20 @@
 
 ---
 
+## [1.11.33] - 2026-05-27
+
+### 改善 — pdf-ocr 啟動階段狀態列卡「排隊中」誤導 user
+
+**症狀**：客戶設好遠端 GPU EasyOCR Server，按下「開始 OCR」後狀態列卡在「排隊中…」不動。實際上 worker 已啟動，只是遠端首次載入 Reader model 需 5-30 秒，期間 `progress_cb` 還沒被呼叫，前端只看到 `job.message` 為空就維持自己設的初始字。
+
+**修法**：
+- **後端**：`_run` 進場立刻設 `job.message = "準備中…（載入引擎 / 連線遠端 OCR Server）"`
+- **前端**：polling 區分 `status=running` 但 `message` 空 → 顯示「啟動中（首次載入模型約 5-30 秒）… 已等 Ns」；`status=pending` 且 ≥ 3 秒 → 顯示「排隊中… 已等 Ns」
+
+兩道防線：後端有 message 直接用後端的；後端萬一沒設前端也會自己標 elapsed 秒數，user 不會誤判工具當掉。
+
+---
+
 ## [1.11.32] - 2026-05-27
 
 ### 新增 — pdf-ocr 進行中可即時「停止辨識」
