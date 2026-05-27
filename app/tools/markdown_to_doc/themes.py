@@ -87,8 +87,9 @@ h3 { color: #1d4ed8; }
 h4, h5, h6 { color: #334155; }
 strong { color: #0f172a; }
 a { color: #2563eb; }
-code { background: #f1f5f9; color: #be185d; padding: 1pt 5pt; border-radius: 3pt; }
-pre { background: #1e293b; color: #e2e8f0; }
+code { color: #be185d; }
+pre { background: #f1f5f9; color: #1e293b; border: 1px solid #cbd5e1; }
+pre code { color: inherit; background: transparent; }
 table { font-size: 10.5pt; }
 th { background: #eff6ff; color: #1e3a8a; border: 1px solid #93c5fd; }
 td { border: 1px solid #cbd5e1; }
@@ -109,9 +110,9 @@ h1 { color: #1f2328; border-bottom: 1px solid #d0d7de; padding-bottom: 6pt; }
 h2 { color: #1f2328; border-bottom: 1px solid #d0d7de; padding-bottom: 4pt; }
 h3, h4, h5, h6 { color: #1f2328; }
 a { color: #0969da; }
-code { background: rgba(175, 184, 193, 0.2); color: #cf222e; padding: 1pt 6pt; border-radius: 3pt; }
+code { color: #cf222e; }
 pre { background: #f6f8fa; color: #24292f; border: 1px solid #d0d7de; }
-pre code { color: inherit; }
+pre code { color: inherit; background: transparent; }
 table th { background: #f6f8fa; border: 1px solid #d0d7de; }
 table td { border: 1px solid #d0d7de; }
 blockquote { background: #f6f8fa; border-left: 4px solid #d0d7de; color: #59636e; }
@@ -135,8 +136,9 @@ h2 { color: #1c1c1c; border-bottom: 1.5px solid #1c1c1c; padding-bottom: 3pt; }
 h3 { color: #2c2c2c; }
 strong { font-weight: 700; }
 a { color: #1c1c1c; text-decoration: underline; }
-code { background: #f4f4f4; padding: 1pt 5pt; border: 1px solid #d4d4d4; border-radius: 2pt; font-size: 0.9em; }
+code { color: #444; font-size: 0.92em; }
 pre { background: #f9f9f9; color: #1c1c1c; border: 1px solid #d4d4d4; }
+pre code { color: inherit; background: transparent; }
 table { font-size: 10.5pt; margin: 1em auto; }
 th, td { border-top: 1px solid #1c1c1c; border-bottom: 1px solid #1c1c1c; }
 th { border-bottom: 1.5px solid #1c1c1c; background: transparent; }
@@ -161,9 +163,9 @@ h3 { color: #b8743f; }
 h4, h5, h6 { color: #6f3a1e; }
 strong { color: #6f3a1e; }
 a { color: #8b4513; }
-code { background: #f0e6d4; color: #8b3a00; padding: 1pt 5pt; border-radius: 3pt; }
+code { color: #8b3a00; }
 pre { background: #f3e9d5; color: #3d2914; border: 1px solid #c9a87e; }
-pre code { color: inherit; }
+pre code { color: inherit; background: transparent; }
 table { font-size: 10.5pt; }
 th { background: #efe1c5; color: #6f3a1e; border: 1px solid #c9a87e; }
 td { border: 1px solid #c9a87e; }
@@ -190,8 +192,9 @@ h3 { color: #2b6cb0; }
 h4 { color: #4a5568; }
 strong { color: #1a365d; }
 a { color: #2c5282; }
-code { background: #edf2f7; color: #c53030; padding: 1pt 5pt; border-radius: 3pt; }
-pre { background: #2d3748; color: #e2e8f0; }
+code { color: #c53030; }
+pre { background: #edf2f7; color: #1a202c; border: 1px solid #cbd5e1; }
+pre code { color: inherit; background: transparent; }
 table { font-size: 10.5pt; box-shadow: 0 1pt 3pt rgba(0,0,0,0.08); }
 th { background: #2c5282; color: #ffffff; border: 1px solid #2c5282; font-weight: 600; }
 td { border: 1px solid #cbd5e1; }
@@ -214,8 +217,9 @@ h2 { border-bottom: 1.5px solid #000; padding-bottom: 3pt; }
 h3, h4, h5, h6 { color: #000; }
 strong { color: #000; }
 a { color: #000; text-decoration: underline; }
-code { background: #e8e8e8; color: #000; padding: 1pt 5pt; border-radius: 2pt; }
+code { color: #000; }
 pre { background: #f5f5f5; color: #000; border: 1.5px solid #000; }
+pre code { color: inherit; background: transparent; }
 table { font-size: 10.5pt; }
 th, td { border: 1px solid #000; }
 th { background: #e8e8e8; }
@@ -235,3 +239,61 @@ def theme_options() -> list[dict]:
     """For UI: list of {id, name, desc} suitable for a select/radio."""
     return [{"id": k, "name": v["name"], "desc": v["desc"]}
             for k, v in THEMES.items()]
+
+
+# 字型選項 — 每個是一個 CSS font-family stack,前段 CJK + fallback,soffice 找到哪個用哪個
+FONTS: dict[str, dict] = {
+    "default": {
+        "name": "預設(隨主題)",
+        "stack": "",
+        "desc": "使用主題內建字型",
+    },
+    "noto-sans": {
+        "name": "Noto Sans TC(黑體)",
+        "stack": "'Noto Sans TC', 'Source Han Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Heiti TC', sans-serif",
+        "desc": "Google Noto 思源黑體系列繁中,易讀現代感",
+    },
+    "noto-serif": {
+        "name": "Noto Serif TC(明體)",
+        "stack": "'Noto Serif TC', 'Source Han Serif TC', 'Songti TC', 'Times New Roman', serif",
+        "desc": "Google Noto 思源宋體系列繁中,正式書面感",
+    },
+    "kaiti": {
+        "name": "標楷體 / Kaiti",
+        "stack": "'DFKai-SB', 'BiauKai', 'Kaiti TC', 'STKaiti', 'AR PL UKai TW', cjk-kaiti, serif",
+        "desc": "公文 / 教材常用,需主機已安裝楷體",
+    },
+    "mingti": {
+        "name": "新細明體 / MingLiU",
+        "stack": "'PMingLiU', 'MingLiU', 'AR PL UMing TW', 'Songti TC', cjk-mingti, serif",
+        "desc": "Windows 早期預設,需主機已安裝細明體",
+    },
+    "monospace": {
+        "name": "等寬字型",
+        "stack": "'JetBrains Mono', 'Fira Code', Menlo, Consolas, 'Liberation Mono', 'Noto Sans Mono CJK TC', monospace",
+        "desc": "全篇等寬,適合程式碼 / 技術文件",
+    },
+}
+
+
+def get_font(name: str) -> dict:
+    """Return font dict. Falls back to default if unknown."""
+    return FONTS.get(name) or FONTS["default"]
+
+
+def font_options() -> list[dict]:
+    """For UI: list of {id, name, desc} suitable for a select."""
+    return [{"id": k, "name": v["name"], "desc": v["desc"]}
+            for k, v in FONTS.items()]
+
+
+def font_css_override(font_id: str) -> str:
+    """Return CSS to override body font-family if font_id != 'default'."""
+    f = get_font(font_id)
+    if not f.get("stack"):
+        return ""
+    # 強制覆蓋 body / h1-h6 / p / li / td / th 的 font-family,但 code/pre 維持等寬
+    return (
+        f"\nbody, h1, h2, h3, h4, h5, h6, p, li, td, th, blockquote "
+        f"{{ font-family: {f['stack']}; }}\n"
+    )

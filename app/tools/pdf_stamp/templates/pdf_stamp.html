@@ -22,6 +22,19 @@
       <div class="meta">{{ '%.0f'|format(s.preset.width_mm) }}×{{ '%.0f'|format(s.preset.height_mm) }}mm, Y={{ '%.0f'|format(s.preset.y_mm) }}</div>
     </label>
     {% endfor %}
+    <label class="asset-item" style="cursor:pointer;" id="noneStampCard">
+      <div class="thumb" style="display:flex; align-items:center; justify-content:center; color:#94a3b8; background:repeating-linear-gradient(45deg, #f1f5f9, #f1f5f9 6px, #e2e8f0 6px, #e2e8f0 12px);">
+        <div style="text-align:center; font-size:12px; line-height:1.6;">
+          {{ icon('close', size=24) }}<br>不蓋章
+        </div>
+      </div>
+      <div class="name">
+        <input type="radio" name="stamp" value="__none__" id="noneStampRadio" />
+        <span>不蓋印章 / 簽名</span>
+        <span class="type-chip" style="background:#fef3c7; color:#92400e;">無</span>
+      </div>
+      <div class="meta">只用下方日期 / 個資限用章</div>
+    </label>
   </div>
   {% endif %}
   <div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--border);">
@@ -146,6 +159,115 @@
       </div>
     </div>
   </details>
+
+<details class="panel" id="restrict-panel">
+  <summary>1c. 個資限用章
+    <span style="font-size:11px; font-weight:600; color:#7c2d12; background:#fed7aa; padding:2px 9px; border-radius:10px; margin-left:6px;">選用</span>
+    <span id="restrict-summary-status" style="font-size:13px; color:#94a3b8; font-weight:400;"> — 未啟用</span>
+  </summary>
+  <div>
+    <p class="muted" style="font-size:12px; margin:0 0 12px;">把證件影本（身分證／護照／健保卡等）送銀行、政府、學校申辦時，蓋「僅供 [用途] 使用，他用無效」紅章防個資外流挪用。</p>
+
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:12px; cursor:pointer;">
+      <input type="checkbox" id="restrict-enabled">
+      <span><b>啟用個資限用章</b>（會跟印章同步套用至每一頁設定）</span>
+    </label>
+
+    <div id="restrict-form" style="display:none; padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;">
+      <div style="display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 320px); gap:18px; align-items:start;">
+        <!-- 左欄:表單 -->
+        <div style="display:grid; grid-template-columns:max-content 1fr; gap:10px 12px; align-items:center; min-width:0;">
+
+          <label style="font-size:13px;">用途範本</label>
+          <select id="restrict-template" class="jt-select" style="max-width:100%;">
+            <option value="">（自訂用途，請在下方輸入）</option>
+          </select>
+
+          <label style="font-size:13px;">用途</label>
+          <input type="text" id="restrict-purpose" placeholder="例如：申請台新銀行帳戶" maxlength="60" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:13px; max-width:100%;">
+
+          <label style="font-size:13px;">日期</label>
+          <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+            <input type="date" id="restrict-date" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:13px;">
+            <button type="button" id="restrict-today" class="btn" style="background:#fff; border:1px solid #d1d5db; font-size:12px; padding:5px 12px;">今天</button>
+            <label style="font-size:12px; cursor:pointer;">
+              <input type="checkbox" id="restrict-date-on" checked style="margin-right:4px;"> 章身含日期
+            </label>
+          </div>
+
+          <label style="font-size:13px;">申請人</label>
+          <input type="text" id="restrict-applicant" placeholder="（選填）例：王小明" maxlength="20" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:13px; max-width:240px;">
+
+          <label style="font-size:13px;">份數</label>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <select id="restrict-copy-total" class="jt-select" style="max-width:140px;">
+              <option value="">不顯示份數</option>
+              <option value="1">共 1 份</option>
+              <option value="2">共 2 份</option>
+              <option value="3">共 3 份</option>
+              <option value="4">共 4 份</option>
+              <option value="5">共 5 份</option>
+            </select>
+            <select id="restrict-copy-current" class="jt-select" style="max-width:120px;">
+              <option value="1">第 1 份</option>
+              <option value="2">第 2 份</option>
+              <option value="3">第 3 份</option>
+              <option value="4">第 4 份</option>
+              <option value="5">第 5 份</option>
+            </select>
+          </div>
+
+          <label style="font-size:13px;">章型</label>
+          <select id="restrict-style" class="jt-select" style="max-width:260px;">
+            <option value="rectangle" selected>長方形紅章（雙線框）</option>
+            <option value="rectangle-single">長方形紅章（單線框）</option>
+            <option value="diagonal">對角線斜印</option>
+          </select>
+
+          <label style="font-size:13px;">字型</label>
+          <select id="restrict-font" class="jt-select" style="max-width:100%;">
+            <option value="kaiti" selected>標楷體（自動找系統最佳）</option>
+          </select>
+
+          <label style="font-size:13px;">顏色</label>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <input type="color" id="restrict-color" value="#c00000" style="border:1px solid #d1d5db; border-radius:4px; width:48px; height:28px; padding:0;">
+            <span class="muted" style="font-size:12px;">傳統紅章 #c00000；可改藍 / 黑</span>
+          </div>
+
+          <label style="font-size:13px;">字級</label>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <input type="number" id="restrict-fontsize" value="64" min="32" max="120" step="4" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:13px; width:90px;">
+            <span class="muted" style="font-size:12px;">px</span>
+          </div>
+
+          <div></div>
+          <button type="button" id="restrict-regen" class="btn btn-primary" style="font-size:12px; padding:6px 12px; justify-self:start; margin-top:4px;">
+            {{ icon('refresh', size=12) }} 重新生成預覽
+          </button>
+        </div>
+
+        <!-- 右欄:預覽 + 提示 -->
+        <div style="min-width:0;">
+          <div style="font-size:11px; color:#64748b; margin-bottom:4px;">預覽</div>
+          <div id="restrict-preview-box" style="background:#fff; border:1px dashed #cbd5e1; border-radius:4px; padding:14px 10px; min-height:160px; display:flex; align-items:center; justify-content:center; text-align:center;">
+            <div id="restrict-preview-placeholder" style="color:#94a3b8; font-size:12px; line-height:1.6;">
+              {{ icon('stamp', size=28) }}
+              <div style="margin-top:6px;">填入「用途」後<br>會自動產生章身預覽</div>
+            </div>
+            <img id="restrict-preview" style="max-width:100%; max-height:200px; display:none;" alt="">
+          </div>
+          <div style="margin-top:10px; padding:8px 12px; background:#fef3c7; border-left:3px solid #f59e0b; font-size:12px; color:#78350f;">
+            啟用後可在下方預覽區獨立拖拉限用章（橘虛線框）+ 4 角縮放。建議蓋在證件「個資欄位上方」但留得辨識。
+          </div>
+          <div style="margin-top:8px; font-size:11px; color:#94a3b8;">
+            想加自己的字型？到 <a href="/admin/fonts" target="_blank" style="color:#3b82f6;">設定 → 字型管理</a> 上傳，會自動出現在字型下拉內。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</details>
 
 <div class="panel">
   <h2 style="margin-top:0;">2. 上傳 PDF</h2>
@@ -314,6 +436,10 @@ const TEMP_DEFAULT_PRESET = {
 
 function getSelectedStampPreset() {
   const id = getSelectedStamp();
+  if (id === '__none__') {
+    // 「不蓋章」 — preset 沒意義,但 editor 仍要一個 paper 框,給預設值
+    return TEMP_DEFAULT_PRESET;
+  }
   if (id === '__temp__') {
     // 臨時資產：preset 是預設中央偏下；preview 進來後會用 paper 真實尺寸再 clamp
     const t = window._tempAsset;
@@ -325,8 +451,10 @@ function getSelectedStampPreset() {
 
 // 取得「印章圖片來源 URL」— 一般 asset 走 /admin/assets/{id}/file，
 // 臨時資產走 sessionStorage 內的 data URL。
+const _BLANK_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
 function getSelectedStampImageUrl() {
   const id = getSelectedStamp();
+  if (id === '__none__') return _BLANK_PNG;  // 透明 1x1,避免 broken image,CSS 也會 display:none
   if (id === '__temp__') {
     return window._tempAsset ? window._tempAsset.dataUrl : '';
   }
@@ -353,6 +481,9 @@ async function ensureEditor() {
   if (!id) return;
   const preset = getSelectedStampPreset();
   await loadPreview();
+  // 「不蓋章」模式 → 加 class 隱藏 primary asset box,只留 paper + overlays
+  const root = document.getElementById('stampOverride');
+  if (root) root.classList.toggle('no-primary-stamp', id === '__none__');
   if (editor) {
     editor.setPaper(previewInfo?.paper_w_mm || 210, previewInfo?.paper_h_mm || 297);
     if (previewInfo?.preview_url) editor.setBackground(previewInfo.preview_url);
@@ -368,6 +499,13 @@ async function ensureEditor() {
     lock_aspect: preset.lock_aspect ?? true,
     onChange: () => { refreshSim(); },
   });
+  // 若 1b/1c 已啟用 (先勾選再上傳 PDF) → 補建 overlay
+  if (document.getElementById('date-enabled')?.checked && typeof _dateEnsureOverlay === 'function') {
+    _dateEnsureOverlay();
+  }
+  if (document.getElementById('restrict-enabled')?.checked && typeof _restrictEnsureOverlay === 'function') {
+    _restrictEnsureOverlay();
+  }
 }
 
 let simSeq = 0;
@@ -417,6 +555,13 @@ async function refreshSim() {
     // current dragged position. Without this the override would be stale
     // (or absent) and the composite preview would keep showing the preset.
     if (editor) fd.append('override', JSON.stringify(editor.getValue()));
+    // 合成模式也要看 date / restrict overlay
+    const simExtras = [];
+    const _d = window.__dateOverlayState__ ? window.__dateOverlayState__() : null;
+    if (_d) simExtras.push(_d);
+    const _r = window.__restrictOverlayState__ ? window.__restrictOverlayState__() : null;
+    if (_r) simExtras.push(_r);
+    if (simExtras.length) fd.append('extras_json', JSON.stringify(simExtras));
     try {
       const r = await fu.upload('/tools/pdf-stamp/preview-all-pages', fd, {processingLabel: '產生全頁預覽中…'});
       if (seq !== simSeq) return; // superseded
@@ -500,7 +645,13 @@ document.addEventListener('change', (e) => {
     if (editor) {
       const id = getSelectedStamp();
       const preset = getSelectedStampPreset();
-      if (id && editor.$assetImg) {
+      // 同步 no-primary-stamp class — 切換到「不蓋章」或從「不蓋章」切回正常時更新
+      const root = document.getElementById('stampOverride');
+      if (root) root.classList.toggle('no-primary-stamp', id === '__none__');
+      if (id === '__none__' && editor.$assetImg) {
+        // 透明 1x1 PNG,避免 CSS 沒蓋到時還顯示 broken image
+        editor.$assetImg.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
+      } else if (id && editor.$assetImg) {
         editor.$assetImg.src = window.safeImgSrc(getSelectedStampImageUrl());
       }
       if (preset) {
@@ -533,17 +684,25 @@ function appendTempAssetIfNeeded(fd) {
 
 document.getElementById('btn-submit').addEventListener('click', async () => {
   const stampId = getSelectedStamp();
-  if (!stampId) return alert('請先選擇印章');
+  if (!stampId) return alert('請先選擇印章 / 簽名 / Logo,或點「不蓋章」改用下方日期 / 個資限用章');
   if (!pickedFiles.length) return alert('請先上傳 PDF');
+  // Extra items — backend treats them as secondary stamps (date, restrict, etc.)
+  const extras = [];
+  const dateItem = window.__dateOverlayState__ ? window.__dateOverlayState__() : null;
+  if (dateItem) extras.push(dateItem);
+  const restrictItem = window.__restrictOverlayState__ ? window.__restrictOverlayState__() : null;
+  if (restrictItem) extras.push(restrictItem);
+  // 「不蓋章」必須至少有一個 extra (date 或 restrict),否則整份 PDF 不會有任何蓋章
+  if (stampId === '__none__' && !extras.length) {
+    return alert('選了「不蓋章」必須至少啟用「1b 插入日期」或「1c 個資限用章」,否則送出後 PDF 不會有任何變動');
+  }
   const fd = new FormData();
   fd.append('stamp_id', stampId);
   if (!appendTempAssetIfNeeded(fd)) return;
   for (const f of pickedFiles) fd.append('file', f);
   fd.append('page_mode', document.getElementById('page-mode').value);
   if (editor) fd.append('override', JSON.stringify(editor.getValue()));
-  // Date overlay extra item — backend treats it as a secondary stamp
-  const dateItem = window.__dateOverlayState__ ? window.__dateOverlayState__() : null;
-  if (dateItem) fd.append('extras_json', JSON.stringify([dateItem]));
+  if (extras.length) fd.append('extras_json', JSON.stringify(extras));
   const r = await fu.upload('/tools/pdf-stamp/submit', fd, {processingLabel: '排隊用印中…'});
   if (!r.ok) {
     const txt = await r.text();
@@ -789,6 +948,218 @@ window.__dateOverlayState__ = function () {
     y_mm: pos.y_mm,
     width_mm: pos.width_mm,
     height_mm: pos.height_mm,
+    rotation_deg: pos.rotation_deg,
+  };
+};
+
+// ============= 個資限用章 (1c) =============
+let restrictOverlay = null;
+let restrictRenderedBase64 = null;
+let restrictRenderedAspect = 1;
+let restrictRenderTimer = null;
+
+function _restrictGetParams() {
+  const purpose = (document.getElementById('restrict-purpose').value || '').trim();
+  const dateOn = document.getElementById('restrict-date-on').checked;
+  const dateIso = document.getElementById('restrict-date').value || _isoToday();
+  const dateFmt = 'slash';  // 用斜線格式較精簡
+  const dateStr = dateOn ? _formatDateText(dateIso, dateFmt) : '';
+  const applicant = (document.getElementById('restrict-applicant').value || '').trim();
+  const total = document.getElementById('restrict-copy-total').value;
+  const current = document.getElementById('restrict-copy-current').value;
+  let copyLabel = '';
+  if (total) copyLabel = `第 ${current} 份 / 共 ${total} 份`;
+  const styleSel = document.getElementById('restrict-style').value;
+  let style = 'rectangle', border = 'double';
+  if (styleSel === 'rectangle-single') { style = 'rectangle'; border = 'single'; }
+  else if (styleSel === 'diagonal') { style = 'diagonal'; border = 'none'; }
+  const fontStyle = document.getElementById('restrict-font').value || 'kaiti';
+  const colorHex = document.getElementById('restrict-color').value || '#c00000';
+  const fontPx = parseInt(document.getElementById('restrict-fontsize').value, 10) || 64;
+  return { purpose, dateStr, applicant, copyLabel, style, border, fontStyle, colorHex, fontPx };
+}
+
+async function _restrictFetchPng() {
+  const p = _restrictGetParams();
+  if (!p.purpose) return null;  // 用途必填,空就不送
+  const r = await fetch('/tools/pdf-stamp/render-restrict-stamp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      purpose: p.purpose,
+      date_str: p.dateStr,
+      applicant: p.applicant,
+      copy_label: p.copyLabel,
+      style: p.style,
+      border: p.border,
+      font_style: p.fontStyle,
+      color_hex: p.colorHex,
+      font_size_px: p.fontPx,
+    }),
+  });
+  if (!r.ok) return null;
+  return await r.json();
+}
+
+async function _restrictRegen({ silent } = {}) {
+  const data = await _restrictFetchPng();
+  if (!data) {
+    // 用途為空 → 還原 placeholder
+    const previewEl = document.getElementById('restrict-preview');
+    const ph = document.getElementById('restrict-preview-placeholder');
+    if (previewEl) previewEl.style.display = 'none';
+    if (ph) ph.style.display = '';
+    return;
+  }
+  const dataUri = 'data:image/png;base64,' + data.png_b64;
+  restrictRenderedBase64 = data.png_b64;
+  restrictRenderedAspect = data.width_px / Math.max(1, data.height_px);
+  const previewEl = document.getElementById('restrict-preview');
+  const ph = document.getElementById('restrict-preview-placeholder');
+  if (previewEl) { previewEl.src = dataUri; previewEl.style.display = ''; }
+  if (ph) ph.style.display = 'none';
+  if (restrictOverlay) {
+    restrictOverlay.setPng(dataUri, { aspect: restrictRenderedAspect });
+  } else if (document.getElementById('restrict-enabled').checked && editor) {
+    // 啟用但 overlay 還沒建(可能首次 regen 時 purpose 為空 / editor 還沒 init)
+    // → 趁 PNG 已產出且 editor 已 ready 補上 overlay
+    _restrictEnsureOverlay();
+  }
+  if (!silent) {
+    const p = _restrictGetParams();
+    document.getElementById('restrict-summary-status').textContent =
+        '— 僅供 ' + p.purpose + ' 使用';
+  }
+  return { dataUri, ...data };
+}
+
+function _restrictScheduleRegen() {
+  if (restrictRenderTimer) clearTimeout(restrictRenderTimer);
+  restrictRenderTimer = setTimeout(() => _restrictRegen({ silent: false }), 250);
+}
+
+function _restrictEnsureOverlay() {
+  if (!editor) return;
+  if (restrictOverlay) return;
+  if (!restrictRenderedBase64) return;
+  const dataUri = 'data:image/png;base64,' + restrictRenderedBase64;
+  const initW = 60;  // 個資章建議 60mm 比日期略寬
+  const initH = initW / restrictRenderedAspect;
+  restrictOverlay = new StampDateOverlay({
+    editor: editor,
+    png_src: dataUri,
+    value: { x_mm: 30, y_mm: 30, width_mm: initW, height_mm: initH, rotation_deg: 0 },
+    borderColor: '#f97316',                              // 橘色虛框與日期(綠)區分
+    bgColor: 'rgba(249, 115, 22, 0.06)',
+    onChange: () => {},
+  });
+}
+
+function _restrictRemoveOverlay() {
+  if (restrictOverlay) { restrictOverlay.destroy(); restrictOverlay = null; }
+}
+
+// Init 個資限用章 controls
+(function initRestrict() {
+  // Default date = today
+  const $val = document.getElementById('restrict-date');
+  if ($val) $val.value = _isoToday();
+
+  // 把 <select> 重新掛 JtSelect (option 用 JS 動態加入後需要)
+  function _remountJtSelect(sel) {
+    if (!window.JtSelect) return;
+    if (sel.dataset.jtSelectMounted) {
+      delete sel.dataset.jtSelectMounted;
+      const wrap = sel.parentElement;
+      if (wrap && wrap.classList.contains('jt-select-wrap')) {
+        wrap.parentElement.insertBefore(sel, wrap);
+        wrap.remove();
+        sel.classList.remove('jt-select-native');
+      }
+    }
+    new window.JtSelect(sel);
+  }
+
+  // Load templates list
+  fetch('/tools/pdf-stamp/restrict-templates').then(r => r.json()).then(j => {
+    const sel = document.getElementById('restrict-template');
+    if (!sel || !j.templates) return;
+    j.templates.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.label; opt.textContent = t.label;
+      sel.appendChild(opt);
+    });
+    _remountJtSelect(sel);
+  });
+
+  // Load font list (system + custom from 字型管理 + semantic shortcuts)
+  fetch('/tools/pdf-stamp/restrict-fonts').then(r => r.json()).then(j => {
+    const sel = document.getElementById('restrict-font');
+    if (!sel || !j.groups) return;
+    sel.innerHTML = '';
+    j.groups.forEach(g => {
+      const og = document.createElement('optgroup');
+      og.label = g.title;
+      g.fonts.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.id;
+        opt.textContent = f.label || f.family;
+        og.appendChild(opt);
+      });
+      sel.appendChild(og);
+    });
+    // Default selection = first semantic (kaiti)
+    sel.value = 'kaiti';
+    _remountJtSelect(sel);
+  });
+
+  document.getElementById('restrict-template').addEventListener('change', (e) => {
+    const v = e.target.value;
+    if (v) {
+      document.getElementById('restrict-purpose').value = v;
+      _restrictScheduleRegen();
+    }
+  });
+  document.getElementById('restrict-today').addEventListener('click', () => {
+    $val.value = _isoToday(); _restrictScheduleRegen();
+  });
+  ['restrict-purpose', 'restrict-date', 'restrict-date-on',
+   'restrict-applicant', 'restrict-copy-total', 'restrict-copy-current',
+   'restrict-style', 'restrict-font', 'restrict-color', 'restrict-fontsize'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const evt = (el.type === 'checkbox' || el.tagName === 'SELECT') ? 'change' : 'input';
+    el.addEventListener(evt, _restrictScheduleRegen);
+  });
+  document.getElementById('restrict-regen').addEventListener('click', () => _restrictRegen({ silent: false }));
+
+  document.getElementById('restrict-enabled').addEventListener('change', async (e) => {
+    const form = document.getElementById('restrict-form');
+    if (e.target.checked) {
+      form.style.display = 'block';
+      await _restrictRegen({ silent: true });
+      _restrictEnsureOverlay();
+      const p = _restrictGetParams();
+      document.getElementById('restrict-summary-status').textContent =
+          p.purpose ? ('— 僅供 ' + p.purpose + ' 使用') : '— 已啟用（請填用途）';
+    } else {
+      form.style.display = 'none';
+      _restrictRemoveOverlay();
+      document.getElementById('restrict-summary-status').textContent = '— 未啟用';
+    }
+  });
+})();
+
+window.__restrictOverlayState__ = function () {
+  if (!document.getElementById('restrict-enabled').checked) return null;
+  if (!restrictRenderedBase64) return null;
+  const overlay = restrictOverlay;
+  const pos = overlay ? overlay.getValue()
+                       : { x_mm: 30, y_mm: 30, width_mm: 60, height_mm: 30, rotation_deg: 0 };
+  return {
+    png_b64: restrictRenderedBase64,
+    x_mm: pos.x_mm, y_mm: pos.y_mm,
+    width_mm: pos.width_mm, height_mm: pos.height_mm,
     rotation_deg: pos.rotation_deg,
   };
 };

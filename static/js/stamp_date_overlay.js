@@ -13,6 +13,9 @@
         x_mm: 150, y_mm: 250, width_mm: 50, height_mm: 12, rotation_deg: 0,
       }, opts.value || {});
       this.aspect = this.value.width_mm / Math.max(1, this.value.height_mm);
+      // 可選自訂邊框 / 背景色,給不同類型的 overlay 視覺區分
+      this.borderColor = opts.borderColor || '#10b981';
+      this.bgColor = opts.bgColor || 'rgba(16, 185, 129, 0.05)';
       this._mounted = false;
       this._mount();
       // Re-render when primary editor relayouts (paper resized / paper changed)
@@ -24,8 +27,8 @@
       this.el = document.createElement('div');
       this.el.className = 'dpe-asset dpe-asset-date';
       this.el.style.zIndex = '5';
-      this.el.style.border = '2px dashed #10b981';
-      this.el.style.background = 'rgba(16, 185, 129, 0.05)';
+      this.el.style.border = '2px dashed ' + this.borderColor;
+      this.el.style.background = this.bgColor;
       this.el.innerHTML =
         '<img alt="date" style="width:100%; height:100%; pointer-events:none;">'
         + '<div class="dpe-handle nw" data-h="nw"></div>'

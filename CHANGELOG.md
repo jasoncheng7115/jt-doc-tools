@@ -4,6 +4,64 @@
 
 ---
 
+## [1.11.45] - 2026-05-28
+
+### 新增 — pdf-stamp 加「個資限用章」+「不蓋章」模式
+
+- **新章類型「個資限用章」**（1c 區塊，選用）：證件影本送銀行 / 政府 / 學校申辦時蓋的「僅供 [用途] 使用，他用無效」紅章
+  - 15 個常用範本：銀行開戶 / 信用卡申辦 / 護照申辦 / 簽證申辦 / 保險投保 / 證券開戶 / 房屋租賃 / 稅務申報 / 求職應徵 / 學貸申辦 / 獎助學金申請 / 補助款申辦 / 戶政事務申辦 / 考試報名 / 會員申辦
+  - 變數：用途、日期（可開關）、申請人、份數（第 N 份 / 共 N 份）
+  - 章型：長方形紅章（雙線框 / 單線框）/ 對角線斜印
+  - 字型走 `font_catalog`（與 pdf-editor 同源），支援自訂上傳字型（admin 字型管理）、台灣系統字型、開源 CJK、+ 4 種內建快選
+  - 顏色 / 字級 / 透明度可調
+  - 視覺階層：用途字大 + 粗體（stroke_width）、其餘小字
+  - 橘色虛框 overlay 可獨立拖拉縮放，跟印章（藍）/ 日期（綠）三者並行
+
+- **新「不蓋章」卡片**：1 區可選「只用 1b 日期 / 1c 個資限用章」不蓋主印章
+  - 編輯模式 / 合成模式 都自動隱藏主印章框
+  - 後端 stamp_id=`__none__` 識別跳過主章 chain
+  - 驗證：選了不蓋章但 1b/1c 都沒啟用 → 阻擋送出
+  - 透明 1×1 PNG 防 broken image fallback
+
+### 修正 — markdown-to-doc
+
+- **DOCX 按鈕 disabled**：HTML→DOCX 直轉 soffice filter chain 失敗。改 HTML → ODT → DOCX 兩段
+- **ODT 內容是 HTML**：根因 soffice 對 HTML 輸入即使 `--convert-to odt:writer8` 仍走 Web filter，mimetype 變 `text-web`。加 `--infilter="HTML (StarWriter)"` 強迫 Writer 篩選器
+- **預覽圖點擊放大**：lightbox + 翻頁（‹ ›）+ ESC / 方向鍵
+- **字型選擇**：6 種主題搭 6 種字型，動態載入；下拉用 JtSelect + 自動翻向 + per-option 字型預覽
+- **code 區塊配色** soffice 對每行 inline `<code>` 套用 background 導致每行紅底重疊：移除所有 inline `<code>` 背景，只保留 `<pre>` 整塊
+- **stat chip layout**：檔名 50% / 其他 3 個共 50%
+- **emoji 拿掉**：所有預覽 / 下載 / 完成訊息改純文字
+
+### 修正 — pdf-ocr
+
+- **完成訊息標示退回原因**：選 GPU 遠端但落到本機 CPU 時，明寫「選用 遠端 GPU EasyOCR 失敗 → 退回 本機 EasyOCR (CPU)」（v1.11.32 偵測邏輯有 bug，去 `-remote` 後正好相等誤判沒退回）
+- **OCR 衝突語言自動 disable**：EasyOCR 非 Latin 系（chi_tra / chi_sim / jpn / kor / tha / ara / heb / hin / rus）同時只能載一個 model，任一勾選其他自動套黃色虛線 disable
+- **「停止辨識」按鈕**：辨識中可即時按紅色 stop 取消，progress_cb 偵測 job.cancelled 跳出
+- **啟動階段狀態列**：「準備中…」/「啟動中（首次載入模型約 5-30 秒）」+ elapsed 秒數，不再卡「排隊中」
+
+### 新增 — 共用 friendlyServerError helper
+
+`static/js/friendly_error.js` 把 fetch Response 轉成中文錯誤訊息（取 `detail` / `error` / `message`），不再顯示原始 JSON。base.html 全域載入
+
+---
+
+## [1.11.35] - 2026-05-27
+
+### 改善 — pdf-ocr 衝突語言自動 disable（取代警告 banner）
+
+v1.11.32 是「選了繁中 + 簡中跳警告 banner，但仍允許送出再退回 Tesseract」。本版改為**在 UI 直接阻擋**：
+
+- 非 Latin 系語言（chi_tra / chi_sim / jpn / kor / tha / ara / heb / hin / rus）同時只能選一個（EasyOCR recognition model 限制）
+- 任一勾選 → 其他非 Latin 系 chip 自動套黃色虛線 disable 樣式，無法點選
+- 取消選取後，其他 chip 自動恢復可選
+- Latin 系（en / de / fr / es / it / pt / nl）不受限，可多選並搭一個非 Latin
+- 語言區下方多一行提示說明規則
+
+只有 `current_engine == easyocr` 時啟用衝突偵測；Tesseract 模式所有語言可自由組合。
+
+---
+
 ## [1.11.34] - 2026-05-27
 
 ### 修正 — pdf-ocr 選 GPU 遠端但實際退回本機 CPU 沒提示

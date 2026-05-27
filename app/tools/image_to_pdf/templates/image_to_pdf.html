@@ -235,7 +235,10 @@ async function uploadOne(file) {
     const r = await fetch('/tools/image-to-pdf/upload', {method: 'POST', body: fd});
     if (!r.ok) {
       pages = pages.filter(p => p.file_id !== placeholderId);
-      alert('上傳失敗：' + file.name + ' — ' + await r.text());
+      const msg = window.friendlyServerError
+        ? await window.friendlyServerError(r, '上傳失敗')
+        : await r.text();
+      alert(`${file.name}：${msg}`);
       render();
       return;
     }
@@ -394,7 +397,13 @@ document.getElementById('btn-generate').addEventListener('click', async () => {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(body),
     });
-    if (!r.ok) { alert('產生失敗：' + await r.text()); return; }
+    if (!r.ok) {
+      const msg = window.friendlyServerError
+        ? await window.friendlyServerError(r, '產生失敗')
+        : await r.text();
+      alert(msg);
+      return;
+    }
     const j = await r.json();
     jp.track(j.job_id);
   } finally {

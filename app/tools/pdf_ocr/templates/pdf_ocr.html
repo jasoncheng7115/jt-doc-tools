@@ -96,6 +96,11 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
 .po-chip-disabled:hover { box-shadow:none; }
 .po-chip-disabled .po-chip-check { background:#f1f5f9; border-color:#cbd5e1; }
 .po-chip-disabled .po-chip-name { color:#94a3b8; }
+/* EasyOCR 衝突而暫時 disable — 與「未安裝」分開,語意是「目前選了另一個非 Latin 系語言」*/
+.po-chip-conflict { opacity:.55; cursor:not-allowed; background:#f8fafc; border-style:dashed; border-color:#fde68a; }
+.po-chip-conflict:hover { box-shadow:none; }
+.po-chip-conflict .po-chip-check { background:#f1f5f9; border-color:#cbd5e1; }
+.po-chip-conflict .po-chip-name { color:#a16207; }
 .po-chip-lock {
   position:absolute; top:-6px; right:-4px;
   background:#fef3c7; color:#92400e;
@@ -384,7 +389,9 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
         {% endif %}
 
         <div class="po-langs-summary" id="poLangsSummary"></div>
-        <div id="poLangsWarn" style="display:none; margin-top:8px; padding:8px 12px; background:#fef3c7; border:1px solid #f59e0b; border-radius:6px; color:#92400e; font-size:13px;"></div>
+        {% if current_engine == 'easyocr' %}
+        <div class="muted" style="margin-top:8px; font-size:12px; color:#94a3b8;">提示：EasyOCR 非 Latin 系語言（中、日、韓、泰、俄、阿拉伯、希伯來、印地）同時只能載一個 model，選了其一其他會自動 disable；Latin 系（英、德、法、西、義、葡、荷）可多選並搭一個非 Latin。</div>
+        {% endif %}
       </div>
       {% else %}
       <div class="po-langs-empty">未偵測到已安裝的語言（tesseract 不可用？請確認系統已安裝 tesseract 與訓練檔）</div>
@@ -679,22 +686,32 @@ const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
     return document.querySelectorAll('.po-chip.is-active');
   }
   const CURRENT_ENGINE = "{{ current_engine }}";
+  // EasyOCR 非 Latin 系語言互斥(同時只能載一個 recognition model):
+  // 任一勾選 → 其他非 Latin 系自動 disable。Latin 系(en/de/fr/...) 可多選 + 配一個非 Latin。
+  const EASYOCR_NON_LATIN = new Set([
+    'chi_tra', 'chi_sim', 'jpn', 'kor', 'tha', 'ara', 'heb', 'hin', 'rus'
+  ]);
+  function applyEasyOcrConflicts(){
+    if (CURRENT_ENGINE !== 'easyocr') {
+      document.querySelectorAll('.po-chip.po-chip-conflict').forEach(c => {
+        c.classList.remove('po-chip-conflict');
+        c.removeAttribute('data-conflict-tip');
+      });
+      return;
+    }
+    const activeNonLatin = Array.from(document.querySelectorAll('.po-chip.is-active'))
+      .map(c => c.dataset.lang)
+      .find(code => EASYOCR_NON_LATIN.has(code));
+    document.querySelectorAll('.po-chip').forEach(c => {
+      const code = c.dataset.lang;
+      if (c.classList.contains('po-chip-disabled')) return;
+      const inConflict = EASYOCR_NON_LATIN.has(code) && code !== activeNonLatin && activeNonLatin;
+      c.classList.toggle('po-chip-conflict', !!inConflict);
+    });
+  }
   function refreshLangSummary(){
     const chips = getSelectedChips();
-    // A. EasyOCR 互斥語言檢查 — ch_tra 與 ch_sim 分屬不同 model group，Reader 不
-    // 能同時載入，會 raise → 自動退回 Tesseract。提前警告使用者擇一。
-    const codes = Array.from(chips).map(c => c.dataset.lang);
-    const warnEl = document.getElementById('poLangsWarn');
-    if (warnEl) {
-      const hasTra = codes.includes('chi_tra');
-      const hasSim = codes.includes('chi_sim');
-      if (CURRENT_ENGINE === 'easyocr' && hasTra && hasSim) {
-        warnEl.style.display = 'block';
-        warnEl.textContent = '⚠ EasyOCR 不支援同時辨識「繁中」與「簡中」(兩者屬不同 model group，互斥)。如果同時勾選，EasyOCR 載入會失敗，系統會自動退回本機 Tesseract。建議擇一：文件以繁中為主→只勾繁中；以簡中為主→只勾簡中。';
-      } else {
-        warnEl.style.display = 'none';
-      }
-    }
+    applyEasyOcrConflicts();
     const items = Array.from(chips).map(c => {
       const codeEl = c.querySelector('.po-chip-code');
       return {
@@ -746,6 +763,7 @@ const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
   document.querySelectorAll('.po-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       if (chip.classList.contains('po-chip-disabled')) return;
+      if (chip.classList.contains('po-chip-conflict')) return;
       chip.classList.toggle('is-active');
       refreshLangSummary();
     });

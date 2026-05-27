@@ -45,8 +45,11 @@ def _safe_stem(filename: str) -> str:
     return safe[:80]
 
 
-def _render_md_html(md_text: str, theme_id: str, title: str) -> str:
-    """Convert markdown text to a full HTML document with theme CSS applied."""
+def _render_md_html(md_text: str, theme_id: str, title: str, font_id: str = "default") -> str:
+    """Convert markdown text to a full HTML document with theme CSS applied.
+
+    font_id 為 'default' 時用主題內建字型;其他字型 ID 會 append 覆蓋 body CSS。
+    """
     from markdown_it import MarkdownIt
     md = (
         MarkdownIt("commonmark", {"breaks": False, "linkify": True, "html": False})
@@ -55,6 +58,7 @@ def _render_md_html(md_text: str, theme_id: str, title: str) -> str:
     )
     body_html = md.render(md_text or "")
     theme = themes.get_theme(theme_id)
+    font_css = themes.font_css_override(font_id or "default")
     # Light HTML escape on title (used in <title>)
     safe_title = (title or "Document").replace("<", "&lt;").replace(">", "&gt;")
     return f"""<!DOCTYPE html>
@@ -64,6 +68,7 @@ def _render_md_html(md_text: str, theme_id: str, title: str) -> str:
 <title>{safe_title}</title>
 <style>
 {theme["css"]}
+{font_css}
 </style>
 </head>
 <body>
@@ -95,6 +100,7 @@ async def index(request: Request):
     return templates.TemplateResponse("markdown_to_doc.html", {
         "request": request,
         "themes": themes.theme_options(),
+        "fonts": themes.font_options(),
     })
 
 
@@ -104,6 +110,7 @@ async def convert(
     text: str = Form(""),
     file: Optional[UploadFile] = File(None),
     theme: str = Form("classic"),
+    font: str = Form("default"),
     title: str = Form(""),
 ):
     """Convert markdown (from text body or uploaded file) to PDF + DOCX + ODT.
@@ -136,7 +143,7 @@ async def convert(
 
     def _do():
         # 1. markdown → HTML with theme
-        html = _render_md_html(md_text, theme, stem)
+        html = _render_md_html(md_text, theme, stem, font)
         html_path = wdir / f"{stem}.html"
         html_path.write_text(html, encoding="utf-8")
         # 2. HTML → PDF + DOCX + ODT via soffice
@@ -149,16 +156,22 @@ async def convert(
         except Exception as e:
             errors["pdf"] = str(e)
             log.exception("md→pdf failed")
-        try:
-            _oc.convert_to_docx(html_path, docx_path, timeout=120.0)
-        except Exception as e:
-            errors["docx"] = str(e)
-            log.exception("md→docx failed")
+        # HTML → ODT 直轉 OK,DOCX 直轉 soffice filter chain 常失敗 →
+        # 先 HTML → ODT,再 ODT → DOCX 兩段轉檔保險
         try:
             _oc.convert_to_odt(html_path, odt_path, timeout=120.0)
         except Exception as e:
             errors["odt"] = str(e)
             log.exception("md→odt failed")
+        try:
+            if odt_path.exists():
+                _oc.convert_to_docx(odt_path, docx_path, timeout=120.0)
+            else:
+                # fallback:沒 ODT 中介,直接從 HTML 試一次
+                _oc.convert_to_docx(html_path, docx_path, timeout=120.0)
+        except Exception as e:
+            errors["docx"] = str(e)
+            log.exception("md→docx failed")
         # 3. Render PDF preview pages
         previews: list[Path] = []
         if pdf_path.exists():
@@ -234,6 +247,7 @@ async def api_markdown_to_doc(
     text: str = Form(""),
     file: Optional[UploadFile] = File(None),
     theme: str = Form("classic"),
+    font: str = Form("default"),
     title: str = Form(""),
     format: str = Form("pdf"),
 ):
@@ -259,7 +273,7 @@ async def api_markdown_to_doc(
     wdir = _work_dir(uid)
 
     def _do():
-        html = _render_md_html(md_text, theme, stem)
+        html = _render_md_html(md_text, theme, stem, font)
         html_path = wdir / f"{stem}.html"
         html_path.write_text(html, encoding="utf-8")
         target = wdir / f"{stem}.{format}"

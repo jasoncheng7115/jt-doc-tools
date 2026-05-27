@@ -47,9 +47,19 @@
 .md2-theme-name { font-weight: 600; font-size: 13px; color: #1e293b; margin-bottom: 3px; }
 .md2-theme-desc { font-size: 11px; color: #64748b; line-height: 1.5; }
 .md2-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; align-items: center; }
+/* 4 個 chip:檔名 50%,其餘 3 個共享 50% (每個 ~16.6%)。窄畫面下自動降為 2 欄 / 1 欄。 */
 .md2-stat-row {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: grid; grid-template-columns: 3fr 1fr 1fr 1fr;
   gap: 10px; margin: 6px 0 14px;
+}
+.md2-stat-row .md2-stat-chip:first-child { grid-column: span 1; }
+@media (max-width: 900px) {
+  .md2-stat-row { grid-template-columns: 1fr 1fr; }
+  .md2-stat-row .md2-stat-chip:first-child { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  .md2-stat-row { grid-template-columns: 1fr; }
+  .md2-stat-row .md2-stat-chip:first-child { grid-column: auto; }
 }
 .md2-stat-chip {
   background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
@@ -75,9 +85,46 @@
 .md2-preview-card img {
   width: 100%; height: auto; display: block;
   border: 1px solid #e2e8f0; border-radius: 3px;
-  background: #fff;
+  background: #fff; cursor: zoom-in; transition: transform .12s;
 }
+.md2-preview-card img:hover { transform: scale(1.02); }
 .md2-preview-label { font-size: 11px; color: #64748b; text-align: center; }
+/* Lightbox overlay for click-to-enlarge */
+.md2-lightbox {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(15, 23, 42, 0.88);
+  display: none; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.md2-lightbox.is-open { display: flex; }
+.md2-lightbox-img {
+  max-width: 95vw; max-height: 90vh; object-fit: contain;
+  background: #fff; border-radius: 4px; box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+  cursor: zoom-out;
+}
+.md2-lightbox-cap {
+  position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+  color: #fff; font-size: 14px; padding: 6px 14px;
+  background: rgba(0,0,0,0.4); border-radius: 4px;
+  pointer-events: none;
+}
+.md2-lightbox-close {
+  position: absolute; top: 16px; right: 20px;
+  width: 36px; height: 36px; border: 0; border-radius: 50%;
+  background: rgba(255,255,255,0.15); color: #fff;
+  font-size: 22px; cursor: pointer; line-height: 1;
+}
+.md2-lightbox-close:hover { background: rgba(255,255,255,0.25); }
+.md2-lightbox-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 64px; border: 0;
+  background: rgba(255,255,255,0.12); color: #fff;
+  font-size: 28px; cursor: pointer; user-select: none;
+}
+.md2-lightbox-nav:hover { background: rgba(255,255,255,0.22); }
+.md2-lightbox-nav.prev { left: 16px; border-radius: 0 4px 4px 0; }
+.md2-lightbox-nav.next { right: 16px; border-radius: 4px 0 0 4px; }
+.md2-lightbox-nav[disabled] { opacity: 0.3; cursor: not-allowed; }
 .md2-dl-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .md2-spinner {
   display:inline-block; width:12px; height:12px;
@@ -145,6 +192,18 @@ def hello():
     </label>
     {% endfor %}
   </div>
+  <div style="margin-top:14px;">
+    <label for="md2Font" style="font-size:13px; font-weight:600; color:#0f172a;">字型</label>
+    <p class="muted" style="font-size:12px; margin:2px 0 6px;">主機上沒安裝的字型會自動 fallback 到下一個候選。</p>
+    <select class="jt-select" id="md2Font" name="font" style="max-width:420px;">
+      {% for f in fonts %}
+      <option value="{{ f.id }}"
+              {% if f.stack %}data-preview-style="font-family: {{ f.stack }};"{% endif %}
+              data-sub="{{ f.desc }}"
+              {% if loop.first %}selected{% endif %}>{{ f.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
 </div>
 
 <div class="panel">
@@ -159,18 +218,57 @@ def hello():
   <h2 style="margin-top:0;">3. 結果</h2>
   <div class="md2-stat-row" id="md2Stat"></div>
   <div class="md2-dl-row" id="md2Downloads"></div>
-  <div style="margin-top:14px; font-size:13px; color:#475569;">📄 所有頁面預覽（PDF render）：</div>
+  <div style="margin-top:14px; font-size:13px; color:#475569;">所有頁面預覽（PDF 渲染，可點圖放大）</div>
   <div class="md2-preview-grid" id="md2Previews"></div>
+</div>
+
+<div class="md2-lightbox" id="md2Lightbox" role="dialog" aria-modal="true" aria-label="頁面預覽放大檢視">
+  <button type="button" class="md2-lightbox-nav prev" id="md2LbPrev" aria-label="上一頁">‹</button>
+  <button type="button" class="md2-lightbox-nav next" id="md2LbNext" aria-label="下一頁">›</button>
+  <button type="button" class="md2-lightbox-close" id="md2LbClose" aria-label="關閉">×</button>
+  <div class="md2-lightbox-cap" id="md2LbCap"></div>
+  <img class="md2-lightbox-img" id="md2LbImg" alt="">
 </div>
 
 {% endblock %}
 {% block scripts %}
+<script src="/static/js/custom_select.js"></script>
 {% raw %}
 <script>
 (function () {
   const $ = (id) => document.getElementById(id);
   let lastResult = null;
   let pickedFilename = '';  // remember last loaded file name to derive download stem
+  let _lbUrls = [];     // preview image URLs for lightbox
+  let _lbTotal = 0;     // total page count
+  let _lbIdx = 0;       // current lightbox index
+
+  function openLightbox(idx) {
+    if (!_lbUrls.length) return;
+    _lbIdx = Math.max(0, Math.min(idx, _lbUrls.length - 1));
+    const box = $('md2Lightbox');
+    $('md2LbImg').src = _lbUrls[_lbIdx];
+    $('md2LbCap').textContent = `第 ${_lbIdx + 1} 頁 / 共 ${_lbTotal} 頁`;
+    $('md2LbPrev').disabled = _lbIdx <= 0;
+    $('md2LbNext').disabled = _lbIdx >= _lbUrls.length - 1;
+    box.classList.add('is-open');
+  }
+  function closeLightbox() { $('md2Lightbox').classList.remove('is-open'); }
+  function lbNav(delta) { openLightbox(_lbIdx + delta); }
+  // wire up once (DOM ready since script is at bottom of body)
+  $('md2LbClose').addEventListener('click', closeLightbox);
+  $('md2LbPrev').addEventListener('click', () => lbNav(-1));
+  $('md2LbNext').addEventListener('click', () => lbNav(1));
+  $('md2LbImg').addEventListener('click', closeLightbox);
+  $('md2Lightbox').addEventListener('click', (e) => {
+    if (e.target.id === 'md2Lightbox') closeLightbox();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!$('md2Lightbox').classList.contains('is-open')) return;
+    if (e.key === 'Escape') closeLightbox();
+    else if (e.key === 'ArrowLeft') lbNav(-1);
+    else if (e.key === 'ArrowRight') lbNav(1);
+  });
 
   // ----- Theme selection (visual sync) -----
   document.querySelectorAll('.md2-theme').forEach(t => {
@@ -233,8 +331,10 @@ def hello():
     const theme = (document.querySelector('input[name="md2-theme"]:checked') || {}).value || 'classic';
     const title = $('md2Title').value.trim() || (pickedFilename ? pickedFilename.replace(/\.[^.]+$/, '') : '');
 
+    const font = $('md2Font') ? $('md2Font').value : 'default';
     const fd = new FormData();
     fd.append('theme', theme);
+    fd.append('font', font);
     if (title) fd.append('title', title);
     fd.append('text', text);
 
@@ -302,25 +402,29 @@ def hello():
       } else {
         a.style.opacity = 0.4; a.style.pointerEvents = 'none'; a.title = '此格式轉換失敗';
       }
-      a.innerHTML = '⬇ 下載 ' + f.name;
+      a.textContent = '下載 ' + f.name;
       dl.appendChild(a);
     }
 
     const grid = $('md2Previews');
     grid.innerHTML = '';
-    j.preview_urls.forEach((url, idx) => {
+    const urls = j.preview_urls || [];
+    urls.forEach((url, idx) => {
       const card = document.createElement('div');
       card.className = 'md2-preview-card';
       const img = document.createElement('img');
       img.src = url; img.alt = `第 ${idx + 1} 頁預覽`; img.loading = 'lazy';
+      img.dataset.idx = String(idx);
+      img.addEventListener('click', () => openLightbox(idx));
       const lbl = document.createElement('div');
       lbl.className = 'md2-preview-label';
       lbl.textContent = `第 ${idx + 1} 頁 / 共 ${j.page_count} 頁`;
       card.appendChild(img); card.appendChild(lbl);
       grid.appendChild(card);
     });
+    _lbUrls = urls; _lbTotal = j.page_count;
 
-    $('md2Status').textContent = '✓ 完成';
+    $('md2Status').textContent = '完成';
     $('md2ResultPanel').hidden = false;
   }
 

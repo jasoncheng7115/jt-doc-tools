@@ -17,6 +17,7 @@ from ...core.job_manager import job_manager
 from ...core import pdf_preview
 from . import service
 from . import date_render as _date_render
+from . import restrict_render as _restrict_render
 
 router = APIRouter()
 
@@ -91,6 +92,139 @@ async def render_date_endpoint(request: Request):
     }
 
 
+@router.post("/render-restrict-stamp")
+async def render_restrict_stamp_endpoint(request: Request):
+    """渲染「個資限用章」PNG。
+
+    Input (JSON):
+        purpose:      str — 用途文字(例「申請台新銀行帳戶」),必填
+        date_str:     str — 日期文字(已格式化),選填
+        applicant:    str — 申請人姓名,選填
+        copy_label:   str — 影本份數標示(例「第 1 份 / 共 3 份」),選填
+        style:        str — "rectangle" / "diagonal",預設 rectangle
+        border:       str — rectangle 模式邊框「double」/「single」/「none」
+        color_hex:    str — 預設 "#c00000" 深紅
+        font_size_px: int — 預設 64
+    Output:
+        { png_b64, width_px, height_px, suggested_width_mm, suggested_height_mm }
+    """
+    import base64
+    body = await request.json()
+    purpose = str(body.get("purpose") or "").strip()
+    if not purpose:
+        raise HTTPException(400, "purpose 不可為空")
+    if len(purpose) > 60:
+        raise HTTPException(400, "purpose 過長(最多 60 字)")
+    date_str = str(body.get("date_str") or "").strip()[:40]
+    applicant = str(body.get("applicant") or "").strip()[:20]
+    copy_label = str(body.get("copy_label") or "").strip()[:30]
+    style = str(body.get("style") or "rectangle")
+    if style not in ("rectangle", "diagonal"):
+        style = "rectangle"
+    border = str(body.get("border") or "double")
+    if border not in ("double", "single", "none"):
+        border = "double"
+    color_hex = str(body.get("color_hex") or "#c00000")
+    import re as _re
+    if not _re.fullmatch(r"#?[0-9a-fA-F]{3,8}", color_hex):
+        color_hex = "#c00000"
+    # font_style 可為 semantic ("kaiti"/"song"/"hei"/"lxgw") 或 font_catalog id
+    # ("system:..." / "custom:..."),_load_font 內部分流處理
+    font_style = str(body.get("font_style") or "kaiti").strip()
+    # 安全性:長度限制 + 字符白名單
+    if len(font_style) > 256:
+        font_style = "kaiti"
+    import re as _re_fs
+    if not _re_fs.fullmatch(r"[A-Za-z0-9_./:\-]+", font_style):
+        font_style = "kaiti"
+    try:
+        font_size_px = int(body.get("font_size_px") or 64)
+    except Exception:
+        font_size_px = 64
+    font_size_px = max(24, min(160, font_size_px))
+
+    try:
+        if style == "diagonal":
+            png_bytes, w, h = _restrict_render.render_diagonal_stamp(
+                purpose=purpose, date_str=date_str,
+                color_hex=color_hex, font_size_px=font_size_px,
+                font_style=font_style,
+            )
+        else:
+            png_bytes, w, h = _restrict_render.render_rectangle_stamp(
+                purpose=purpose, date_str=date_str,
+                applicant=applicant, copy_label=copy_label,
+                color_hex=color_hex, font_size_px=font_size_px,
+                border_style=border, font_style=font_style,
+            )
+    except Exception as e:
+        raise HTTPException(500, f"render failed: {e.__class__.__name__}: {e}") from e
+
+    # 1 px @ 72 dpi ≈ 0.353 mm. 個資限用章建議寬度 ~45 mm(顯眼但不過大)
+    aspect = (w / h) if h else 1.0
+    target_height_mm = font_size_px * 0.353 * 1.2  # 行高 + padding 估算
+    target_width_mm = target_height_mm * aspect
+    return {
+        "png_b64": base64.b64encode(png_bytes).decode("ascii"),
+        "width_px": w,
+        "height_px": h,
+        "suggested_width_mm": round(target_width_mm, 1),
+        "suggested_height_mm": round(target_height_mm, 1),
+    }
+
+
+@router.get("/restrict-templates")
+async def restrict_templates_endpoint():
+    """回傳「個資限用章」常用用途範本清單。"""
+    return {"templates": _restrict_render.PURPOSE_TEMPLATES}
+
+
+@router.get("/restrict-fonts")
+async def restrict_fonts_endpoint():
+    """回傳可用字型清單(用 font_catalog,跟 pdf-editor 同源)。
+
+    上分四類 + 內建 semantic style:
+    - 內建 semantic style (kaiti / song / hei / lxgw) — 自動最佳化
+    - custom: 設定→字型管理上傳的公司字型
+    - taiwan: 台灣常用字型 (BiauKai / DFKai / MingLiU / PMingLiU / msjh ...)
+    - free-cjk: 開源 CJK (Noto, Source Han, LXGW, AR PL UKai, etc.)
+    - cjk: 其他 CJK
+    """
+    from app.core import font_catalog
+    fonts = font_catalog.list_fonts()
+    # 過濾只留 CJK 能用的(個資章需中文渲染)
+    cjk_fonts = [f for f in fonts
+                 if f.get("category") in ("custom", "taiwan", "free-cjk", "cjk")]
+    groups: dict[str, list] = {}
+    for f in cjk_fonts:
+        groups.setdefault(f["category"], []).append({
+            "id": f["id"],
+            "label": f["label"],
+            "family": f["family"],
+            "variant": f.get("variant", ""),
+            "style": f.get("style"),
+        })
+    group_titles = {
+        "custom": "自訂上傳字型",
+        "taiwan": "台灣系統字型",
+        "free-cjk": "開源 CJK 字型",
+        "cjk": "其他 CJK 字型",
+    }
+    ordered = []
+    # 先放 semantic style (使用者沒設定字型管理也能用)
+    semantic = [
+        {"id": "kaiti", "label": "標楷體（自動找系統最佳）", "family": "標楷體", "variant": "", "style": "serif"},
+        {"id": "song",  "label": "宋體（典雅）",         "family": "宋體",   "variant": "", "style": "serif"},
+        {"id": "hei",   "label": "黑體（現代）",         "family": "黑體",   "variant": "", "style": "sans"},
+        {"id": "lxgw",  "label": "霞鶩文楷（內建）",     "family": "LXGW",   "variant": "", "style": "serif"},
+    ]
+    ordered.append({"key": "semantic", "title": "內建快選", "fonts": semantic})
+    for key in ("custom", "taiwan", "free-cjk", "cjk"):
+        if key in groups and groups[key]:
+            ordered.append({"key": key, "title": group_titles[key], "fonts": groups[key]})
+    return {"groups": ordered, "total": len(cjk_fonts) + len(semantic)}
+
+
 # 臨時資產 (#7, v1.3.16)
 # 使用者可以在 pdf-stamp UI 「臨時上傳」一張圖，圖只放在瀏覽器 sessionStorage，
 # 送出時才隨 request 上傳到 server，server 寫到 temp_dir 用一次就丟。
@@ -100,20 +234,27 @@ _TEMP_ASSET_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 _TEMP_ASSET_ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 
 
+_NONE_STAMP_SENTINEL = "__none__"
+
+
 async def _resolve_stamp_source(
     stamp_id: str,
     temp_asset_file: Optional[UploadFile],
     request: Optional[Request] = None,
     actor_username: str = "",
-) -> tuple[Path, dict]:
+) -> tuple[Optional[Path], dict]:
     """Return (stamp_image_path_on_disk, preset_dict_or_empty).
 
-    - 一般 asset：查 asset_manager，回路徑 + asset.preset (轉 dict)
-    - 臨時資產：把上傳檔案落地到 temp_dir，回路徑 + 空 preset（preset 由 client
-      傳的 override 決定，所以 service 層只認 override 即可）
+    - stamp_id == '__none__': 不蓋主印章,只跑 extras (日期 / 個資限用章)。
+      回 (None, {}) 讓呼叫端 skip 主章蓋章邏輯。
+    - 一般 asset：查 asset_manager,回路徑 + asset.preset (轉 dict)
+    - 臨時資產：把上傳檔案落地到 temp_dir,回路徑 + 空 preset (preset 由 client
+      傳的 override 決定,所以 service 層只認 override 即可)
 
-    任何錯誤情境一律 raise HTTPException(400)。臨時資產情境會寫一筆 audit。
+    任何錯誤情境一律 raise HTTPException(400)。
     """
+    if stamp_id == _NONE_STAMP_SENTINEL:
+        return None, {}
     if stamp_id != _TEMP_STAMP_SENTINEL:
         asset = asset_manager.get(stamp_id)
         if not asset or asset.type not in ("stamp", "signature", "logo"):
@@ -318,11 +459,16 @@ async def submit(
                     n = doc.page_count
                 pages = [0] if page_mode == "first" else [max(0, n - 1)]
             dst = batch_dir / f"{src_path.stem}_stamped.pdf"
-            params = service.StampParams(
-                x_mm=p_x, y_mm=p_y, width_mm=p_w, height_mm=p_h,
-                rotation_deg=p_rot, pages=pages,
-            )
-            service.stamp(src_path, dst, stamp_png, params)
+            if stamp_png is None:
+                # 「不蓋章」模式 → 直接複製原檔當基底,只跑 extras
+                import shutil as _sh
+                _sh.copy(str(src_path), str(dst))
+            else:
+                params = service.StampParams(
+                    x_mm=p_x, y_mm=p_y, width_mm=p_w, height_mm=p_h,
+                    rotation_deg=p_rot, pages=pages,
+                )
+                service.stamp(src_path, dst, stamp_png, params)
             # Apply extra items (date, etc.) on top of the primary stamp
             for ex in extra_items:
                 tmp_dst = batch_dir / f"{src_path.stem}_extra_{uuid.uuid4().hex[:8]}.pdf"
@@ -460,9 +606,14 @@ async def preview_all_pages(
     override: Optional[str] = Form(None),
     page_mode: str = Form("all"),
     temp_asset_file: Optional[UploadFile] = File(None),
+    extras_json: Optional[str] = Form(None),
 ):
     """Render every page of the uploaded PDF with the stamp applied at the
-    given position; return one PNG URL per page so the UI can stack them."""
+    given position; return one PNG URL per page so the UI can stack them.
+
+    extras_json: 額外的 overlay (date / restrict 等),會在 primary 印章之後
+    依序疊上,讓「合成模式」逐頁看到完整結果。
+    """
     from ...core import sessions as _sessions
     actor = _sessions.user_label(getattr(request.state, "user", None))
     stamp_png_path, preset_dict = await _resolve_stamp_source(
@@ -503,12 +654,59 @@ async def preview_all_pages(
         pages = [max(0, n - 1)]
 
     from ...core import pdf_utils as pu
-    pu.stamp_pdf(
-        src_pdf=src, dst_pdf=stamped,
-        stamp_png=stamp_png_path,
-        x_mm=p_x, y_mm=p_y, w_mm=p_w, h_mm=p_h,
-        pages=pages, rotation_deg=p_rot,
-    )
+    if stamp_png_path is None:
+        # 「不蓋章」模式 → 複製原檔當基底
+        import shutil as _sh
+        _sh.copy(str(src), str(stamped))
+    else:
+        pu.stamp_pdf(
+            src_pdf=src, dst_pdf=stamped,
+            stamp_png=stamp_png_path,
+            x_mm=p_x, y_mm=p_y, w_mm=p_w, h_mm=p_h,
+            pages=pages, rotation_deg=p_rot,
+        )
+
+    # Apply extras (date / restrict) on top of primary stamp
+    extra_tmp_files: list[Path] = []
+    if extras_json:
+        try:
+            import base64
+            raw_items = json.loads(extras_json)
+            if isinstance(raw_items, list):
+                for idx, it in enumerate(raw_items):
+                    png_b64 = it.get("png_b64")
+                    if not png_b64 or not isinstance(png_b64, str):
+                        continue
+                    if len(png_b64) > 5_000_000:
+                        continue
+                    try:
+                        png_bytes = base64.b64decode(png_b64, validate=True)
+                    except Exception:
+                        continue
+                    if not png_bytes.startswith(b"\x89PNG"):
+                        continue
+                    extra_png = settings.temp_dir / f"{upload_id}_extra_{idx:02d}.png"
+                    extra_png.write_bytes(png_bytes)
+                    extra_tmp_files.append(extra_png)
+                    tmp_stamped = settings.temp_dir / f"{upload_id}_chain_{idx:02d}.pdf"
+                    pu.stamp_pdf(
+                        src_pdf=stamped,
+                        dst_pdf=tmp_stamped,
+                        stamp_png=extra_png,
+                        x_mm=float(it.get("x_mm", 150)),
+                        y_mm=float(it.get("y_mm", 250)),
+                        w_mm=float(it.get("width_mm", 50)),
+                        h_mm=float(it.get("height_mm", 12)),
+                        pages=pages,
+                        rotation_deg=float(it.get("rotation_deg", 0)),
+                    )
+                    try:
+                        stamped.unlink()
+                    except OSError:
+                        pass
+                    tmp_stamped.rename(stamped)
+        except Exception:
+            pass
 
     # Render every page (or just the affected ones if a subset was picked) to
     # PNG so the front end can stack them.
@@ -525,6 +723,8 @@ async def preview_all_pages(
 
     try:
         src.unlink(); stamped.unlink()
+        for p in extra_tmp_files:
+            p.unlink(missing_ok=True)
     except OSError:
         pass
 
@@ -539,8 +739,13 @@ async def preview_stamped(
     override: Optional[str] = Form(None),
     page_mode: str = Form("all"),
     temp_asset_file: Optional[UploadFile] = File(None),
+    extras_json: Optional[str] = Form(None),
 ):
-    """Stamp the first applicable page of the PDF and return a PNG preview."""
+    """Stamp the first applicable page of the PDF and return a PNG preview.
+
+    extras_json: 同 /submit,額外的 overlay 物件 (date / restrict 等),會在
+    primary 印章蓋完之後依序疊上,讓「合成模式」看得到完整結果。
+    """
     from ...core import sessions as _sessions
     actor = _sessions.user_label(getattr(request.state, "user", None))
     stamp_png_path, preset_dict = await _resolve_stamp_source(
@@ -588,17 +793,66 @@ async def preview_stamped(
         pages = None
 
     from ...core import pdf_utils as pu
-    pu.stamp_pdf(
-        src_pdf=src,
-        dst_pdf=stamped,
-        stamp_png=stamp_png_path,
-        x_mm=p_x, y_mm=p_y, w_mm=p_w, h_mm=p_h,
-        pages=pages, rotation_deg=p_rot,
-    )
+    if stamp_png_path is None:
+        import shutil as _sh
+        _sh.copy(str(src), str(stamped))
+    else:
+        pu.stamp_pdf(
+            src_pdf=src,
+            dst_pdf=stamped,
+            stamp_png=stamp_png_path,
+            x_mm=p_x, y_mm=p_y, w_mm=p_w, h_mm=p_h,
+            pages=pages, rotation_deg=p_rot,
+        )
+
+    # Apply extras (date / restrict) on top of primary stamp,讓合成模式
+    # 看得到實際結果。每個 extra 寫到 temp PNG → chain stamp 到當前 PDF。
+    extra_tmp_files: list[Path] = []
+    if extras_json:
+        try:
+            import base64
+            raw_items = json.loads(extras_json)
+            if isinstance(raw_items, list):
+                for idx, it in enumerate(raw_items):
+                    png_b64 = it.get("png_b64")
+                    if not png_b64 or not isinstance(png_b64, str):
+                        continue
+                    if len(png_b64) > 5_000_000:
+                        continue
+                    try:
+                        png_bytes = base64.b64decode(png_b64, validate=True)
+                    except Exception:
+                        continue
+                    if not png_bytes.startswith(b"\x89PNG"):
+                        continue
+                    extra_png = settings.temp_dir / f"{upload_id}_extra_{idx:02d}.png"
+                    extra_png.write_bytes(png_bytes)
+                    extra_tmp_files.append(extra_png)
+                    tmp_stamped = settings.temp_dir / f"{upload_id}_chain_{idx:02d}.pdf"
+                    pu.stamp_pdf(
+                        src_pdf=stamped,
+                        dst_pdf=tmp_stamped,
+                        stamp_png=extra_png,
+                        x_mm=float(it.get("x_mm", 150)),
+                        y_mm=float(it.get("y_mm", 250)),
+                        w_mm=float(it.get("width_mm", 50)),
+                        h_mm=float(it.get("height_mm", 12)),
+                        pages=pages,
+                        rotation_deg=float(it.get("rotation_deg", 0)),
+                    )
+                    try:
+                        stamped.unlink()
+                    except OSError:
+                        pass
+                    tmp_stamped.rename(stamped)
+        except Exception:
+            # 預覽用,任何 extras 錯誤都安靜跳過,不擋 primary 預覽
+            pass
+
     pdf_preview.render_page_png(stamped, png, preview_page, dpi=120)
 
     # Clean up intermediates
-    for fp in (src, stamped):
+    for fp in (src, stamped, *extra_tmp_files):
         try:
             fp.unlink()
         except OSError:

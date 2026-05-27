@@ -64,8 +64,21 @@
       const item = document.createElement('div');
       item.className = 'jt-select-option';
       item.dataset.value = opt.value;
-      item.textContent = opt.textContent;
       item.setAttribute('role', 'option');
+      // 主標籤(可套 data-preview-style 預覽字型) + 可選次標籤(data-sub)
+      const main = document.createElement('div');
+      main.className = 'jt-select-option-main';
+      main.textContent = opt.textContent;
+      const previewStyle = opt.getAttribute('data-preview-style');
+      if (previewStyle) main.style.cssText = previewStyle;
+      item.appendChild(main);
+      const sub = opt.getAttribute('data-sub');
+      if (sub) {
+        const subEl = document.createElement('div');
+        subEl.className = 'jt-select-option-sub';
+        subEl.textContent = sub;
+        item.appendChild(subEl);
+      }
       if (opt.disabled) item.classList.add('disabled');
       item.addEventListener('click', () => {
         if (opt.disabled) return;
@@ -88,8 +101,9 @@
       const v = this.select.value;
       const opt = this.select.querySelector(`option[value="${CSS.escape(v)}"]`);
       const label = opt ? opt.textContent : v;
+      const previewStyle = opt ? (opt.getAttribute('data-preview-style') || '') : '';
       this.trigger.innerHTML =
-        `<span class="jt-select-label">${this._escape(label)}</span>` +
+        `<span class="jt-select-label"${previewStyle ? ` style="${this._escape(previewStyle)}"` : ''}>${this._escape(label)}</span>` +
         `<span class="jt-select-arrow" aria-hidden="true"></span>`;
       (this._items || []).forEach(el => {
         el.classList.toggle('selected', el.dataset.value === v);
@@ -161,9 +175,22 @@
       this.panel.hidden = false;
       this.trigger.classList.add('open');
       this.trigger.setAttribute('aria-expanded', 'true');
+      // 計算空間,若下方不夠就翻向上(panel 顯示在 trigger 上方)
+      this._adjustPanelDirection();
       // Scroll selected into view
       const sel = this.panel.querySelector('.jt-select-option.selected');
       if (sel) sel.scrollIntoView({ block: 'nearest' });
+    }
+    _adjustPanelDirection() {
+      this.wrap.classList.remove('up');
+      const rect = this.trigger.getBoundingClientRect();
+      const panelHeight = this.panel.offsetHeight || 240;  // 沒 render 完先估
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const margin = 8;  // 留邊距
+      if (spaceBelow < panelHeight + margin && spaceAbove > spaceBelow) {
+        this.wrap.classList.add('up');
+      }
     }
     close() {
       this.panel.hidden = true;
