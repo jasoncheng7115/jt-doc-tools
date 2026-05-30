@@ -54,21 +54,23 @@
     </div>
     <div class="trd-form-cell trd-form-cell-wide">
       <label class="trd-label">或上傳檔案</label>
-      <label class="trd-drop-zone" id="dropZone" for="fileInput">
-        <input type="file" id="fileInput" accept=".pdf,.docx,.odt,.ods,.odp,.txt,.md" hidden />
-        <div class="trd-drop-icon">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="17 8 12 3 7 8"/>
-            <line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
-        </div>
-        <div class="trd-drop-text">
-          <b>點此挑選</b>或拖曳檔案到此
-          <span class="trd-drop-hint">PDF / DOCX / ODT / ODS / ODP / TXT / MD</span>
-        </div>
-      </label>
-      {% if workspace_enabled(request) %}<div class="fu-ws-row" style="justify-content:flex-start; margin-top:8px;"><button type="button" class="ws-load-btn" id="wsLoadBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg><span>從工作區載入 PDF</span></button></div>{% endif %}
+      <div style="display:flex; gap:10px; align-items:stretch;">
+        <label class="trd-drop-zone" id="dropZone" for="fileInput" style="flex:1; min-width:0;">
+          <input type="file" id="fileInput" accept=".pdf,.docx,.odt,.ods,.odp,.txt,.md" hidden />
+          <div class="trd-drop-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <div class="trd-drop-text">
+            <b>點此挑選</b>或拖曳檔案到此
+            <span class="trd-drop-hint">PDF / DOCX / ODT / ODS / ODP / TXT / MD</span>
+          </div>
+        </label>
+        {% if workspace_enabled(request) %}<button type="button" class="ws-load-btn" id="wsLoadBtn" style="align-self:center; white-space:nowrap;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg><span>從工作區載入</span></button>{% endif %}
+      </div>
     </div>
   </div>
   <div style="margin-top:14px;">

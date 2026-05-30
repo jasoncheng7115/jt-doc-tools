@@ -56,8 +56,11 @@
 .ws-usage-fill.full { background: linear-gradient(to right, #ef4444, #dc2626); }
 .ws-usage-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
 .ws-usage-text { font-size: 13px; font-variant-numeric: tabular-nums; }
-.ws-retention { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; background: #f1f5f9; border-radius: 8px; color: #475569; font-size: 12px; }
-.ws-retention svg { flex: none; opacity: .8; }
+.ws-retention { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; background: #f1f5f9; border: 1px solid transparent; border-radius: 8px; color: #475569; font-size: 12.5px; font-weight: 600; }
+.ws-retention svg { flex: none; }
+/* 有保留時數（檔案會被自動清除）→ 琥珀色警示，讓使用者一眼看到 */
+.ws-retention.warn { background: #fffbeb; border-color: #fcd34d; color: #b45309; }
+.ws-retention.warn svg { color: #d97706; }
 .ws-count { display: none; margin-left: 10px; font-size: 12px; font-weight: 600; color: #475569; background: #e2e8f0; border-radius: 11px; padding: 1px 9px; vertical-align: middle; }
 .ws-count.show { display: inline-block; }
 .ws-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-top: 6px; }
@@ -146,6 +149,8 @@ async function wsLoad() {
     rtext = `檔案存放超過 ${rh} 小時會自動清除`;
   }
   ret.innerHTML = clock + '<span>保留期限：' + rtext + '</span>';
+  // 有 TTL（會自動清除）→ 醒目琥珀警示；永久保留 → 中性
+  ret.classList.toggle('warn', rh !== -1 && rh !== null && rh !== undefined);
 
   // files
   const files = j.files || [];
