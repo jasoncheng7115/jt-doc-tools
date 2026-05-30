@@ -314,6 +314,19 @@
       <input class="sidebar-search" id="sidebarSearch" type="search" placeholder="搜尋工具… (例：填表 / form fill、用印 / stamp)" />
     </div>
     <div class="sidebar-scroll">
+      {% if workspace_enabled(request) %}
+      <div class="sb-solo">
+        <a class="sb-item sb-workspace-link" href="/workspace" data-name="我的工作區 workspace 工作區 我的檔案 saved files 暫存">
+          <span class="sb-item-icon">{{ icon('archive', size=18) }}</span>
+          <span class="sb-item-text">
+            <span class="sb-item-name">我的工作區</span>
+            <span class="sb-item-desc">存放各工具輸出的檔案</span>
+          </span>
+          {% set _wc = workspace_count(request) %}
+          {% if _wc %}<span class="sb-count" style="margin-left:auto; align-self:center;">{{ _wc }}</span>{% endif %}
+        </a>
+      </div>
+      {% endif %}
       {# 釘選群組 — 預留 placeholder，由前端 JS 依 localStorage 動態填入。
          如果使用者有釘選工具，這裡會顯示在最上方便快速存取。 #}
       <details class="sb-group sb-pinned" id="sbPinnedGroup" open hidden>
@@ -416,6 +429,7 @@
   <script src="/static/js/modal.js"></script>
   <script src="/static/js/error_format.js"></script>
   <script src="/static/js/friendly_error.js"></script>
+  {% if workspace_enabled(request) %}<script src="/static/js/workspace_picker.js"></script>{% endif %}
   <script>
     (function(){
       const btn = document.getElementById('sidebarToggle');

@@ -210,8 +210,9 @@ input.field { padding: 6px 10px; border: 1px solid var(--border); border-radius:
         <button class="btn btn-primary" id="btnGenerate" disabled>{{ icon('download') }} 產生 PDF</button>
         <span id="status" class="muted" style="align-self:center; font-size:12.5px;"></span>
       </div>
-      <div id="doneBox" class="muted" style="margin-top:10px;" hidden>
+      <div id="doneBox" class="muted" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;" hidden>
         <a id="dlLink" class="btn btn-primary" href="#">{{ icon('download') }} 下載結果</a>
+        {% if workspace_enabled(request) %}<button id="wsSaveBtn" class="btn" type="button" hidden>{{ icon('archive') }} 存至工作區</button>{% endif %}
       </div>
     </div>
   </div>
@@ -356,6 +357,9 @@ $('btnGenerate').addEventListener('click', async () => {
     $('dlLink').href = d.url;
     $('doneBox').hidden = false;
     $('status').textContent = '完成';
+    if (window.attachWorkspaceSave) window.attachWorkspaceSave(
+      document.getElementById('wsSaveBtn'),
+      () => ({ url: d.url, name: (d.url.split('/').pop() || 'nup.pdf').split('?')[0], tool: 'pdf-nup' }));
   } finally {
     $('btnGenerate').disabled = false;
   }

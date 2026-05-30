@@ -589,6 +589,7 @@
       <span class="desc">支援 PNG / JPG / WebP / PDF</span>
     </label>
   </div>
+  {% if workspace_enabled(request) %}<div class="fu-ws-row" style="justify-content:flex-start;"><button type="button" class="ws-load-btn" id="wsLoadBtn">{{ icon('archive', size=16) }}<span>從工作區載入</span></button></div>{% endif %}
   <div class="es-status" id="status"></div>
 
   <!-- 連續掃描的 live preview 區，預設隱藏 -->
@@ -915,6 +916,7 @@ async function uploadFiles(files) {
     e.target.value = '';
   });
 });
+if (window.attachWorkspaceLoadButton) window.attachWorkspaceLoadButton(document.getElementById('wsLoadBtn'), $('fileInput'));
 
 // 拖放（PC 用）
 const dropZone = $('dropZone');

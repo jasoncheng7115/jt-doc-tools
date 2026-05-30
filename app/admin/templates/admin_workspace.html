@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}工作區設定 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('archive', size=22) }} 工作區設定</h1>
+<p class="muted">「我的工作區」讓使用者把各工具輸出的 PDF / PNG 存在伺服器上，只有自己的帳號看得到。容量額度對所有人統一適用（無個人特例）。</p>
+
+<div class="panel" style="border-left:4px solid #3b82f6; font-size:13px;">
+  <b>說明：</b>
+  <ul style="margin:6px 0 0 18px; padding:0; line-height:1.7;">
+    <li><b>停用</b>後整個功能完全隱藏：各工具的「存至工作區」「從工作區載入」按鈕與「我的工作區」頁面都不會出現。</li>
+    <li>認證關閉（單機模式）時，工作區為單一共用（即該台機器的使用者）。</li>
+    <li>只接受 PDF 與 PNG 檔。</li>
+    <li>保留時數到期由背景排程（每 6 小時）清理；填 <code>-1</code> 表示永久保留。</li>
+    <li>容量 / 單檔上限填 <code>0</code> 表示不限制。</li>
+  </ul>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">設定</h2>
+  <div class="form-row">
+    <label>啟用工作區</label>
+    <label class="switch-label"><input type="checkbox" id="ws-enabled" {% if settings.enabled %}checked{% endif %}> 開啟此功能</label>
+  </div>
+  <div class="form-row">
+    <label>每人容量額度</label>
+    <input class="field" type="number" id="ws-quota" value="{{ settings.per_user_quota_mb }}" min="0" max="1048576" style="width:110px;"> MB（0 = 不限）
+  </div>
+  <div class="form-row">
+    <label>單檔上限</label>
+    <input class="field" type="number" id="ws-maxfile" value="{{ settings.max_file_mb }}" min="0" max="1048576" style="width:110px;"> MB（0 = 不限）
+  </div>
+  <div class="form-row">
+    <label>保留時數</label>
+    <input class="field" type="number" id="ws-retention" value="{{ settings.retention_hours }}" min="-1" max="876000" style="width:110px;"> 小時（-1 = 永久）
+  </div>
+  <p style="margin-top:14px;">
+    <button class="btn btn-primary" id="saveBtn">{{ icon('save', size=14) }} 儲存設定</button>
+    <span id="status" class="muted" style="font-size:12px; margin-left:10px;"></span>
+  </p>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">目前佔用</h2>
+  <p class="muted" style="font-size:13px;">總計 {{ stats.total_count }} 個檔案，{{ '%.1f'|format(stats.total_bytes / 1048576) }} MB。</p>
+  {% if stats.users %}
+  <table class="ws-table">
+    <thead><tr><th>使用者</th><th>檔案數</th><th>佔用</th><th></th></tr></thead>
+    <tbody>
+      {% for u in stats.users %}
+      <tr><td><b>{{ u.label }}</b></td><td class="muted">{{ u.count }}</td><td class="muted">{{ '%.1f'|format(u.bytes / 1048576) }} MB</td>
+        <td><button class="btn btn-small ws-clear-user" data-key="{{ u.key }}" data-label="{{ u.label }}" type="button">清空</button></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p style="margin-top:12px;"><button class="btn btn-small" id="ws-clear-all" type="button">清空所有人的工作區</button>
+    <span class="muted" style="font-size:12px; margin-left:8px;">（管理員僅能管理容量，無法瀏覽使用者檔案內容）</span></p>
+  {% else %}
+  <p class="muted">尚無任何使用者存檔。</p>
+  {% endif %}
+</div>
+
+<style>
+  .ws-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .ws-table th, .ws-table td { padding:6px 8px; border-bottom:1px solid #e5e7eb; text-align:left; }
+  .ws-table th { background:#f9fafb; font-size:11px; color:#6b7280; }
+  .switch-label { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#374151; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  const body = {
+    enabled: document.getElementById('ws-enabled').checked,
+    per_user_quota_mb: parseInt(document.getElementById('ws-quota').value, 10),
+    max_file_mb: parseInt(document.getElementById('ws-maxfile').value, 10),
+    retention_hours: parseInt(document.getElementById('ws-retention').value, 10),
+  };
+  const r = await fetch('/admin/workspace/save', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  const status = document.getElementById('status');
+  if (r.ok) {
+    status.textContent = '已儲存（重新整理頁面後其他工具的工作區按鈕即依新設定顯示）';
+    status.style.color = '#16a34a';
+  } else {
+    status.textContent = '失敗：' + await r.text();
+    status.style.color = '#dc2626';
+  }
+});
+
+document.querySelectorAll('.ws-clear-user').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    if (!confirm(`確定清空「${btn.dataset.label}」的工作區？此動作無法復原。`)) return;
+    const fd = new FormData(); fd.append('user_key', btn.dataset.key);
+    const r = await fetch('/admin/workspace/clear-user', { method: 'POST', body: fd });
+    if (r.ok) { const j = await r.json(); showToast(`已清空 ${j.removed} 個檔案`, 'ok'); setTimeout(() => location.reload(), 800); }
+    else showAlert('失敗：' + await r.text());
+  });
+});
+const clearAll = document.getElementById('ws-clear-all');
+if (clearAll) clearAll.addEventListener('click', async () => {
+  if (!(await showConfirm('確定清空「所有使用者」的工作區？此動作無法復原。', { title: '清空全部', okText: '確定清空' }))) return;
+  const r = await fetch('/admin/workspace/clear-all', { method: 'POST' });
+  if (r.ok) { const j = await r.json(); showToast(`已清空 ${j.removed} 個檔案`, 'ok'); setTimeout(() => location.reload(), 800); }
+  else showAlert('失敗：' + await r.text());
+});
+</script>
+{% endblock %}

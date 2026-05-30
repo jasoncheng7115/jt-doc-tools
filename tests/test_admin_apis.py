@@ -59,3 +59,43 @@ def test_synonyms_save_round_trip(client):
         assert r.status_code == 200
     finally:
         synonym_manager.save_map(backup)
+
+
+def test_asset_upload_rejects_unsupported_type(client):
+    """A non-image / non-PDF file returns a friendly 400, not a 500 deep in
+    PIL (regression guard for the asset upload)."""
+    junk = b"PK\x03\x04 this is a zip, not an image or pdf"
+    r = client.post(
+        "/admin/assets/upload",
+        data={"name": "x", "type": "stamp", "remove_bg": "false"},
+        files={"file": ("x.png", junk, "image/png")},
+    )
+    assert r.status_code == 400
+
+
+def test_asset_upload_pdf_renders_to_image(client):
+    """A PDF asset is auto-rendered (first page) to PNG and accepted."""
+    import fitz
+    doc = fitz.open(); doc.new_page(width=120, height=120)
+    pdf = doc.tobytes(); doc.close()
+    r = client.post(
+        "/admin/assets/upload",
+        data={"name": "_pdfstamp", "type": "stamp", "remove_bg": "false"},
+        files={"file": ("stamp.pdf", pdf, "application/pdf")},
+        follow_redirects=False,
+    )
+    assert r.status_code in (303, 302, 200)
+
+
+def test_asset_upload_accepts_png(client):
+    from PIL import Image
+    import io
+    buf = io.BytesIO()
+    Image.new("RGBA", (10, 10), (0, 0, 0, 0)).save(buf, format="PNG")
+    r = client.post(
+        "/admin/assets/upload",
+        data={"name": "_pngtest", "type": "stamp", "remove_bg": "false"},
+        files={"file": ("ok.png", buf.getvalue(), "image/png")},
+        follow_redirects=False,
+    )
+    assert r.status_code in (303, 302)  # redirect to edit page on success

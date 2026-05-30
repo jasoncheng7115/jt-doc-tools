@@ -196,6 +196,7 @@
         <input type="file" id="filePicker" hidden
           accept=".txt,.csv,.tsv,.md,.markdown,.log,.json,.yaml,.yml,.ini,.conf,.xlsx,.ods,.docx,.odt,.pdf">
       </label>
+      {% if workspace_enabled(request) %}<button type="button" class="tl-mini-btn" id="wsLoadBtn">{{ icon('archive', size=12) }} 從工作區載入</button>{% endif %}
       <button type="button" class="tl-mini-btn" id="btnClearInput">清空</button>
     </span>
   </div>
@@ -480,6 +481,7 @@ async function _uploadFile(f) {
   }
 }
 
+if (window.attachWorkspaceLoadButton) window.attachWorkspaceLoadButton(document.getElementById('wsLoadBtn'), $('filePicker'), { accept: ['pdf'] });
 $('filePicker').addEventListener('change', e => {
   if (e.target.files && e.target.files[0]) _uploadFile(e.target.files[0]);
   e.target.value = "";

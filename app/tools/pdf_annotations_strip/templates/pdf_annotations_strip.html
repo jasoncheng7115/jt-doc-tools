@@ -115,6 +115,7 @@
 
   <div style="margin-top:14px;">
     <button class="btn btn-primary" id="btnStrip">{{ icon('trash', size=14) }} 刪除並下載</button>
+    {% if workspace_enabled(request) %}<button class="btn" id="wsSaveBtn" type="button" hidden style="margin-left:8px;">{{ icon('archive', size=14) }} 存至工作區</button>{% endif %}
     <span id="stripStatus" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
   </div>
 </div>
@@ -348,6 +349,9 @@ $("btnStrip").addEventListener("click", async () => {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
   _setBusy(btn, false);
   $("stripStatus").textContent = `完成，刪除了 ${removed} 條註解`;
+  if (window.attachWorkspaceSave) window.attachWorkspaceSave(
+    document.getElementById("wsSaveBtn"),
+    () => ({ blob: blob, name: name, tool: 'pdf-annotations-strip' }));
 });
 </script>
 {% endblock %}

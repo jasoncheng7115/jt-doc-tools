@@ -21,6 +21,9 @@
       };
       this.lockAspect = opts.lock_aspect ?? true;
       this.aspect = this.value.width_mm / this.value.height_mm || 1;
+      // Display zoom — 1 = fit-to-canvas. Drag math stays correct because
+      // mmPerPx is derived from the (zoomed) paper width in _relayout().
+      this.zoom = 1;
 
       this.$paperSelect = this.root.querySelector('.dpe-paper-select');
       this.$x = this.root.querySelector('.dpe-x');
@@ -63,12 +66,18 @@
 
     _setPaperSelect() {
       const v = `${this.paper.w},${this.paper.h}`;
+      // Drop any previously-added custom option so switching between several
+      // custom paper sizes (e.g. multi-page PDFs with differing dimensions)
+      // doesn't accumulate stale "自訂 (...)" entries.
+      this.$paperSelect.querySelectorAll('option[data-dpe-custom]').forEach(o => o.remove());
       for (const opt of this.$paperSelect.options) {
         if (opt.value === v) { this.$paperSelect.value = v; return; }
       }
       // unknown size — add custom
       const o = document.createElement('option');
-      o.value = v; o.textContent = `自訂 (${this.paper.w}×${this.paper.h})`;
+      o.value = v;
+      o.textContent = `自訂 (${(+this.paper.w).toFixed(1)}×${(+this.paper.h).toFixed(1)})`;
+      o.dataset.dpeCustom = '1';
       this.$paperSelect.appendChild(o);
       this.$paperSelect.value = v;
     }
@@ -81,6 +90,10 @@
       const paperAspect = this.paper.w / this.paper.h;
       let pw = aw, ph = aw / paperAspect;
       if (ph > ah) { ph = ah; pw = ah * paperAspect; }
+      // Apply display zoom on top of the fitted size. mmPerPx is recomputed
+      // from the zoomed width so drag/resize deltas stay accurate.
+      const z = this.zoom || 1;
+      pw *= z; ph *= z;
       this.$paper.style.width = pw + 'px';
       this.$paper.style.height = ph + 'px';
       this.mmPerPx = this.paper.w / pw;
@@ -320,6 +333,13 @@
       this._setPaperSelect();
       this._clamp(); this._relayout(); this._emit();
     }
+
+    setZoom(z) {
+      this.zoom = Math.min(5, Math.max(0.25, z || 1));
+      this._relayout();
+      return this.zoom;
+    }
+    getZoom() { return this.zoom || 1; }
 
     getValue() {
       return {

@@ -90,6 +90,7 @@
   </details>
   <div style="display:flex; gap:8px; margin:10px 0; align-items:center; flex-wrap:wrap;">
     <a class="btn btn-primary" id="downloadBtn" href="#">{{ icon('download') }}下載填好的 PDF</a>
+    {% if workspace_enabled(request) %}<button class="btn" id="wsSaveBtn" type="button" hidden>{{ icon('archive') }}存至工作區</button>{% endif %}
     <button class="btn btn-small" id="regenBtn" type="button" hidden>{{ icon('refresh') }}套用新位置</button>
     <span id="templateStatus" class="muted" style="font-size:13px;"></span>
     <button class="btn btn-small" id="saveTplBtn" type="button" hidden>{{ icon('save') }}儲存為範本</button>
@@ -339,6 +340,8 @@ if (companySwitch) {
     currentFileBaseName = (data.filename || '').replace(/\.[^.]+$/i, '');
     downloadBtn.href = `/tools/pdf-fill/download/${data.upload_id}`;
     downloadBtn.setAttribute('download', (data.filename || 'refill.pdf').replace(/\.[^.]+$/i, '') + '_filled.pdf');
+    if (window.attachWorkspaceSave) window.attachWorkspaceSave(document.getElementById('wsSaveBtn'),
+      () => ({ url: downloadBtn.href, name: (currentFileBaseName || 'filled') + '_filled.pdf', tool: 'pdf-fill' }));
     renderTemplateStatus(data.report.applied_template, data.upload_id, data.filename || 'refill.pdf');
     renderAllPages();
     document.getElementById('resultPanel').hidden = false;
@@ -410,6 +413,8 @@ form.addEventListener('submit', async (e) => {
     renderUnmatched(data.report.unmatched_labels || [], data.profile_keys || []);
     downloadBtn.href = `/tools/pdf-fill/download/${data.upload_id}`;
     downloadBtn.setAttribute('download', file.name.replace(/\.[^.]+$/i, '') + '_filled.pdf');
+    if (window.attachWorkspaceSave) window.attachWorkspaceSave(document.getElementById('wsSaveBtn'),
+      () => ({ url: downloadBtn.href, name: file.name.replace(/\.[^.]+$/i, '') + '_filled.pdf', tool: 'pdf-fill' }));
     renderTemplateStatus(data.report.applied_template, data.upload_id, file.name);
     currentPlacements = data.placements || [];
     currentPage = data.page || {width_pt: 595, height_pt: 842, dpi: 120};

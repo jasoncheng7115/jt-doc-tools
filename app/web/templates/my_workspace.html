@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}我的工作區 · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('archive', size=22) }} 我的工作區</h1>
+<p class="muted">這裡存放你從各工具按「存至工作區」保留的 PDF / PNG 檔，只有你的帳號看得到。在任何工具的上傳區可按「從工作區載入」取回使用。</p>
+
+<div class="panel">
+  <h2 style="margin-top:0;">容量</h2>
+  <div id="ws-usage-wrap">
+    <div class="ws-usage-bar"><div class="ws-usage-fill" id="ws-usage-fill"></div></div>
+    <div class="ws-usage-line">
+      <div class="ws-usage-text muted" id="ws-usage-text">載入中…</div>
+      <div class="ws-retention muted" id="ws-retention"></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">上傳到工作區</h2>
+  <p class="muted" style="font-size:12px; margin:0 0 8px;">直接把 PDF / PNG 拖進來，或點選挑選，存到自己的工作區。</p>
+  <div class="file-upload" id="wsUpload" data-accept="application/pdf,image/png">
+    <label class="drop-zone" for="wsUpload-input">
+      <div class="drop-zone-inner">
+        <div class="drop-zone-icon"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14l3-3 3 3"/><path d="M12 11v10"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M16 7l-4-4-4 4"/><path d="M12 3v8"/></svg></div>
+        <div class="drop-zone-text">拖曳 PDF / PNG 到此，或點選挑選</div>
+        <div class="drop-zone-filename"></div>
+      </div>
+      <input type="file" id="wsUpload-input" accept="application/pdf,image/png" multiple />
+    </label>
+  </div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0;">檔案<span id="ws-count" class="ws-count"></span></h2>
+  <div id="ws-bulk" class="ws-bulk" hidden>
+    <label class="ws-bulk-all"><input type="checkbox" id="ws-select-all"> 全選</label>
+    <button class="btn btn-small" id="ws-del-selected" type="button" disabled>刪除選取 <span id="ws-sel-count">0</span></button>
+  </div>
+  <div id="ws-empty" class="muted" hidden style="padding:14px 2px;">目前沒有檔案。到任何工具產生 PDF / PNG 後，按「存至工作區」即可保留在這裡。</div>
+  <div id="ws-grid" class="ws-grid"></div>
+</div>
+
+<div id="ws-lightbox" class="ws-lightbox" hidden>
+  <button class="ws-lb-close" type="button" aria-label="關閉">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12"/><path d="M6 18L18 6"/></svg>
+  </button>
+  <img id="ws-lb-img" alt="預覽">
+  <a id="ws-lb-open" class="btn btn-primary" target="_blank" rel="noopener">開啟原檔</a>
+</div>
+
+<style>
+.ws-usage-bar { height: 12px; background: #e5e7eb; border-radius: 7px; overflow: hidden; }
+.ws-usage-fill { height: 100%; width: 0; background: linear-gradient(to right, #2563eb, #3b82f6); transition: width .25s; }
+.ws-usage-fill.warn { background: linear-gradient(to right, #f59e0b, #f97316); }
+.ws-usage-fill.full { background: linear-gradient(to right, #ef4444, #dc2626); }
+.ws-usage-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
+.ws-usage-text { font-size: 13px; font-variant-numeric: tabular-nums; }
+.ws-retention { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; background: #f1f5f9; border-radius: 8px; color: #475569; font-size: 12px; }
+.ws-retention svg { flex: none; opacity: .8; }
+.ws-count { display: none; margin-left: 10px; font-size: 12px; font-weight: 600; color: #475569; background: #e2e8f0; border-radius: 11px; padding: 1px 9px; vertical-align: middle; }
+.ws-count.show { display: inline-block; }
+.ws-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-top: 6px; }
+.ws-card { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
+.ws-bulk { display: flex; align-items: center; gap: 14px; margin: 0 0 12px; font-size: 13px; color: #475569; }
+.ws-bulk-all { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.ws-card { position: relative; }
+.ws-check { position: absolute; top: 8px; left: 8px; z-index: 2; width: 18px; height: 18px; cursor: pointer; }
+.ws-card.selected { outline: 2px solid var(--primary); outline-offset: -2px; }
+.ws-thumb { height: 150px; background: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 1px solid var(--border); cursor: zoom-in; }
+.ws-lightbox { position: fixed; inset: 0; z-index: 9998; background: rgba(15,23,42,.8); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; }
+.ws-lightbox img { max-width: 92vw; max-height: 80vh; object-fit: contain; background: #fff; box-shadow: 0 10px 40px rgba(0,0,0,.4); border-radius: 4px; }
+.ws-lb-close { position: absolute; top: 16px; right: 20px; background: rgba(255,255,255,.15); border: none; color: #fff; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.ws-lb-close:hover { background: rgba(255,255,255,.28); }
+.ws-card .ws-body, .ws-card .ws-actions { background: #f8fafc; }
+.ws-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; }
+.ws-badge { font-size: 11px; font-weight: 700; color: #fff; padding: 3px 8px; border-radius: 6px; }
+.ws-badge.pdf { background: #dc2626; }
+.ws-badge.png { background: #0ea5e9; }
+.ws-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.ws-name { font-size: 13px; font-weight: 600; color: #1e293b; word-break: break-all; line-height: 1.35; }
+.ws-meta { font-size: 11.5px; color: #94a3b8; }
+.ws-actions { display: flex; gap: 6px; padding: 0 12px 12px; flex-wrap: nowrap; }
+.ws-actions .btn { padding: 4px 8px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.ws-actions .btn svg { flex: none; }
+</style>
+
+<script src="/static/js/friendly_error.js"></script>
+<script src="/static/js/file_upload.js"></script>
+<script>
+const WS = {
+  fmtBytes(n) {
+    if (!n) return '0 B';
+    const u = ['B', 'KB', 'MB', 'GB']; let i = 0; let v = n;
+    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    return (i === 0 ? v : v.toFixed(1)) + ' ' + u[i];
+  },
+  fmtTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    const p = (x) => String(x).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  },
+  esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; },
+};
+const _svg = (p) => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+WS.IC = {
+  dl: _svg('<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/>'),
+  rename: _svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
+  del: _svg('<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>'),
+};
+
+async function wsLoad() {
+  let j;
+  try {
+    const r = await fetch('/workspace/api/list');
+    if (!r.ok) throw new Error(await window.friendlyServerError(r, '載入工作區失敗'));
+    j = await r.json();
+  } catch (e) { alert(e.message || '載入工作區失敗'); return; }
+
+  // usage
+  const u = j.usage || {};
+  const fill = document.getElementById('ws-usage-fill');
+  const txt = document.getElementById('ws-usage-text');
+  if (u.quota_bytes) {
+    const pct = Math.min(100, Math.round(u.used_bytes / u.quota_bytes * 100));
+    fill.style.width = pct + '%';
+    fill.className = 'ws-usage-fill' + (pct >= 100 ? ' full' : pct >= 80 ? ' warn' : '');
+    txt.textContent = `已用 ${WS.fmtBytes(u.used_bytes)} / ${WS.fmtBytes(u.quota_bytes)}（${pct}%）`;
+  } else {
+    fill.style.width = '100%';
+    fill.className = 'ws-usage-fill';
+    txt.textContent = `已用 ${WS.fmtBytes(u.used_bytes)}（無容量上限）`;
+  }
+
+  // 保留期限（讀系統設定值）
+  const rh = j.retention_hours;
+  const ret = document.getElementById('ws-retention');
+  const clock = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+  let rtext;
+  if (rh === -1 || rh === null || rh === undefined) {
+    rtext = '永久保留，除非你手動刪除';
+  } else if (rh % 24 === 0 && rh >= 24) {
+    rtext = `檔案存放超過 ${rh / 24} 天會自動清除`;
+  } else {
+    rtext = `檔案存放超過 ${rh} 小時會自動清除`;
+  }
+  ret.innerHTML = clock + '<span>保留期限：' + rtext + '</span>';
+
+  // files
+  const files = j.files || [];
+  const cntEl = document.getElementById('ws-count');
+  cntEl.textContent = files.length ? files.length : '';
+  cntEl.classList.toggle('show', files.length > 0);
+  document.getElementById('ws-empty').hidden = files.length > 0;
+  document.getElementById('ws-bulk').hidden = files.length === 0;
+  const grid = document.getElementById('ws-grid');
+  grid.innerHTML = files.map(f => {
+    const ext = (f.ext || '').replace('.', '');
+    // First-page preview for PDF (rendered server-side) + the image itself for
+    // PNG. Falls back to a coloured badge if the thumbnail can't be produced.
+    const thumb = `<img src="/workspace/thumb/${f.file_id}" alt="" loading="lazy" `
+      + `onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('span'),{className:'ws-badge ${ext}',textContent:'${ext.toUpperCase()}'}))">`;
+    return `<div class="ws-card" data-id="${f.file_id}">
+      <input type="checkbox" class="ws-check" data-id="${f.file_id}" aria-label="選取">
+      <div class="ws-thumb" data-id="${f.file_id}" data-ext="${ext}">${thumb}</div>
+      <div class="ws-body">
+        <div class="ws-name">${WS.esc(f.name)}</div>
+        <div class="ws-meta">${WS.fmtBytes(f.size)} · ${WS.esc(f.source_tool_name || f.source_tool || '—')}</div>
+        <div class="ws-meta">${WS.fmtTime(f.saved_at)}</div>
+      </div>
+      <div class="ws-actions">
+        <a class="btn btn-small" href="/workspace/file/${f.file_id}?dl=1">${WS.IC.dl}下載</a>
+        <button class="btn btn-small" type="button" data-act="rename">${WS.IC.rename}重新命名</button>
+        <button class="btn btn-small" type="button" data-act="delete">${WS.IC.del}刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+  const selAll = document.getElementById('ws-select-all');
+  if (selAll) selAll.checked = false;
+  if (typeof _wsUpdateBulk === 'function') _wsUpdateBulk();
+}
+
+// 點縮圖 → lightbox 放大
+document.getElementById('ws-grid').addEventListener('click', (e) => {
+  const thumb = e.target.closest('.ws-thumb');
+  if (!thumb) return;
+  const id = thumb.dataset.id;
+  const lb = document.getElementById('ws-lightbox');
+  document.getElementById('ws-lb-img').src = '/workspace/thumb/' + id;
+  document.getElementById('ws-lb-open').href = '/workspace/file/' + id;
+  lb.hidden = false;
+});
+document.querySelector('.ws-lb-close').addEventListener('click', () => {
+  document.getElementById('ws-lightbox').hidden = true;
+});
+document.getElementById('ws-lightbox').addEventListener('click', (e) => {
+  if (e.target.id === 'ws-lightbox') e.currentTarget.hidden = true;
+});
+
+// 多選 + 批次刪除
+function _wsSelected() { return [...document.querySelectorAll('.ws-check:checked')].map(c => c.dataset.id); }
+function _wsUpdateBulk() {
+  const sel = _wsSelected();
+  document.getElementById('ws-sel-count').textContent = sel.length;
+  document.getElementById('ws-del-selected').disabled = sel.length === 0;
+  document.querySelectorAll('.ws-check').forEach(c => c.closest('.ws-card').classList.toggle('selected', c.checked));
+}
+document.getElementById('ws-grid').addEventListener('change', (e) => {
+  if (e.target.classList.contains('ws-check')) _wsUpdateBulk();
+});
+document.getElementById('ws-select-all').addEventListener('change', (e) => {
+  document.querySelectorAll('.ws-check').forEach(c => { c.checked = e.target.checked; });
+  _wsUpdateBulk();
+});
+document.getElementById('ws-del-selected').addEventListener('click', async () => {
+  const sel = _wsSelected();
+  if (!sel.length) return;
+  if (!confirm(`確定刪除選取的 ${sel.length} 個檔案？此動作無法復原。`)) return;
+  for (const id of sel) {
+    const fd = new FormData(); fd.append('file_id', id);
+    await fetch('/workspace/delete', { method: 'POST', body: fd });
+  }
+  document.getElementById('ws-select-all').checked = false;
+  wsLoad();
+});
+
+document.getElementById('ws-grid').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-act]');
+  if (!btn) return;
+  const card = btn.closest('.ws-card');
+  const id = card.dataset.id;
+  const act = btn.dataset.act;
+  if (act === 'delete') {
+    if (!confirm('確定刪除這個檔案？此動作無法復原。')) return;
+    const fd = new FormData(); fd.append('file_id', id);
+    const r = await fetch('/workspace/delete', { method: 'POST', body: fd });
+    if (!r.ok) return alert(await window.friendlyServerError(r, '刪除失敗'));
+    wsLoad();
+  } else if (act === 'rename') {
+    const cur = card.querySelector('.ws-name').textContent;
+    const name = prompt('新檔名：', cur);
+    if (name == null || !name.trim()) return;
+    const fd = new FormData(); fd.append('file_id', id); fd.append('name', name.trim());
+    const r = await fetch('/workspace/rename', { method: 'POST', body: fd });
+    if (!r.ok) return alert(await window.friendlyServerError(r, '重新命名失敗'));
+    wsLoad();
+  }
+});
+
+// 拖曳 / 挑選上傳到工作區
+if (window.FileUpload) {
+  const wsUp = new FileUpload(document.getElementById('wsUpload'), async (files) => {
+    const arr = Array.isArray(files) ? files : [files];
+    let dup = 0;
+    for (const f of arr) {
+      const fd = new FormData();
+      fd.append('file', f, f.name);
+      fd.append('source_tool', '手動上傳');
+      const r = await fetch('/workspace/save', { method: 'POST', body: fd });
+      if (!r.ok) { alert(await window.friendlyServerError(r, '上傳失敗')); break; }
+      try { if ((await r.json()).duplicate) dup++; } catch (_e) {}
+    }
+    wsUp.reset();
+    if (dup && window.showToast) window.showToast(`已上傳；其中 ${dup} 個與既有檔同名（已另存）`, 'ok');
+    wsLoad();
+  });
+}
+
+wsLoad();
+</script>
+{% endblock %}

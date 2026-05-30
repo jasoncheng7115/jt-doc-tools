@@ -98,10 +98,10 @@ _ACCEPTED_EXTS = (".pdf", ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".we
 
 
 def _clip_repetition(text: str, max_repeats: int = 3) -> str:
-    """偵測 LLM 重複生成迴圈,連續相同 line >= max_repeats 次就截斷。
+    """偵測 LLM 重複生成迴圈，連續相同 line >= max_repeats 次就截斷。
     qwen2.5vl 等 vision LLM 在 temperature=0 + OCR 任務常陷入無限重複(e.g.
     「資安整競爭力之重」repeat 數千次) → 截斷避免污染對齊邏輯與全文展示。
-    repeat_penalty=1.15 已大幅減少這種情況,本函式為防呆雙重保險。"""
+    repeat_penalty=1.15 已大幅減少這種情況，本函式為防呆雙重保險。"""
     lines = text.splitlines()
     out: list[str] = []
     run_text = None
@@ -416,7 +416,7 @@ async def run_ocr(upload_id: str, request: Request,
                     _ocrlog5 = _lg.getLogger("app.pdf_ocr.llm")
                     def _llm_full_cb(png_bytes: bytes) -> str:
                         import time as _t
-                        # 取縮圖實際尺寸,塞進 prompt 讓 LLM 知道座標系統
+                        # 取縮圖實際尺寸，塞進 prompt 讓 LLM 知道座標系統
                         try:
                             from PIL import Image as _PILImg
                             import io as _io
@@ -425,17 +425,17 @@ async def run_ocr(upload_id: str, request: Request,
                         except Exception:
                             iw, ih = 0, 0
                         # qwen2.5-VL 對僵硬的 JSON / native token 格式會拒絕輸出座標。
-                        # 用自然語言 prompt + plain text bbox 格式,實測穩定。
+                        # 用自然語言 prompt + plain text bbox 格式，實測穩定。
                         prompt = (
-                            "請你識別出影像中的文字,並給出每塊文字所在圖對應的座標 "
-                            "(不止 x, y, 要給出左上與右下四個數,即 x1, y1, x2, y2),\n"
+                            "請你識別出影像中的文字，並給出每塊文字所在圖對應的座標 "
+                            "(不止 x, y, 要給出左上與右下四個數，即 x1, y1, x2, y2),\n"
                             f"最左上為 (0, 0), 此圖尺寸為 {iw} × {ih} 像素。\n\n"
-                            "每塊文字輸出一行,格式:\n"
+                            "每塊文字輸出一行，格式:\n"
                             '"文字內容" - (x1, y1, x2, y2)\n\n'
                             "## 規則\n"
                             "- 一行一塊(可以是字 / 詞 / 行 / 短語)\n"
                             "- 不能腦補:影像中沒寫的字一律不能寫\n"
-                            "- 看不清楚的字用 ? 代替,不要猜\n"
+                            "- 看不清楚的字用 ? 代替，不要猜\n"
                             "- 公司名 / 人名 / 機關名 / 編號 / 日期 / 金額照原文寫\n"
                             "- 由上到下、由左到右排序\n"
                         )
@@ -536,7 +536,7 @@ async def run_ocr(upload_id: str, request: Request,
                     return "本機 Tesseract"
                 return ocr_chosen_engine or "?"
             if ocr_engine_pages:
-                # 多 engine 顯示細項;單一 engine 簡潔
+                # 多 engine 顯示細項；單一 engine 簡潔
                 if len(ocr_engine_pages) == 1:
                     eng = next(iter(ocr_engine_pages))
                     label = ENG_LABEL.get(eng, eng)

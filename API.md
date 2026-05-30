@@ -691,14 +691,15 @@ POST /tools/pdf-stamp/api/pdf-stamp
 | `width_mm` | float | ✓ | 寬度（mm） |
 | `height_mm` | float | ✓ | 高度（mm） |
 | `rotation_deg` | float | | 旋轉角度，預設 `0` |
-| `page_mode` | str | | `all`（每頁）/ `first` / `last` / 指定頁 |
+| `page_mode` | str | | `all`（每頁）/ `first` / `last`，預設 `all` |
+| `pages_json` | str | | 指定頁：JSON 陣列，0 起算頁碼（如 `[0,2,4]`）。提供時優先於 `page_mode`；超出範圍的頁碼會被忽略 |
 
 ```bash
 curl -X POST http://localhost:8765/tools/pdf-stamp/api/pdf-stamp \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -F "file=@contract.pdf" -F "stamp_image=@chop.png" \
   -F "x_mm=150" -F "y_mm=30" -F "width_mm=30" -F "height_mm=30" \
-  -F "page_mode=last" \
+  -F "pages_json=[0,2]" \
   --output stamped.pdf
 ```
 
@@ -1425,6 +1426,25 @@ sudo systemctl start jt-doc-tools
 - 如有公開暴露需求，建議加上 `limit_req_zone` 防濫用
 
 詳見 [OPS.md](./OPS.md) 的「反向代理」段與「504 Gateway Timeout 排錯流程」。
+
+---
+
+## 14b. 使用者工作區（session 認證，非 Bearer API）
+
+「我的工作區」是綁定登入 session 的網頁功能（cookie 認證），**不屬於對外 Bearer API**，因為每個檔案以登入者帳號隔離。需 admin 在「工作區設定」啟用；停用時下列端點一律回 404。
+
+| 端點 | 方法 | 說明 |
+|---|---|---|
+| `/workspace` | GET | 「我的工作區」頁面 |
+| `/workspace/api/list` | GET | 列出自己的檔案（`?accept=pdf,png` 過濾）+ 容量 + 保留時數 |
+| `/workspace/api/count` | GET | 檔案數（側欄徽章用） |
+| `/workspace/save` | POST | 存檔：`job_id`（伺服器端複製 job 結果）或 `file`（直接上傳 bytes）；僅 PDF / PNG |
+| `/workspace/file/{file_id}` | GET | 取檔（`?dl=1` 下載）|
+| `/workspace/thumb/{file_id}` | GET | 縮圖（PDF 首頁渲染 / PNG 原圖）|
+| `/workspace/delete` | POST | 刪除（`file_id`）|
+| `/workspace/rename` | POST | 重新命名（`file_id`、`name`）|
+
+容量額度、單檔上限、保留時數、啟用 / 停用由 admin 在 `/admin/workspace` 設定（全站統一，無個人特例）。
 
 ---
 

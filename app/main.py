@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.11.45"
+VERSION = "1.11.65"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -100,6 +100,36 @@ def _tpl_is_auditor(request) -> bool:
 
 templates.env.globals["is_admin"] = _tpl_is_admin
 templates.env.globals["is_auditor"] = _tpl_is_auditor
+
+
+def _tpl_workspace_enabled(request=None) -> bool:
+    """Jinja global: True when the user-workspace feature is enabled by the
+    admin. Templates gate the 「存至工作區」/「從工作區載入」buttons + the
+    「我的工作區」nav item on this so a disabled feature is fully invisible."""
+    try:
+        from .core import workspace as _ws
+        return _ws.is_enabled()
+    except Exception:
+        return False
+
+
+templates.env.globals["workspace_enabled"] = _tpl_workspace_enabled
+
+
+def _tpl_workspace_count(request=None) -> int:
+    """Jinja global: number of files in the current user's workspace, rendered
+    server-side into the sidebar badge (no extra fetch; shows in every nav
+    state). 0 when disabled / not applicable."""
+    try:
+        from .core import workspace as _ws
+        if not _ws.is_enabled() or request is None:
+            return 0
+        return _ws.count_files(request)
+    except Exception:
+        return 0
+
+
+templates.env.globals["workspace_count"] = _tpl_workspace_count
 # Per-tool English keyword aliases — typed in the sidebar search to find a
 # tool by its English term (e.g. "stamp" → PDF 蓋章).
 _TOOL_ALIASES = {
@@ -276,6 +306,9 @@ templates.env.globals["nav_settings"] = [
     {"icon": "archive", "name": "檔案保留 / 清理", "description": "歷史檔案保留天數與自動清理",
      "url": "/admin/retention",
      "keywords": "retention cleanup history sweep gc gdpr 保留 清理 歷史"},
+    {"icon": "archive", "name": "工作區設定", "description": "啟用/停用使用者工作區、每人容量額度、保留時數",
+     "url": "/admin/workspace",
+     "keywords": "workspace quota storage user files save load disk 工作區 容量 額度 儲存 空間 啟用 停用 保留"},
     # History pages are admin-only and only meaningful when auth is on
     # (per spec: when auth off the pages don't appear at all).
     {"icon": "page", "name": "表單填寫歷史", "description": "已填表的歷史記錄",
@@ -371,6 +404,11 @@ app.include_router(_build_auth_router(templates))
 from .web.router import build_router as _build_web_router  # noqa: E402
 
 app.include_router(_build_web_router(templates, tools, settings.app_name, VERSION))
+
+# User workspace (我的工作區) — page + save/list/serve/delete endpoints.
+from .web.workspace_routes import build_router as _build_workspace_router  # noqa: E402
+
+app.include_router(_build_workspace_router(templates))
 
 # Admin routes
 from .admin.router import build_router as _build_admin_router  # noqa: E402
@@ -800,10 +838,24 @@ async def _redirect_pdf_diff(rest: str = ""):
 
 # ---- Shared API: job status + result download ----
 @app.get("/api/jobs/{job_id}")
-async def api_job_status(job_id: str):
+async def api_job_status(job_id: str, request: Request):
     job = job_manager.get(job_id)
     if not job:
         return JSONResponse({"error": "job not found"}, status_code=404)
+    # Tag the owner on the first authenticated poll (creator's browser). Used to
+    # ACL "存至工作區 by job_id". /api/ bypasses the cookie auth gate, so resolve
+    # the session cookie directly here.
+    if job.owner_id is None:
+        try:
+            from .core import auth_settings as _as, sessions as _se
+            if _as.is_enabled():
+                tok = request.cookies.get(_se.COOKIE_NAME, "")
+                u = (getattr(request.state, "user", None)
+                     or (_se.lookup(tok) if tok else None))
+                if u and u.get("user_id") is not None:
+                    job.owner_id = int(u["user_id"])
+        except Exception:
+            pass
     return job.to_public()
 
 

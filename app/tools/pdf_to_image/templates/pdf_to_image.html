@@ -95,7 +95,10 @@
 <div class="panel" id="p2iResultPanel" hidden>
   <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
     <h2 style="margin:0;">預覽（<span id="p2iPageCount">0</span> 頁，總 <span id="p2iTotalSize">—</span>）</h2>
-    <a class="btn btn-primary" id="p2iBtnDownload" href="#">{{ icon('download') }} 下載</a>
+    <div style="display:flex; gap:8px;">
+      {% if workspace_enabled(request) %}<button id="wsSaveBtn" class="btn" type="button" hidden>{{ icon('archive') }} 存至工作區</button>{% endif %}
+      <a class="btn btn-primary" id="p2iBtnDownload" href="#">{{ icon('download') }} 下載</a>
+    </div>
   </div>
   <div class="p2i-status" id="p2iStatus"></div>
   <div class="p2i-grid" id="p2iGrid"></div>
@@ -205,6 +208,15 @@
       });
       btnDownload.href = '/tools/pdf-to-image/download/' + d.upload_id;
       btnDownload.style.display = '';
+      // 工作區只收單一 PNG（多頁是 ZIP，不適用）
+      const wsBtn = document.getElementById('wsSaveBtn');
+      if (wsBtn) {
+        if (d.page_count === 1 && window.attachWorkspaceSave) {
+          window.attachWorkspaceSave(wsBtn, () => ({
+            url: '/tools/pdf-to-image/download/' + d.upload_id,
+            name: 'page_1.png', tool: 'pdf-to-image' }));
+        } else { wsBtn.hidden = true; }
+      }
       const total = fmtBytes(d.total_bytes || 0);
       btnDownload.innerHTML = dlIcon + (d.page_count === 1
         ? ' 下載 PNG（' + total + '）'

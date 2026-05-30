@@ -2,11 +2,19 @@
 <div class="file-upload" id="{{ upload_id|default('upload') }}" data-accept="{{ accept|default('application/pdf') }}">
   <label class="drop-zone" for="{{ upload_id|default('upload') }}-input">
     <div class="drop-zone-inner">
-      <div class="drop-zone-icon">📤</div>
+      <div class="drop-zone-icon"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14l3-3 3 3"/><path d="M12 11v10"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M16 7l-4-4-4 4"/><path d="M12 3v8"/></svg></div>
       <div class="drop-zone-text">拖曳檔案到此，或點選挑選</div>
       <div class="drop-zone-hint">{{ hint|default('')|safe }}</div>
       <div class="drop-zone-filename"></div>
     </div>
     <input type="file" id="{{ upload_id|default('upload') }}-input" {% if input_name %}name="{{ input_name }}"{% endif %} accept="{{ accept|default('application/pdf') }}" {% if multiple %}multiple{% endif %} />
   </label>
+  {% if workspace_enabled(request) %}
+  <div class="fu-ws-row">
+    <button type="button" class="ws-load-btn" data-accept="{{ accept|default('application/pdf') }}">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+      <span>從工作區載入</span>
+    </button>
+  </div>
+  {% endif %}
 </div>

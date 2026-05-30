@@ -50,10 +50,14 @@ class Settings(BaseSettings):
     def branding_dir(self) -> Path:
         return self.data_dir / "branding"
 
+    @property
+    def workspace_dir(self) -> Path:
+        return self.data_dir / "workspace"
+
     def ensure_dirs(self) -> None:
         for p in (self.data_dir, self.assets_dir, self.assets_files_dir,
                   self.jobs_dir, self.temp_dir, self.fonts_dir,
-                  self.branding_dir):
+                  self.branding_dir, self.workspace_dir):
             p.mkdir(parents=True, exist_ok=True)
 
 

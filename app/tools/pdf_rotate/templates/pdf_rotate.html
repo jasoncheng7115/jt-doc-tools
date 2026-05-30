@@ -70,6 +70,7 @@
       {{ icon('download', size=14) }} 下載 PDF</button>
     <button class="btn" type="button" id="btn-png">
       {{ icon('image', size=14) }} 下載 ZIP（每頁 PNG）</button>
+    {% if workspace_enabled(request) %}<button class="btn" type="button" id="wsSaveBtn">{{ icon('archive', size=14) }} 存至工作區</button>{% endif %}
     <button class="btn" type="button" id="btn-reset">
       {{ icon('reset', size=14) }} 處理新檔案</button>
     <span id="action-msg" class="muted" style="margin-left:10px; font-size:12.5px;"></span>
@@ -430,6 +431,20 @@ $('btn-pdf').addEventListener('click', async () => {
     btn.innerHTML = orig;
   }
 });
+
+if (window.attachWorkspaceSave && document.getElementById('wsSaveBtn')) {
+  window.attachWorkspaceSave(document.getElementById('wsSaveBtn'), async () => {
+    if (!uploadId) throw new Error('沒有檔案');
+    const fd = await buildSubmitForm();
+    const r = await fetch('/tools/pdf-rotate/finalize', { method: 'POST', body: fd });
+    if (!r.ok) throw new Error(await r.text());
+    const blob = await r.blob();
+    const cd = r.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i);
+    const name = m ? decodeURIComponent(m[1]) : 'rotated.pdf';
+    return { blob, name, tool: 'pdf-rotate' };
+  });
+}
 
 $('btn-png').addEventListener('click', async () => {
   if (!uploadId) return;

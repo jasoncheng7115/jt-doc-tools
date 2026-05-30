@@ -13,7 +13,7 @@
         x_mm: 150, y_mm: 250, width_mm: 50, height_mm: 12, rotation_deg: 0,
       }, opts.value || {});
       this.aspect = this.value.width_mm / Math.max(1, this.value.height_mm);
-      // 可選自訂邊框 / 背景色,給不同類型的 overlay 視覺區分
+      // 可選自訂邊框 / 背景色，給不同類型的 overlay 視覺區分
       this.borderColor = opts.borderColor || '#10b981';
       this.bgColor = opts.bgColor || 'rgba(16, 185, 129, 0.05)';
       this._mounted = false;

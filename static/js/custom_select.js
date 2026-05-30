@@ -175,7 +175,7 @@
       this.panel.hidden = false;
       this.trigger.classList.add('open');
       this.trigger.setAttribute('aria-expanded', 'true');
-      // 計算空間,若下方不夠就翻向上(panel 顯示在 trigger 上方)
+      // 計算空間，若下方不夠就翻向上(panel 顯示在 trigger 上方)
       this._adjustPanelDirection();
       // Scroll selected into view
       const sel = this.panel.querySelector('.jt-select-option.selected');

@@ -27,6 +27,11 @@ class Job:
     updated_at: float = field(default_factory=time.time)
     meta: dict[str, Any] = field(default_factory=dict)
     cancelled: bool = False
+    # Lazily tagged on the first authenticated status poll (the creator's
+    # browser polls within ~800ms; the unguessable job_id isn't known to anyone
+    # else yet). Used to ACL "存至工作區 by job_id" so a leaked id can't let
+    # another user copy someone else's result into their workspace.
+    owner_id: Optional[int] = None
 
     def to_public(self) -> dict:
         return {

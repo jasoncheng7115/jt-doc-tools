@@ -249,17 +249,26 @@ const editor = new DragPositionEditor({
       const ctx = canvas.getContext('2d');
       ctx.drawImage(tmp, 0, 0);
       const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-      let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
-      for (let y = 0; y < canvas.height; y++) {
-        for (let x = 0; x < canvas.width; x++) {
-          const a = data[(y * canvas.width + x) * 4 + 3];
+      const W = canvas.width, H = canvas.height;
+      // Detect content WITHIN the current selection only. When the selection is
+      // (near) full-image this scans everything; once the user shrinks the box
+      // to exclude scan artefacts (e.g. a fold line), auto-snap refines to the
+      // content inside their box.
+      const sx0 = Math.max(0, Math.floor(rect.x * W));
+      const sy0 = Math.max(0, Math.floor(rect.y * H));
+      const sx1 = Math.min(W, Math.ceil((rect.x + rect.w) * W));
+      const sy1 = Math.min(H, Math.ceil((rect.y + rect.h) * H));
+      let minX = sx1, minY = sy1, maxX = sx0 - 1, maxY = sy0 - 1;
+      for (let y = sy0; y < sy1; y++) {
+        for (let x = sx0; x < sx1; x++) {
+          const a = data[(y * W + x) * 4 + 3];
           if (a > 8) {
             if (x < minX) minX = x; if (y < minY) minY = y;
             if (x > maxX) maxX = x; if (y > maxY) maxY = y;
           }
         }
       }
-      if (maxX <= minX || maxY <= minY) { alert('找不到可見內容'); return; }
+      if (maxX < minX || maxY < minY) { alert('選取範圍內找不到可見內容'); return; }
       const pad = Math.max(2, Math.round(Math.min(canvas.width, canvas.height) / 200));
       minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
       maxX = Math.min(canvas.width - 1, maxX + pad);

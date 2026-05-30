@@ -68,6 +68,7 @@
           <span class="trd-drop-hint">PDF / DOCX / ODT / ODS / ODP / TXT / MD</span>
         </div>
       </label>
+      {% if workspace_enabled(request) %}<div class="fu-ws-row" style="justify-content:flex-start; margin-top:8px;"><button type="button" class="ws-load-btn" id="wsLoadBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg><span>從工作區載入 PDF</span></button></div>{% endif %}
     </div>
   </div>
   <div style="margin-top:14px;">
@@ -666,6 +667,7 @@ async function handleUploadedFile(f) {
 }
 
 fileInput.addEventListener('change', (e) => handleUploadedFile(e.target.files[0]));
+if (window.attachWorkspaceLoadButton) window.attachWorkspaceLoadButton(document.getElementById('wsLoadBtn'), fileInput, { accept: ['pdf'] });
 
 // Drag-and-drop wiring on the entire drop zone label
 (function() {

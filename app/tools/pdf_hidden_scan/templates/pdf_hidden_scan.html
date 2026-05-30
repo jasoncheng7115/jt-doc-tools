@@ -50,6 +50,7 @@
   <h3 style="margin:0 0 8px; color:#064e3b;">清除完成</h3>
   <div id="dlSummary" style="font-size:13px; color:#065f46; margin-bottom:10px;"></div>
   <a class="btn btn-primary" id="dlLink" href="#">{{ icon('download') }} 下載清除後的 PDF</a>
+  {% if workspace_enabled(request) %}<button id="wsSaveBtn" class="btn" type="button" hidden style="margin-left:8px;">{{ icon('archive') }} 存至工作區</button>{% endif %}
 </div>
 
 {% endblock %}
@@ -137,6 +138,9 @@ async function runClean(all) {
   $('dlSummary').textContent =
     '已清除：' + Object.entries(rm).filter(([_,v])=>v>0).map(([k,v])=>`${k} ${v}`).join('　·　');
   $('dlLink').href = d.download_url;
+  if (window.attachWorkspaceSave) window.attachWorkspaceSave(
+    document.getElementById('wsSaveBtn'),
+    () => ({ url: d.download_url, name: (d.download_url.split('/').pop() || 'cleaned.pdf').split('?')[0], tool: 'pdf-hidden-scan' }));
   $('dlPanel').hidden = false;
   $('dlPanel').scrollIntoView({behavior:'smooth', block:'end'});
 }

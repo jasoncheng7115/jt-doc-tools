@@ -459,6 +459,7 @@ body.pe-pan-active { cursor: grabbing !important; }
   <div class="pe-top">
     <button class="btn btn-primary" type="button" id="btnSave">{{ icon('save') }} 儲存並預覽</button>
     <a class="btn" id="btnDownload" href="#" style="display:none;">{{ icon('download') }} 下載</a>
+    {% if workspace_enabled(request) %}<button class="btn" id="wsSaveBtn" type="button" hidden>{{ icon('archive') }} 存至工作區</button>{% endif %}
     <span class="pe-top-divider"></span>
     <button class="btn" type="button" id="btnUndo" title="復原 (Cmd/Ctrl+Z)" disabled>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h9a7 7 0 0 1 0 14h-2"/></svg>
@@ -3244,6 +3245,9 @@ async function savePdf(isAuto, opts) {
     dl._downloadUrl = data.download_url;
     dl._downloadName = suggestedFilename();
     dl.href = data.download_url;
+    if (window.attachWorkspaceSave) window.attachWorkspaceSave(
+      document.getElementById('wsSaveBtn'),
+      () => ({ url: data.download_url, name: suggestedFilename(), tool: 'pdf-editor' }));
     dl.style.display = ''; dl.innerHTML = dl.innerHTML.includes('svg') ? dl.innerHTML : '下載 PDF';
     dl.setAttribute('download', suggestedFilename());
     // NOTE: intentionally NOT clearing _origBbox or markers. Each save

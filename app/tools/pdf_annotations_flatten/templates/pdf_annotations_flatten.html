@@ -88,6 +88,7 @@
   <div class="af-preview" id="bakedGrid"></div>
   <div style="margin-top:14px;">
     <button class="btn btn-primary" id="btnDownload">{{ icon('download', size=14) }} 下載平面化後的 PDF</button>
+    {% if workspace_enabled(request) %}<button class="btn" id="wsSaveBtn" type="button" hidden style="margin-left:8px;">{{ icon('archive', size=14) }} 存至工作區</button>{% endif %}
   </div>
 </div>
 
@@ -215,6 +216,9 @@ function _renderBakedGrid(r) {
   }
   $("bakedGrid").innerHTML = html;
   $("bakedPanel").hidden = false;
+  if (window.attachWorkspaceSave) window.attachWorkspaceSave(
+    document.getElementById("wsSaveBtn"),
+    () => ({ url: `/tools/pdf-annotations-flatten/baked-download/${bakedUid}`, name: 'flattened.pdf', tool: 'pdf-annotations-flatten' }));
   $("bakedPanel").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 

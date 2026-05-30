@@ -283,6 +283,7 @@
   <h3 style="margin:0 0 8px; color:#064e3b;">處理完成</h3>
   <div id="doneSummary" style="margin-bottom:10px; font-size:13px; color:#065f46;"></div>
   <a class="btn btn-primary" id="dlLink" href="#">{{ icon('download') }} 下載處理後的 PDF</a>
+  {% if workspace_enabled(request) %}<button class="btn" id="wsSaveBtn" type="button" hidden style="margin-left:8px;">{{ icon('archive') }} 存至工作區</button>{% endif %}
   <h4 style="margin:16px 0 4px; font-size:14px; color:#064e3b;">處理後預覽</h4>
   <p class="muted" style="font-size:12px; margin:0 0 6px;">點縮圖可放大檢視。</p>
   <div class="dd-preview-grid" id="ddPreviewGrid"></div>
@@ -443,6 +444,9 @@ $('btnProcess').addEventListener('click', async () => {
     $('doneSummary').textContent =
       `模式：${chosenMode === 'redact' ? 'Redaction（編修）' : 'Masking（資料遮罩）'}　·　處理 ${d.processed} 筆`;
     $('dlLink').href = d.download_url;
+    if (window.attachWorkspaceSave) window.attachWorkspaceSave(
+      document.getElementById('wsSaveBtn'),
+      () => ({ url: d.download_url, name: (d.download_url.split('/').pop() || 'deidentified.pdf').split('?')[0], tool: 'doc-deident' }));
     const grid = $('ddPreviewGrid');
     grid.innerHTML = (d.pages || []).map(p => `
       <div class="dd-preview-card">

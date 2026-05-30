@@ -8,6 +8,7 @@
   <div class="job-actions">
     <a class="btn btn-primary job-download" hidden>{{ icon('download') }}下載 PDF</a>
     <a class="btn job-download-png" hidden>{{ icon('image') }}下載 PNG</a>
+    {% if workspace_enabled(request) %}<button class="btn job-save-ws" type="button" hidden>{{ icon('archive') }}存至工作區</button>{% endif %}
     <button class="btn btn-secondary job-reset" type="button">{{ icon('refresh') }}處理新檔案</button>
   </div>
 </div>

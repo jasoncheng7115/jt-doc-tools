@@ -48,7 +48,7 @@ def _safe_stem(filename: str) -> str:
 def _render_md_html(md_text: str, theme_id: str, title: str, font_id: str = "default") -> str:
     """Convert markdown text to a full HTML document with theme CSS applied.
 
-    font_id 為 'default' 時用主題內建字型;其他字型 ID 會 append 覆蓋 body CSS。
+    font_id 為 'default' 時用主題內建字型；其他字型 ID 會 append 覆蓋 body CSS。
     """
     from markdown_it import MarkdownIt
     md = (
@@ -167,7 +167,7 @@ async def convert(
             if odt_path.exists():
                 _oc.convert_to_docx(odt_path, docx_path, timeout=120.0)
             else:
-                # fallback:沒 ODT 中介,直接從 HTML 試一次
+                # fallback:沒 ODT 中介，直接從 HTML 試一次
                 _oc.convert_to_docx(html_path, docx_path, timeout=120.0)
         except Exception as e:
             errors["docx"] = str(e)

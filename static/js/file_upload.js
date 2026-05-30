@@ -32,6 +32,43 @@
       this.onFile = onFile || (() => {});
       this.multiple = !!this.input.multiple;
       this._bind();
+      this._wireWorkspaceLoad();
+    }
+    // Wire the optional 「從工作區載入」 button (rendered by the shared
+    // file_upload.html component when the workspace feature is enabled).
+    // Derives which saved file types (pdf/png) this upload can accept; hides
+    // the button when neither applies (e.g. a .docx-only upload).
+    _wireWorkspaceLoad() {
+      const btn = this.root.querySelector('.ws-load-btn');
+      if (!btn) return;
+      if (!window.openWorkspacePicker || !window.workspaceAcceptExts) { btn.hidden = true; return; }
+      const exts = window.workspaceAcceptExts(
+        this.input.getAttribute('accept') || btn.dataset.accept || '');
+      if (!exts.length) { btn.hidden = true; return; }
+      btn.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        window.openWorkspacePicker({
+          accept: exts,
+          onPick: async (id, meta) => {
+            const file = await window.workspaceFileAsFile(id, meta);
+            this.loadFiles([file]);
+          },
+        });
+      });
+    }
+    // Inject File object(s) programmatically (used by 從工作區載入) — mirrors
+    // a real drop/selection so the tool's onFile pipeline runs unchanged.
+    loadFiles(files) {
+      const arr = Array.from(files || []);
+      if (!arr.length) return;
+      const picked = this.multiple ? arr : [arr[0]];
+      try {
+        const dt = new DataTransfer();
+        picked.forEach(f => dt.items.add(f));
+        this.input.files = dt.files;
+      } catch (_e) { /* DataTransfer unsupported — onFile still fires below */ }
+      this._dropMultiNotice = '';
+      this._pick(picked);
     }
     _bind() {
       this.input.addEventListener('change', () => {

@@ -42,6 +42,7 @@ def build_router(templates) -> APIRouter:
 
     @router.post("/assets/upload")
     async def assets_upload(
+        request: Request,
         name: str = Form(...),
         type: str = Form("stamp"),
         remove_bg: bool = Form(False),
@@ -50,10 +51,79 @@ def build_router(templates) -> APIRouter:
         data = await file.read()
         if not data:
             raise HTTPException(400, "empty file")
-        asset = asset_manager.create_from_bytes(
-            name=name, type=type, png_bytes=data, remove_bg=remove_bg
-        )
-        return RedirectResponse(f"/admin/assets/{asset.id}/edit", status_code=303)
+        # Accept PNG / JPEG directly; a PDF is rendered to PNG (first page) so a
+        # scanned-stamp PDF can be used as an asset. Anything else → friendly 400
+        # (rather than a 500 deep inside image processing). Validate by magic
+        # bytes, not the (spoofable) content-type / filename.
+        is_png = data[:8] == b"\x89PNG\r\n\x1a\n"
+        is_jpeg = data[:3] == b"\xff\xd8\xff"
+        is_pdf = data[:4] == b"%PDF"
+        if is_pdf:
+            try:
+                import fitz
+                from PIL import Image as _Img
+                with fitz.open(stream=data, filetype="pdf") as _doc:
+                    if _doc.page_count == 0:
+                        raise HTTPException(400, "PDF 沒有任何頁面")
+                    # Render at high DPI so the cropped stamp stays crisp.
+                    pix = _doc[0].get_pixmap(matrix=fitz.Matrix(3, 3), alpha=False)
+                    data = pix.tobytes("png")
+                # A scanned stamp PDF is mostly paper with a small mark — auto-
+                # crop the margins so the asset is just the stamp, not a full A4
+                # page. A real chop is COLOURED ink (high chroma) or solid black
+                # (much darker than paper); scan artefacts (fold/scratch lines,
+                # shadows, paper noise) are near-grey and only slightly off the
+                # paper tone. So detect content as "high chroma OR clearly dark"
+                # and ignore the rest — this drops faint diagonal scan lines that
+                # a plain brightness threshold would keep. (Transparency is still
+                # handled separately by remove_bg.)
+                import numpy as _np
+                im = _Img.open(io.BytesIO(data)).convert("RGB")
+                w, h = im.size
+                arr = _np.asarray(im).astype(_np.int16)
+                chroma = arr.max(axis=2) - arr.min(axis=2)
+                bright = arr.max(axis=2)
+                cc = max(4, min(w, h) // 40)
+                corners_b = _np.concatenate([
+                    bright[:cc, :cc].ravel(), bright[:cc, -cc:].ravel(),
+                    bright[-cc:, :cc].ravel(), bright[-cc:, -cc:].ravel()])
+                paper_b = float(_np.median(corners_b))
+                content = (chroma > 40) | ((paper_b - bright) > 90)
+                ys, xs = _np.where(content)
+                if xs.size and ys.size:
+                    x0, x1 = int(xs.min()), int(xs.max())
+                    y0, y1 = int(ys.min()), int(ys.max())
+                    if (x1 - x0) < w * 0.96 or (y1 - y0) < h * 0.96:
+                        pad = max(6, min(w, h) // 80)
+                        crop = (max(0, x0 - pad), max(0, y0 - pad),
+                                min(w, x1 + 1 + pad), min(h, y1 + 1 + pad))
+                        buf = io.BytesIO()
+                        im.crop(crop).save(buf, format="PNG")
+                        data = buf.getvalue()
+            except HTTPException:
+                raise
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception("asset pdf render failed")
+                raise HTTPException(400, "PDF 轉圖片失敗，請確認是有效的 PDF。")
+        elif not (is_png or is_jpeg):
+            raise HTTPException(
+                400, "資產只接受 PNG / JPEG 圖片或 PDF（會自動取第一頁轉圖片）。請重新選擇檔案。")
+        try:
+            asset = asset_manager.create_from_bytes(
+                name=name, type=type, png_bytes=data, remove_bg=remove_bg
+            )
+        except HTTPException:
+            raise
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("asset upload failed")
+            raise HTTPException(400, "圖片處理失敗，請確認是有效的 PNG / JPEG 圖片。")
+        edit_url = f"/admin/assets/{asset.id}/edit"
+        # AJAX caller (fetch) → JSON so errors stay on-page; plain form → 303.
+        if "application/json" in (request.headers.get("accept") or ""):
+            return JSONResponse({"ok": True, "edit_url": edit_url})
+        return RedirectResponse(edit_url, status_code=303)
 
     @router.get("/assets/export")
     async def assets_export():

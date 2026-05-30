@@ -220,6 +220,15 @@ def sweep_all() -> dict[str, Any]:
     # temp_hours is in HOURS not days
     report["temp"] = _sweep_temp_dir(s["temp_hours"] * 3600
                                      if s["temp_hours"] > 0 else 0)
+    # Workspace has its own settings file (data/workspace.json); retention is
+    # in hours, -1 = keep forever.
+    try:
+        from . import workspace as _ws
+        ws_hours = int(_ws.get_settings().get("retention_hours", -1))
+        report["workspace"] = _ws.sweep_older_than(
+            ws_hours * 3600 if ws_hours > 0 else 0)
+    except Exception:
+        logger.exception("workspace sweep failed")
     report["audit"] = _sweep_audit(s["audit_days"])
     # Expired sessions
     report["sessions"] = sessions.cleanup_expired()

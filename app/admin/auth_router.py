@@ -921,6 +921,51 @@ def build_auth_router(templates) -> APIRouter:
         )
         return {"ok": True, "report": report}
 
+    # ---------- /admin/workspace ----------
+
+    @router.get("/workspace", response_class=HTMLResponse)
+    async def workspace_admin_page(request: Request):
+        from ..core import workspace as _ws
+        return templates.TemplateResponse("admin_workspace.html", {
+            "request": request,
+            "settings": _ws.get_settings(),
+            "stats": _ws.collect_stats(),
+        })
+
+    @router.post("/workspace/save")
+    async def workspace_admin_save(request: Request):
+        from ..core import workspace as _ws
+        body = await request.json()
+        try:
+            saved = _ws.save_settings(body)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        audit_db.log_event(
+            "settings_change", username=_actor(request), ip=_client_ip(request),
+            target="workspace", details=body,
+        )
+        return {"ok": True, "settings": saved}
+
+    @router.post("/workspace/clear-user")
+    async def workspace_admin_clear_user(request: Request, user_key: str = Form(...)):
+        from ..core import workspace as _ws
+        n = _ws.admin_clear_user(user_key)
+        audit_db.log_event(
+            "settings_change", username=_actor(request), ip=_client_ip(request),
+            target="workspace", details={"action": "clear_user", "user_key": user_key, "removed": n},
+        )
+        return {"ok": True, "removed": n}
+
+    @router.post("/workspace/clear-all")
+    async def workspace_admin_clear_all(request: Request):
+        from ..core import workspace as _ws
+        n = _ws.admin_clear_all()
+        audit_db.log_event(
+            "settings_change", username=_actor(request), ip=_client_ip(request),
+            target="workspace", details={"action": "clear_all", "removed": n},
+        )
+        return {"ok": True, "removed": n}
+
     # ---------- /admin/system-status ----------
 
     @router.get("/system-status", response_class=HTMLResponse)

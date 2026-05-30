@@ -10,12 +10,13 @@
   <div class="file-upload" id="dropZone">
     <label class="drop-zone" for="fileInput">
       <div class="drop-zone-inner">
-        <div class="drop-zone-icon">📤</div>
+        <div class="drop-zone-icon"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14l3-3 3 3"/><path d="M12 11v10"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M16 7l-4-4-4 4"/><path d="M12 3v8"/></svg></div>
         <div class="drop-zone-text">拖曳檔案到此，或點選挑選</div>
         <div class="drop-zone-hint">證件正反面等多張掃描，可一次選多個、上傳後可繼續加。單檔上限 50 MB；本機處理，暫存自動清除、預設不留紀錄。</div>
       </div>
       <input type="file" id="fileInput" accept=".pdf,image/*,.tif,.tiff" multiple />
     </label>
+    {% if workspace_enabled(request) %}<div class="fu-ws-row" style="justify-content:flex-start;"><button type="button" class="ws-load-btn" id="wsLoadBtn">{{ icon('archive', size=16) }}<span>從工作區載入</span></button></div>{% endif %}
     <div id="upload-list" class="sm-uploadList" hidden></div>
     <div class="sm-uploadActions" id="upload-actions" hidden>
       <button type="button" class="btn btn-small" id="btn-clear-all">{{ icon('trash', size=14) }} 全部清除</button>
@@ -216,6 +217,7 @@ const dzZone = dz.querySelector('.drop-zone');  // label：點擊自動開檔
 }));
 dz.addEventListener('drop', (e) => uploadFiles(e.dataTransfer.files));
 fi.addEventListener('change', (e) => uploadFiles(e.target.files));
+if (window.attachWorkspaceLoadButton) window.attachWorkspaceLoadButton(document.getElementById('wsLoadBtn'), fi);
 
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c =>

@@ -99,7 +99,7 @@ async def render_restrict_stamp_endpoint(request: Request):
     Input (JSON):
         purpose:      str — 用途文字(例「申請台新銀行帳戶」),必填
         date_str:     str — 日期文字(已格式化),選填
-        applicant:    str — 申請人姓名,選填
+        applicant:    str — 申請人姓名，選填
         copy_label:   str — 影本份數標示(例「第 1 份 / 共 3 份」),選填
         style:        str — "rectangle" / "diagonal",預設 rectangle
         border:       str — rectangle 模式邊框「double」/「single」/「none」
@@ -245,11 +245,11 @@ async def _resolve_stamp_source(
 ) -> tuple[Optional[Path], dict]:
     """Return (stamp_image_path_on_disk, preset_dict_or_empty).
 
-    - stamp_id == '__none__': 不蓋主印章,只跑 extras (日期 / 個資限用章)。
+    - stamp_id == '__none__': 不蓋主印章，只跑 extras (日期 / 個資限用章)。
       回 (None, {}) 讓呼叫端 skip 主章蓋章邏輯。
     - 一般 asset：查 asset_manager,回路徑 + asset.preset (轉 dict)
     - 臨時資產：把上傳檔案落地到 temp_dir,回路徑 + 空 preset (preset 由 client
-      傳的 override 決定,所以 service 層只認 override 即可)
+      傳的 override 決定，所以 service 層只認 override 即可)
 
     任何錯誤情境一律 raise HTTPException(400)。
     """
@@ -345,13 +345,44 @@ async def index(request: Request):
     )
 
 
+def _resolve_pages(page_mode: str, pages_json: Optional[str], n: int) -> Optional[List[int]]:
+    """Resolve which 0-based page indices to stamp for an n-page PDF.
+
+    Explicit ``pages_json`` (a JSON array of 0-based page indices, sent by the
+    per-page chip picker in the web UI) takes precedence over the legacy
+    ``page_mode`` ("all" / "first" / "last", kept for the public REST API).
+    Out-of-range indices are dropped (so the same selection can be applied to
+    multi-file batches with differing page counts). Returns None to mean
+    "every page" (which ``stamp_pdf`` interprets as all pages).
+    """
+    if pages_json:
+        try:
+            raw = json.loads(pages_json)
+        except Exception:
+            raw = None
+        if isinstance(raw, list):
+            idxs = sorted({
+                int(i) for i in raw
+                if isinstance(i, (int, float)) and 0 <= int(i) < n
+            })
+            if idxs:
+                return None if len(idxs) >= n else idxs
+            # empty / all-out-of-range → fall through to page_mode default
+    if page_mode == "first":
+        return [0]
+    if page_mode == "last":
+        return [max(0, n - 1)]
+    return None
+
+
 @router.post("/submit")
 async def submit(
     request: Request,
     stamp_id: str = Form(...),
     file: List[UploadFile] = File(...),
     override: Optional[str] = Form(None),
-    page_mode: str = Form("all"),  # "all" | "first" | "last"
+    page_mode: str = Form("all"),  # "all" | "first" | "last" (legacy / API)
+    pages_json: Optional[str] = Form(None),  # explicit 0-based indices (web UI)
     temp_asset_file: Optional[UploadFile] = File(None),
     extras_json: Optional[str] = Form(None),
 ):
@@ -453,14 +484,12 @@ async def submit(
             job.message = f"處理第 {i + 1}/{total} 份：{orig_name}"
             job.progress = (i / max(1, total)) * 0.95
             # Per-file page selection depends on that file's page count.
-            pages: Optional[list[int]] = None
-            if page_mode != "all":
-                with fitz.open(str(src_path)) as doc:
-                    n = doc.page_count
-                pages = [0] if page_mode == "first" else [max(0, n - 1)]
+            with fitz.open(str(src_path)) as doc:
+                n = doc.page_count
+            pages = _resolve_pages(page_mode, pages_json, n)
             dst = batch_dir / f"{src_path.stem}_stamped.pdf"
             if stamp_png is None:
-                # 「不蓋章」模式 → 直接複製原檔當基底,只跑 extras
+                # 「不蓋章」模式 → 直接複製原檔當基底，只跑 extras
                 import shutil as _sh
                 _sh.copy(str(src_path), str(dst))
             else:
@@ -605,6 +634,7 @@ async def preview_all_pages(
     file: UploadFile = File(...),
     override: Optional[str] = Form(None),
     page_mode: str = Form("all"),
+    pages_json: Optional[str] = Form(None),
     temp_asset_file: Optional[UploadFile] = File(None),
     extras_json: Optional[str] = Form(None),
 ):
@@ -612,7 +642,7 @@ async def preview_all_pages(
     given position; return one PNG URL per page so the UI can stack them.
 
     extras_json: 額外的 overlay (date / restrict 等),會在 primary 印章之後
-    依序疊上,讓「合成模式」逐頁看到完整結果。
+    依序疊上，讓「合成模式」逐頁看到完整結果。
     """
     from ...core import sessions as _sessions
     actor = _sessions.user_label(getattr(request.state, "user", None))
@@ -647,11 +677,7 @@ async def preview_all_pages(
     import fitz
     with fitz.open(str(src)) as doc:
         n = doc.page_count
-    pages: Optional[list[int]] = None
-    if page_mode == "first":
-        pages = [0]
-    elif page_mode == "last":
-        pages = [max(0, n - 1)]
+    pages = _resolve_pages(page_mode, pages_json, n)
 
     from ...core import pdf_utils as pu
     if stamp_png_path is None:
@@ -738,13 +764,14 @@ async def preview_stamped(
     file: UploadFile = File(...),
     override: Optional[str] = Form(None),
     page_mode: str = Form("all"),
+    pages_json: Optional[str] = Form(None),
     temp_asset_file: Optional[UploadFile] = File(None),
     extras_json: Optional[str] = Form(None),
 ):
     """Stamp the first applicable page of the PDF and return a PNG preview.
 
     extras_json: 同 /submit,額外的 overlay 物件 (date / restrict 等),會在
-    primary 印章蓋完之後依序疊上,讓「合成模式」看得到完整結果。
+    primary 印章蓋完之後依序疊上，讓「合成模式」看得到完整結果。
     """
     from ...core import sessions as _sessions
     actor = _sessions.user_label(getattr(request.state, "user", None))
@@ -782,15 +809,8 @@ async def preview_stamped(
     import fitz
     with fitz.open(str(src)) as doc:
         n = doc.page_count
-    if page_mode == "last":
-        preview_page = max(0, n - 1)
-        pages = [preview_page]
-    elif page_mode == "first":
-        preview_page = 0
-        pages = [0]
-    else:
-        preview_page = 0
-        pages = None
+    pages = _resolve_pages(page_mode, pages_json, n)
+    preview_page = pages[0] if pages else 0
 
     from ...core import pdf_utils as pu
     if stamp_png_path is None:
@@ -846,7 +866,7 @@ async def preview_stamped(
                         pass
                     tmp_stamped.rename(stamped)
         except Exception:
-            # 預覽用,任何 extras 錯誤都安靜跳過,不擋 primary 預覽
+            # 預覽用，任何 extras 錯誤都安靜跳過，不擋 primary 預覽
             pass
 
     pdf_preview.render_page_png(stamped, png, preview_page, dpi=120)
@@ -899,6 +919,7 @@ async def api_pdf_stamp(
     height_mm: float = Form(30.0),
     rotation_deg: float = Form(0.0),
     page_mode: str = Form("all"),  # all | first | last
+    pages_json: Optional[str] = Form(None),  # 指定頁：JSON 陣列, 0-based index
 ):
     """單次上傳 PDF + 印章圖檔（PNG / JPG），蓋章後回 PDF。"""
     if not (file.filename or "").lower().endswith(".pdf"):
@@ -924,11 +945,9 @@ async def api_pdf_stamp(
     out = settings.temp_dir / f"stamp_api_{uid}_out.pdf"
     stem = Path(file.filename or "document.pdf").stem
     import fitz as _fitz
-    pages_arg: Optional[list[int]] = None
-    if page_mode != "all":
-        with _fitz.open(str(src)) as d:
-            n = d.page_count
-        pages_arg = [0] if page_mode == "first" else [max(0, n - 1)]
+    with _fitz.open(str(src)) as d:
+        n = d.page_count
+    pages_arg = _resolve_pages(page_mode, pages_json, n)
     params = service.StampParams(
         x_mm=x_mm, y_mm=y_mm, width_mm=width_mm, height_mm=height_mm,
         rotation_deg=rotation_deg, pages=pages_arg,

@@ -230,6 +230,9 @@
           <a class="nav-ch" href="#14-速率限制--大檔上限">14. 速率限制 / 大檔上限</a>
         </div>
         <div class="nav-group nav-group-flat">
+          <a class="nav-ch" href="#14b-使用者工作區session-認證非-bearer-api">14b. 使用者工作區（session 認證，非 Bearer API）</a>
+        </div>
+        <div class="nav-group nav-group-flat">
           <a class="nav-ch" href="#15-變更歷史">15. 變更歷史</a>
         </div>
       </nav>
@@ -593,12 +596,12 @@ curl <span class="hl-flag">-s</span> <span class="hl-url">http://localhost:8765/
 <h4 id="pdf-用印--簽名">PDF 用印 / 簽名</h4>
 <p>在 PDF 上疊加印章 / 簽名圖。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-stamp/api/pdf-stamp</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>stamp_image</code></td><td>file</td><td>✓</td><td>印章 / 簽名圖（透明 PNG 佳）</td></tr><tr><td><code>x_mm</code></td><td>float</td><td>✓</td><td>左下角 X 位置（mm）</td></tr><tr><td><code>y_mm</code></td><td>float</td><td>✓</td><td>左下角 Y 位置（mm）</td></tr><tr><td><code>width_mm</code></td><td>float</td><td>✓</td><td>寬度（mm）</td></tr><tr><td><code>height_mm</code></td><td>float</td><td>✓</td><td>高度（mm）</td></tr><tr><td><code>rotation_deg</code></td><td>float</td><td></td><td>旋轉角度，預設 <code>0</code></td></tr><tr><td><code>page_mode</code></td><td>str</td><td></td><td><code>all</code>（每頁）/ <code>first</code> / <code>last</code> / 指定頁</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>stamp_image</code></td><td>file</td><td>✓</td><td>印章 / 簽名圖（透明 PNG 佳）</td></tr><tr><td><code>x_mm</code></td><td>float</td><td>✓</td><td>左下角 X 位置（mm）</td></tr><tr><td><code>y_mm</code></td><td>float</td><td>✓</td><td>左下角 Y 位置（mm）</td></tr><tr><td><code>width_mm</code></td><td>float</td><td>✓</td><td>寬度（mm）</td></tr><tr><td><code>height_mm</code></td><td>float</td><td>✓</td><td>高度（mm）</td></tr><tr><td><code>rotation_deg</code></td><td>float</td><td></td><td>旋轉角度，預設 <code>0</code></td></tr><tr><td><code>page_mode</code></td><td>str</td><td></td><td><code>all</code>（每頁）/ <code>first</code> / <code>last</code>，預設 <code>all</code></td></tr><tr><td><code>pages_json</code></td><td>str</td><td></td><td>指定頁：JSON 陣列，0 起算頁碼（如 <code>[0,2,4]</code>）。提供時優先於 <code>page_mode</code>；超出範圍的頁碼會被忽略</td></tr></tbody></table></div>
 <pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-stamp/api/pdf-stamp</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@contract.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;stamp_image=@chop.png&quot;</span> \
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;x_mm=150&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;y_mm=30&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;width_mm=30&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;height_mm=30&quot;</span> \
-  <span class="hl-flag">-F</span> <span class="hl-str">&quot;page_mode=last&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;pages_json=[0,2]&quot;</span> \
   <span class="hl-flag">--output</span> stamped.pdf</code></pre>
 <p>回應：蓋章後的 PDF。</p>
       </section>
@@ -1070,6 +1073,13 @@ sudo systemctl start jt-doc-tools
 <li>如有公開暴露需求，建議加上 <code>limit_req_zone</code> 防濫用</li>
 </ul>
 <p>詳見 <a href="./OPS.md" target="_blank" rel="noopener">OPS.md</a> 的「反向代理」段與「504 Gateway Timeout 排錯流程」。</p>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="14b-使用者工作區session-認證非-bearer-api" data-title="14b. 使用者工作區（session 認證，非 Bearer API）" hidden>
+<h3 id="14b-使用者工作區session-認證非-bearer-api">14b. 使用者工作區（session 認證，非 Bearer API）</h3>
+<p>「我的工作區」是綁定登入 session 的網頁功能（cookie 認證），<strong>不屬於對外 Bearer API</strong>，因為每個檔案以登入者帳號隔離。需 admin 在「工作區設定」啟用；停用時下列端點一律回 404。</p>
+<div class="table-wrap"><table><thead><tr><th>端點</th><th>方法</th><th>說明</th></tr></thead><tbody><tr><td><code>/workspace</code></td><td>GET</td><td>「我的工作區」頁面</td></tr><tr><td><code>/workspace/api/list</code></td><td>GET</td><td>列出自己的檔案（<code>?accept=pdf,png</code> 過濾）+ 容量 + 保留時數</td></tr><tr><td><code>/workspace/api/count</code></td><td>GET</td><td>檔案數（側欄徽章用）</td></tr><tr><td><code>/workspace/save</code></td><td>POST</td><td>存檔：<code>job_id</code>（伺服器端複製 job 結果）或 <code>file</code>（直接上傳 bytes）；僅 PDF / PNG</td></tr><tr><td><code>/workspace/file/{file_id}</code></td><td>GET</td><td>取檔（<code>?dl=1</code> 下載）</td></tr><tr><td><code>/workspace/thumb/{file_id}</code></td><td>GET</td><td>縮圖（PDF 首頁渲染 / PNG 原圖）</td></tr><tr><td><code>/workspace/delete</code></td><td>POST</td><td>刪除（<code>file_id</code>）</td></tr><tr><td><code>/workspace/rename</code></td><td>POST</td><td>重新命名（<code>file_id</code>、<code>name</code>）</td></tr></tbody></table></div>
+<p>容量額度、單檔上限、保留時數、啟用 / 停用由 admin 在 <code>/admin/workspace</code> 設定（全站統一，無個人特例）。</p>
 <hr>
       </section>
       <section class="doc-section" data-sec="15-變更歷史" data-title="15. 變更歷史" hidden>

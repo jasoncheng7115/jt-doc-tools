@@ -182,7 +182,7 @@ details[open] > .po-ext-summary .po-ext-arrow { transform:rotate(90deg); }
     </div>
   </div>
 
-  {# ============== GPU 識別伺服器(外部加速) — 簡潔版,可折疊 ============== #}
+  {# ============== GPU 識別伺服器(外部加速) — 簡潔版，可折疊 ============== #}
   <details style="margin-top:20px; background:#fff; border:1px solid #e2e8f0; border-radius:8px;" {% if external_ocr_configured %}open{% endif %}>
   <summary class="po-ext-summary" style="cursor:pointer; padding:14px 18px; user-select:none; list-style:none; display:flex; align-items:center; gap:10px;">
     <span class="po-ext-arrow" style="color:#475569; font-size:22px; line-height:1; transition:transform 0.15s; display:inline-block; width:18px; transform-origin:center;">▶</span>
@@ -206,7 +206,7 @@ details[open] > .po-ext-summary .po-ext-arrow { transform:rotate(90deg); }
           <span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; background:#3b82f6; color:#fff; border-radius:50%; font-size:12px; font-weight:700;">1</span>
           <span style="font-weight:600; font-size:13px; color:#1e293b;">下載安裝腳本</span>
         </div>
-        <p style="font-size:12px; color:#64748b; margin:0 0 10px; line-height:1.5;">純 ASCII(無中文),可在無 CJK locale 的 GPU server 上跑。</p>
+        <p style="font-size:12px; color:#64748b; margin:0 0 10px; line-height:1.5;">純 ASCII（無中文），可在無 CJK locale 的 GPU server 上跑。</p>
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
           <a href="/admin/ocr-langs/deploy/install.sh" class="btn btn-primary" download="jt-ocr-server-install.sh" style="font-size:12px; padding:6px 10px; display:inline-flex; align-items:center; gap:4px;">{{ icon('download', size=12) }} install.sh</a>
           <a href="/admin/ocr-langs/deploy/uninstall.sh" class="btn" download="jt-ocr-server-uninstall.sh" style="background:#fff; border:1px solid #d1d5db; font-size:12px; padding:6px 10px; display:inline-flex; align-items:center; gap:4px;">{{ icon('download', size=12) }} uninstall.sh</a>
@@ -304,7 +304,7 @@ ssh root@GPUServer 'bash /tmp/jt-ocr-server-install.sh'</pre>
           <div style="font-weight:600; color:#1e40af; font-size:12px; margin-bottom:4px; display:flex; align-items:center; gap:4px;">{{ icon('tool', size=12) }} DGX Spark 最佳化(aarch64 + GB10 Blackwell)</div>
           <div style="font-size:11px; color:#1e3a8a; line-height:1.6;">
             script 偵測到 aarch64 + <code>/etc/dgx-release</code> 時自動用 <code>cu128</code> wheel 索引(支援 sm_120)。
-            其他 x86_64 NVIDIA GPU 用 <code>cu124</code>。已預裝 PyTorch 會自動重用,省 ~3GB 下載。
+            其他 x86_64 NVIDIA GPU 用 <code>cu124</code>。已預裝 PyTorch 會自動重用，省 ~3GB 下載。
           </div>
         </div>
       </div>

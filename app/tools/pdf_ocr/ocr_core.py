@@ -244,7 +244,7 @@ def _parse_llm_grounded_response(text: str, img_w: int, img_h: int) -> list[dict
 
     bbox 可接受:
       - [x0, y0, x1, y1] (左上 / 右下)
-      - [x, y, w, h] (左上 + 寬高,用啟發判定:第 3 / 4 值 < 第 1 / 2 的兩倍就當寬高)
+      - [x, y, w, h] (左上 + 寬高，用啟發判定:第 3 / 4 值 < 第 1 / 2 的兩倍就當寬高)
       - "x0 y0 x1 y1" 字串
 
     座標假設是縮圖（送進 LLM 的影像）的像素值。回的每個 item:
@@ -268,7 +268,7 @@ def _parse_llm_grounded_response(text: str, img_w: int, img_h: int) -> list[dict
     )
     plain_hits = plain_pattern.findall(body)
     if plain_hits:
-        # Qwen2.5-VL 對 plain-text grounding prompt 會用我們告訴它的影像尺寸回絕對像素,
+        # Qwen2.5-VL 對 plain-text grounding prompt 會用我們告訴它的影像尺寸回絕對像素，
         # 不像原生 token 那樣強制 0-1000 正規化。直接當絕對像素處理。
         items = []
         for t, x0s, y0s, x1s, y1s in plain_hits:
@@ -337,7 +337,7 @@ def _parse_llm_grounded_response(text: str, img_w: int, img_h: int) -> list[dict
             nums = _re.findall(r"-?\d+(?:\.\d+)?", coords)
             if len(nums) >= 4:
                 x0, y0, x1, y1 = map(float, nums[:4])
-                # 若 x1 / y1 像寬高,轉成右下
+                # 若 x1 / y1 像寬高，轉成右下
                 if x1 < x0 * 2 and y1 < y0 * 2 and x1 < img_w / 2 and y1 < img_h / 2:
                     x1, y1 = x0 + x1, y0 + y1
                 items.append({"text": t, "bbox": (x0, y0, x1, y1)})
@@ -419,12 +419,12 @@ def _parse_llm_grounded_response(text: str, img_w: int, img_h: int) -> list[dict
 
 def add_llm_text_overlay_on_page(page: "fitz.Page", llm_text: str) -> int:
     """LLM 直接辨識用 — 把 LLM 回的文字以**透明文字層**覆蓋到頁面上(不是頁外)，
-    這樣使用者用滑鼠拖選頁面任何區域,都能選到 OCR 出來的文字並複製。
+    這樣使用者用滑鼠拖選頁面任何區域，都能選到 OCR 出來的文字並複製。
 
     跟 `add_llm_search_layer_offpage` 的差別：
-    - off-page 把文字放在 page rect 外 → 只能 Cmd+F 搜尋,拖選不到
+    - off-page 把文字放在 page rect 外 → 只能 Cmd+F 搜尋，拖選不到
     - on-page 把文字鋪在頁面內 → 拖選有 hit
-    沒有 word 級 bbox 所以拖選不會精準到字,但整頁的內容可以一次拖選複製。
+    沒有 word 級 bbox 所以拖選不會精準到字，但整頁的內容可以一次拖選複製。
 
     回插入的字數(實際字元數，不是「1=成功」)。
     """
@@ -432,10 +432,10 @@ def add_llm_text_overlay_on_page(page: "fitz.Page", llm_text: str) -> int:
         return 0
     text = llm_text.strip()
     try:
-        # 留 20pt 邊距,避免文字層蓋到頁緣截斷
+        # 留 20pt 邊距，避免文字層蓋到頁緣截斷
         rect = fitz.Rect(20, 20,
                          page.rect.width - 20, page.rect.height - 20)
-        # 由大到小試字級,確保所有字都塞得進可見頁面區
+        # 由大到小試字級，確保所有字都塞得進可見頁面區
         for size in (10, 8, 6, 4, 3, 2, 1):
             ret = page.insert_textbox(
                 rect, text,
@@ -447,7 +447,7 @@ def add_llm_text_overlay_on_page(page: "fitz.Page", llm_text: str) -> int:
             )
             if ret >= 0:
                 return len(text)
-        # 最小字級仍塞不下 → 強制塞入(會被裁,但至少有部分可選)
+        # 最小字級仍塞不下 → 強制塞入(會被裁，但至少有部分可選)
         page.insert_textbox(rect, text, fontname="china-t",
                              fontsize=1, color=(0, 0, 0), render_mode=3, align=0)
         return len(text)
@@ -766,7 +766,7 @@ def ocr_pdf_to_searchable(
                             _renderedimg = _PILImg2.open(_io2.BytesIO(png))
                             rendered_w, rendered_h = _renderedimg.size
                         except Exception:
-                            # fallback: 假設用 dpi 渲染,從 page.rect 算回
+                            # fallback: 假設用 dpi 渲染，從 page.rect 算回
                             rendered_w = int(page.rect.width * dpi / 72.0)
                             rendered_h = int(page.rect.height * dpi / 72.0)
                         sx = rendered_w / small_w
@@ -842,10 +842,10 @@ def ocr_pdf_to_searchable(
                             did_llm_direct = True
                         else:
                             dstage["note"] = "LLM 回覆有文字但寫入搜尋層失敗"
-                            llm_direct_fallback_note = "LLM 寫入失敗,退回 OCR 引擎"
+                            llm_direct_fallback_note = "LLM 寫入失敗，退回 OCR 引擎"
                     else:
                         dstage["note"] = "LLM 回覆空白"
-                        llm_direct_fallback_note = "LLM 回覆空白,退回 OCR 引擎"
+                        llm_direct_fallback_note = "LLM 回覆空白，退回 OCR 引擎"
                 except Exception as e:
                     dstage["note"] = f"LLM 直接辨識呼叫失敗：{e}"
                     log.warning("llm-direct page %d failed: %s", pno, e)
@@ -857,7 +857,7 @@ def ocr_pdf_to_searchable(
                 if llm_direct_fallback_note:
                     _emit(cp, llm_direct_fallback_note)
             # 用抽象 OCR engine：依 admin 設定(預設 easyocr),失敗自動 fallback tesseract。
-            # 若 admin 已設定 + 啟用「外部 GPU OCR Server」會優先打遠端,失敗自動退本機。
+            # 若 admin 已設定 + 啟用「外部 GPU OCR Server」會優先打遠端，失敗自動退本機。
             from app.core import ocr_engine as _oe
             from app.core import ocr_remote_settings as _ors_check
             chosen_engine = _oe.get_default_engine()
@@ -882,9 +882,9 @@ def ocr_pdf_to_searchable(
                     _emit(cp, f"OCR 完成 (遠端 GPU EasyOCR @ {_ors_check.get().get('url', '')})")
                 elif intended == "easyocr-remote":
                     # 選用 GPU remote 但失敗 → 退回本機 (CPU)
-                    _emit(cp, f"OCR 完成（遠端 GPU EasyOCR 失敗,改用本機 {engine_used} (CPU)）")
+                    _emit(cp, f"OCR 完成（遠端 GPU EasyOCR 失敗，改用本機 {engine_used} (CPU)）")
                 else:
-                    _emit(cp, f"OCR 完成（{chosen_engine} 失敗,改用 {engine_used}）")
+                    _emit(cp, f"OCR 完成（{chosen_engine} 失敗，改用 {engine_used}）")
             elif engine_used == "easyocr-remote" and words:
                 _emit(cp, f"OCR 完成 (遠端 GPU EasyOCR @ {_ors_check.get().get('url', '')})")
             if not words:
@@ -904,7 +904,7 @@ def ocr_pdf_to_searchable(
                 "ocr_raw": {"text": ocr_raw_text, "word_count": len(words), "note": ocr_raw_note},
             }
             # === LLM 對位辨識（hybrid）===
-            # LLM 對影像獨立做一次 OCR（從零識別,不看 OCR 結果），把回的文字
+            # LLM 對影像獨立做一次 OCR（從零識別，不看 OCR 結果），把回的文字
             # 透過行對齊映射到 EasyOCR 的 bbox 上。對齊失敗 → 保留 OCR 原字
             # （避免把 LLM 腦補的文字塞到精準格子裡）。
             if llm_align_ocr:
@@ -929,17 +929,17 @@ def ocr_pdf_to_searchable(
                             llm_align_used = True
                             _emit(cp, "LLM 對位辨識完成（行對齊）")
                         else:
-                            astage["note"] = "LLM 行數 / 字數對不上,保留 EasyOCR 原字（避免腦補）"
+                            astage["note"] = "LLM 行數 / 字數對不上，保留 EasyOCR 原字（避免腦補）"
                             astage["fallback_to_ocr"] = True
-                            _emit(cp, "LLM 行數對不上,保留 EasyOCR 原字")
+                            _emit(cp, "LLM 行數對不上，保留 EasyOCR 原字")
                     else:
-                        astage["note"] = "LLM 回空白,保留 EasyOCR 原字"
+                        astage["note"] = "LLM 回空白，保留 EasyOCR 原字"
                         astage["fallback_to_ocr"] = True
                 except Exception as e:
                     astage["note"] = f"LLM 失敗（{e}）,保留 EasyOCR 原字"
                     astage["fallback_to_ocr"] = True
                     log.warning("llm-align page %d failed: %s", pno, e)
-                    _emit(cp, f"LLM 對位辨識失敗,保留 EasyOCR 原字: {e}")
+                    _emit(cp, f"LLM 對位辨識失敗，保留 EasyOCR 原字: {e}")
                 page_stages["llm_align"] = astage
             # === LLM 視覺校對（先做）===
             # 看 PNG 影像對照 OCR 結果，能修純文字看不出來的字元錯誤。

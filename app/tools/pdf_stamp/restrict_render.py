@@ -4,9 +4,9 @@
   「僅供 [用途] 使用，他用無效」+ 日期 + 申請人(可選) + 份數(可選)
 
 樣式:
-  - rectangle: 雙線框紅章(傳統印章感,預設)
+  - rectangle: 雙線框紅章(傳統印章感，預設)
   - rectangle-single: 單線框
-  - diagonal:  對角線斜印(45° 紅字,無邊框)
+  - diagonal:  對角線斜印(45° 紅字，無邊框)
 
 排版採視覺階層:
   小字「僅供」 → 大字「{purpose}」(粗體) → 小字「使用，他用無效」 → 分隔線 → 小字 footer
@@ -24,8 +24,8 @@ _FONT_DIR = Path(__file__).parent / "fonts"
 _LXGW_PATH = _FONT_DIR / "LXGWWenKaiTC-Regular.ttf"
 
 # 系統字型 fallback 鏈 — 每項 (path, index, regular_index, bold_index)
-# .ttc 是字型集合,index 不同代表不同子字型。Mac 的 Songti.ttc / Heiti Medium.ttc
-# 預設 index=0 是 SC 簡中,繁中要指定 TC 變體 (Songti.ttc 的 index 7 是 TC Regular)。
+# .ttc 是字型集合，index 不同代表不同子字型。Mac 的 Songti.ttc / Heiti Medium.ttc
+# 預設 index=0 是 SC 簡中，繁中要指定 TC 變體 (Songti.ttc 的 index 7 是 TC Regular)。
 _KAITI_FALLBACK = [
     ("/System/Library/Fonts/Supplemental/BiauKai.ttc", 0, 0),                # macOS 標楷體
     ("C:/Windows/Fonts/DFKai-SB.ttf", 0, 0),                                 # Windows 標楷體
@@ -65,7 +65,7 @@ def _load_font(style_or_id: str, size_px: int,
       + 老舊 hardcoded fallback chain
     - font_catalog id (system:/path/to/font.ttc, custom:xxx.ttf, etc.) → 直接 resolve
     """
-    # 1. font_catalog 解析 (system / custom 字型,從設定頁來)
+    # 1. font_catalog 解析 (system / custom 字型，從設定頁來)
     if style_or_id and (":" in style_or_id) and style_or_id not in FONT_STYLES:
         try:
             from app.core import font_catalog
@@ -219,7 +219,7 @@ def render_rectangle_stamp(
         w = max(2, int(big_size * 0.06))
         draw.rectangle([0, 0, img_w - 1, img_h - 1], outline=color, width=w)
 
-    # 寫字 (置中,逐行下移)
+    # 寫字 (置中，逐行下移)
     y = pad_y
     # 「僅供」
     x = (img_w - w_top) // 2
@@ -258,7 +258,7 @@ def render_diagonal_stamp(
     font_size_px: int = 80,
     font_style: str = "kaiti",
 ) -> tuple[bytes, int, int]:
-    """渲染對角線斜印(45° 紅字,無邊框)。"""
+    """渲染對角線斜印(45° 紅字，無邊框)。"""
     text = f"僅供 {(purpose or '').strip() or '_________'} 使用 · 他用無效"
     if date_str.strip():
         text += f"  ({date_str.strip()})"

@@ -48,6 +48,7 @@
   <h3 style="margin:0 0 8px; color:#064e3b;">完成</h3>
   <div id="dlSummary" style="font-size:13px; color:#065f46; margin-bottom:10px;"></div>
   <a class="btn btn-primary" id="dlLink" href="#">{{ icon('download') }} 下載清除後的 PDF</a>
+  {% if workspace_enabled(request) %}<button id="wsSaveBtn" class="btn" type="button" hidden style="margin-left:8px;">{{ icon('archive') }} 存至工作區</button>{% endif %}
 </div>
 
 {% endblock %}
@@ -127,6 +128,9 @@ $('btnClean').addEventListener('click', async () => {
   $('cleanStatus').textContent = '完成';
   $('dlSummary').textContent = `清除後檔案大小：${fmt(d.size)}`;
   $('dlLink').href = d.download_url;
+  if (window.attachWorkspaceSave) window.attachWorkspaceSave(
+    document.getElementById('wsSaveBtn'),
+    () => ({ url: d.download_url, name: (d.download_url.split('/').pop() || 'cleaned.pdf').split('?')[0], tool: 'pdf-metadata' }));
   $('dlPanel').hidden = false;
   $('dlPanel').scrollIntoView({behavior:'smooth', block:'end'});
 });

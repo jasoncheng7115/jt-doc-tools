@@ -7,6 +7,7 @@
       this.status = root.querySelector('.job-status');
       this.dlBtn = root.querySelector('.job-download');
       this.dlPngBtn = root.querySelector('.job-download-png');
+      this.saveWsBtn = root.querySelector('.job-save-ws');
       this.resetBtn = root.querySelector('.job-reset');
       this.downloadUrl = downloadUrl || ((jid) => `/api/jobs/${jid}/download`);
       this.downloadPngUrl = downloadPngUrl || ((jid) => `/api/jobs/${jid}/download-png`);
@@ -34,9 +35,34 @@
       this.status.textContent = '準備中…';
       this.dlBtn.hidden = true;
       if (this.dlPngBtn) this.dlPngBtn.hidden = true;
+      if (this.saveWsBtn) this.saveWsBtn.hidden = true;
       this._stop();
     }
     _stop() { if (this._timer) { clearInterval(this._timer); this._timer = null; } }
+    // Show + wire 「存至工作區」 for a finished job whose result is a PDF/PNG.
+    _wireSaveWs(j) {
+      const btn = this.saveWsBtn;
+      if (!btn || !window.saveToWorkspace) return;
+      const fname = j.result_filename || '';
+      if (!/\.(pdf|png)$/i.test(fname)) { btn.hidden = true; return; }  // workspace = PDF/PNG only
+      btn.hidden = false;
+      btn.disabled = false;
+      const orig = btn.dataset.origHtml || (btn.dataset.origHtml = btn.innerHTML);
+      btn.innerHTML = orig;
+      btn.onclick = async () => {
+        btn.disabled = true;
+        try {
+          const res = await window.saveToWorkspace({ jobId: this.jobId }, fname, j.tool_id || '');
+          btn.innerHTML = '已存至工作區';
+          if (window.showToast) window.showToast(
+            (res && res.duplicate) ? '已存至工作區（工作區已有同名檔，已另存一份）' : '已存至工作區', 'ok');
+        } catch (e) {
+          btn.disabled = false;
+          if (window.showAlert) window.showAlert(e.message || '存至工作區失敗');
+          else alert(e.message || '存至工作區失敗');
+        }
+      };
+    }
     track(jobId) {
       this.jobId = jobId;
       // 重設前次 run 的殘留狀態（進度條 / 下載按鈕 / 錯誤色），避免顯示 stale UI
@@ -44,6 +70,7 @@
       this.bar.style.background = '';
       this.dlBtn.hidden = true;
       if (this.dlPngBtn) this.dlPngBtn.hidden = true;
+      if (this.saveWsBtn) this.saveWsBtn.hidden = true;
       this.show();
       this.status.textContent = '處理中…';
       this._stop();
@@ -65,6 +92,7 @@
               this.dlPngBtn.hidden = false;
               this.dlPngBtn.href = this.downloadPngUrl(jobId);
             }
+            this._wireSaveWs(j);
             this._stop();
             try { this.onDone(j); } catch (_) {}
           } else if (j.status === 'error') {

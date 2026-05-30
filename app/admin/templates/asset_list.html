@@ -8,7 +8,7 @@
 <details class="panel" open>
   <summary>新增資產</summary>
   <form method="post" action="/admin/assets/upload" enctype="multipart/form-data" id="assetUploadForm">
-    {% with upload_id='assetUpload', accept='image/png,image/jpeg', input_name='file', hint='PNG（建議帶透明背景）或 JPEG' %}
+    {% with upload_id='assetUpload', accept='image/png,image/jpeg,application/pdf', input_name='file', hint='PNG（建議帶透明背景）/ JPEG / PDF（自動取第一頁轉圖片）' %}
       {% include "components/file_upload.html" %}
     {% endwith %}
     <div class="form-row">
@@ -95,6 +95,23 @@
     if (nameInput && !nameInput.value) {
       nameInput.value = f.name.replace(/\.[^.]+$/, '');
     }
+  });
+  // AJAX submit so errors stay on-page (PDF auto-converts; other types get a
+  // friendly message instead of a raw-JSON navigation).
+  const form = document.getElementById('assetUploadForm');
+  if (form) form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const orig = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '上傳中…';
+    try {
+      const r = await fetch('/admin/assets/upload', {
+        method: 'POST', body: new FormData(form), headers: { 'Accept': 'application/json' } });
+      if (r.ok) { location.href = (await r.json()).edit_url; return; }
+      (window.showAlert || window.alert)(await window.friendlyServerError(r, '上傳失敗'));
+    } catch (err) {
+      (window.showAlert || window.alert)('上傳失敗：' + err.message);
+    }
+    btn.disabled = false; btn.innerHTML = orig;
   });
 })();
 </script>

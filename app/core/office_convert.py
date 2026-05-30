@@ -270,7 +270,7 @@ def convert_to_odt(src: Path, dst_odt: Path, timeout: float = 60.0,
             "找不到 LibreOffice / OxOffice。請先安裝其中一個才能輸出 .odt 格式。"
         )
 
-    # HTML 輸入自動指定 Writer 篩選器,避免 Web filter 輸出 text-web mimetype
+    # HTML 輸入自動指定 Writer 篩選器，避免 Web filter 輸出 text-web mimetype
     if input_filter is None and src.suffix.lower() in (".html", ".htm"):
         input_filter = "HTML (StarWriter)"
 

@@ -96,7 +96,7 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
 .po-chip-disabled:hover { box-shadow:none; }
 .po-chip-disabled .po-chip-check { background:#f1f5f9; border-color:#cbd5e1; }
 .po-chip-disabled .po-chip-name { color:#94a3b8; }
-/* EasyOCR 衝突而暫時 disable — 與「未安裝」分開,語意是「目前選了另一個非 Latin 系語言」*/
+/* EasyOCR 衝突而暫時 disable — 與「未安裝」分開，語意是「目前選了另一個非 Latin 系語言」*/
 .po-chip-conflict { opacity:.55; cursor:not-allowed; background:#f8fafc; border-style:dashed; border-color:#fde68a; }
 .po-chip-conflict:hover { box-shadow:none; }
 .po-chip-conflict .po-chip-check { background:#f1f5f9; border-color:#cbd5e1; }
@@ -208,8 +208,11 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
 .po-toggle-tag-full   { background:#fce7f3; color:#9f1239; }
 /* 識別結果全文摺疊區 */
 .po-fulltext { margin-top:10px; background:#f8fafc; border:1px solid var(--border); border-radius:8px; }
-.po-fulltext > summary { cursor:pointer; padding:10px 14px; font-weight:600; color:#334155; font-size:14px; user-select:none; }
-.po-fulltext > summary:hover { background:#f1f5f9; }
+.po-fulltext > summary { list-style:none; cursor:pointer; padding:10px 14px; font-weight:600; color:#334155; font-size:14px; user-select:none; display:flex; align-items:center; gap:8px; }
+.po-fulltext > summary::-webkit-details-marker { display:none; }
+.po-fulltext > summary::before { content:'▶'; font-size:10px; color:#94a3b8; transition:transform .15s; }
+.po-fulltext[open] > summary::before { transform:rotate(90deg); }
+.po-fulltext > summary:hover { background:#f1f5f9; border-radius:8px; }
 .po-fulltext-body { padding:0 14px 14px; }
 .po-fulltext-pre { background:#fff; border:1px solid var(--border); border-radius:6px; padding:12px; max-height:420px; overflow:auto; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.7; white-space:pre-wrap; word-break:break-word; color:#1e293b; margin:0; }
 
@@ -452,8 +455,8 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
     </div>
     <div class="po-field" style="grid-column: 1 / -1;">
       <!-- LLM 主辨識選項：直接 / 對位 / 完整 三擇一（獨立於 LLM 後處理）
-           暫時隱藏（v1.11.22+）— LLM 重複生成迴圈與座標精度問題尚未完全穩定,
-           hide 但保留 checkbox 給 backend 邏輯,後端 API 仍可傳 use_llm_direct/align/full -->
+           暫時隱藏（v1.11.22+）— LLM 重複生成迴圈與座標精度問題尚未完全穩定，
+           hide 但保留 checkbox 給 backend 邏輯，後端 API 仍可傳 use_llm_direct/align/full -->
       <div class="po-toggle-grid" style="margin-bottom:10px; display:none;">
         <div class="po-toggle {% if not llm_vision_ok %}po-toggle-disabled{% endif %}">
           <input type="checkbox" id="poUseLlmDirect" {% if not llm_vision_ok %}disabled{% endif %}>
@@ -563,6 +566,9 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
 {# Pre-render icon SVGs into JS constants so JS-built innerHTML can use them #}
 <script>
 const PO_ICON_FILE = {{ icon('file-text', size=14) | tojson }};
+const PO_ICON_LAYERS = {{ icon('layers', size=14) | tojson }};
+const PO_ICON_INFO = {{ icon('info', size=14) | tojson }};
+const PO_ICON_WRAP = (svg) => '<span style="display:inline-flex; align-items:center;">' + svg + '</span>';
 const PO_ICON_COPY = {{ icon('copy', size=12) | tojson }};
 const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
 </script>
@@ -573,7 +579,7 @@ const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
 
   // 主辨識模式互斥規則:
   //   - 直接辨識 / 對位辨識 / 完整辨識 三者互斥(只能擇一)
-  //   - 三者擇一勾選時, 校對 / 校正 自動 disable + uncheck (校對只能配 EasyOCR/Tesseract)
+  //   - 三者擇一勾選時， 校對 / 校正 自動 disable + uncheck (校對只能配 EasyOCR/Tesseract)
   //   - OCR 語言區塊在「直接辨識」「完整辨識」時反灰(LLM 不用 OCR 引擎);
   //     「對位辨識」時 OCR 還是會跑(取座標), 語言設定有意義 → 不反灰
   function syncLlmDirectMutex() {
@@ -600,7 +606,7 @@ const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
         }
       }
     });
-    // OCR 語言區塊：「直接辨識」「完整辨識」反灰,「對位辨識」維持(EasyOCR 還是會跑)
+    // OCR 語言區塊：「直接辨識」「完整辨識」反灰，「對位辨識」維持(EasyOCR 還是會跑)
     const langSection = $('poLangSection');
     const langNote = $('poLangDisabledNote');
     if (langSection) {
@@ -924,7 +930,7 @@ const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
       body += pageHtml;
     });
     return '<details class="po-stages">'
-      + '<summary>各階段詳細結果（' + stageResults.length + ' 頁，點開比對每段成效）</summary>'
+      + '<summary>' + PO_ICON_WRAP(PO_ICON_LAYERS) + '各階段詳細結果（' + stageResults.length + ' 頁，點開比對每段成效）</summary>'
       + '<div class="po-stages-body">' + body + '</div>'
       + '</details>';
   }
@@ -1052,13 +1058,13 @@ const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
           let modeLabel = '';
           if (stats.llm_full_used) {
             const t = stats.llm_full_total_s || 0;
-            modeLabel = `（LLM 完整辨識,LLM 用時 ${t}s）`;
+            modeLabel = `（LLM 完整辨識，LLM 用時 ${t}s）`;
           } else if (stats.llm_align_used) {
             const t = stats.llm_align_total_s || 0;
-            modeLabel = `（LLM 對位辨識,LLM 用時 ${t}s）`;
+            modeLabel = `（LLM 對位辨識，LLM 用時 ${t}s）`;
           } else if (stats.llm_direct_used) {
             const t = stats.llm_direct_total_s || 0;
-            modeLabel = `（LLM 直接辨識,LLM 用時 ${t}s）`;
+            modeLabel = `（LLM 直接辨識，LLM 用時 ${t}s）`;
           } else if (stats.llm_vision_used || stats.llm_used) {
             modeLabel = '（含 ' + [stats.llm_vision_used ? 'LLM 視覺校對' : null,
                                   stats.llm_used ? 'LLM 文字校正' : null].filter(Boolean).join(' + ') + '）';
@@ -1071,6 +1077,7 @@ const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
             + '插入文字 ' + (stats.words_inserted || 0) + ' 字' + modeLabel
             + '<br><br>'
             + '<a class="btn btn-primary" href="' + url + '" download>下載文字辨識後 PDF</a>'
+            + (window.attachWorkspaceSave ? '<button id="ocrWsSave" class="btn" type="button" style="margin-left:8px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>存至工作區</button>' : '')
             + (stats.llm_direct_used
                ? '<div style="margin-top:8px; font-size:12px; color:#a16207;">⚠ LLM 直接辨識無逐字座標，拖選反白位置不對應圖上文字位置（要精準對位請改用「LLM 對位辨識」）；要拿完整內容請展開下方「識別結果全文」一次複製。中文易腦補，務必對照原檔複核。</div>'
                : '')
@@ -1078,9 +1085,9 @@ const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
                ? '<div style="margin-top:8px; font-size:12px; color:#a16207;">⚠ LLM 完整辨識的座標由 vision 模型預測，typical 誤差 ±10-30px（grounded 模型本質限制，非引擎 bug）。如需 pixel-accurate 拖選位置，請改勾「LLM 對位辨識」(EasyOCR 拿像素級座標 + LLM 拿文字)。</div>'
                : '')
             + '</div>'
-            // 識別結果全文 — 預設摺疊,方便檢視 / 複製
+            // 識別結果全文 — 預設摺疊，方便檢視 / 複製
             + (fullText
-               ? '<details class="po-fulltext"><summary><span style="display:inline-flex; vertical-align:middle; margin-right:4px;">' + PO_ICON_FILE + '</span>識別結果全文（' + fullCharCount + ' 字' + (stages.length > 1 ? '，' + stages.length + ' 頁' : '') + '，點開檢視 / 複製）</summary>'
+               ? '<details class="po-fulltext"><summary>' + PO_ICON_WRAP(PO_ICON_FILE) + '識別結果全文（' + fullCharCount + ' 字' + (stages.length > 1 ? '，' + stages.length + ' 頁' : '') + '，點開檢視 / 複製）</summary>'
                  + '<div class="po-fulltext-body">'
                  + '<div style="margin-bottom:8px;"><button type="button" class="btn btn-small" id="poCopyFullText">📋 複製全文</button></div>'
                  + '<pre id="poFullTextPre" class="po-fulltext-pre">' + fullText.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + '</pre>'
@@ -1088,7 +1095,7 @@ const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
                : '')
             + renderStageDetails(stages)
             + '<details class="po-stages">'
-            + '<summary>怎麼確認是這個工具 OCR 的（不是 macOS 預覽程式自動 OCR）？</summary>'
+            + '<summary>' + PO_ICON_WRAP(PO_ICON_INFO) + '怎麼確認是這個工具 OCR 的（不是 macOS 預覽程式自動 OCR）？</summary>'
             + '<div class="po-stages-body">'
             + '<div style="padding-top:6px;font-size:13px;color:#475569;line-height:1.7;">'
             + '下載後用 Adobe Acrobat / Apple 預覽程式開啟，三個方法擇一：<br>'
@@ -1101,6 +1108,9 @@ const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
             + renderViewer(uploadId);
           setBtnBusy(false);
           mountViewerEmbedCss();
+          if (window.attachWorkspaceSave) window.attachWorkspaceSave(
+            document.getElementById('ocrWsSave'),
+            () => ({ url: url, name: (url.split('/').pop() || 'ocr.pdf').split('?')[0], tool: 'pdf-ocr' }));
           // 複製全文按鈕 — 從 pre 元素拿文字（任何模式只要有結果都會出現）
           const copyBtn = document.getElementById('poCopyFullText');
           if (copyBtn && fullText) {

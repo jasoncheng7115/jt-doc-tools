@@ -12,6 +12,7 @@
     <p class="muted" style="font-size:12px;">可一次選多張；上傳後可繼續加。單檔上限 50 MB。</p>
     <input type="file" id="fileInput" accept="image/*" multiple style="display:none;">
   </div>
+  {% if workspace_enabled(request) %}<div class="fu-ws-row" style="justify-content:flex-start;"><button type="button" class="ws-load-btn" id="wsLoadBtn">{{ icon('archive', size=16) }}<span>從工作區載入</span></button></div>{% endif %}
 </div>
 
 <details class="panel" id="grid-panel" hidden open>
@@ -206,6 +207,7 @@ dz.addEventListener('click', () => fi.click());
 }));
 dz.addEventListener('drop', (e) => uploadFiles(e.dataTransfer.files));
 fi.addEventListener('change', (e) => uploadFiles(e.target.files));
+if (window.attachWorkspaceLoadButton) window.attachWorkspaceLoadButton(document.getElementById('wsLoadBtn'), fi, { accept: ['png'] });
 
 async function uploadFiles(fileList) {
   if (!fileList || !fileList.length) return;

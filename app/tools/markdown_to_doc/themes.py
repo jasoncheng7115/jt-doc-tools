@@ -251,27 +251,27 @@ FONTS: dict[str, dict] = {
     "noto-sans": {
         "name": "Noto Sans TC(黑體)",
         "stack": "'Noto Sans TC', 'Source Han Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Heiti TC', sans-serif",
-        "desc": "Google Noto 思源黑體系列繁中,易讀現代感",
+        "desc": "Google Noto 思源黑體系列繁中，易讀現代感",
     },
     "noto-serif": {
         "name": "Noto Serif TC(明體)",
         "stack": "'Noto Serif TC', 'Source Han Serif TC', 'Songti TC', 'Times New Roman', serif",
-        "desc": "Google Noto 思源宋體系列繁中,正式書面感",
+        "desc": "Google Noto 思源宋體系列繁中，正式書面感",
     },
     "kaiti": {
         "name": "標楷體 / Kaiti",
         "stack": "'DFKai-SB', 'BiauKai', 'Kaiti TC', 'STKaiti', 'AR PL UKai TW', cjk-kaiti, serif",
-        "desc": "公文 / 教材常用,需主機已安裝楷體",
+        "desc": "公文 / 教材常用，需主機已安裝楷體",
     },
     "mingti": {
         "name": "新細明體 / MingLiU",
         "stack": "'PMingLiU', 'MingLiU', 'AR PL UMing TW', 'Songti TC', cjk-mingti, serif",
-        "desc": "Windows 早期預設,需主機已安裝細明體",
+        "desc": "Windows 早期預設，需主機已安裝細明體",
     },
     "monospace": {
         "name": "等寬字型",
         "stack": "'JetBrains Mono', 'Fira Code', Menlo, Consolas, 'Liberation Mono', 'Noto Sans Mono CJK TC', monospace",
-        "desc": "全篇等寬,適合程式碼 / 技術文件",
+        "desc": "全篇等寬，適合程式碼 / 技術文件",
     },
 }
 
