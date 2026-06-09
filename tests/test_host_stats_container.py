@@ -55,6 +55,25 @@ def test_get_host_stats_container_path(monkeypatch):
     assert cpu.get("source") == "cgroup"
 
 
+def test_get_host_stats_container_mem_and_io_from_cgroup(monkeypatch):
+    # 容器內：RAM 走 cgroup（含扣 inactive_file 的 working set）、disk I/O 走
+    # cgroup io.stat，而非 psutil 讀到的實體主機值。
+    monkeypatch.setattr(hs, "_is_container", lambda: True)
+    monkeypatch.setattr(hs, "_container_cpu_percent", lambda fb: 1.0)
+    monkeypatch.setattr(hs, "_cgroup_ncpu", lambda fb: 6)
+    fake_mem = {"total": 10 << 30, "used": 374 << 20, "available": 9 << 30,
+                "percent": 3.6, "swap_total": 0, "swap_used": 0, "swap_percent": 0.0}
+    fake_io = {"read_bytes": 20 << 30, "write_bytes": 26 << 30,
+               "read_count": 1, "write_count": 2}
+    monkeypatch.setattr(hs, "_container_mem", lambda p: dict(fake_mem))
+    monkeypatch.setattr(hs, "_container_disk_io", lambda: dict(fake_io))
+    s = hs.get_host_stats()
+    assert s["mem"]["used"] == (374 << 20)        # cgroup working set，非實體主機
+    assert s["mem"]["total"] == (10 << 30)
+    assert s["disk_io"]["read_bytes"] == (20 << 30)  # cgroup io.stat，非 /proc/diskstats
+    assert s["disk_io"]["write_bytes"] == (26 << 30)
+
+
 def test_get_host_stats_baremetal_path(monkeypatch):
     # 非容器（實機 / VM）→ psutil，in_container False，loadavg 可有值
     monkeypatch.setattr(hs, "_is_container", lambda: False)

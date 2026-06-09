@@ -4,6 +4,16 @@
 
 ---
 
+## [1.11.74] - 2026-06-09
+
+### 修正 — 系統狀態頁在容器內的記憶體、磁碟 I/O 也改抓容器自己的（延續 1.11.73）
+
+- 延續 1.11.73 的容器感知，再修兩個同源問題（容器內 `/proc` 讀到實體主機值）：
+  - **記憶體**：原本走 LXCFS `/proc/meminfo` 算的 used 排除快取，比實際偏低、與 Proxmox 顯示對不上。改讀 cgroup `memory.current` 並扣掉可回收檔案快取（`inactive_file`）得 working set，與 Proxmox 同公式；上限取 `memory.max`。
+  - **磁碟 I/O**：原本 psutil 讀 `/proc/diskstats` 是實體主機的（會看到 TB 級累計與爆高速率）。改讀 cgroup `io.stat`（v2）/ `blkio`（v1）的本容器讀寫量。
+  - 網路維持 psutil — `/proc/net/dev` 在容器內是 namespaced，本來就是容器自己的介面流量。
+- 實機 / VM 一律維持 psutil（各自有獨立 `/proc`）。cgroup v2 / v1 都支援，讀取失敗則回退 psutil。
+
 ## [1.11.73] - 2026-06-09
 
 ### 修正 — 系統狀態頁在 LXC / Docker 容器內顯示的是實體主機 CPU / Load，改抓容器自己的

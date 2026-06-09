@@ -160,6 +160,120 @@ def _container_cpu_percent(fallback_ncpu: Optional[int]) -> Optional[float]:
     return pct if usage is not None else None
 
 
+def _container_disk_io() -> Optional[dict]:
+    """容器自己的 block I/O 累計量（cgroup）。容器內 psutil 讀 /proc/diskstats
+    是實體主機的，必須改讀 cgroup io.stat（v2）/ blkio（v1）。"""
+    try:  # cgroup v2 io.stat：每行 "maj:min rbytes=.. wbytes=.. rios=.. wios=.."
+        rb = wb = rios = wios = 0
+        found = False
+        with open("/sys/fs/cgroup/io.stat", encoding="utf-8") as f:
+            for line in f:
+                for tok in line.split()[1:]:
+                    if tok.startswith("rbytes="):
+                        rb += int(tok[7:]); found = True
+                    elif tok.startswith("wbytes="):
+                        wb += int(tok[7:])
+                    elif tok.startswith("rios="):
+                        rios += int(tok[5:])
+                    elif tok.startswith("wios="):
+                        wios += int(tok[5:])
+        if found:
+            return {"read_bytes": rb, "write_bytes": wb,
+                    "read_count": rios, "write_count": wios}
+    except Exception:
+        pass
+    try:  # cgroup v1 blkio：行 "maj:min Read <bytes>" / "Write <bytes>"
+        rb = wb = 0
+        found = False
+        with open("/sys/fs/cgroup/blkio/blkio.throttle.io_service_bytes",
+                  encoding="utf-8") as f:
+            for line in f:
+                t = line.split()
+                if len(t) == 3 and t[1] == "Read":
+                    rb += int(t[2]); found = True
+                elif len(t) == 3 and t[1] == "Write":
+                    wb += int(t[2])
+        if found:
+            return {"read_bytes": rb, "write_bytes": wb,
+                    "read_count": 0, "write_count": 0}
+    except Exception:
+        pass
+    return None
+
+
+def _cg_read_int(path: str) -> Optional[int]:
+    try:
+        with open(path, encoding="utf-8") as f:
+            return int(f.read().strip())
+    except Exception:
+        return None
+
+
+def _cg_read_str(path: str) -> Optional[str]:
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read().strip()
+    except Exception:
+        return None
+
+
+def _container_mem(psutil_mod) -> Optional[dict]:
+    """容器自己的記憶體用量（cgroup），與 Proxmox 顯示一致（含 cache）。
+    容器內 psutil 走 LXCFS /proc/meminfo 算的 used 排除 cache，會比 cgroup
+    memory.current（Proxmox 用的值）低，導致數字對不上。"""
+    # cgroup v2
+    current = _cg_read_int("/sys/fs/cgroup/memory.current")
+    if current is not None:
+        # 扣掉可回收的檔案快取（inactive_file），得到 working set，與 Proxmox
+        # 對容器顯示的記憶體用量一致；直接用 memory.current 會把 cache 也算進去
+        # 而偏高。
+        inactive = 0
+        try:
+            with open("/sys/fs/cgroup/memory.stat", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("inactive_file "):
+                        inactive = int(line.split()[1]); break
+        except Exception:
+            pass
+        used = max(0, current - inactive)
+        lim = _cg_read_str("/sys/fs/cgroup/memory.max")
+        total = int(lim) if (lim and lim != "max") else psutil_mod.virtual_memory().total
+        sw_used = _cg_read_int("/sys/fs/cgroup/memory.swap.current") or 0
+        sw_lim = _cg_read_str("/sys/fs/cgroup/memory.swap.max")
+        sw_total = int(sw_lim) if (sw_lim and sw_lim != "max") else 0
+        return {
+            "total": total, "used": used, "available": max(0, total - used),
+            "percent": round(used / total * 100, 1) if total else 0.0,
+            "swap_total": sw_total, "swap_used": sw_used,
+            "swap_percent": round(sw_used / sw_total * 100, 1) if sw_total else 0.0,
+        }
+    # cgroup v1
+    usage = _cg_read_int("/sys/fs/cgroup/memory/memory.usage_in_bytes")
+    if usage is not None:
+        inactive = 0
+        try:
+            with open("/sys/fs/cgroup/memory/memory.stat", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("total_inactive_file "):
+                        inactive = int(line.split()[1]); break
+        except Exception:
+            pass
+        used = max(0, usage - inactive)
+        lim = _cg_read_int("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+        total = lim if (lim and lim < (1 << 62)) else psutil_mod.virtual_memory().total
+        memsw = _cg_read_int("/sys/fs/cgroup/memory/memory.memsw.usage_in_bytes")
+        memsw_lim = _cg_read_int("/sys/fs/cgroup/memory/memory.memsw.limit_in_bytes")
+        sw_used = max(0, (memsw or used) - used)
+        sw_total = max(0, (memsw_lim - total)) if (memsw_lim and memsw_lim < (1 << 62)) else 0
+        return {
+            "total": total, "used": used, "available": max(0, total - used),
+            "percent": round(used / total * 100, 1) if total else 0.0,
+            "swap_total": sw_total, "swap_used": sw_used,
+            "swap_percent": round(sw_used / sw_total * 100, 1) if sw_total else 0.0,
+        }
+    return None
+
+
 def _safe_disk_usage(path: str) -> Optional[dict]:
     """psutil.disk_usage 在 Windows 拒絕存取的盤符會炸，包起來。"""
     psutil = _try_psutil()
@@ -216,15 +330,19 @@ def get_host_stats() -> dict:
                 out["cpu"]["loadavg"] = None
     except Exception as e:
         out["cpu"] = {"error": str(e)}
-    # RAM
+    # RAM — 容器內改讀 cgroup（與 Proxmox 顯示一致，含 cache）；實機 / VM 用 psutil
     try:
-        mem = psutil.virtual_memory()
-        swap = psutil.swap_memory()
-        out["mem"] = {
-            "total": mem.total, "used": mem.used, "available": mem.available,
-            "percent": mem.percent,
-            "swap_total": swap.total, "swap_used": swap.used, "swap_percent": swap.percent,
-        }
+        cm = _container_mem(psutil) if in_container else None
+        if cm is not None:
+            out["mem"] = cm
+        else:
+            mem = psutil.virtual_memory()
+            swap = psutil.swap_memory()
+            out["mem"] = {
+                "total": mem.total, "used": mem.used, "available": mem.available,
+                "percent": mem.percent,
+                "swap_total": swap.total, "swap_used": swap.used, "swap_percent": swap.percent,
+            }
     except Exception as e:
         out["mem"] = {"error": str(e)}
     # Disk — DATA_DIR 所在的盤 (最相關) + system root
@@ -249,13 +367,21 @@ def get_host_stats() -> dict:
         out["disks"] = []
         out["disks_error"] = str(e)
     # Disk IO (cumulative counter — UI 算 delta)
+    # 容器內 psutil 讀 /proc/diskstats 是實體主機的（會看到 TB 級累計）→ 改讀
+    # cgroup io.stat 的本容器 I/O；實機 / VM 用 psutil。
     try:
-        io = psutil.disk_io_counters()
-        if io:
-            out["disk_io"] = {"read_bytes": io.read_bytes,
-                              "write_bytes": io.write_bytes,
-                              "read_count": io.read_count,
-                              "write_count": io.write_count}
+        cio = _container_disk_io() if in_container else None
+        if cio is not None:
+            out["disk_io"] = cio
+        else:
+            io = psutil.disk_io_counters()
+            if io:
+                out["disk_io"] = {"read_bytes": io.read_bytes,
+                                  "write_bytes": io.write_bytes,
+                                  "read_count": io.read_count,
+                                  "write_count": io.write_count}
+            else:
+                out["disk_io"] = None
     except Exception:
         out["disk_io"] = None
     # Network IO (cumulative)
