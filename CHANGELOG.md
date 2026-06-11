@@ -4,6 +4,17 @@
 
 ---
 
+## [1.11.81] - 2026-06-11
+
+### 資安 — 修補 GitHub CodeQL / Dependabot 告警一輪
+
+- **Starlette BADHOST 路徑污染繞過（CVE-2026-48710 / GHSA-86qp-5c8j-p5mr，重要）**：Starlette 會用 Host 標頭重建 `request.url.path`，特製 `Host: h/login?x` 可讓 `request.url.path` 變成 `/login`（公開路徑）但實際路由仍是受保護路徑。本站多個資安中介層（登入閘 `_auth_gate`、API token 閘、admin/稽核員前綴判定 `require_admin`）原用 `request.url.path` 判斷 → 已知會被繞過（實測：已登入但無權限者送污染 Host 可進入未授權工具）。**全部改用不受 Host 影響的原始 ASGI `scope["path"]`**，從程式面根治（不需等 Starlette 升級）。測試 `tests/test_badhost_path_gate.py`（污染 Host 不能繞過工具權限閘 / admin 閘；已驗證在修補前會失敗、修補後通過）。
+- **pdf-to-markdown 反射式 XSS（CodeQL High）**：渲染失敗訊息把例外字串直接塞進 `innerHTML`、按鈕還原用 `innerHTML` 寫入 `textContent` 來源 → 改用既有 `_esc()` 跳脫 + 還原改 `textContent`。
+- **pdf-to-office 預覽路徑（CodeQL High）**：`page` 參數流入檔名 → 加正整數 clamp + 改走 `safe_join()` 容器內含檢查（`kind` 本就 allow-list）。
+- **pdf-wordcount 例外資訊外洩（CodeQL Medium）**：分析失敗原本把原始例外文字回給前端 → 改記 log + 回泛用「無法分析」。
+- **說明（已評估、無需改碼或屬預期行為）**：①OCR 遠端伺服器測試端點的 SSRF（CodeQL Critical #108/#109）僅限**管理員**且本就需指定內網 OCR 伺服器位址，已有 scheme/host 白名單 + cloud metadata 封鎖 + 路徑寫死，屬預期功能；②einvoice 緩衝區的 SHA-1（CodeQL High #92）是**舊版相容查找用**（新寫入已用 blake2b、`usedforsecurity=False`），改了會讀不到舊資料，非資安控制。兩者建議於 GitHub 標記為 won't-fix。
+- **相依升級評估**：Starlette 1.x 雖修掉 BADHOST，但其 `TemplateResponse(request, name)` 變強制簽章會牽動全部工具頁，屬獨立遷移工項；本版已從程式面擋掉實際風險，相依升級另案處理。
+
 ## [1.11.80] - 2026-06-11
 
 ### 修正 — 啟用認證後，非管理員在「用印與簽名」/「浮水印」的編輯與合成模式看不到預覽（GitHub #28 第 2 點）

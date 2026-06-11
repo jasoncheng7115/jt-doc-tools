@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from ...config import settings
 from ...core import upload_owner as _uo
 from ...core.job_manager import job_manager
-from ...core.safe_paths import require_uuid_hex
+from ...core.safe_paths import require_uuid_hex, safe_join
 
 logger = logging.getLogger("app.pdf_to_office")
 router = APIRouter()
@@ -166,11 +166,14 @@ async def preview_png(request: Request, job_id: str, kind: str,
     if not job.result_path:
         raise HTTPException(404, "結果未就緒")
     work_dir = Path(job.result_path).parent
-    p_num = page or 1
+    # `page` is user-supplied — clamp to a sane positive int and resolve the
+    # filename through safe_join so it can never escape work_dir (defence in
+    # depth: kind is already allow-listed and p_num is an int).
+    p_num = max(1, min(int(page or 1), 100000))
     # 新檔名 preview_{kind}_{N}.png；舊單頁 fallback preview_{kind}.png
-    png = work_dir / f"preview_{kind}_{p_num}.png"
+    png = safe_join(work_dir, f"preview_{kind}_{p_num}.png")
     if not png.exists():
-        legacy = work_dir / f"preview_{kind}.png"
+        legacy = safe_join(work_dir, f"preview_{kind}.png")
         if legacy.exists() and p_num == 1:
             png = legacy
         else:

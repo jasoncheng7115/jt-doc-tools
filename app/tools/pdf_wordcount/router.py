@@ -16,6 +16,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from ...config import settings
 from ...core.http_utils import content_disposition
 
+import logging
+_log = logging.getLogger(__name__)
+
 
 router = APIRouter()
 
@@ -326,9 +329,13 @@ async def analyze_multi(files: list[UploadFile] = File(...)):
             data = await f.read()
             per_file.append(_analyze_doc(data, fname))
         except HTTPException as exc:
+            # exc.detail is our own user-facing message — safe to surface.
             skipped.append(f"{fname}（{exc.detail}）")
-        except Exception as exc:
-            skipped.append(f"{fname}（{exc}）")
+        except Exception:
+            # Never echo raw exception text to the client (may leak internal
+            # paths / library internals). Log the detail, show a generic note.
+            _log.warning("wordcount analyze failed for %s", fname, exc_info=True)
+            skipped.append(f"{fname}（無法分析）")
     if not per_file:
         raise HTTPException(400, "沒有可分析的檔案；支援格式：PDF / TXT / MD / CSV / 等純文字")
     # 跨檔聚合

@@ -405,7 +405,7 @@
         const safe = window.DOMPurify.sanitize(html);
         $('pmRendered').innerHTML = safe;
       } catch (rerr) {
-        $('pmRendered').innerHTML = '<div class="pm-error">Markdown 渲染失敗: ' + rerr + '</div>';
+        $('pmRendered').innerHTML = '<div class="pm-error">Markdown 渲染失敗: ' + _esc(String(rerr)) + '</div>';
       }
 
 
@@ -417,7 +417,7 @@
       $('pmStatus').textContent = '';
     } finally {
       btn.disabled = false;
-      btn.innerHTML = origText;
+      btn.textContent = origText;  // origText is textContent — restore as text, not HTML
     }
   });
 

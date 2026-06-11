@@ -77,7 +77,10 @@ def require_admin(request: Request) -> dict:
     if user.get("source") == "off":
         return user   # auth disabled — everyone is "admin"
     uid = user["user_id"]
-    path = request.url.path or ""
+    # Raw ASGI scope path — not request.url.path, which is rebuilt from the
+    # (attacker-controllable) Host header and can be poisoned to dodge these
+    # auditor/admin prefix checks (Starlette BADHOST, CVE-2026-48710).
+    path = request.scope.get("path") or request.url.path or ""
     is_admin_user = permissions.is_admin(uid)
     is_aud_user = permissions.is_auditor(uid)
 

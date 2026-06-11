@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.11.80"
+VERSION = "1.11.81"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -618,7 +618,7 @@ async def _capture_upload_filename(request: Request, call_next):
     ctype = (request.headers.get("content-type") or "").lower()
     if (request.method in ("POST", "PUT")
             and ctype.startswith("multipart/form-data")
-            and request.url.path.startswith("/tools/")):
+            and (request.scope.get("path") or request.url.path).startswith("/tools/")):
         clen_str = request.headers.get("content-length") or "0"
         try:
             clen = int(clen_str)
@@ -654,7 +654,11 @@ async def _auth_gate(request: Request, call_next):
     from .core import auth_settings, sessions, permissions
     if not auth_settings.is_enabled():
         return await call_next(request)
-    path = request.url.path
+    # Use the RAW ASGI scope path, not request.url.path: request.url is rebuilt
+    # from the Host header, which a crafted "Host: x/../" can poison so url.path
+    # diverges from the path actually routed — bypassing these prefix-based
+    # gates (Starlette BADHOST, CVE-2026-48710). scope["path"] is Host-independent.
+    path = request.scope.get("path") or request.url.path
     if path in _PUBLIC_EXACT or any(path.startswith(p) for p in _PUBLIC_PREFIXES):
         return await call_next(request)
     # Bearer-token middleware (executed earlier in the chain) may have already
@@ -741,7 +745,8 @@ async def _auth_gate(request: Request, call_next):
 @app.middleware("http")
 async def _api_token_gate(request: Request, call_next):
     from .core.api_tokens import api_tokens
-    path = request.url.path
+    # Raw scope path — Host-header-independent (see _auth_gate / BADHOST note).
+    path = request.scope.get("path") or request.url.path
 
     # Only guard explicit API surfaces; never block UI pages, static files,
     # or admin (admin is browser-based and has its own access control).
