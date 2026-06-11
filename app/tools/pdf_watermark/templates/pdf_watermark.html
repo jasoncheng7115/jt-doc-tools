@@ -34,7 +34,7 @@
       {% for s in assets %}
       <label class="wm-asset-card{% if s.id == default_id %} selected{% endif %}">
         <input type="radio" name="asset" value="{{ s.id }}" {% if s.id == default_id %}checked{% endif %} />
-        <div class="wm-asset-thumb"><img src="/admin/assets/{{ s.id }}/thumb" /></div>
+        <div class="wm-asset-thumb"><img src="/assets/{{ s.id }}/thumb" /></div>
         <div class="wm-asset-meta">
           <span class="wm-asset-name">{{ s.name }}</span>
           <span class="type-chip type-{{ s.type }}">{{ {'stamp':'印章','signature':'簽名','logo':'Logo','watermark':'浮水印'}[s.type] or s.type }}</span>
@@ -358,7 +358,7 @@ function getEditorAssetUrl(){
     // 臨時資產：editor 顯示用 sessionStorage 內的 data URL
     return window._wmTempAsset ? window._wmTempAsset.dataUrl : null;
   }
-  return `/admin/assets/${id}/file?v=${Date.now()}`;
+  return `/assets/${id}/file?v=${Date.now()}`;
 }
 
 // Probe a URL for natural image dimensions, return aspect ratio (w/h) or 1 on failure.

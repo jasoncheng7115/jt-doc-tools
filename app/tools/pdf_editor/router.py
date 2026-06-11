@@ -632,8 +632,8 @@ async def list_assets():
                 "id": a.id,
                 "name": a.name,
                 "type": a.type,
-                "thumb_url": f"/admin/assets/{a.id}/thumb",
-                "file_url": f"/admin/assets/{a.id}/file",
+                "thumb_url": f"/assets/{a.id}/thumb",
+                "file_url": f"/assets/{a.id}/file",
                 "preset": {"width_mm": a.preset.width_mm, "height_mm": a.preset.height_mm},
             })
     return {"assets": out}

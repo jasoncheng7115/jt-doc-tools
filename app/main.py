@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.11.76"
+VERSION = "1.11.77"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -409,6 +409,13 @@ app.include_router(_build_web_router(templates, tools, settings.app_name, VERSIO
 from .web.workspace_routes import build_router as _build_workspace_router  # noqa: E402
 
 app.include_router(_build_workspace_router(templates))
+
+# Shared asset images (logo / stamp / signature / watermark) — login-gated,
+# read-only. Lets non-admin users see asset thumbnails / previews in the
+# stamp / watermark / editor tools without exposing admin asset management.
+from .web.asset_routes import build_router as _build_asset_router  # noqa: E402
+
+app.include_router(_build_asset_router())
 
 # Admin routes
 from .admin.router import build_router as _build_admin_router  # noqa: E402

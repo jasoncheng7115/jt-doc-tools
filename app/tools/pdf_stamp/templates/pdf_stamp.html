@@ -13,7 +13,7 @@
   <div class="asset-list" id="stampAssetList" style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));">
     {% for s in stamps %}
     <label class="asset-item" style="cursor:pointer;">
-      <div class="thumb"><img src="/admin/assets/{{ s.id }}/thumb" /></div>
+      <div class="thumb"><img src="/assets/{{ s.id }}/thumb" /></div>
       <div class="name">
         <input type="radio" name="stamp" value="{{ s.id }}" {% if s.id == default_id %}checked{% endif %} />
         {{ s.name }}
@@ -649,7 +649,7 @@ function getSelectedStampPreset() {
   return stamps.find(s => s.id === id)?.preset || null;
 }
 
-// 取得「印章圖片來源 URL」— 一般 asset 走 /admin/assets/{id}/file，
+// 取得「印章圖片來源 URL」— 一般 asset 走 /assets/{id}/file（登入即可,非僅 admin）,
 // 臨時資產走 sessionStorage 內的 data URL。
 const _BLANK_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
 function getSelectedStampImageUrl() {
@@ -658,7 +658,7 @@ function getSelectedStampImageUrl() {
   if (id === '__temp__') {
     return window._tempAsset ? window._tempAsset.dataUrl : '';
   }
-  return id ? `/admin/assets/${id}/file?t=${Date.now()}` : '';
+  return id ? `/assets/${id}/file?t=${Date.now()}` : '';
 }
 
 // 把 sessionStorage 的 data URL 還原成 File 物件，submit / preview 時上傳
