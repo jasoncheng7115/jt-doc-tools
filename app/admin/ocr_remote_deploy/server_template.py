@@ -26,7 +26,11 @@ GPU selection (multi-GPU hosts):
     free VRAM, then picks the one with the MOST free VRAM that still has at
     least JT_OCR_MIN_FREE_MB free (default 2048 MB). This automatically avoids
     cards already saturated by other workloads (Ollama, etc.).
-  - If no GPU meets the threshold (or there is no CUDA), it falls back to CPU.
+  - The free-VRAM threshold is a MULTI-GPU feature only: a single-GPU host
+    always uses cuda:0 (it is never demoted to CPU), which also covers
+    unified-memory cards like the GB10 whose free VRAM reads as N/A.
+  - On multi-GPU hosts where none of the measurable cards meets the threshold,
+    it falls back to CPU. With no CUDA at all -> CPU.
   - The choice is cached for the process lifetime so all language Readers land
     on the same device. Restart the service to re-pick (e.g. after other GPU
     jobs free up). EasyOCR does NOT shard across multiple GPUs - one device.
@@ -113,9 +117,18 @@ def _gpu_free_table() -> list[dict]:
 
 
 def _pick_device() -> Any:
-    """Pick the GPU index with the MOST free VRAM that still meets the
-    JT_OCR_MIN_FREE_MB threshold. Returns 'cpu' if there is no CUDA GPU or none
-    has enough free memory. Cached after the first call."""
+    """Decide which device EasyOCR Readers run on. Cached after first call.
+
+    Rules (the free-VRAM threshold is a MULTI-GPU feature - it never demotes a
+    working single-GPU host to CPU):
+      - no CUDA GPU                         -> 'cpu'
+      - exactly one GPU                     -> cuda:0 (no choice to make; also
+        covers unified-memory cards like the GB10 whose free VRAM reads N/A)
+      - several GPUs, none measurable       -> cuda:0 (can't compare; don't
+        punish with CPU just because mem_get_info is unavailable)
+      - several GPUs, some measurable       -> the eligible card (free >=
+        JT_OCR_MIN_FREE_MB) with the MOST free VRAM; if none of the measurable
+        cards meets the threshold -> 'cpu' (the user-chosen safe fallback)."""
     global _chosen_device
     if _chosen_device is not None:
         return _chosen_device
@@ -124,9 +137,24 @@ def _pick_device() -> Any:
         _chosen_device = "cpu"
         log.info("Device selection: no CUDA GPU available -> CPU")
         return _chosen_device
+    if len(table) == 1:
+        _chosen_device = 0
+        g = table[0]
+        log.info("Device selection: single GPU cuda:0 (%s, %s) -> use it",
+                 _safe_log_str(g.get("name", "?")),
+                 ("%d MB free" % g["free_mb"]) if "note" not in g
+                 else "free VRAM unavailable")
+        return _chosen_device
     summary = ", ".join(
-        "cuda:%d %dMB free" % (g["index"], g.get("free_mb", 0)) for g in table)
-    eligible = [g for g in table if g.get("free_mb", 0) >= _MIN_FREE_MB]
+        "cuda:%d %dMB free%s" % (g["index"], g.get("free_mb", 0),
+                                 "?" if "note" in g else "") for g in table)
+    measurable = [g for g in table if "note" not in g]
+    if not measurable:
+        _chosen_device = 0
+        log.warning("Device selection: %d GPUs but free VRAM is unmeasurable "
+                    "-> default cuda:0. Candidates: %s", len(table), summary)
+        return _chosen_device
+    eligible = [g for g in measurable if g.get("free_mb", 0) >= _MIN_FREE_MB]
     if eligible:
         best = max(eligible, key=lambda g: g.get("free_mb", 0))
         _chosen_device = best["index"]

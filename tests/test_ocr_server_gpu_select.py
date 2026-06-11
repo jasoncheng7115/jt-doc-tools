@@ -108,16 +108,48 @@ def test_threshold_is_configurable(reset_state, monkeypatch):
     assert srv._pick_device() == "cpu"
 
 
-def test_decision_is_cached(reset_state, monkeypatch):
+def test_single_gpu_below_threshold_still_used(reset_state, monkeypatch):
+    # One GPU, free VRAM below the 2048 threshold. A single-GPU host must NOT be
+    # demoted to CPU (that would regress hosts that worked before this feature).
     _install_torch(monkeypatch, [
-        {"name": "A", "free_mb": 9000, "total_mb": 12000},
+        {"name": "A", "free_mb": 500, "total_mb": 8000},
     ])
     assert srv._pick_device() == 0
+
+
+def test_single_gpu_unmeasurable_uses_gpu0(reset_state, monkeypatch):
+    # GB10 / unified-memory case: only one GPU and mem_get_info fails (N/A).
+    # Must still use cuda:0, never CPU.
+    _install_torch(monkeypatch, [
+        {"name": "NVIDIA GB10", "free_mb": None, "total_mb": 0},
+    ])
+    assert srv._pick_device() == 0
+
+
+def test_multi_gpu_all_unmeasurable_uses_gpu0(reset_state, monkeypatch):
+    # Several GPUs but free VRAM is unmeasurable on all of them -> can't compare,
+    # default to cuda:0 rather than punishing with CPU.
+    _install_torch(monkeypatch, [
+        {"name": "A", "free_mb": None, "total_mb": 0},
+        {"name": "B", "free_mb": None, "total_mb": 0},
+    ])
+    assert srv._pick_device() == 0
+
+
+def test_decision_is_cached(reset_state, monkeypatch):
+    # Use a multi-GPU layout so the choice genuinely depends on VRAM (not the
+    # single-GPU shortcut), proving the cache — not re-evaluation — holds it.
+    _install_torch(monkeypatch, [
+        {"name": "A", "free_mb": 3000, "total_mb": 12000},
+        {"name": "B", "free_mb": 9000, "total_mb": 12000},
+    ])
+    assert srv._pick_device() == 1
     # Now swap in a torch that would pick differently; cached value must persist.
     _install_torch(monkeypatch, [
-        {"name": "X", "free_mb": 100, "total_mb": 12000},
+        {"name": "A", "free_mb": 9000, "total_mb": 12000},
+        {"name": "B", "free_mb": 100, "total_mb": 12000},
     ])
-    assert srv._pick_device() == 0  # unchanged — cached
+    assert srv._pick_device() == 1  # unchanged — cached
 
 
 def test_ties_break_deterministically(reset_state, monkeypatch):
