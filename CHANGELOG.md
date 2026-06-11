@@ -4,6 +4,18 @@
 
 ---
 
+## [1.11.78] - 2026-06-11
+
+### 新增 — 遠端 OCR 伺服器（jt-ocr-server）多 GPU 主機自動挑卡（依空閒 VRAM）
+
+- 先前 jt-ocr-server 一律用 GPU 0（`gpu=torch.cuda.is_available()` 這個 bool 會被 EasyOCR 解析成 `cuda:0`），在多張 GPU 的主機上無法避開正被其他工作（Ollama 等）占用的卡。
+- 改為**第一次載入 Reader 時自動列舉每張 GPU 的空閒 VRAM**，挑「空閒最多且達門檻」的那張（`_pick_device`）。所有語言的 Reader 共用同一張卡。伺服器版本 bump `1.0.0 → 1.1.0`。
+- 門檻預設 **2048 MB**（EasyOCR + CJK 模型加 CUDA context 約需 1.5–2 GB），可用 systemd unit 的 `Environment=JT_OCR_MIN_FREE_MB` 調整；設 0 等於不限。
+- **都不夠門檻 → 退回 CPU**（不會硬擠造成 CUDA OOM 讓整個請求失敗），並在 log 與 `/healthz` 標明退回原因。
+- `/healthz`、`/version` 新增 `selected_device`（如 `cuda:1` / `cpu`）、`gpus`（每張卡的 free/total VRAM 表）、`min_free_mb`；`/ocr` 回傳的 `device` 改為精確的 `cuda:N` / `cpu`。admin「OCR 語言」頁測試結果會顯示選到哪張卡、偵測到幾張 GPU。
+- 註：EasyOCR 本身不會跨多卡分散，永遠綁一張；要重新挑卡（例如其他工作釋出 VRAM 後）重啟服務即可。
+- 測試：`tests/test_ocr_server_gpu_select.py`（挑空閒最多者 / 都不夠退 CPU / 無 CUDA 退 CPU / mem_get_info 失敗的卡不選 / 門檻可調 / 決策快取 / 平手取第一張，共 7 項）。
+
 ## [1.11.77] - 2026-06-11
 
 ### 修正 — 啟用認證後，非管理員無法預覽`資產管理`內的 logo / 浮水印 / 印章圖片（GitHub #28）

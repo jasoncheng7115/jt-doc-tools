@@ -345,9 +345,10 @@ ssh root@GPUServer 'bash /tmp/jt-ocr-server-install.sh'</pre>
         const ok = j.last_test_ok;
         const info = j.last_test_info || {};
         const gpu = info.gpu || info.device_name || '';
+        const sel = (info.selected_device && info.selected_device !== 'pending') ? ' [' + info.selected_device + ']' : '';
         const vram = info.vram_free_mb ? ' (free ' + info.vram_free_mb + ' MB / ' + info.vram_total_mb + ' MB)' : '';
         setStatus('上次測試 ' + j.last_test_at + '：<b style="color:' + (ok?'#10b981':'#ef4444') + '">' +
-                   (ok?'✓ 通過':'✗ 失敗') + '</b>' + (gpu ? '<br>GPU: ' + gpu + vram : ''),
+                   (ok?'✓ 通過':'✗ 失敗') + '</b>' + (gpu ? '<br>GPU: ' + gpu + sel + vram : ''),
                    ok?'ok':'err');
       }
     } catch(e) {}
@@ -369,12 +370,16 @@ ssh root@GPUServer 'bash /tmp/jt-ocr-server-install.sh'</pre>
       if (j.ok) {
         const h = j.healthz || {};
         const gpu = h.gpu || '';
+        const sel = (h.selected_device && h.selected_device !== 'pending') ? ' [' + h.selected_device + ']' : '';
         const vram = h.vram_free_mb ? ' (free ' + h.vram_free_mb + ' MB / ' + h.vram_total_mb + ' MB)' : '';
+        const multi = (Array.isArray(h.gpus) && h.gpus.length > 1)
+          ? '<br>偵測到 ' + h.gpus.length + ' 張 GPU，辨識時自動選用空閒 VRAM 最多者（門檻 ' + (h.min_free_mb || '?') + ' MB）'
+          : '';
         setStatus('✓ 連接成功<br>Server: ' + (h.server || '?') +
                   '<br>EasyOCR: ' + (h.easyocr || '?') +
                   '<br>PyTorch: ' + (h.torch || '?') +
                   '<br>CUDA: ' + (h.cuda_available ? '✓' : '✗') +
-                   (gpu ? '<br>GPU: ' + gpu + vram : ''), 'ok');
+                   (gpu ? '<br>GPU: ' + gpu + sel + vram : '') + multi, 'ok');
       } else {
         setStatus('✗ ' + (j.error || '失敗'), 'err');
       }

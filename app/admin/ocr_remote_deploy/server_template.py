@@ -12,12 +12,24 @@ API:
                      header:    Authorization: Bearer <token>
                      -> {engine, version, device, elapsed_s,
                          words: [{text, bbox: [x0,y0,x1,y1], conf}]}
-  GET  /healthz      -> {ok, gpu, vram_free_mb, vram_total_mb, easyocr, torch}
-  GET  /version     -> {server, easyocr, torch, cuda_available, device_name}
+  GET  /healthz      -> {ok, selected_device, min_free_mb, gpus: [...],
+                         gpu, vram_free_mb, vram_total_mb, easyocr, torch}
+  GET  /version     -> {server, easyocr, torch, cuda_available,
+                         selected_device, device_name}
 
 Auth: every endpoint except /healthz requires Bearer token matching the
 JT_OCR_TOKEN_FILE contents. /healthz is unauthenticated so basic monitoring
 works without exposing the token.
+
+GPU selection (multi-GPU hosts):
+  - On the first Reader load, _pick_device() enumerates every CUDA GPU and its
+    free VRAM, then picks the one with the MOST free VRAM that still has at
+    least JT_OCR_MIN_FREE_MB free (default 2048 MB). This automatically avoids
+    cards already saturated by other workloads (Ollama, etc.).
+  - If no GPU meets the threshold (or there is no CUDA), it falls back to CPU.
+  - The choice is cached for the process lifetime so all language Readers land
+    on the same device. Restart the service to re-pick (e.g. after other GPU
+    jobs free up). EasyOCR does NOT shard across multiple GPUs - one device.
 
 Design notes:
   - Lazy-load Reader per langs combo, keep in memory dict (langs_key -> reader)
@@ -35,7 +47,7 @@ from typing import Any
 from fastapi import FastAPI, File, Form, HTTPException, Header, UploadFile
 from fastapi.responses import JSONResponse
 
-SERVER_VERSION = "1.0.0"
+SERVER_VERSION = "1.1.0"
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -56,6 +68,85 @@ app = FastAPI(title="jt-ocr-server", version=SERVER_VERSION)
 
 # Reader cache: "ch_tra+en" -> easyocr.Reader instance
 _readers: dict[str, Any] = {}
+
+# Minimum free VRAM (MB) a GPU must have to be eligible. EasyOCR + CJK models
+# plus the CUDA context need ~1.5-2 GB. Override via the JT_OCR_MIN_FREE_MB env
+# (set in the systemd unit). Values <= 0 disable the threshold (any GPU OK).
+try:
+    _MIN_FREE_MB = int(os.environ.get("JT_OCR_MIN_FREE_MB", "2048"))
+except ValueError:
+    _MIN_FREE_MB = 2048
+
+# Chosen device, decided once on first Reader load and cached for the process.
+#   int  -> CUDA GPU index
+#   "cpu"-> run on CPU
+#   None -> not decided yet
+_chosen_device: Any = None
+
+
+def _gpu_free_table() -> list[dict]:
+    """Per-GPU [{index, name, free_mb, total_mb}] sorted by index. Empty when no
+    CUDA. Best-effort: a GPU whose mem_get_info raises (e.g. fully saturated by
+    another process) is reported with free_mb=0 so it is never picked."""
+    out: list[dict] = []
+    try:
+        import torch  # type: ignore
+        if not torch.cuda.is_available():
+            return out
+        for i in range(torch.cuda.device_count()):
+            entry: dict = {"index": i}
+            try:
+                entry["name"] = torch.cuda.get_device_name(i)
+            except Exception:
+                entry["name"] = "?"
+            try:
+                free, total = torch.cuda.mem_get_info(i)
+                entry["free_mb"] = round(free / 1024 / 1024)
+                entry["total_mb"] = round(total / 1024 / 1024)
+            except Exception as e:
+                entry["free_mb"] = 0
+                entry["note"] = "mem_get_info failed: " + e.__class__.__name__
+            out.append(entry)
+    except Exception as e:
+        log.warning("GPU enumeration failed: %s", _safe_log_str(e))
+    return out
+
+
+def _pick_device() -> Any:
+    """Pick the GPU index with the MOST free VRAM that still meets the
+    JT_OCR_MIN_FREE_MB threshold. Returns 'cpu' if there is no CUDA GPU or none
+    has enough free memory. Cached after the first call."""
+    global _chosen_device
+    if _chosen_device is not None:
+        return _chosen_device
+    table = _gpu_free_table()
+    if not table:
+        _chosen_device = "cpu"
+        log.info("Device selection: no CUDA GPU available -> CPU")
+        return _chosen_device
+    summary = ", ".join(
+        "cuda:%d %dMB free" % (g["index"], g.get("free_mb", 0)) for g in table)
+    eligible = [g for g in table if g.get("free_mb", 0) >= _MIN_FREE_MB]
+    if eligible:
+        best = max(eligible, key=lambda g: g.get("free_mb", 0))
+        _chosen_device = best["index"]
+        log.info("Device selection: picked cuda:%d (%s, %d MB free; "
+                 "need >= %d MB). Candidates: %s",
+                 best["index"], _safe_log_str(best.get("name", "?")),
+                 best.get("free_mb", 0), _MIN_FREE_MB, summary)
+    else:
+        _chosen_device = "cpu"
+        log.warning("Device selection: no GPU has >= %d MB free -> CPU "
+                    "fallback. Candidates: %s", _MIN_FREE_MB, summary)
+    return _chosen_device
+
+
+def _device_label() -> str:
+    """Human-readable label for the chosen device ('cuda:1' / 'cpu' /
+    'pending' before the first Reader loads)."""
+    if _chosen_device is None:
+        return "pending"
+    return "cpu" if _chosen_device == "cpu" else "cuda:%d" % _chosen_device
 
 
 def _require_auth(authorization: str | None) -> None:
@@ -88,20 +179,38 @@ def _safe_log_str(s) -> str:
 
 
 def _get_reader(langs_list: list[str]):
-    """Lazy-load EasyOCR Reader for a langs combination, cache for reuse."""
+    """Lazy-load EasyOCR Reader for a langs combination, cache for reuse.
+
+    The target device is chosen once (see _pick_device) and reused for every
+    Reader so all language models share one GPU."""
     import easyocr  # type: ignore
-    import torch  # type: ignore
 
     key = "+".join(sorted(langs_list))
     if key in _readers:
         return _readers[key]
 
-    gpu_ok = torch.cuda.is_available()
+    dev = _pick_device()  # int GPU index or "cpu"
+    gpu_arg: Any = False if dev == "cpu" else ("cuda:%d" % dev)
     safe_langs = _safe_log_str(langs_list)
     safe_key = _safe_log_str(key)
-    log.info("Loading EasyOCR Reader for langs=%s (gpu=%s)", safe_langs, gpu_ok)
+    log.info("Loading EasyOCR Reader for langs=%s (device=%s)",
+             safe_langs, _device_label())
     t0 = time.time()
-    reader = easyocr.Reader(langs_list, gpu=gpu_ok, verbose=False)
+    try:
+        reader = easyocr.Reader(langs_list, gpu=gpu_arg, verbose=False)
+    except Exception as e:
+        # Older EasyOCR builds only accept gpu=bool, not a "cuda:N" device
+        # string. Fall back to selecting the device on the torch side, then
+        # ask EasyOCR for gpu=True (which uses the current CUDA device).
+        if gpu_arg is not False:
+            log.warning("Reader with gpu=%s failed (%s); retrying via "
+                        "set_device(%d) + gpu=True",
+                        gpu_arg, e.__class__.__name__, dev)
+            import torch  # type: ignore
+            torch.cuda.set_device(dev)
+            reader = easyocr.Reader(langs_list, gpu=True, verbose=False)
+        else:
+            raise
     log.info("Reader for %s loaded in %.1fs", safe_key, time.time() - t0)
     _readers[key] = reader
     return reader
@@ -119,20 +228,27 @@ def _to_int_list(bbox) -> list[int]:
 def healthz() -> JSONResponse:
     """Unauthenticated liveness check."""
     info: dict[str, Any] = {"ok": True, "server": SERVER_VERSION}
+    info["min_free_mb"] = _MIN_FREE_MB
+    info["selected_device"] = _device_label()  # "cuda:N" / "cpu" / "pending"
     try:
         import torch  # type: ignore
         info["torch"] = torch.__version__
         info["cuda_available"] = torch.cuda.is_available()
         if torch.cuda.is_available():
-            info["gpu"] = torch.cuda.get_device_name(0)
-            # mem_get_info may fail if other processes (Ollama etc.) saturated VRAM -
-            # don't treat as a hard error, just skip VRAM stats.
-            try:
-                free, total = torch.cuda.mem_get_info(0)
-                info["vram_free_mb"] = round(free / 1024 / 1024)
-                info["vram_total_mb"] = round(total / 1024 / 1024)
-            except Exception as _e:
-                info["vram_note"] = f"unavailable: {_e.__class__.__name__}"
+            # Full per-GPU VRAM table so multi-GPU hosts can see exactly which
+            # card was chosen and how much each has free.
+            table = _gpu_free_table()
+            info["gpus"] = table
+            # Backward-compatible single-device fields point at the chosen GPU
+            # (or device 0 if no Reader has loaded yet).
+            idx = _chosen_device if isinstance(_chosen_device, int) else 0
+            sel = next((g for g in table if g["index"] == idx), None)
+            if sel:
+                info["gpu"] = sel.get("name", "?")
+                if "free_mb" in sel:
+                    info["vram_free_mb"] = sel["free_mb"]
+                if "total_mb" in sel:
+                    info["vram_total_mb"] = sel["total_mb"]
     except Exception as e:
         info["torch_error"] = str(e).splitlines()[0][:200]
     try:
@@ -148,12 +264,14 @@ def healthz() -> JSONResponse:
 def version(authorization: str | None = Header(default=None)) -> JSONResponse:
     _require_auth(authorization)
     info: dict[str, Any] = {"server": SERVER_VERSION}
+    info["selected_device"] = _device_label()
     try:
         import torch  # type: ignore
         info["torch"] = torch.__version__
         info["cuda_available"] = torch.cuda.is_available()
         if torch.cuda.is_available():
-            info["device_name"] = torch.cuda.get_device_name(0)
+            idx = _chosen_device if isinstance(_chosen_device, int) else 0
+            info["device_name"] = torch.cuda.get_device_name(idx)
     except Exception:
         pass
     try:
@@ -217,10 +335,9 @@ async def ocr(
             "conf": float(conf),
         })
 
-    import torch  # type: ignore
     return JSONResponse({
         "engine": "easyocr",
-        "device": "cuda" if torch.cuda.is_available() else "cpu",
+        "device": _device_label(),  # "cuda:N" / "cpu"
         "elapsed_s": round(elapsed, 3),
         "n_words": len(words),
         "words": words,

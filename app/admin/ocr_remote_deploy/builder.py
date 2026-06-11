@@ -509,6 +509,10 @@ Group=$SERVICE_USER
 WorkingDirectory=$INSTALL_DIR
 Environment=JT_OCR_TOKEN_FILE=$INSTALL_DIR/token
 Environment=JT_OCR_PORT=$SERVICE_PORT
+# Min free VRAM (MB) a GPU needs to be auto-selected on multi-GPU hosts.
+# The server picks the eligible GPU with the most free VRAM, else falls back
+# to CPU. Lower this if your cards are small; 0 disables the threshold.
+Environment=JT_OCR_MIN_FREE_MB=2048
 ExecStart=$INSTALL_DIR/.venv/bin/python $INSTALL_DIR/server.py
 Restart=on-failure
 RestartSec=5
