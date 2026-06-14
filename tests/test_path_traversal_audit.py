@@ -54,6 +54,12 @@ KNOWN_SAFE_FUNCTIONS: set[str] = {
     # under a uuid4 dir, the user `filename` is stripped via Path(...).name and
     # used solely in the Content-Disposition header (RFC 5987 safe).
     "api_scan_merge",
+    # pdf_watermark batch_create: the batch dir is `wm_batch_<uuid4().hex>` —
+    # server-generated, never from a request parameter. The form fields
+    # (params / page_mode / asset_id) don't flow into any fs path. The matching
+    # /batch/{batch_id}/add|process endpoints DO take a user batch_id and are
+    # guarded by `_batch_dir()` (_BATCH_RE 32-hex + upload_owner.require).
+    "batch_create",
 }
 
 

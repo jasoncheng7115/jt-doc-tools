@@ -191,3 +191,37 @@ class TestAdminAcl:
         r = c.post("/admin/sso/save", json={"oidc": {"enabled": True}},
                    follow_redirects=False)
         assert r.status_code == 403
+
+
+class TestAccountIsolation:
+    """Classic SSO pitfall: an IdP identity must NOT take over a same-named
+    local account or inherit its privileges."""
+
+    def test_sso_user_does_not_shadow_or_inherit_local_admin(self, admin_session):
+        from app.core import user_manager, permissions, sso_provision as p, auth_db
+        # A privileged LOCAL user named 'vip'
+        local_uid = user_manager.create_local("vip", "VIP", "LocalPass1234",
+                                               roles=["admin"])
+        assert permissions.is_admin(local_uid)
+        # An OIDC identity claiming the same username 'vip' (attacker-controlled)
+        u = p.provision("oidc", external_id="evil-sub", username="vip",
+                        display_name="Not VIP", groups=["randoms"])
+        # → a SEPARATE account, different id, source=oidc, NOT admin
+        assert u["user_id"] != local_uid
+        row = auth_db.conn().execute("SELECT source FROM users WHERE id=?",
+                                     (u["user_id"],)).fetchone()
+        assert row["source"] == "oidc"
+        assert not permissions.is_admin(u["user_id"])
+        # the local admin is untouched
+        assert permissions.is_admin(local_uid)
+
+    def test_disabled_sso_user_cannot_relogin(self, admin_session):
+        from app.core import sso_provision as p, auth_db
+        u = p.provision("oidc", external_id="sub-dis", username="dwight",
+                        display_name="D")
+        auth_db.conn().execute("UPDATE users SET enabled=0 WHERE id=?",
+                               (u["user_id"],))
+        auth_db.conn().commit()
+        with pytest.raises(p.SSOProvisionError):
+            p.provision("oidc", external_id="sub-dis", username="dwight",
+                        display_name="D")
