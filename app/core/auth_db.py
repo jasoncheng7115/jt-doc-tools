@@ -272,11 +272,16 @@ def _m8_sso_sources(conn: sqlite3.Connection) -> None:
     """v8: allow `source` = 'oidc' / 'saml' on users + groups (SSO, v1.12 起).
 
     SQLite can't alter a column-level CHECK in place, so rebuild both tables the
-    standard way (same approach as _m2). All current columns (incl. m6 totp +
-    m7 is_audit_seed) are preserved via INSERT ... SELECT. FK enforcement is off
-    during migrations, so group_members rows survive the table swap (proven by
-    _m2, which likewise dropped+recreated `users`)."""
+    standard way. All current columns (incl. m6 totp + m7 is_audit_seed) are
+    preserved via INSERT ... SELECT.
+
+    CRITICAL: `DROP TABLE users/groups` with foreign_keys=ON performs an implicit
+    DELETE that fires `group_members`' ON DELETE CASCADE — wiping every group
+    membership. We therefore disable foreign_keys for the rebuild (the migrate
+    connection is autocommit, so the PRAGMA takes effect) and re-enable after.
+    The SQLite-recommended 12-step table-rebuild does exactly this."""
     conn.executescript("""
+    PRAGMA foreign_keys=OFF;
     CREATE TABLE users_new (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
         username        TEXT NOT NULL,
@@ -321,6 +326,7 @@ def _m8_sso_sources(conn: sqlite3.Connection) -> None:
     SELECT id, name, source, external_dn, description, created_at FROM groups;
     DROP TABLE groups;
     ALTER TABLE groups_new RENAME TO groups;
+    PRAGMA foreign_keys=ON;
     """)
 
 

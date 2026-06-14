@@ -129,16 +129,21 @@ def exchange_code(cfg: dict[str, Any], *, code: str, redirect_uri: str) -> dict[
     return body
 
 
+_ALLOWED_ALGS = ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512",
+                 "PS256", "PS384", "PS512"]
+
+
 def verify_id_token(cfg: dict[str, Any], id_token: str, *, nonce: str | None) -> dict[str, Any]:
     import jwt
     doc = discover(cfg)
     try:
         jwk_client = jwt.PyJWKClient(doc["jwks_uri"])
         signing_key = jwk_client.get_signing_key_from_jwt(id_token)
-        header = jwt.get_unverified_header(id_token)
-        alg = header.get("alg", "RS256")
+        # Pin to asymmetric algorithms — NEVER trust the token's own `alg`
+        # header, which would let an attacker downgrade to HS256 and sign with
+        # the (public) JWKS key (alg-confusion attack).
         claims = jwt.decode(
-            id_token, signing_key.key, algorithms=[alg],
+            id_token, signing_key.key, algorithms=_ALLOWED_ALGS,
             audience=cfg["client_id"], issuer=doc["issuer"],
             options={"require": ["exp", "iat", "aud", "iss"]},
         )

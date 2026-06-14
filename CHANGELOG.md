@@ -4,6 +4,13 @@
 
 ---
 
+## [1.12.1] - 2026-06-14
+
+### 修正 — v1.12.0 SSO 自我審查發現的兩個問題
+
+- **（重要，資料安全）DB migration v8 會清空群組成員**：v8 為了讓 `users` / `groups` 的 `source` 支援 `oidc` / `saml` 而重建這兩張表，但 `DROP TABLE` 在 `foreign_keys=ON` 下會觸發 `group_members` 的 ON DELETE CASCADE → 既有 LDAP / AD / 本機群組的成員關係在升級到 1.12.0 時被清空（LDAP/AD 下次登入會自動補回，本機手動成員則永久遺失）。修法：v8 重建期間 `PRAGMA foreign_keys=OFF`（migrate 連線為 autocommit，pragma 生效），重建後再開回。新增 `tests/test_auth_db_migration_v8.py` 驗證升級後 users / groups / group_members 全數保留 + FK 完整。**已升級到 1.12.0 的站台**：本機群組成員若遺失，可從 `jtdt update` 自動產生的 `data.backup-*` 還原（id 在 migration 中保留，直接複製 `group_members` 即可）。
+- **（資安）OIDC id_token 驗證的 alg-confusion 防護**：原本用 token header 自帶的 `alg` 來驗簽，攻擊者可改成 HS256 並用公開的 JWKS 金鑰偽造簽章。改為固定只接受非對稱演算法白名單（RS/ES/PS 256/384/512），不信任 header 的 alg。
+
 ## [1.12.0] - 2026-06-14
 
 ### 新增 — SSO 單一登入（OIDC + SAML，與本機 / LDAP / AD 並存）
