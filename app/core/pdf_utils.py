@@ -139,8 +139,21 @@ def stamp_pdf(
                 x_mm + off_x, y_mm + off_y, draw_w, draw_h, page_h_mm
             )
             rect = fitz.Rect(x0, y0, x1, y1)
+            # Coordinates come from the editor, which positions the stamp in the
+            # page's DISPLAYED (rotated) coordinates. page.insert_image works in
+            # the UNROTATED page space and ignores /Rotate, so on a rotated page
+            # (e.g. an A4 portrait scanned with /Rotate 90 → shown landscape) the
+            # stamp would land in the wrong place + wrong orientation. Map the
+            # rect back through the derotation matrix and counter-rotate the image
+            # so it ends up exactly where the user placed it, upright. For an
+            # unrotated page the matrix is identity and rotate=0 → no change.
+            # (GitHub #28: edit mode vs composite/export mismatch on rotated PDFs.)
+            page_rot = page.rotation or 0
+            if page_rot:
+                rect = rect * page.derotation_matrix
             img_xref = page.insert_image(
-                rect, stream=stamp_bytes, overlay=True, keep_proportion=False
+                rect, stream=stamp_bytes, overlay=True, keep_proportion=False,
+                rotate=page_rot,
             )
             if blend_multiply and isinstance(img_xref, int) and img_xref > 0:
                 _apply_multiply_blend(doc, page, img_xref)

@@ -393,4 +393,11 @@ def _draw(
 ) -> None:
     x0, y0, x1, y1 = rect_mm_to_pt_topleft(x_mm, y_mm, w_mm, h_mm, page_h_mm)
     rect = fitz.Rect(x0, y0, x1, y1)
-    page.insert_image(rect, stream=img, overlay=True, keep_proportion=False)
+    # Honour page /Rotate: coords are in the displayed (rotated) space but
+    # insert_image works in unrotated page space — map back + counter-rotate so
+    # the watermark lands correctly on rotated pages (same class as GitHub #28).
+    page_rot = page.rotation or 0
+    if page_rot:
+        rect = rect * page.derotation_matrix
+    page.insert_image(rect, stream=img, overlay=True, keep_proportion=False,
+                      rotate=page_rot)
