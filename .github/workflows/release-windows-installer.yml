@@ -12,9 +12,11 @@ name: Build Windows installer
 #   * push of a version tag (v*)        -> build + attach to the GitHub Release
 #   * manual run (workflow_dispatch)    -> build + upload as a workflow artifact
 #
-# Code signing is NOT wired up yet (unsigned-first strategy). When the
-# SignPath OSS application is approved, add a signing step after makensis
-# and before the upload -- see packaging/windows/INSTALLER.md.
+# Code signing: SignPath OSS (approved 2026-06). The signing step is GATED on
+# the SIGNPATH_ORG_ID repo secret being present — until you add the secrets it
+# is skipped and the (unsigned) installer is released as before. Once the three
+# secrets + matching SignPath slugs exist, the next tag is auto-signed.
+# Setup: packaging/windows/SIGNPATH-APPLICATION.md §3-4 (gitignored).
 
 on:
   push:
@@ -33,6 +35,15 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Secrets can't be used directly in `if:` — surface presence via env.
+    # Edit the *_SLUG values if your SignPath project/policy/artifact slugs
+    # differ. During the SignPath TEST-certificate phase set POLICY_SLUG to your
+    # test policy (e.g. test-signing); switch to the release policy for prod.
+    env:
+      HAS_SIGNPATH: ${{ secrets.SIGNPATH_ORG_ID }}
+      SIGNPATH_PROJECT_SLUG: jt-doc-tools
+      SIGNPATH_POLICY_SLUG: release-signing
+      SIGNPATH_ARTIFACT_SLUG: installer
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -74,25 +85,38 @@ jobs:
           path: packaging/windows/jt-doc-tools-${{ steps.ver.outputs.version }}-setup.exe
           if-no-files-found: error
 
-      # --- code signing (unsigned-first; enable once SignPath OSS is approved) ---
-      # Add repo secrets SIGNPATH_API_TOKEN + SIGNPATH_ORG_ID, then uncomment.
-      # Full setup steps: packaging/windows/SIGNPATH-APPLICATION.md
-      #   - name: Sign installer (SignPath)
-      #     if: github.ref_type == 'tag'
-      #     uses: signpath/github-action-submit-signing-request@v1
-      #     with:
-      #       api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-      #       organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
-      #       project-slug: jt-doc-tools
-      #       signing-policy-slug: release-signing
-      #       artifact-configuration-slug: installer
-      #       github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
-      #       wait-for-completion: true
-      #       output-artifact-directory: packaging/windows/signed
+      # --- code signing (SignPath OSS) — skipped automatically if no secret ---
+      - name: Sign installer (SignPath)
+        id: sign
+        if: ${{ github.ref_type == 'tag' && env.HAS_SIGNPATH != '' }}
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORG_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ env.SIGNPATH_ARTIFACT_SLUG }}
+          github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: packaging/windows/signed
+
+      - name: Select release file (signed if present, else unsigned)
+        id: pick
+        if: github.ref_type == 'tag'
+        run: |
+          UNSIGNED="packaging/windows/jt-doc-tools-${{ steps.ver.outputs.version }}-setup.exe"
+          SIGNED=$(ls packaging/windows/signed/*.exe 2>/dev/null | head -1)
+          if [ -n "$SIGNED" ] && [ -f "$SIGNED" ]; then
+            echo "Using SIGNED installer: $SIGNED"
+            echo "file=$SIGNED" >> "$GITHUB_OUTPUT"
+          else
+            echo "Using UNSIGNED installer (SignPath not configured yet)"
+            echo "file=$UNSIGNED" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Attach to GitHub Release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          files: packaging/windows/jt-doc-tools-${{ steps.ver.outputs.version }}-setup.exe
+          files: ${{ steps.pick.outputs.file }}
           fail_on_unmatched_files: true
