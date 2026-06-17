@@ -83,7 +83,11 @@ def _sync_user(provider: str, external_id: str, username: str,
         )
         uid = cur.lastrowid
     permissions.set_subject_roles("user", str(uid), ["default-user"])
-    logger.info("SSO provisioned new %s user id=%s username=%s", provider, uid, username)
+    from .log_safe import safe_log
+    # username comes from an IdP claim — sanitise (strip CR/LF) before logging
+    # to prevent log injection (CodeQL #115).
+    logger.info("SSO provisioned new %s user id=%s username=%s",
+                provider, uid, safe_log(username))
     return {"user_id": uid, "username": username,
             "display_name": display_name, "source": provider, "created": True}
 

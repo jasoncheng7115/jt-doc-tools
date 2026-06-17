@@ -4,6 +4,18 @@
 
 ---
 
+## [1.12.6] - 2026-06-16
+
+### 資安 — 相依套件 High CVE 升級 + SSO 程式 CodeQL 修補（第一輪）
+
+- **cryptography 47 → 49**（Dependabot High）：舊版 wheel 內含有漏洞的 OpenSSL。順手把它從 transitive 升為顯式直接依賴（SSO 的 Fernet / PyJWT RS256 / xmlsec 都用到）。
+- **python-multipart 0.0.27 → 0.0.32**（Dependabot High）：querystring 二次方時間解析 DoS，外加分號分隔符 / Content-Disposition RFC 2231 走私 / 負 Content-Length buffer 等修補。
+- **SSO Log Injection（CodeQL #115）**：`sso_provision` 記 log 的 IdP username 改走 `log_safe.safe_log` 去除 CR/LF。
+- **SSO 例外資訊外洩（CodeQL #114）**：SAML SP metadata 端點不再把例外文字回給前端，改記 log + 回泛用訊息。
+- 全套 905 passed（1 個 admin_audit.html 的 node JS 檢查為負載下偶發，單獨跑通過）。
+- **說明（評估後不改碼 / 屬預期，建議 GitHub dismiss）**：CodeQL #108/#109（admin OCR 測試端點 SSRF，僅管理員 + 內網目標 + 已有 scheme/host 白名單 + metadata 封鎖）、#92（einvoice 舊版相容 SHA-1，非資安控制）、#111/#112/#113（SSO 導向 IdP / 簽章 cookie，皆為 SSO 既定機制 + 已有 `_check_url` / `safe_next` / HMAC 控制）。Dependabot torch jit.script（Low，未使用 `torch.jit.script`）。
+- **待第二輪**：Starlette 0.52 → 1.x（含 Windows StaticFiles UNC SSRF/NTLM、form() DoS 兩個 High + BADHOST 等）—— 1.x 改 `TemplateResponse` 簽名牽動全站 81 處呼叫，屬獨立遷移工項，下一版處理。BADHOST 的實際繞過風險本站已於 v1.11.81 從程式面（scope path）擋掉。
+
 ## [1.12.5] - 2026-06-16
 
 ### 改善 — 浮水印即時預覽支援多頁切換

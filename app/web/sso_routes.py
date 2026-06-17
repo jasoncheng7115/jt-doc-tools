@@ -24,7 +24,10 @@ from fastapi.responses import RedirectResponse, Response
 from ..core import (audit_db, auth_settings, oidc, saml, sessions,
                     sso_provision, sso_settings)
 from ..core.url_safety import safe_next
+from ..logging_setup import get_logger
 from .auth_routes import _client_ip, _set_session_cookie
+
+logger = get_logger(__name__)
 
 _SSO_TX_COOKIE = "jtdt_sso_tx"
 _SSO_TX_TTL = 600  # seconds
@@ -219,7 +222,10 @@ def build_router(templates) -> APIRouter:
         try:
             xml = saml.sp_metadata(cfg, _public_base(request))
         except saml.SAMLError as e:
-            return Response(str(e), status_code=400)
+            # Log the detail; return a generic message (no exception text to the
+            # client — CodeQL #114 information exposure).
+            logger.warning("SAML SP metadata generation failed: %s", e)
+            return Response("SP metadata 產生失敗，請檢查 SAML 設定", status_code=400)
         return Response(xml, media_type="application/xml")
 
     return router
