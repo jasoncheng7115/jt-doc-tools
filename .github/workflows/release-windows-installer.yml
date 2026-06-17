@@ -36,13 +36,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     # Secrets can't be used directly in `if:` — surface presence via env.
-    # Edit the *_SLUG values if your SignPath project/policy/artifact slugs
-    # differ. During the SignPath TEST-certificate phase set POLICY_SLUG to your
-    # test policy (e.g. test-signing); switch to the release policy for prod.
+    # POLICY_SLUG = test-signing during the SignPath TEST-certificate phase;
+    # switch to release-signing once SignPath issues the PRODUCTION cert
+    # (release-signing shows INVALID in the console until then).
     env:
       HAS_SIGNPATH: ${{ secrets.SIGNPATH_ORG_ID }}
       SIGNPATH_PROJECT_SLUG: jt-doc-tools
-      SIGNPATH_POLICY_SLUG: release-signing
+      SIGNPATH_POLICY_SLUG: test-signing
       SIGNPATH_ARTIFACT_SLUG: installer
     steps:
       - name: Checkout
