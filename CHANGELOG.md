@@ -4,6 +4,13 @@
 
 ---
 
+## [1.12.8] - 2026-06-17
+
+### Windows 安裝程式 — 接上 SignPath 程式碼簽章（OSS 核准，測試憑證階段）
+
+- SignPath Foundation OSS 申請**已核准**。`release-windows-installer.yml` 的簽章步驟正式接上並 gated（`SIGNPATH_ORG_ID` secret 存在才簽，否則維持未簽 release，不會壞）；新增 `pick` 步驟自動附「簽好的 exe」或退回未簽版。slug 對齊 SignPath 後台：project `jt-doc-tools` / artifact `initial`（zip 包 PE）/ policy 現為 `test-signing`（正式憑證發放後改 `release-signing`）。
+- 本 tag (`v1.12.8`) 為第一個觸發 SignPath 簽章的 release —— 用**測試憑證**簽（SmartScreen 尚不信任，屬正常，旨在驗證整條 pipeline）。設定通過後 SignPath 會核發正式憑證，屆時重打 tag 即得 SmartScreen 認可的簽章安裝程式。
+
 ## [1.12.7] - 2026-06-17
 
 ### 資安 — Starlette 0.52 → 1.3.1 升級（清掉一整批 Dependabot 告警，含 2 個 High，第二輪）
