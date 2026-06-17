@@ -43,7 +43,7 @@ jobs:
       HAS_SIGNPATH: ${{ secrets.SIGNPATH_ORG_ID }}
       SIGNPATH_PROJECT_SLUG: jt-doc-tools
       SIGNPATH_POLICY_SLUG: test-signing
-      SIGNPATH_ARTIFACT_SLUG: installer
+      SIGNPATH_ARTIFACT_SLUG: initial
     steps:
       - name: Checkout
         uses: actions/checkout@v4
