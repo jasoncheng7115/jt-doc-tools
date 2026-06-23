@@ -30,7 +30,7 @@ dependencies = [
     "cryptography>=49.0.0,<50",
     "jinja2>=3.1.6,<4",
     "pydantic>=2.9.0,<3",
-    "pydantic-settings>=2.5.0,<3",
+    "pydantic-settings>=2.14.2,<3",
     "PyMuPDF>=1.26.0,<2",
     # pymupdf4llm — PyMuPDF 官方 RAG / Markdown 輸出套件,給 pdf-to-markdown 工具
     # 鎖在 0.3.x:1.27.x 要求 pymupdf==1.27.2.3 + onnxruntime(~100MB ML layout)太重,
