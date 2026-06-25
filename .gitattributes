@@ -1,8 +1,8 @@
-# 行尾正規化：Windows 批次檔 / PowerShell 一律 CRLF，避免無 git 的客戶
-# 走 tarball 下載時保留 LF，cmd.exe 執行 LF-only 批次檔會逐 token 噴錯。
+# 行尾正規化：Windows 批次檔一律 CRLF，避免無 git 的客戶走 tarball 下載時
+# 保留 LF，cmd.exe 執行 LF-only 批次檔會逐 token 噴錯（PowerShell 對 LF 無妨，
+# 故不強制 *.ps1，避免不必要的行尾正規化 churn）。
 *.cmd  text eol=crlf
 *.bat  text eol=crlf
-*.ps1  text eol=crlf
 
 # Unix 腳本一律 LF
 *.sh   text eol=lf

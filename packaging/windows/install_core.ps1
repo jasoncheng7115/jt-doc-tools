@@ -389,6 +389,18 @@ function Setup-Python {
     $env:UV_PYTHON_PREFERENCE = 'only-managed'
     $setupBat = Join-Path $InstallDir 'setup-python.cmd'
     if (-not (Test-Path $setupBat)) { Die "setup-python.cmd not found at $setupBat" 22 }
+    # 防 LF-only 行尾：無 git 的機器走 tarball 下載原始碼時保留 repo 的 LF 行尾，
+    # cmd.exe 執行 LF-only 批次檔會逐 token 噴「不是內部或外部命令」錯誤。執行前
+    # 一律強制正規化成 CRLF，無論來源是 git clone 或 tarball 都保證可跑。
+    try {
+        $rawCmd = [System.IO.File]::ReadAllText($setupBat)
+        $crlfCmd = ($rawCmd -replace "`r`n", "`n") -replace "`n", "`r`n"
+        if ($crlfCmd -ne $rawCmd) {
+            [System.IO.File]::WriteAllText($setupBat, $crlfCmd, (New-Object System.Text.UTF8Encoding($false)))
+        }
+    } catch {
+        Warn "Could not normalize setup-python.cmd line endings: $_"
+    }
     cmd /c "`"$setupBat`" `"$InstallDir`" 2>&1" | ForEach-Object { Write-Output $_ }
     switch ($LASTEXITCODE) {
         0 { Ok "Python environment ready: $InstallDir\.venv" }
