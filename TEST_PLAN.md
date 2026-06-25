@@ -730,4 +730,5 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 - [ ] **企業 TLS 檢查環境 uv 可安裝**：MITM proxy 換憑證的網路，install / `jtdt update` 預設用 OS 信任庫（`UV_SYSTEM_CERTS`/`UV_NATIVE_TLS`）；必要時 `JTDT_TLS_INSECURE=1`
 - [ ] **插入頁碼縮圖放大可正常顯示**（GitHub issue #32）：點縮圖放大不再黑遮罩 / file not found
 - [ ] **中文頁碼輸出 PDF**：「第 1 / 20 頁」等格式中文不缺字（非「·」）
+- [ ] **PDF 編輯器螢光筆可改色**（GitHub issue #35）：選螢光筆 → 屬性面板改顏色 → 畫布即時變色（半透明）→ 存檔輸出該色
 

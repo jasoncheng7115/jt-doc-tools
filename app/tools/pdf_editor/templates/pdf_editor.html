@@ -2128,7 +2128,14 @@ function wirePropsPanel(active) {
   const pfFill = $('pfFill');
   const pfFillOn = $('pfFillOn');
   if (pfFill) pfFill.addEventListener('input', (e) => {
-    if (pfFillOn?.checked) active.set('fill', e.target.value); rerender();
+    if (active._peType === 'highlight') {
+      // 螢光筆面板沒有「填色」開關（pfFillOn 不存在），且要保留半透明
+      // （PDF 螢光筆透光，不是不透明色塊）→ 一律套用所選色 + 0.45 alpha。
+      active.set('fill', hexToRgba(e.target.value, 0.45));
+    } else if (pfFillOn?.checked) {
+      active.set('fill', e.target.value);
+    }
+    rerender();
   });
   if (pfFillOn) pfFillOn.addEventListener('change', (e) => {
     active.set('fill', e.target.checked ? (pfFill.value || '#ffffff') : ''); rerender();
@@ -3384,6 +3391,11 @@ function colorToHex(c, fallback) {
   const m = c.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
   if (!m) return fallback;
   return '#' + [m[1],m[2],m[3]].map(n => Number(n).toString(16).padStart(2,'0')).join('');
+}
+function hexToRgba(hex, alpha) {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
+  if (!m) return hex;
+  return `rgba(${parseInt(m[1],16)}, ${parseInt(m[2],16)}, ${parseInt(m[3],16)}, ${alpha})`;
 }
 function escapeHTML(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
