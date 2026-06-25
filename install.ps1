@@ -519,6 +519,21 @@ function Setup-Python {
     if (-not (Test-Path $setupBat)) {
         Die "setup-python.cmd not found at $setupBat (run install.sh / install.ps1 again to fetch latest source)"
     }
+    # 防 LF-only 行尾：客戶機器若無 git（winget 來源壞掉等），安裝程式會走
+    # tarball 下載原始碼，tarball 保留 repo 的 LF 行尾。cmd.exe 執行 LF-only
+    # 批次檔會逐 token 噴「不是內部或外部命令」錯誤（setup-python.cmd 跑不起來，
+    # Python 環境裝不成）。git clone 路徑因 autocrlf 會轉成 CRLF 所以正常 —
+    # 這裡執行前一律強制正規化成 CRLF，無論來源是 git clone 或 tarball 都保證可跑。
+    try {
+        $rawCmd = [System.IO.File]::ReadAllText($setupBat)
+        $crlfCmd = ($rawCmd -replace "`r`n", "`n") -replace "`n", "`r`n"
+        if ($crlfCmd -ne $rawCmd) {
+            [System.IO.File]::WriteAllText($setupBat, $crlfCmd, (New-Object System.Text.UTF8Encoding($false)))
+            Write-Output "[debug] normalized setup-python.cmd line endings to CRLF (tarball-mode safe)"
+        }
+    } catch {
+        Warn "Could not normalize setup-python.cmd line endings: $_"
+    }
     cmd /c "`"$setupBat`" `"$myInstallDir`" 2>&1" | ForEach-Object { Write-Output $_ }
     $rc = $LASTEXITCODE
     if ($rc -ne 0) {

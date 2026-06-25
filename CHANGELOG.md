@@ -4,6 +4,20 @@
 
 ---
 
+## [1.12.10] - 2026-06-25
+
+### 修正 — Windows 一行安裝在無 git 環境（走 tarball 下載）失敗
+
+- **症狀**：客戶以 PowerShell 一行指令安裝時，進度跑到「Setting up isolated Python environment」後噴出一連串 `'yedexpansion'`、`'cript'`、`'rocess'`、`'p-python.cmd'`… 「不是內部或外部命令」錯誤，Python 環境裝不起來、安裝中止。
+- **根因**：`setup-python.cmd` 以 LF（Unix）行尾提交。有 git 的機器 `git clone` 會被 autocrlf 自動轉成 CRLF 所以一切正常；但客戶機器因 winget 套件來源毀損導致 git 裝不起來，安裝程式改走 **tarball 下載原始碼**，tarball 保留 repo 的 LF 行尾，cmd.exe 執行 LF-only 批次檔會逐 token 誤切而報錯（`'yedexpansion'` 即來自 `setlocal enabledelayedexpansion` 那行）。
+- **修法（三層防護）**：
+  - `install.ps1` 在執行 `setup-python.cmd` 前一律先把它正規化成 CRLF，無論來源是 git clone 或 tarball 都保證可正確執行（已在 Windows 11 實機完整重現原錯誤並驗證修復後輸出乾淨）。
+  - `setup-python.cmd` 改以 CRLF 行尾提交。
+  - 新增 `.gitattributes` 強制 `*.cmd` / `*.bat` / `*.ps1` 使用 CRLF、`*.sh` 使用 LF，從源頭避免再發生。
+- **附帶說明**：客戶機器 winget 來源毀損（`Failed when opening source(s)`）導致 tesseract / git 自動安裝失敗，屬該機器環境問題；git 缺席只影響日後 `jtdt update`，不影響本次安裝完成。
+
+---
+
 ## [1.12.9] - 2026-06-19
 
 ### 安全性 — CodeQL / Dependabot 告警一輪
