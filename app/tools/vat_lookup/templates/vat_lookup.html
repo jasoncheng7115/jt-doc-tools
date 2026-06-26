@@ -230,6 +230,11 @@ mark.vl-hl {
 }
 .vl-stat-row:last-child { margin-bottom: 0; }
 .vl-stat-row:hover { background: #f1f5f9; }
+.vl-stats-head {
+  grid-column: 1 / -1; font-size: 13px; font-weight: 600; color: #334155;
+  margin-bottom: -4px;
+}
+.vl-stats-head .vl-stats-head-note { font-weight: 400; color: #94a3b8; font-size: 12px; }
 .vl-stats-hint {
   grid-column: 1 / -1; font-size: 12px; color: #64748b;
   display: flex; align-items: center; gap: 6px; margin-top: -2px;
@@ -483,7 +488,7 @@ function _statCard(title, type, items, total) {
       <span class="vl-stat-n">${i.count.toLocaleString('en-US')}</span>
     </div>`;
   }).join('');
-  const totalNote = total ? `共 ${total.toLocaleString('en-US')}${total > 5000 ? '（取樣前 5000）' : ''}` : '';
+  const totalNote = total ? `共 ${total.toLocaleString('en-US')}` : '';
   return `<div class="vl-stat-card"><h4>${title}<span class="vl-stat-total">${totalNote}</span></h4>${rows}</div>`;
 }
 
@@ -494,7 +499,11 @@ function renderStats(s) {
     + _statCard('縣市統計', 'city', s.city, s.total)
     + _statCard('組織統計', 'org_type', s.org, s.total);
   if (!html) { _hideStats(); return; }
-  box.innerHTML = html
+  const topN = s.top_n || 8;
+  const sampleNote = (s.total > (s.sampled || 0) && s.sampled)
+    ? `<span class="vl-stats-head-note">　·　依前 ${(s.sampled).toLocaleString('en-US')} 筆命中計算分布</span>` : '';
+  const head = `<div class="vl-stats-head">搜尋結果分布 — 各類取前 ${topN} 名${sampleNote}</div>`;
+  box.innerHTML = head + html
     + `<div class="vl-stats-hint">點任一項統計可加入篩選（可疊加多個條件；點已選的可取消）</div>`;
   box.hidden = false;
 }

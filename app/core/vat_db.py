@@ -751,6 +751,8 @@ def search_companies(query: str, fields=None, limit: int = 50,
 
 # 統計取樣上限：廣詞匹配可能上百萬列，取前 N 筆算分布，避免拉爆記憶體 / 變慢。
 _STATS_SAMPLE = 5000
+# 每張統計圖顯示前幾名（回傳給前端，標籤才不會跟實際值對不上）
+_STATS_TOPN = 8
 
 
 def _city_of(address: str) -> str:
@@ -801,8 +803,8 @@ def search_stats(query: str, fields=None, categories=None,
                 one = one.strip()
                 if one:
                     ind_c[one] += 1
-        topn = lambda c: [{"value": k, "count": n} for k, n in c.most_common(8)]
-        return {"total": total, "sampled": len(rows),
+        topn = lambda c: [{"value": k, "count": n} for k, n in c.most_common(_STATS_TOPN)]
+        return {"total": total, "sampled": len(rows), "top_n": _STATS_TOPN,
                 "industry": topn(ind_c), "city": topn(city_c), "org": topn(org_c)}
     finally:
         conn.close()
