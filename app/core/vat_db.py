@@ -795,7 +795,9 @@ def search_stats(query: str, fields=None, categories=None,
         for addr, org, inds in rows:
             city_c[_city_of(addr)] += 1
             org_c[(org or "").strip() or "其他"] += 1
-            for one in re.split(r"[／/、,，]", inds or ""):
+            # 行業多值只用「/」分隔；逗號 / 括號是單一行業名稱內的字元，不可切
+            # （政府資料如「加盟連鎖式便利商店（有商品進銷貨行為）」含全形逗號）。
+            for one in re.split(r"\s*[／/]\s*", inds or ""):
                 one = one.strip()
                 if one:
                     ind_c[one] += 1
