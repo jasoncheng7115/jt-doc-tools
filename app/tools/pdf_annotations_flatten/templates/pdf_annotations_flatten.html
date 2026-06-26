@@ -173,7 +173,7 @@ function _setBusy(btn, busy, busyLabel) {
 $("btnFlatten").addEventListener("click", async () => {
   if (!lastFile) return;
   if (lastResult && lastResult.total > 0) {
-    if (!confirm(`即將把 ${lastResult.total} 條註解寫入頁面內容流，操作不可逆，要繼續？`)) return;
+    if (!(await window.showConfirm(`即將把 ${lastResult.total} 條註解寫入頁面內容流，操作不可逆，要繼續？`, { title: '平面化註解', kind: 'danger', okText: '繼續' }))) return;
   }
   const btn = $("btnFlatten");
   _setBusy(btn, true, "處理中…");

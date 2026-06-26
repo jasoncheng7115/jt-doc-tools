@@ -367,9 +367,9 @@ document.getElementById('btn-rotate-all-r').addEventListener('click', () => {
   render();
 });
 
-document.getElementById('btn-clear').addEventListener('click', () => {
+document.getElementById('btn-clear').addEventListener('click', async () => {
   if (!pages.length) return;
-  if (!confirm('確定要清除所有圖片嗎？')) return;
+  if (!(await window.showConfirm('確定要清除所有圖片嗎？', { title: '清除圖片', kind: 'danger', okText: '清除' }))) return;
   // Best-effort server cleanup
   pages.filter(p => !p.uploading).forEach(p =>
     fetch('/tools/image-to-pdf/delete/' + p.file_id, {method: 'POST'}).catch(() => {}));

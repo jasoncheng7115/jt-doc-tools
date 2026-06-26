@@ -51,7 +51,7 @@ document.addEventListener('click', async (e) => {
   const tr = btn.closest('tr');
   const tid = tr.dataset.tid;
   if (btn.dataset.act === 'delete') {
-    if (!confirm('確定刪除這個範本？')) return;
+    if (!(await window.showConfirm('確定刪除這個範本？', { title: '刪除範本', kind: 'danger', okText: '刪除' }))) return;
     const r = await fetch(`/admin/templates/${tid}/delete`, { method: 'POST' });
     if (r.ok) tr.remove();
     else alert('刪除失敗');

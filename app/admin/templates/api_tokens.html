@@ -172,7 +172,7 @@ document.addEventListener('click', async (e) => {
     } catch (err) { alert('複製失敗：' + err.message); }
   }
   if (e.target.closest('.btn-revoke')) {
-    if (!confirm('確定要撤銷這個 token？\n之後任何用它的 script 都會 401。')) return;
+    if (!(await window.showConfirm('確定要撤銷這個 token？\n之後任何用它的 script 都會 401。', { title: '撤銷 Token', kind: 'danger', okText: '撤銷' }))) return;
     const r = await fetch('/admin/api/tokens/revoke', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},

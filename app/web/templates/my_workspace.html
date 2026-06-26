@@ -221,7 +221,7 @@ document.getElementById('ws-select-all').addEventListener('change', (e) => {
 document.getElementById('ws-del-selected').addEventListener('click', async () => {
   const sel = _wsSelected();
   if (!sel.length) return;
-  if (!confirm(`確定刪除選取的 ${sel.length} 個檔案？此動作無法復原。`)) return;
+  if (!(await window.showConfirm(`確定刪除選取的 ${sel.length} 個檔案？此動作無法復原。`, { title: '批次刪除', kind: 'danger', okText: '刪除' }))) return;
   for (const id of sel) {
     const fd = new FormData(); fd.append('file_id', id);
     await fetch('/workspace/delete', { method: 'POST', body: fd });
@@ -237,14 +237,14 @@ document.getElementById('ws-grid').addEventListener('click', async (e) => {
   const id = card.dataset.id;
   const act = btn.dataset.act;
   if (act === 'delete') {
-    if (!confirm('確定刪除這個檔案？此動作無法復原。')) return;
+    if (!(await window.showConfirm('確定刪除這個檔案？此動作無法復原。', { title: '刪除檔案', kind: 'danger', okText: '刪除' }))) return;
     const fd = new FormData(); fd.append('file_id', id);
     const r = await fetch('/workspace/delete', { method: 'POST', body: fd });
     if (!r.ok) return alert(await window.friendlyServerError(r, '刪除失敗'));
     wsLoad();
   } else if (act === 'rename') {
     const cur = card.querySelector('.ws-name').textContent;
-    const name = prompt('新檔名：', cur);
+    const name = await window.showPrompt('新檔名：', { title: '重新命名', defaultValue: cur });
     if (name == null || !name.trim()) return;
     const fd = new FormData(); fd.append('file_id', id); fd.append('name', name.trim());
     const r = await fetch('/workspace/rename', { method: 'POST', body: fd });

@@ -114,7 +114,7 @@ if (vb) vb.addEventListener('click', async () => {
 
 const db = $('btnDisable');
 if (db) db.addEventListener('click', async () => {
-  if (!confirm('確定要停用 TOTP 嗎？您的帳號將回到只用密碼登入。')) return;
+  if (!(await window.showConfirm('確定要停用 TOTP 嗎？您的帳號將回到只用密碼登入。', { title: '停用 2FA', kind: 'danger', okText: '停用' }))) return;
   db.disabled = true;
   try {
     const r = await fetch('/me/2fa/disable', {method: 'POST'});

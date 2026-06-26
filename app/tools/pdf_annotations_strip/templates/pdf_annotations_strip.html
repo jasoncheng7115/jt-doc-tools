@@ -312,7 +312,7 @@ $("btnStrip").addEventListener("click", async () => {
     return;
   }
   if (mode === "all" && lastResult.total > 0) {
-    if (!confirm(`即將刪除全部 ${lastResult.total} 條註解，要繼續？`)) return;
+    if (!(await window.showConfirm(`即將刪除全部 ${lastResult.total} 條註解，要繼續？`, { title: '清除註解', kind: 'danger', okText: '清除' }))) return;
   }
   const fd = new FormData();
   fd.append("upload_id", lastResult.upload_id);

@@ -93,7 +93,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
 
 document.querySelectorAll('.ws-clear-user').forEach(btn => {
   btn.addEventListener('click', async () => {
-    if (!confirm(`確定清空「${btn.dataset.label}」的工作區？此動作無法復原。`)) return;
+    if (!(await window.showConfirm(`確定清空「${btn.dataset.label}」的工作區？此動作無法復原。`, { title: '清空工作區', kind: 'danger', okText: '清空' }))) return;
     const fd = new FormData(); fd.append('user_key', btn.dataset.key);
     const r = await fetch('/admin/workspace/clear-user', { method: 'POST', body: fd });
     if (r.ok) { const j = await r.json(); showToast(`已清空 ${j.removed} 個檔案`, 'ok'); setTimeout(() => location.reload(), 800); }

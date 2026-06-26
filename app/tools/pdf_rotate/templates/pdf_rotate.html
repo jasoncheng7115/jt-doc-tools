@@ -405,7 +405,7 @@ async function buildSubmitForm() {
 $('btn-pdf').addEventListener('click', async () => {
   if (!uploadId) return;
   if (pageMode.size === 0) {
-    if (!confirm('沒有任何頁設定轉向，仍要下載 PDF 嗎？')) return;
+    if (!(await window.showConfirm('沒有任何頁設定轉向，仍要下載 PDF 嗎？', { title: '確認下載', okText: '仍要下載' }))) return;
   }
   const btn = $('btn-pdf');
   const orig = btn.innerHTML;
