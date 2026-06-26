@@ -4,6 +4,13 @@
 
 ---
 
+## [1.12.25] - 2026-06-26
+
+### 資安 — 統編查詢 SQL 改全常數字串（根治 CodeQL 4 個 High 誤判）
+
+- v1.12.24 把下鑽 / 欄位片段改靜態查表，但 CodeQL 仍判 query「built from user-controlled sources」（字典用使用者 key 查、`% len(cats)` 拼 IN、變數 `+` 進 query）。本版**把 4 個查詢的 SQL 字串做成完全常數**：類別篩選改 `category IN (SELECT value FROM json_each(?))`、組織/縣市/行業改 `(? IS NULL OR ...)` NULL-guard、欄位開關改每欄 on/off 旗標 —— 整條 SQL 不含任何使用者輸入拼接，篩選一律走參數。CodeQL 應完全消除這 4 個告警，行為不變（28 項 vat 測試 + 邊界組合驗證）。
+- 註：本就無實際 SQL injection（值一直是參數化），此為消除靜態分析告警 + defense-in-depth。
+
 ## [1.12.24] - 2026-06-26
 
 ### 變更 — Windows 安裝程式標題改中文

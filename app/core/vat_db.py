@@ -201,18 +201,8 @@ def _fts_tokenize(s: str) -> str:
     return re.sub(r"\s+", " ", "".join(parts)).strip()
 
 
-# 可搜尋欄位（對應 FTS 欄名 + vat_registry 欄名）；UI 5 個開關。
+# 可搜尋欄位（對應 FTS 欄名 + vat_registry 欄名）；UI 5 個開關。固定順序。
 _FTS_FIELDS = ("name", "address", "owner", "org_type", "industries")
-
-# LIKE fallback 用的靜態 SQL 片段查表（欄名常數，避免 f-string 拼欄名觸發
-# CodeQL「SQL from user input」誤判 + defense-in-depth）。
-_FIELD_LIKE = {
-    "name":       "name LIKE ? ESCAPE '\\'",
-    "address":    "address LIKE ? ESCAPE '\\'",
-    "owner":      "owner LIKE ? ESCAPE '\\'",
-    "org_type":   "org_type LIKE ? ESCAPE '\\'",
-    "industries": "industries LIKE ? ESCAPE '\\'",
-}
 
 
 def _fts_match_query(q: str, fields=None) -> str:
@@ -683,38 +673,55 @@ def _esc_like(s: str) -> str:
     return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-# 下鑽 SQL 片段用「靜態常數查表」而非 f-string 拼欄名 —— 欄名永遠是常數，
-# 使用者值只走 ? 參數；既是 defense-in-depth，也避免 CodeQL 把「f-string 拼 SQL」
-# 誤判成 user-controlled SQL（city 一律用 2 個前綴比對台/臺，不足時填重複值）。
-_DRILL_SQL = {
-    "v": {
-        "org":  "v.org_type = ?",
-        "city": "(v.address LIKE ? ESCAPE '\\' OR v.address LIKE ? ESCAPE '\\')",
-        "ind":  "v.industries LIKE ? ESCAPE '\\'",
-    },
-    "": {
-        "org":  "org_type = ?",
-        "city": "(address LIKE ? ESCAPE '\\' OR address LIKE ? ESCAPE '\\')",
-        "ind":  "industries LIKE ? ESCAPE '\\'",
-    },
-}
+# ── 篩選 SQL 全做成「常數字串 + NULL-guard 參數」── 整條 query 不含任何使用者
+# 輸入拼接（類別走 json_each、組織/縣市/行業走 `? IS NULL OR ...` 旗標），從根本
+# 消除 CodeQL「SQL query built from user-controlled sources」誤判 + 強參數化。
+# 參數順序（見 _filter_params）：cat_on(0/1), cat_json, org, org,
+#   city, city_pat1, city_pat2, ind, ind_pat
+_FILTER_WHERE_V = (   # 給 FTS JOIN（欄位帶 v. 別名）
+    " AND (? = 0 OR v.category IN (SELECT value FROM json_each(?)))"
+    " AND (? IS NULL OR v.org_type = ?)"
+    " AND (? IS NULL OR v.address LIKE ? ESCAPE '\\' OR v.address LIKE ? ESCAPE '\\')"
+    " AND (? IS NULL OR v.industries LIKE ? ESCAPE '\\')"
+)
+_FILTER_WHERE = (     # 給 LIKE 直查（無別名）
+    " AND (? = 0 OR category IN (SELECT value FROM json_each(?)))"
+    " AND (? IS NULL OR org_type = ?)"
+    " AND (? IS NULL OR address LIKE ? ESCAPE '\\' OR address LIKE ? ESCAPE '\\')"
+    " AND (? IS NULL OR industries LIKE ? ESCAPE '\\')"
+)
+# LIKE fallback「搜哪些欄位」：常數 SQL + 每欄 on/off 旗標參數（不動態拼欄名）。
+_LIKE_FIELDS_WHERE = (
+    "("
+    "(? = 1 AND name LIKE ? ESCAPE '\\') OR "
+    "(? = 1 AND address LIKE ? ESCAPE '\\') OR "
+    "(? = 1 AND owner LIKE ? ESCAPE '\\') OR "
+    "(? = 1 AND org_type LIKE ? ESCAPE '\\') OR "
+    "(? = 1 AND industries LIKE ? ESCAPE '\\')"
+    ")"
+)
 
 
-def _drill_where(alias: str, org_type=None, city=None, industry=None):
-    """下鑽篩選（點搜尋結果統計圖用）：組織別 / 縣市（地址前綴）/ 行業。
-    回 (sql_clause, params)。alias='v'（FTS JOIN）或 ''（LIKE 直查）。"""
-    sql = _DRILL_SQL["v"] if alias == "v" else _DRILL_SQL[""]
-    clauses, params = [], []
-    if org_type:
-        clauses.append(sql["org"]); params.append(org_type)
-    if city:
-        # 統計把地址縣市正規化成「台」，但原始地址多用「臺」(政府資料)，台/臺
-        # 兩種前綴都比對（否則點「台北市」查不到「臺北市…」）。固定 2 個參數。
-        base = _esc_like(city)
-        clauses.append(sql["city"]); params.extend([base + "%", base.replace("台", "臺") + "%"])
-    if industry:
-        clauses.append(sql["ind"]); params.append("%" + _esc_like(industry) + "%")
-    return ("".join(" AND " + c for c in clauses), params)
+def _filter_params(cats, org_type, city, industry) -> list:
+    """對應 _FILTER_WHERE(_V) 的參數列。cats 是已驗證的 list（可空）。
+    縣市台/臺兩前綴都比對（統計正規化成台，原始地址多為臺）。"""
+    cb = _esc_like(city) if city else None
+    return [
+        1 if cats else 0, json.dumps(cats or []),
+        org_type, org_type,
+        city, (cb + "%") if cb is not None else None,
+        (cb.replace("台", "臺") + "%") if cb is not None else None,
+        industry, ("%" + _esc_like(industry) + "%") if industry else None,
+    ]
+
+
+def _like_fields_params(sel, pattern) -> list:
+    """對應 _LIKE_FIELDS_WHERE：依固定欄位順序給 (on_flag, pattern)。"""
+    out: list = []
+    for f in _FTS_FIELDS:
+        out.append(1 if f in sel else 0)
+        out.append(pattern)
+    return out
 
 
 def search_companies(query: str, fields=None, limit: int = 50,
@@ -752,39 +759,29 @@ def search_companies(query: str, fields=None, limit: int = 50,
         # ── FTS5 路徑（多欄、可欄位限定）──
         match = _fts_match_query(q, fields)
         if match and _fts_ready(conn):
-            params: list = [match]
-            extra = ""
-            if cats:
-                extra += " AND v.category IN (%s)" % ",".join("?" * len(cats)); params.extend(cats)
-            dc, dp = _drill_where("v", org_type, city, industry); extra += dc; params.extend(dp)
-            params.append(limit)
             # 不在 SQL ORDER BY（廣詞匹配大量列排序很慢）；LIMIT 短路取前 N，
-            # 取回該頁後 Python 依名稱排序。
+            # 取回該頁後 Python 依名稱排序。query 字串全常數，篩選走參數。
+            params = [match] + _filter_params(cats, org_type, city, industry) + [limit]
             rows = conn.execute(
                 "SELECT v.vat, v.name, v.address, v.owner, v.org_type, v.status, "
                 "v.category, v.industries "
                 "FROM vat_fts JOIN vat_registry v ON v.vat = vat_fts.vat "
-                "WHERE vat_fts MATCH ?" + extra + " LIMIT ?",
+                "WHERE vat_fts MATCH ?" + _FILTER_WHERE_V + " LIMIT ?",
                 params,
             ).fetchall()
             return sorted((_to_dict(r) for r in rows), key=lambda d: d["name"] or "")
 
-        # ── LIKE fallback：搜選定欄位（欄名來自 whitelist，無注入）──
+        # ── LIKE fallback：搜選定欄位（每欄 on/off 旗標，query 字串全常數）──
         pattern = f"%{_esc_like(q)}%"
         sel = [f for f in (fields or _FTS_FIELDS) if f in _FTS_FIELDS]
         if not sel:
             sel = list(_FTS_FIELDS)
-        # 用靜態常數片段查表（_FIELD_LIKE）而非 f-string 拼欄名 — CodeQL clean +
-        # defense-in-depth（欄名永遠常數，值走 ? 參數）。
-        field_where = "(" + " OR ".join(_FIELD_LIKE[f] for f in sel) + ")"
-        params = [pattern] * len(sel)
-        if cats:
-            field_where += " AND category IN (%s)" % ",".join("?" * len(cats)); params.extend(cats)
-        dc, dp = _drill_where("", org_type, city, industry); params.extend(dp)
-        params.append(limit)
+        params = (_like_fields_params(sel, pattern)
+                  + _filter_params(cats, org_type, city, industry) + [limit])
         rows = conn.execute(
             "SELECT vat, name, address, owner, org_type, status, category, industries "
-            f"FROM vat_registry WHERE {field_where}{dc} ORDER BY name LIMIT ?",
+            "FROM vat_registry WHERE " + _LIKE_FIELDS_WHERE + _FILTER_WHERE
+            + " ORDER BY name LIMIT ?",
             params,
         ).fetchall()
         return [_to_dict(r) for r in rows]
@@ -822,19 +819,15 @@ def search_stats(query: str, fields=None, categories=None,
         if not (match and _fts_ready(conn)):
             return {"total": 0, "sampled": 0, "industry": [], "city": [],
                     "org": [], "unavailable": True}
-        params: list = [match]
-        extra = ""
-        if cats:
-            extra += " AND v.category IN (%s)" % ",".join("?" * len(cats)); params.extend(cats)
-        dc, dp = _drill_where("v", org_type, city, industry); extra += dc; params.extend(dp)
+        params = [match] + _filter_params(cats, org_type, city, industry)
         total = conn.execute(
             "SELECT count(*) FROM vat_fts JOIN vat_registry v ON v.vat=vat_fts.vat "
-            "WHERE vat_fts MATCH ?" + extra, params).fetchone()[0]
-        params2 = list(params) + [_STATS_SAMPLE]
+            "WHERE vat_fts MATCH ?" + _FILTER_WHERE_V, params).fetchone()[0]
         rows = conn.execute(
             "SELECT v.address, v.org_type, v.industries "
             "FROM vat_fts JOIN vat_registry v ON v.vat=vat_fts.vat "
-            "WHERE vat_fts MATCH ?" + extra + " LIMIT ?", params2).fetchall()
+            "WHERE vat_fts MATCH ?" + _FILTER_WHERE_V + " LIMIT ?",
+            params + [_STATS_SAMPLE]).fetchall()
         from collections import Counter
         ind_c, city_c, org_c = Counter(), Counter(), Counter()
         for addr, org, inds in rows:
