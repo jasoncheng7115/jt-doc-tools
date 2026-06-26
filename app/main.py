@@ -21,8 +21,9 @@ logger = get_logger(__name__)
 
 app = FastAPI(title=settings.app_name, version=VERSION)
 
-# CSRF 防護（pure-ASGI，最外層）— double-submit token，疊在 SameSite=Lax 之上。
-# 最後 add_middleware 者最外層：最先驗證不安全方法、最後設 jtdt_csrf cookie。
+# CSRF 防護（pure-ASGI）— double-submit token，疊在 SameSite=Lax 之上。
+# 加在 @app.middleware 之前 → 位於 auth gate 內層：公開端點（login / setup）
+# 仍會被 CSRF 驗證，已認證動作在 auth 通過後驗證；bearer API / SSO 回呼豁免。
 from app.core.csrf import CSRFMiddleware  # noqa: E402
 app.add_middleware(CSRFMiddleware)
 
