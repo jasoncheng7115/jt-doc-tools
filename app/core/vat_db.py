@@ -190,14 +190,27 @@ def _fts_tokenize(s: str) -> str:
     return re.sub(r"\s+", " ", "".join(parts)).strip()
 
 
-def _fts_match_query(q: str) -> str:
+# 可搜尋欄位（對應 FTS 欄名 + vat_registry 欄名）；UI 5 個開關。
+_FTS_FIELDS = ("name", "address", "owner", "org_type", "industries")
+
+
+def _fts_match_query(q: str, fields=None) -> str:
     """使用者輸入 → FTS5 MATCH 字串。空格分多關鍵字 → 各自逐字 phrase →
-    以空格（FTS5 預設 AND）串接，代表「都要符合」。"""
+    以空格（FTS5 預設 AND）串接，代表「都要符合」。
+
+    fields：要搜尋的欄位 list（_FTS_FIELDS 子集）。None 或含全部 → 不限欄
+    （搜所有欄）；子集 → 用 FTS5 欄位限定 `{name address}:"..."`。"""
+    sel = [f for f in (fields or _FTS_FIELDS) if f in _FTS_FIELDS]
+    if not sel:
+        sel = list(_FTS_FIELDS)
+    prefix = ""
+    if set(sel) != set(_FTS_FIELDS):
+        prefix = "{" + " ".join(sel) + "}:"
     phrases = []
     for kw in (q or "").split():
         tok = _fts_tokenize(kw).replace('"', "")
         if tok:
-            phrases.append('"' + tok + '"')
+            phrases.append(prefix + '"' + tok + '"')
     return " ".join(phrases)
 
 
@@ -211,12 +224,22 @@ def _fts5_available(conn: sqlite3.Connection) -> bool:
         return False
 
 
+# FTS schema 版本：1 = 舊單欄 doc；2 = 多欄（name/address/owner/org_type/
+# industries，支援欄位限定搜尋）。改 schema 一定要 bump，舊站台升版時 _fts_ready
+# 會因版本不符而視同未就緒 → 走 LIKE fallback + 背景自動重建成新 schema。
+_FTS_SCHEMA_VER = 2
+
+
 def _fts_ready(conn: sqlite3.Connection) -> bool:
-    """vat_fts 是否存在且已建好（有列）。**用 LIMIT 1 存在性檢查，不可用
-    count(*)** —— FTS5 的 count(*) 會掃整個索引（170 萬筆 ~1 秒），而這函式每次
-    搜尋都呼叫一次，會把毫秒級的 FTS 搜尋拖成秒級。"""
+    """vat_fts 是否存在、有列、且 schema 版本相符。**用 LIMIT 1 存在性檢查，
+    不可用 count(*)** —— FTS5 的 count(*) 會掃整個索引（170 萬筆 ~1 秒），而這
+    函式每次搜尋都呼叫一次，會把毫秒級的 FTS 搜尋拖成秒級。"""
     try:
-        return conn.execute("SELECT 1 FROM vat_fts LIMIT 1").fetchone() is not None
+        if conn.execute("SELECT 1 FROM vat_fts LIMIT 1").fetchone() is None:
+            return False
+        ver = conn.execute(
+            "SELECT value FROM vat_meta WHERE key='fts_schema_ver'").fetchone()
+        return bool(ver) and ver[0] == str(_FTS_SCHEMA_VER)
     except Exception:
         return False
 
@@ -266,16 +289,22 @@ def rebuild_fts(conn: Optional[sqlite3.Connection] = None) -> int:
         if not _fts5_available(conn):
             return -1
         conn.create_function("jt_fts_tok", 1, _fts_tokenize)
+        # 每個可搜欄位獨立一欄（逐字 unigram），才能做欄位限定搜尋（5 開關）。
         conn.executescript(
             "DROP TABLE IF EXISTS vat_fts;"
             "CREATE VIRTUAL TABLE vat_fts USING fts5("
-            "  vat UNINDEXED, doc,"
+            "  vat UNINDEXED, name, address, owner, org_type, industries,"
             "  tokenize='unicode61 remove_diacritics 2');"
         )
         conn.execute(
-            "INSERT INTO vat_fts(vat, doc) SELECT vat, "
-            "jt_fts_tok(COALESCE(name,'')||' '||COALESCE(address,'')||' '||"
-            "COALESCE(owner,'')||' '||COALESCE(industries,'')) FROM vat_registry"
+            "INSERT INTO vat_fts(vat, name, address, owner, org_type, industries) "
+            "SELECT vat, jt_fts_tok(COALESCE(name,'')), jt_fts_tok(COALESCE(address,'')), "
+            "jt_fts_tok(COALESCE(owner,'')), jt_fts_tok(COALESCE(org_type,'')), "
+            "jt_fts_tok(COALESCE(industries,'')) FROM vat_registry"
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO vat_meta (key, value) VALUES ('fts_schema_ver', ?)",
+            (str(_FTS_SCHEMA_VER),),
         )
         conn.commit()
         return conn.execute("SELECT count(*) FROM vat_fts").fetchone()[0]
@@ -629,17 +658,39 @@ def lookup_vat(vat: str) -> Optional[dict]:
         conn.close()
 
 
-def search_companies(query: str, field: str = "any", limit: int = 50,
-                     categories: Optional[list[str]] = None) -> list[dict]:
-    """模糊搜尋。query 用 SQL LIKE %query%。
-    field: 'name' | 'address' | 'owner' | 'industries' | 'any'（搜全部）
-    categories: 篩選類別 list（例 ['企業', '學校']）；None / 空 = 全部不篩
-    limit: 1 ~ 500
-    回傳 list of dict，最多 limit 筆。"""
+def _esc_like(s: str) -> str:
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _drill_where(alias: str, org_type=None, city=None, industry=None):
+    """下鑽篩選（點搜尋結果統計圖用）：組織別 / 縣市（地址前綴）/ 行業。
+    回 (sql_clause, params)。alias='v'（FTS JOIN）或 ''（LIKE 直查）。"""
+    a = (alias + ".") if alias else ""
+    clauses, params = [], []
+    if org_type:
+        clauses.append(f"{a}org_type = ?"); params.append(org_type)
+    if city:
+        clauses.append(f"{a}address LIKE ? ESCAPE '\\'"); params.append(_esc_like(city) + "%")
+    if industry:
+        clauses.append(f"{a}industries LIKE ? ESCAPE '\\'"); params.append("%" + _esc_like(industry) + "%")
+    return ("".join(" AND " + c for c in clauses), params)
+
+
+def search_companies(query: str, fields=None, limit: int = 50,
+                     categories: Optional[list] = None,
+                     org_type: str = None, city: str = None,
+                     industry: str = None) -> list[dict]:
+    """模糊搜尋（FTS5 逐字；FTS 不可用 / 未建時 LIKE fallback）。
+
+    fields：要搜的欄位 list（_FTS_FIELDS 子集：name/address/owner/org_type/
+            industries）；None = 全部（UI 5 開關，預設全開）。
+    categories：類別篩選（企業 / 學校…）。
+    org_type / city / industry：下鑽篩選（點搜尋結果統計圖）。
+    最短 1 個字。回 list of dict（≤limit，依名稱排序）。"""
     if not query or not isinstance(query, str):
         return []
     q = query.strip()
-    if len(q) < 1:               # 最短 1 個字（FTS5 逐字 unigram 支援）
+    if len(q) < 1:
         return []
     limit = max(1, min(int(limit) if isinstance(limit, int) else 50, 500))
 
@@ -648,7 +699,6 @@ def search_companies(query: str, field: str = "any", limit: int = 50,
                 "org_type": r[4], "status": r[5], "category": r[6],
                 "industries": r[7]}
 
-    # 類別篩選清單（FTS / LIKE 兩路共用）
     cats: list = []
     if categories:
         if not isinstance(categories, list):
@@ -658,57 +708,100 @@ def search_companies(query: str, field: str = "any", limit: int = 50,
     init_db()
     conn = _connect()
     try:
-        # ── FTS5 路徑：field='any'（UI 預設、99% 用例）且索引已建好 ──
-        # 空格拆多關鍵字 → 各自逐字 phrase → AND；走 FTS 索引不掃全表。
-        match = _fts_match_query(q) if field == "any" else ""
+        # ── FTS5 路徑（多欄、可欄位限定）──
+        match = _fts_match_query(q, fields)
         if match and _fts_ready(conn):
-            cat_clause = ""
             params: list = [match]
+            extra = ""
             if cats:
-                cat_clause = " AND v.category IN (%s)" % ",".join("?" * len(cats))
-                params.extend(cats)
+                extra += " AND v.category IN (%s)" % ",".join("?" * len(cats)); params.extend(cats)
+            dc, dp = _drill_where("v", org_type, city, industry); extra += dc; params.extend(dp)
             params.append(limit)
+            # 不在 SQL ORDER BY（廣詞匹配大量列排序很慢）；LIMIT 短路取前 N，
+            # 取回該頁後 Python 依名稱排序。
             rows = conn.execute(
                 "SELECT v.vat, v.name, v.address, v.owner, v.org_type, v.status, "
                 "v.category, v.industries "
-                "FROM vat_fts f JOIN vat_registry v ON v.vat = f.vat "
-                "WHERE f.doc MATCH ?" + cat_clause + " "
-                "ORDER BY v.name LIMIT ?",
+                "FROM vat_fts JOIN vat_registry v ON v.vat = vat_fts.vat "
+                "WHERE vat_fts MATCH ?" + extra + " LIMIT ?",
                 params,
             ).fetchall()
-            return [_to_dict(r) for r in rows]
+            return sorted((_to_dict(r) for r in rows), key=lambda d: d["name"] or "")
 
-        # ── LIKE fallback：指定欄位查詢，或 FTS5 不可用 / 索引未建 ──
-        q_esc = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        pattern = f"%{q_esc}%"
-        # 用 static map 而不是 f-string 拼接欄位名 — 避免 CodeQL 誤判 SQL injection
-        _FIELD_WHERE = {
-            "name":       "name LIKE ? ESCAPE '\\'",
-            "address":    "address LIKE ? ESCAPE '\\'",
-            "owner":      "owner LIKE ? ESCAPE '\\'",
-            "industries": "industries LIKE ? ESCAPE '\\'",
-        }
-        if field == "any":
-            field_where = ("(name LIKE ? ESCAPE '\\' OR address LIKE ? ESCAPE '\\' "
-                           "OR owner LIKE ? ESCAPE '\\' OR industries LIKE ? ESCAPE '\\')")
-            params = [pattern, pattern, pattern, pattern]
-        elif field in _FIELD_WHERE:
-            field_where = _FIELD_WHERE[field]
-            params = [pattern]
-        else:
-            raise ValueError(f"未知欄位：{field}")
-        cat_where = ""
+        # ── LIKE fallback：搜選定欄位（欄名來自 whitelist，無注入）──
+        pattern = f"%{_esc_like(q)}%"
+        sel = [f for f in (fields or _FTS_FIELDS) if f in _FTS_FIELDS]
+        if not sel:
+            sel = list(_FTS_FIELDS)
+        field_where = "(" + " OR ".join(f"{f} LIKE ? ESCAPE '\\'" for f in sel) + ")"
+        params = [pattern] * len(sel)
         if cats:
-            cat_where = " AND category IN (%s)" % ",".join("?" * len(cats))
-            params.extend(cats)
+            field_where += " AND category IN (%s)" % ",".join("?" * len(cats)); params.extend(cats)
+        dc, dp = _drill_where("", org_type, city, industry); params.extend(dp)
         params.append(limit)
         rows = conn.execute(
             "SELECT vat, name, address, owner, org_type, status, category, industries "
-            f"FROM vat_registry WHERE {field_where}{cat_where} "
-            "ORDER BY name LIMIT ?",
+            f"FROM vat_registry WHERE {field_where}{dc} ORDER BY name LIMIT ?",
             params,
         ).fetchall()
         return [_to_dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+# 統計取樣上限：廣詞匹配可能上百萬列，取前 N 筆算分布，避免拉爆記憶體 / 變慢。
+_STATS_SAMPLE = 5000
+
+
+def _city_of(address: str) -> str:
+    """從地址切出縣市（直轄市 / 縣 / 市）。取不到回「其他」。臺→台 正規化。"""
+    if not address:
+        return "其他"
+    m = re.match(r"\s*(.{1,3}?[縣市])", address)
+    return m.group(1).replace("臺", "台") if m else "其他"
+
+
+def search_stats(query: str, fields=None, categories=None,
+                 org_type=None, city=None, industry=None) -> dict:
+    """對命中集（取樣 ≤ _STATS_SAMPLE）算 行業 / 縣市 / 組織別 分布，給搜尋結果
+    區的統計圖 + 點擊下鑽。回 {total, sampled, industry/city/org: [{value,count}]}。
+    FTS 不可用時回 unavailable（前端不顯示，避免在 LIKE 上做大統計拖慢）。"""
+    if not query or not isinstance(query, str) or len(query.strip()) < 1:
+        return {"total": 0, "sampled": 0, "industry": [], "city": [], "org": []}
+    q = query.strip()
+    cats = [c for c in (categories or []) if isinstance(c, str) and c]
+    init_db()
+    conn = _connect()
+    try:
+        match = _fts_match_query(q, fields)
+        if not (match and _fts_ready(conn)):
+            return {"total": 0, "sampled": 0, "industry": [], "city": [],
+                    "org": [], "unavailable": True}
+        params: list = [match]
+        extra = ""
+        if cats:
+            extra += " AND v.category IN (%s)" % ",".join("?" * len(cats)); params.extend(cats)
+        dc, dp = _drill_where("v", org_type, city, industry); extra += dc; params.extend(dp)
+        total = conn.execute(
+            "SELECT count(*) FROM vat_fts JOIN vat_registry v ON v.vat=vat_fts.vat "
+            "WHERE vat_fts MATCH ?" + extra, params).fetchone()[0]
+        params2 = list(params) + [_STATS_SAMPLE]
+        rows = conn.execute(
+            "SELECT v.address, v.org_type, v.industries "
+            "FROM vat_fts JOIN vat_registry v ON v.vat=vat_fts.vat "
+            "WHERE vat_fts MATCH ?" + extra + " LIMIT ?", params2).fetchall()
+        from collections import Counter
+        ind_c, city_c, org_c = Counter(), Counter(), Counter()
+        for addr, org, inds in rows:
+            city_c[_city_of(addr)] += 1
+            org_c[(org or "").strip() or "其他"] += 1
+            for one in re.split(r"[／/、,，]", inds or ""):
+                one = one.strip()
+                if one:
+                    ind_c[one] += 1
+        topn = lambda c: [{"value": k, "count": n} for k, n in c.most_common(8)]
+        return {"total": total, "sampled": len(rows),
+                "industry": topn(ind_c), "city": topn(city_c), "org": topn(org_c)}
     finally:
         conn.close()
 

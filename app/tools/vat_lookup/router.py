@@ -52,22 +52,47 @@ async def lookup(payload: dict):
     return result
 
 
+def _search_args(payload: dict):
+    """從 payload 取共用搜尋參數：fields（欄位開關 list）、categories、
+    下鑽 org_type / city / industry。"""
+    fields = (payload or {}).get("fields")
+    if fields is not None and not isinstance(fields, list):
+        fields = None
+    return {
+        "fields": fields,
+        "categories": (payload or {}).get("categories") or None,
+        "org_type": (payload or {}).get("org_type") or None,
+        "city": (payload or {}).get("city") or None,
+        "industry": (payload or {}).get("industry") or None,
+    }
+
+
 @router.post("/search")
 def search(payload: dict):
     """模糊搜尋（同步函數，FastAPI 自動 run in threadpool 避免阻塞 event loop）。"""
     query = (payload or {}).get("query", "")
-    field = (payload or {}).get("field", "any")
     limit = (payload or {}).get("limit", 50)
-    categories = (payload or {}).get("categories") or None
     if not isinstance(query, str) or len(query.strip()) < 1:
         raise HTTPException(400, "query 至少 1 個字元")
     try:
         results = vat_db.search_companies(
-            query.strip(), field=field, limit=limit, categories=categories,
-        )
+            query.strip(), limit=limit, **_search_args(payload))
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"results": results, "count": len(results), "query": query.strip()}
+
+
+@router.post("/stats")
+def stats(payload: dict):
+    """搜尋結果的 行業 / 縣市 / 組織別 分布（統計全部命中、取樣上限 5000）。
+    給搜尋結果區的小統計圖 + 點擊下鑽用。"""
+    query = (payload or {}).get("query", "")
+    if not isinstance(query, str) or len(query.strip()) < 1:
+        return {"total": 0, "industry": [], "city": [], "org": []}
+    try:
+        return vat_db.search_stats(query.strip(), **_search_args(payload))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.post("/batch")

@@ -256,3 +256,54 @@ def test_rebuild_fts_from_existing(vat_tmp):
     assert ready is False
     assert vat_db.rebuild_fts() == 1
     assert any(x["name"] == "測試企業社" for x in vat_db.search_companies("測試"))
+
+
+# ---- 欄位開關 / 下鑽 / 統計（v1.12.18）----
+
+def _seed_full(vat_db_mod):
+    vat_db_mod.init_db()
+    c = vat_db_mod._connect()
+    rows = [
+        ("11111111", "節省工具有限公司", "台北市大同區", "王小明", "有限公司", "超級市場", "企業"),
+        ("22222222", "大同電器行", "台北市中山區", "張三", "獨資", "家電零售", "企業"),
+        ("33333333", "台中科技股份有限公司", "台中市西屯區", "李四", "股份有限公司", "半導體", "企業"),
+        ("44444444", "節省超商", "雲林縣斗六市", "陳五", "有限公司", "便利商店 / 超級市場", "企業"),
+    ]
+    for vat, name, addr, owner, org, ind, cat in rows:
+        c.execute("INSERT OR REPLACE INTO vat_registry"
+                  "(vat,name,address,owner,org_type,industries,category,status) "
+                  "VALUES(?,?,?,?,?,?,?,'營業中')", (vat, name, addr, owner, org, ind, cat))
+    c.commit(); vat_db_mod.rebuild_fts(c); c.commit(); c.close()
+
+
+def test_search_fields_filter(vat_tmp):
+    _seed_full(vat_db)
+    n = lambda q, **k: sorted(x["name"] for x in vat_db.search_companies(q, **k))
+    # 「大同」只搜名稱 → 大同電器行；只搜地址 → 節省工具(地址含大同區)
+    assert n("大同", fields=["name"]) == ["大同電器行"]
+    assert n("大同", fields=["address"]) == ["節省工具有限公司"]
+    # 只搜負責人
+    assert n("李四", fields=["owner"]) == ["台中科技股份有限公司"]
+    # 全選(None)= 兩者都中
+    assert set(n("大同")) == {"大同電器行", "節省工具有限公司"}
+
+
+def test_search_drill_filters(vat_tmp):
+    _seed_full(vat_db)
+    n = lambda q, **k: sorted(x["name"] for x in vat_db.search_companies(q, **k))
+    assert n("節省", org_type="有限公司") == ["節省工具有限公司", "節省超商"]
+    assert n("電器", city="台北市") == ["大同電器行"]
+    assert n("節省", industry="便利商店") == ["節省超商"]
+    assert n("節省", industry="超級市場") == ["節省工具有限公司", "節省超商"]
+
+
+def test_search_stats(vat_tmp):
+    _seed_full(vat_db)
+    s = vat_db.search_stats("節省")   # 節省工具 + 節省超商
+    assert s["total"] == 2
+    ind = {x["value"]: x["count"] for x in s["industry"]}
+    assert ind.get("超級市場") == 2 and ind.get("便利商店") == 1   # 多值「/」切分
+    city = {x["value"]: x["count"] for x in s["city"]}
+    assert city.get("台北市") == 1 and city.get("雲林縣") == 1
+    org = {x["value"]: x["count"] for x in s["org"]}
+    assert org.get("有限公司") == 2

@@ -183,6 +183,61 @@ mark.vl-hl {
   vertical-align: -3px;
 }
 @keyframes vl-spin { to { transform: rotate(360deg); } }
+/* 欄位開關 */
+.vl-field-toggles {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px;
+  margin: -4px 0 14px; font-size: 13px; color: #475569;
+}
+.vl-field-toggles .vl-ft-label { color: #94a3b8; font-size: 12px; }
+.vl-field-toggles label {
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+  user-select: none;
+}
+.vl-field-toggles input { cursor: pointer; accent-color: #3b82f6; }
+/* 下鑽橫幅 */
+.vl-drill-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 12px; font-size: 13px; color: #1e3a8a;
+}
+.vl-drill-bar .vl-drill-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #fff; border: 1px solid #93c5fd; border-radius: 999px;
+  padding: 2px 6px 2px 10px;
+}
+.vl-drill-bar .vl-drill-x {
+  cursor: pointer; color: #64748b; font-weight: 700; line-height: 1;
+  padding: 0 4px; border-radius: 50%;
+}
+.vl-drill-bar .vl-drill-x:hover { background: #e2e8f0; color: #0f172a; }
+/* 統計圖 */
+.vl-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px; margin-bottom: 14px;
+}
+.vl-stat-card {
+  background: #fff; border: 1px solid #e5e9f0; border-radius: 10px; padding: 12px 14px;
+}
+.vl-stat-card h4 {
+  margin: 0 0 8px; font-size: 13px; color: #0f172a; display: flex;
+  align-items: center; justify-content: space-between;
+}
+.vl-stat-card h4 .vl-stat-total { font-size: 11px; color: #94a3b8; font-weight: 500; }
+.vl-stat-row {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px;
+  padding: 3px 6px; border-radius: 6px; cursor: pointer; position: relative;
+  font-size: 12.5px;
+}
+.vl-stat-row:hover { background: #f1f5f9; }
+.vl-stat-row .vl-stat-bar {
+  position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px;
+  background: #dbeafe; z-index: 0;
+}
+.vl-stat-row .vl-stat-name, .vl-stat-row .vl-stat-n { position: relative; z-index: 1; }
+.vl-stat-row .vl-stat-name { color: #334155; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vl-stat-row .vl-stat-n { color: #64748b; font-variant-numeric: tabular-nums; }
+.vl-stat-row.active { background: #bfdbfe; }
+.vl-stat-empty { font-size: 12px; color: #94a3b8; padding: 4px 6px; }
 </style>
 {% endblock %}
 
@@ -204,6 +259,15 @@ mark.vl-hl {
   <span><span class="key">節省</span> 1 個字起 → 名稱 / 地址 / 行業模糊搜尋</span>
   <span><span class="key">節省 工具</span> 空格分隔多個關鍵字 → 都要符合</span>
   <span><span class="key">Enter</span> 送出</span>
+</div>
+
+<div class="vl-field-toggles" id="fieldToggles">
+  <span class="vl-ft-label">搜尋欄位：</span>
+  <label><input type="checkbox" class="vl-ft" value="name" checked> 名稱</label>
+  <label><input type="checkbox" class="vl-ft" value="address" checked> 地址</label>
+  <label><input type="checkbox" class="vl-ft" value="org_type" checked> 組織</label>
+  <label><input type="checkbox" class="vl-ft" value="industries" checked> 行業</label>
+  <label><input type="checkbox" class="vl-ft" value="owner" checked> 負責人</label>
 </div>
 
 {% if meta.record_count %}
@@ -232,6 +296,8 @@ mark.vl-hl {
 
 <!-- 查詢 / 搜尋（合併模式：自動辨識 8 位 vs 名稱） -->
 <div data-pane="search">
+  <div id="vlDrillBar" class="vl-drill-bar" hidden></div>
+  <div id="vlStats" class="vl-stats" hidden></div>
   <div id="results">
     <div class="vl-result-empty">
       {{ icon('search', size=32) }}
@@ -327,6 +393,7 @@ function _renderCard(r, isMiss, query) {
 }
 
 function _showResultsEmpty() {
+  _hideStats();
   $('results').innerHTML = `<div class="vl-result-empty">
     {{ icon('search', size=32) }}
     <div>輸入統編、公司名稱、或地址、行業關鍵字開始查詢</div>
@@ -341,12 +408,132 @@ function _updateClearFilterBtn() {
   if (btn) btn.hidden = _activeCategories.size === 0;
 }
 
+// ── 欄位開關 + 下鑽（行業 / 縣市 / 組織）+ 統計圖 ──
+const _drill = { org_type: null, city: null, industry: null };
+let _lastQuery = '';   // 用來判斷「換了查詢字串」→ 清掉上一個查詢的下鑽
+
+function _selectedFields() {
+  const all = Array.from(document.querySelectorAll('.vl-ft'));
+  const on = all.filter(c => c.checked).map(c => c.value);
+  // 全選 → null（後端不限欄）；沒選 → 視同全選（避免查不到）
+  if (on.length === 0 || on.length === all.length) return null;
+  return on;
+}
+
+function _searchExtras() {
+  const x = {};
+  const f = _selectedFields();
+  if (f) x.fields = f;
+  if (_activeCategories.size > 0) x.categories = Array.from(_activeCategories);
+  if (_drill.org_type) x.org_type = _drill.org_type;
+  if (_drill.city) x.city = _drill.city;
+  if (_drill.industry) x.industry = _drill.industry;
+  return x;
+}
+
+function _hideStats() {
+  const s = $('vlStats'); if (s) { s.hidden = true; s.innerHTML = ''; }
+}
+
+const _DRILL_LABELS = { industry: '行業', city: '縣市', org_type: '組織' };
+
+function _renderDrillBar() {
+  const bar = $('vlDrillBar');
+  if (!bar) return;
+  const active = Object.entries(_drill).filter(([k, v]) => v);
+  if (!active.length) { bar.hidden = true; bar.innerHTML = ''; return; }
+  bar.hidden = false;
+  bar.innerHTML = '已篩選：' + active.map(([k, v]) =>
+    `<span class="vl-drill-chip">${_DRILL_LABELS[k] || k}：${escapeHtml(v)}`
+    + `<span class="vl-drill-x" data-drill="${k}">×</span></span>`).join('')
+    + ` <button class="vl-btn-sm" id="drillClearAll">清除全部</button>`;
+}
+
+async function _loadStats(q) {
+  const box = $('vlStats');
+  if (!box) return;
+  try {
+    const r = await fetch('/tools/vat-lookup/stats', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q, ..._searchExtras() }),
+    });
+    if (!r.ok) { _hideStats(); return; }
+    const s = await r.json();
+    if (s.unavailable) { _hideStats(); return; }
+    renderStats(s);
+  } catch (_e) { _hideStats(); }
+}
+
+function _statCard(title, type, items, total) {
+  if (!items || !items.length) return '';
+  const max = Math.max.apply(null, items.map(i => i.count).concat([1]));
+  const activeVal = (type === 'org_type') ? _drill.org_type
+    : (type === 'city') ? _drill.city : _drill.industry;
+  const rows = items.map(i => {
+    const pct = Math.round(i.count / max * 100);
+    const isA = activeVal === i.value;
+    return `<div class="vl-stat-row${isA ? ' active' : ''}" data-stat-type="${type}" data-stat-value="${escapeHtml(i.value)}">
+      <span class="vl-stat-bar" style="width:${pct}%"></span>
+      <span class="vl-stat-name" title="${escapeHtml(i.value)}">${escapeHtml(i.value)}</span>
+      <span class="vl-stat-n">${i.count.toLocaleString('en-US')}</span>
+    </div>`;
+  }).join('');
+  const totalNote = total ? `共 ${total.toLocaleString('en-US')}${total > 5000 ? '（取樣前 5000）' : ''}` : '';
+  return `<div class="vl-stat-card"><h4>${title}<span class="vl-stat-total">${totalNote}</span></h4>${rows}</div>`;
+}
+
+function renderStats(s) {
+  const box = $('vlStats');
+  if (!box) return;
+  const html = _statCard('行業統計', 'industry', s.industry, s.total)
+    + _statCard('縣市統計', 'city', s.city, s.total)
+    + _statCard('組織統計', 'org_type', s.org, s.total);
+  if (!html) { _hideStats(); return; }
+  box.innerHTML = html;
+  box.hidden = false;
+}
+
+// 點統計列 → 設下鑽 + 重搜（再點同一個 = 取消）
+document.getElementById('vlStats').addEventListener('click', (e) => {
+  const row = e.target.closest('.vl-stat-row');
+  if (!row) return;
+  const type = row.dataset.statType, val = row.dataset.statValue;
+  const key = (type === 'org_type') ? 'org_type' : (type === 'city') ? 'city' : 'industry';
+  _drill[key] = (_drill[key] === val) ? null : val;
+  _renderDrillBar();
+  smartQuery();
+});
+
+// 下鑽橫幅：移除單一 / 清除全部
+document.getElementById('vlDrillBar').addEventListener('click', (e) => {
+  if (e.target.id === 'drillClearAll') {
+    _drill.org_type = _drill.city = _drill.industry = null;
+    _renderDrillBar(); smartQuery(); return;
+  }
+  const x = e.target.closest('.vl-drill-x');
+  if (x) { _drill[x.dataset.drill] = null; _renderDrillBar(); smartQuery(); }
+});
+
+// 欄位開關改變 → 有查詢字串就重搜（全部取消則自動全選回來）
+document.querySelectorAll('.vl-ft').forEach(c => {
+  c.addEventListener('change', () => {
+    const all = Array.from(document.querySelectorAll('.vl-ft'));
+    if (all.every(x => !x.checked)) all.forEach(x => x.checked = true);
+    if ($('qInput').value.trim()) smartQuery();
+  });
+});
+
 async function smartQuery() {
   const q = $('qInput').value.trim();
   if (!q) {
     _showResultsEmpty();
     return;
   }
+  if (q !== _lastQuery) {   // 換查詢字串 → 清掉上一個查詢的下鑽篩選
+    _drill.org_type = _drill.city = _drill.industry = null;
+    _renderDrillBar();
+  }
+  _lastQuery = q;
   const btn = $('btnSearch');
   const btnText = $('btnSearchText');
   btn.disabled = true;
@@ -355,6 +542,7 @@ async function smartQuery() {
   try {
     // 8 位數字 + 沒有類別篩選 → 直接 vat lookup
     if (/^\d{8}$/.test(q) && _activeCategories.size === 0) {
+      _hideStats();
       const r = await fetch('/tools/vat-lookup/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -376,10 +564,7 @@ async function smartQuery() {
         $('results').innerHTML = `<div class="vl-result-empty">請輸入關鍵字</div>`;
         return;
       }
-      const payload = { query: q, field: 'any', limit: 50 };
-      if (_activeCategories.size > 0) {
-        payload.categories = Array.from(_activeCategories);
-      }
+      const payload = { query: q, limit: 50, ..._searchExtras() };
       const r = await fetch('/tools/vat-lookup/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -394,6 +579,7 @@ async function smartQuery() {
         ? `（篩選類別：${Array.from(_activeCategories).join(' / ')}）`
         : '';
       if (!j.results.length) {
+        _hideStats();
         $('results').innerHTML = `<div class="vl-result-empty">
           {{ icon('search', size=32) }}
           <div>找不到符合「${escapeHtml(q)}」${escapeHtml(catNote)}的資料</div>
@@ -406,6 +592,7 @@ async function smartQuery() {
       </div>`;
       _lastSearchResults = j.results;
       $('results').innerHTML = hdr + j.results.map(r => _renderCard(r, false, q)).join('');
+      _loadStats(q);   // 非同步載入行業 / 縣市 / 組織統計圖（不擋結果顯示）
     }
   } catch (e) {
     $('results').innerHTML = `<div class="vl-card miss"><div class="vl-card-head"><span style="color:#991b1b;">查詢失敗：${escapeHtml(e.message)}</span></div></div>`;
