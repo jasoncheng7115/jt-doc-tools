@@ -225,10 +225,15 @@ mark.vl-hl {
 .vl-stat-card h4 .vl-stat-total { font-size: 11px; color: #94a3b8; font-weight: 500; }
 .vl-stat-row {
   display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px;
-  padding: 3px 6px; border-radius: 6px; cursor: pointer; position: relative;
-  font-size: 12.5px;
+  padding: 5px 7px; margin-bottom: 4px; border-radius: 6px; cursor: pointer;
+  position: relative; font-size: 12.5px;
 }
+.vl-stat-row:last-child { margin-bottom: 0; }
 .vl-stat-row:hover { background: #f1f5f9; }
+.vl-stats-hint {
+  grid-column: 1 / -1; font-size: 12px; color: #64748b;
+  display: flex; align-items: center; gap: 6px; margin-top: -2px;
+}
 .vl-stat-row .vl-stat-bar {
   position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px;
   background: #dbeafe; z-index: 0;
@@ -489,7 +494,8 @@ function renderStats(s) {
     + _statCard('縣市統計', 'city', s.city, s.total)
     + _statCard('組織統計', 'org_type', s.org, s.total);
   if (!html) { _hideStats(); return; }
-  box.innerHTML = html;
+  box.innerHTML = html
+    + `<div class="vl-stats-hint">點任一項統計可加入篩選（可疊加多個條件；點已選的可取消）</div>`;
   box.hidden = false;
 }
 
