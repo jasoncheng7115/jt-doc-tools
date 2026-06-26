@@ -184,3 +184,75 @@ def test_ingest_zip_no_csv_inside(vat_tmp):
         z.writestr("readme.txt", "no csv here")
     with pytest.raises(ValueError, match="找不到"):
         vat_db.ingest_archive_or_csv(buf.getvalue(), source="bad-zip")
+
+
+# ---- FTS5 名稱搜尋（逐字 unigram，1 字 / 子字串 / 多關鍵字 AND）----
+
+def _seed_fts(vat_db_mod):
+    csv_text = (
+        "統一編號,營業人名稱,營業地址\n"
+        "11111111,節省工具有限公司,台中市北屯區\n"
+        "22222222,節省科技股份有限公司,台北市\n"
+        "33333333,工具王企業社,高雄市\n"
+        "44444444,大同電器行,台北市大同區\n"
+    )
+    return vat_db_mod.ingest_csv(csv_text.encode("utf-8"), source="test")
+
+
+def test_fts_one_char_and_substring(vat_tmp):
+    _seed_fts(vat_db)
+    names = lambda q: sorted(r["name"] for r in vat_db.search_companies(q))
+    assert "工具王企業社" in names("工")          # 1 個字
+    assert "節省工具有限公司" in names("工")
+    assert names("節省") == ["節省工具有限公司", "節省科技股份有限公司"]  # 子字串
+
+
+def test_fts_multi_keyword_and(vat_tmp):
+    _seed_fts(vat_db)
+    r = [x["name"] for x in vat_db.search_companies("節省 工具")]
+    assert r == ["節省工具有限公司"]   # 只有同時含「節省」+「工具」
+
+
+def test_fts_cross_field_and(vat_tmp):
+    _seed_fts(vat_db)
+    # 地址含「台北」+ 名稱含「科技」→ 跨欄位 AND
+    r = [x["name"] for x in vat_db.search_companies("台北 科技")]
+    assert r == ["節省科技股份有限公司"]
+
+
+def test_search_min_one_char(vat_tmp):
+    _seed_fts(vat_db)
+    assert vat_db.search_companies("") == []
+    assert len(vat_db.search_companies("工")) >= 1
+
+
+def test_like_fallback_when_fts_missing(vat_tmp):
+    _seed_fts(vat_db)
+    conn = vat_db._connect()
+    conn.execute("DROP TABLE IF EXISTS vat_fts")
+    conn.commit()
+    conn.close()
+    r = [x["name"] for x in vat_db.search_companies("節省")]  # 退回 LIKE
+    assert "節省工具有限公司" in r
+
+
+def test_category_stats_cached_after_ingest(vat_tmp):
+    _seed_fts(vat_db)
+    conn = vat_db._connect()
+    row = conn.execute(
+        "SELECT value FROM vat_meta WHERE key='category_stats_json'").fetchone()
+    conn.close()
+    assert row and row[0]   # ingest 後已快取
+
+
+def test_rebuild_fts_from_existing(vat_tmp):
+    # 模擬舊版 DB：有資料但 build_index=False（沒建 FTS）→ 之後 rebuild
+    vat_db.ingest_csv(
+        "統一編號,營業人名稱,營業地址\n55555555,測試企業社,台南市\n".encode(),
+        source="t", build_index=False)
+    conn = vat_db._connect()
+    ready = vat_db._fts_ready(conn)
+    conn.close()
+    assert ready is False
+    assert vat_db.rebuild_fts() == 1
+    assert any(x["name"] == "測試企業社" for x in vat_db.search_companies("測試"))

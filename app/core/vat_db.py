@@ -23,6 +23,7 @@ import csv
 import io
 import json
 import os
+import re
 import secrets
 import sqlite3
 import threading
@@ -160,6 +161,125 @@ def _init_schema(conn: sqlite3.Connection) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_vat_category ON vat_registry(category)")
     except Exception:
         pass
+
+
+# ====================================================================
+# FTS5 全文檢索（逐字 unigram）— 解決名稱搜尋 LIKE '%x%' 全表掃描問題。
+#   名稱搜尋用 LIKE 前導萬用字元 → 用不到索引 → 掃 170 萬筆。
+#   改用 FTS5：把「名稱+地址+負責人+行業」合併、CJK 逐字用空白隔開
+#   (unicode61 把每個 CJK 字當一個 token)，1 個字起就能走索引；查詢端
+#   空格拆多關鍵字 → 各自逐字 phrase → AND 串接。
+# ====================================================================
+# CJK 統一 / 擴展 / 相容 + 日文假名（含 CJK 範圍即逐字切）
+_CJK_FTS_RE = re.compile(r"[぀-ヿ㐀-䶿一-鿿豈-﫿]")
+
+
+def _fts_tokenize(s: str) -> str:
+    """把字串中的 CJK 每個字用空白隔開（unicode61 會逐字當 token），
+    非 CJK（英數）保留原樣成為整段 token。回正規化後的可索引字串。"""
+    if not s:
+        return ""
+    parts = []
+    for ch in s:
+        if _CJK_FTS_RE.match(ch):
+            parts.append(" ")
+            parts.append(ch)
+            parts.append(" ")
+        else:
+            parts.append(ch)
+    return re.sub(r"\s+", " ", "".join(parts)).strip()
+
+
+def _fts_match_query(q: str) -> str:
+    """使用者輸入 → FTS5 MATCH 字串。空格分多關鍵字 → 各自逐字 phrase →
+    以空格（FTS5 預設 AND）串接，代表「都要符合」。"""
+    phrases = []
+    for kw in (q or "").split():
+        tok = _fts_tokenize(kw).replace('"', "")
+        if tok:
+            phrases.append('"' + tok + '"')
+    return " ".join(phrases)
+
+
+def _fts5_available(conn: sqlite3.Connection) -> bool:
+    """這個 sqlite build 有沒有 FTS5（多數發行版預設有；少數沒有就退回 LIKE）。"""
+    try:
+        conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS _fts_probe USING fts5(x)")
+        conn.execute("DROP TABLE IF EXISTS _fts_probe")
+        return True
+    except Exception:
+        return False
+
+
+def _fts_ready(conn: sqlite3.Connection) -> bool:
+    """vat_fts 是否存在且已建好（有列）。"""
+    try:
+        return conn.execute("SELECT count(*) FROM vat_fts").fetchone()[0] > 0
+    except Exception:
+        return False
+
+
+_fts_build_lock = threading.Lock()
+_fts_build_started = False
+
+
+def maybe_build_fts_background() -> None:
+    """服務啟動時呼叫：既有站台升版 / 重新安裝 / 重啟後，若 vat_registry 已有
+    資料但 FTS 索引尚未建（或被清掉），背景就地重建 + 快取類別統計 —— **不必
+    重新下載資料**。非阻塞：建好前名稱搜尋走 LIKE fallback，建好後自動切 FTS。
+    update / reinstall / restart 三條路徑都會重啟服務，故統一在此自癒。"""
+    global _fts_build_started
+    with _fts_build_lock:
+        if _fts_build_started:
+            return
+        _fts_build_started = True
+
+    def _work() -> None:
+        try:
+            init_db()
+            conn = _connect()
+            try:
+                has_data = conn.execute(
+                    "SELECT 1 FROM vat_registry LIMIT 1").fetchone()
+                if has_data and not _fts_ready(conn) and _fts5_available(conn):
+                    rebuild_fts(conn)
+                    _cache_category_stats(conn)
+                    conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            pass  # best-effort；失敗就維持 LIKE fallback
+
+    threading.Thread(target=_work, daemon=True, name="vat-fts-build").start()
+
+
+def rebuild_fts(conn: Optional[sqlite3.Connection] = None) -> int:
+    """從 vat_registry 重建 FTS5 索引（逐字 unigram，合併可搜欄位）。
+    回 FTS 列數；FTS5 不可用時回 -1。匯入後 + 既有 DB 首次升級時呼叫。"""
+    own = conn is None
+    if own:
+        init_db()
+        conn = _connect()
+    try:
+        if not _fts5_available(conn):
+            return -1
+        conn.create_function("jt_fts_tok", 1, _fts_tokenize)
+        conn.executescript(
+            "DROP TABLE IF EXISTS vat_fts;"
+            "CREATE VIRTUAL TABLE vat_fts USING fts5("
+            "  vat UNINDEXED, doc,"
+            "  tokenize='unicode61 remove_diacritics 2');"
+        )
+        conn.execute(
+            "INSERT INTO vat_fts(vat, doc) SELECT vat, "
+            "jt_fts_tok(COALESCE(name,'')||' '||COALESCE(address,'')||' '||"
+            "COALESCE(owner,'')||' '||COALESCE(industries,'')) FROM vat_registry"
+        )
+        conn.commit()
+        return conn.execute("SELECT count(*) FROM vat_fts").fetchone()[0]
+    finally:
+        if own:
+            conn.close()
 
 
 # 來源 → 類別 mapping (中文 label，給 admin UI 顯示用)
@@ -343,8 +463,12 @@ def parse_csv_to_records(data: bytes) -> Iterable[dict]:
 # ─── Ingest ─────────────────────────────────────────────────────────
 
 def ingest_csv(data: bytes, source: str = "manual_upload",
-               category: str = None) -> dict:
+               category: str = None, build_index: bool = True) -> dict:
     """匯入 CSV bytes 到 vat_registry — 採 staging swap 模式避免中斷 lookup。
+
+    build_index：匯入後是否就地重建 FTS 名稱搜尋索引 + 快取類別統計。手動上傳
+    CSV 時為 True；多來源全量更新時主檔傳 False（補充匯完後在末端統一建一次，
+    避免重複重建）。
 
     category: 標註該批資料的分類（企業 / 中央政府機關 / 地方政府機關 / 學校）。
         None 時依 source 名稱自動推斷。
@@ -432,6 +556,15 @@ def ingest_csv(data: bytes, source: str = "manual_upload",
                 ("record_count", str(count)),
             )
 
+            # 3b. 建 FTS 名稱搜尋索引 + 快取類別統計（手動上傳走這；多來源全量
+            # 更新主檔傳 build_index=False，由末端統一建）。失敗不影響資料。
+            if build_index:
+                try:
+                    rebuild_fts(conn)
+                    _cache_category_stats(conn)
+                except Exception:
+                    pass
+
             # 4. Invalidate cache
             _lookup_cache.clear()
             return {
@@ -504,17 +637,49 @@ def search_companies(query: str, field: str = "any", limit: int = 50,
     if not query or not isinstance(query, str):
         return []
     q = query.strip()
-    if len(q) < 2:
+    if len(q) < 1:               # 最短 1 個字（FTS5 逐字 unigram 支援）
         return []
     limit = max(1, min(int(limit) if isinstance(limit, int) else 50, 500))
-    q_esc = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    pattern = f"%{q_esc}%"
+
+    def _to_dict(r) -> dict:
+        return {"vat": r[0], "name": r[1], "address": r[2], "owner": r[3],
+                "org_type": r[4], "status": r[5], "category": r[6],
+                "industries": r[7]}
+
+    # 類別篩選清單（FTS / LIKE 兩路共用）
+    cats: list = []
+    if categories:
+        if not isinstance(categories, list):
+            raise ValueError("categories 必須是 list")
+        cats = [c for c in categories if isinstance(c, str) and c]
+
     init_db()
     conn = _connect()
     try:
+        # ── FTS5 路徑：field='any'（UI 預設、99% 用例）且索引已建好 ──
+        # 空格拆多關鍵字 → 各自逐字 phrase → AND；走 FTS 索引不掃全表。
+        match = _fts_match_query(q) if field == "any" else ""
+        if match and _fts_ready(conn):
+            cat_clause = ""
+            params: list = [match]
+            if cats:
+                cat_clause = " AND v.category IN (%s)" % ",".join("?" * len(cats))
+                params.extend(cats)
+            params.append(limit)
+            rows = conn.execute(
+                "SELECT v.vat, v.name, v.address, v.owner, v.org_type, v.status, "
+                "v.category, v.industries "
+                "FROM vat_fts f JOIN vat_registry v ON v.vat = f.vat "
+                "WHERE f.doc MATCH ?" + cat_clause + " "
+                "ORDER BY v.name LIMIT ?",
+                params,
+            ).fetchall()
+            return [_to_dict(r) for r in rows]
+
+        # ── LIKE fallback：指定欄位查詢，或 FTS5 不可用 / 索引未建 ──
+        q_esc = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{q_esc}%"
         # 用 static map 而不是 f-string 拼接欄位名 — 避免 CodeQL 誤判 SQL injection
-        # （也是 defense-in-depth：即使未來 valid_fields whitelist 失守，也不會
-        # 把任意字串拼進 SQL）
         _FIELD_WHERE = {
             "name":       "name LIKE ? ESCAPE '\\'",
             "address":    "address LIKE ? ESCAPE '\\'",
@@ -524,24 +689,16 @@ def search_companies(query: str, field: str = "any", limit: int = 50,
         if field == "any":
             field_where = ("(name LIKE ? ESCAPE '\\' OR address LIKE ? ESCAPE '\\' "
                            "OR owner LIKE ? ESCAPE '\\' OR industries LIKE ? ESCAPE '\\')")
-            params: list = [pattern, pattern, pattern, pattern]
+            params = [pattern, pattern, pattern, pattern]
         elif field in _FIELD_WHERE:
             field_where = _FIELD_WHERE[field]
             params = [pattern]
         else:
             raise ValueError(f"未知欄位：{field}")
-
-        # 類別篩選（IN clause）
         cat_where = ""
-        if categories:
-            if not isinstance(categories, list):
-                raise ValueError("categories 必須是 list")
-            cats = [c for c in categories if isinstance(c, str) and c]
-            if cats:
-                placeholders = ",".join("?" * len(cats))
-                cat_where = f" AND category IN ({placeholders})"
-                params.extend(cats)
-
+        if cats:
+            cat_where = " AND category IN (%s)" % ",".join("?" * len(cats))
+            params.extend(cats)
         params.append(limit)
         rows = conn.execute(
             "SELECT vat, name, address, owner, org_type, status, category, industries "
@@ -549,11 +706,7 @@ def search_companies(query: str, field: str = "any", limit: int = 50,
             "ORDER BY name LIMIT ?",
             params,
         ).fetchall()
-        return [{
-            "vat": r[0], "name": r[1], "address": r[2],
-            "owner": r[3], "org_type": r[4], "status": r[5],
-            "category": r[6], "industries": r[7],
-        } for r in rows]
+        return [_to_dict(r) for r in rows]
     finally:
         conn.close()
 
@@ -776,28 +929,57 @@ def stop_scheduler() -> None:
         _scheduler_thread.join(timeout=5)
 
 
+def _compute_category_stats(conn: sqlite3.Connection) -> list[dict]:
+    """對 vat_registry 跑 GROUP BY COUNT 算類別統計（172 萬筆，慢，只在
+    匯入後 / 快取缺失時算一次）。"""
+    rows = conn.execute(
+        "SELECT COALESCE(category, '未分類') AS c, COUNT(*) "
+        "FROM vat_registry GROUP BY c"
+    ).fetchall()
+    counts = {r[0]: r[1] for r in rows}
+    order = ["企業", "中央政府機關", "地方政府機關", "學校", "未分類"]
+    out = []
+    for cat in order:
+        if cat in counts:
+            out.append({"category": cat, "count": counts[cat]})
+    for cat, n in counts.items():
+        if cat not in order:
+            out.append({"category": cat, "count": n})
+    return out
+
+
+def _cache_category_stats(conn: sqlite3.Connection) -> list[dict]:
+    """算好類別統計並寫進 vat_meta 快取（給頁面載入直接讀，免每次 GROUP BY）。"""
+    stats = _compute_category_stats(conn)
+    conn.execute(
+        "INSERT OR REPLACE INTO vat_meta (key, value) VALUES ('category_stats_json', ?)",
+        (json.dumps(stats, ensure_ascii=False),),
+    )
+    return stats
+
+
 def get_category_stats() -> list[dict]:
     """回每個 category 的筆數（含 NULL → 未分類）。
     順序固定：企業 / 中央政府機關 / 地方政府機關 / 學校 / 未分類。
-    UI 用來顯示「資料庫組成」。"""
+    UI 用來顯示「資料庫組成」。
+
+    優先讀 vat_meta 的快取（匯入時算好）；快取缺失才即時計算一次並寫回，
+    避免每次進頁面都對 172 萬筆 GROUP BY（先前頁面要等好幾秒的主因）。"""
     init_db()
     conn = _connect()
     try:
-        rows = conn.execute(
-            "SELECT COALESCE(category, '未分類') AS c, COUNT(*) "
-            "FROM vat_registry GROUP BY c"
-        ).fetchall()
-        counts = {r[0]: r[1] for r in rows}
-        order = ["企業", "中央政府機關", "地方政府機關", "學校", "未分類"]
-        out = []
-        for cat in order:
-            if cat in counts:
-                out.append({"category": cat, "count": counts[cat]})
-        # 沒列在 order 內的其他 category 加在尾
-        for cat, n in counts.items():
-            if cat not in order:
-                out.append({"category": cat, "count": n})
-        return out
+        row = conn.execute(
+            "SELECT value FROM vat_meta WHERE key='category_stats_json'"
+        ).fetchone()
+        if row and row[0]:
+            try:
+                cached = json.loads(row[0])
+                if isinstance(cached, list) and cached:
+                    return cached
+            except Exception:
+                pass
+        # 快取缺失（既有 DB 首次升級）→ 算一次並寫回
+        return _cache_category_stats(conn)
     finally:
         conn.close()
 
@@ -1003,7 +1185,9 @@ def download_and_ingest_all(timeout_sec: int = 600) -> dict:
     try:
         main_bytes, main_src = download_from_sources(progress_stage="downloading_main")
         _write_progress(stage="parsing_main", source_name=main_src["name"])
-        main_result = ingest_archive_or_csv(main_bytes, source=main_src["name"])
+        # 主檔不在此建索引（補充匯完後在末端統一建一次 FTS + 快取）
+        main_result = ingest_archive_or_csv(
+            main_bytes, source=main_src["name"], build_index=False)
 
         supp_results = []
         n_supp = len(SUPPLEMENT_URLS)
@@ -1060,6 +1244,21 @@ def download_and_ingest_all(timeout_sec: int = 600) -> dict:
             except Exception as e:
                 supp_results.append({"name": src["name"], "added": 0, "error": str(e)})
 
+        # 全部來源（主檔 + 補充）匯入完成 → 重建 FTS5 名稱搜尋索引 + 快取類別
+        # 統計。一次做完（不在每個來源各做），失敗不影響資料（搜尋會 LIKE
+        # fallback、類別統計會即時算）。
+        _write_progress(stage="indexing")
+        try:
+            _ic = _connect()
+            try:
+                rebuild_fts(_ic)
+                _cache_category_stats(_ic)
+                _ic.commit()
+            finally:
+                _ic.close()
+        except Exception:
+            pass
+
         # 重讀 meta 取最終 total
         final_meta = get_meta()
         result = {
@@ -1089,8 +1288,8 @@ def download_and_ingest_all(timeout_sec: int = 600) -> dict:
         raise
 
 
-def ingest_archive_or_csv(data: bytes, source: str) -> dict:
-    """自動判斷 ZIP / CSV 並 ingest。"""
+def ingest_archive_or_csv(data: bytes, source: str, build_index: bool = True) -> dict:
+    """自動判斷 ZIP / CSV 並 ingest。build_index 透傳給 ingest_csv。"""
     # ZIP magic number = PK\x03\x04
     if data.startswith(b"PK\x03\x04"):
         import zipfile
@@ -1101,6 +1300,6 @@ def ingest_archive_or_csv(data: bytes, source: str) -> dict:
             # 取最大那個（通常主要資料）
             csv_names.sort(key=lambda n: -z.getinfo(n).file_size)
             csv_data = z.read(csv_names[0])
-        return ingest_csv(csv_data, source=source)
+        return ingest_csv(csv_data, source=source, build_index=build_index)
     # 直接當 CSV
-    return ingest_csv(data, source=source)
+    return ingest_csv(data, source=source, build_index=build_index)

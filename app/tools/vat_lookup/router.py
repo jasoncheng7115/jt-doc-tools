@@ -59,8 +59,8 @@ def search(payload: dict):
     field = (payload or {}).get("field", "any")
     limit = (payload or {}).get("limit", 50)
     categories = (payload or {}).get("categories") or None
-    if not isinstance(query, str) or len(query.strip()) < 2:
-        raise HTTPException(400, "query 至少 2 個字元")
+    if not isinstance(query, str) or len(query.strip()) < 1:
+        raise HTTPException(400, "query 至少 1 個字元")
     try:
         results = vat_db.search_companies(
             query.strip(), field=field, limit=limit, categories=categories,

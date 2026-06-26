@@ -243,6 +243,7 @@
 
 <div class="vd-breakdown" id="breakdown" style="display:none;">
   <h4>上次更新明細 <span class="vd-bd-time" id="bdTime"></span></h4>
+  <p class="muted" style="font-size:12px; margin:2px 0 10px;">主檔每次為「全量重新匯入」（財政部發布的是完整資料集，非增量），筆數接近整個資料庫屬正常；補充來源為「新增不覆蓋」。</p>
   <div class="vd-bd-rows" id="bdRows"></div>
 </div>
 
@@ -407,22 +408,25 @@ function renderBreakdown(lr) {
   const rows = $('bdRows');
   rows.innerHTML = '';
 
-  const addRow = (label, name, count, errMsg) => {
+  // 主檔每次都是「全量重新匯入」（財政部發布的是完整資料集，非增量），所以
+  // 主檔筆數看起來幾乎等於整個資料庫 — 這是正常的。補充來源才是「新增不覆蓋」。
+  const addRow = (label, name, count, errMsg, isMain) => {
     rows.appendChild(_mkCell('vd-bd-label', label));
     rows.appendChild(_mkCell('vd-bd-name', name));
     if (errMsg) {
       // 失敗訊息跨 count + pct 兩欄
       rows.appendChild(_mkCell('vd-bd-count err', '失敗：' + errMsg));
     } else {
+      const n = (count || 0).toLocaleString('en-US');
       rows.appendChild(_mkCell('vd-bd-count',
-        '+' + (count || 0).toLocaleString('en-US') + ' 筆'));
-      rows.appendChild(_mkCell('vd-bd-pct', ''));
+        isMain ? ('匯入 ' + n + ' 筆') : ('+' + n + ' 筆')));
+      rows.appendChild(_mkCell('vd-bd-pct', isMain ? '全量' : '新增'));
     }
   };
 
-  addRow('主檔', lr.main_source_name || '(未知來源)', lr.main_records);
+  addRow('主檔', lr.main_source_name || '(未知來源)', lr.main_records, null, true);
   for (const s of (lr.supplements || [])) {
-    addRow('補充', s.name, s.added, s.error);
+    addRow('補充', s.name, s.added, s.error, false);
   }
   // 總計列
   rows.appendChild(_mkCell('vd-bd-label vd-bd-total-label', '總計'));

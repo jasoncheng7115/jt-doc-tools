@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.12.15"
+VERSION = "1.12.16"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -1205,6 +1205,9 @@ async def _startup():
         try:
             from .core import vat_db as _vatdb
             _vatdb.start_scheduler()
+            # 既有站台升版 / 重新安裝 / 重啟後，若已有統編資料但 FTS 名稱搜尋
+            # 索引尚未建（舊版資料庫），背景就地重建（不必重新下載）。非阻塞。
+            _vatdb.maybe_build_fts_background()
         except Exception:
             logger.exception("vat_db scheduler start failed")
     except Exception as exc:

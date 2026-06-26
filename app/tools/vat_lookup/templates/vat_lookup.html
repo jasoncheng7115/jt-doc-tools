@@ -196,7 +196,8 @@ mark.vl-hl {
 </div>
 <div class="vl-search-hint">
   <span><span class="key">12345678</span> 8 位數字 → 統編反查</span>
-  <span><span class="key">有限公司</span> 關鍵字 → 模糊搜尋</span>
+  <span><span class="key">節省</span> 1 個字起 → 名稱 / 地址 / 行業模糊搜尋</span>
+  <span><span class="key">節省 工具</span> 空格分隔多個關鍵字 → 都要符合</span>
   <span><span class="key">Enter</span> 送出</span>
 </div>
 
@@ -284,10 +285,12 @@ function _catChip(cat) {
 function _highlight(text, query) {
   if (!text) return '';
   const escapedText = escapeHtml(text);
-  if (!query) return escapedText;
-  const escapedQuery = escapeHtml(query);
-  // 跳過 regex 特殊字元
-  const reEsc = escapedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // 多關鍵字：空格拆開逐一高亮（與後端 AND 搜尋一致）。用 alternation 一次
+  // 掃過，避免逐關鍵字 replace 時又掃到前一輪插入的 <mark> 標記。
+  const kws = (query || '').trim().split(/\s+/).filter(Boolean);
+  if (!kws.length) return escapedText;
+  const reEsc = kws.map(kw =>
+    escapeHtml(kw).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   return escapedText.replace(new RegExp(reEsc, 'gi'),
     m => `<mark class="vl-hl">${m}</mark>`);
 }
@@ -364,8 +367,8 @@ async function smartQuery() {
       $('results').innerHTML = _renderCard(j, false, q);
     } else {
       // 文字 OR (8 位數字 + 有篩選) → 模糊搜尋
-      if (q.length < 2) {
-        $('results').innerHTML = `<div class="vl-result-empty">關鍵字至少 2 個字元</div>`;
+      if (q.length < 1) {
+        $('results').innerHTML = `<div class="vl-result-empty">請輸入關鍵字</div>`;
         return;
       }
       const payload = { query: q, field: 'any', limit: 50 };
