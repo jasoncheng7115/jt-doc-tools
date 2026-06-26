@@ -212,9 +212,11 @@ def _fts5_available(conn: sqlite3.Connection) -> bool:
 
 
 def _fts_ready(conn: sqlite3.Connection) -> bool:
-    """vat_fts 是否存在且已建好（有列）。"""
+    """vat_fts 是否存在且已建好（有列）。**用 LIMIT 1 存在性檢查，不可用
+    count(*)** —— FTS5 的 count(*) 會掃整個索引（170 萬筆 ~1 秒），而這函式每次
+    搜尋都呼叫一次，會把毫秒級的 FTS 搜尋拖成秒級。"""
     try:
-        return conn.execute("SELECT count(*) FROM vat_fts").fetchone()[0] > 0
+        return conn.execute("SELECT 1 FROM vat_fts LIMIT 1").fetchone() is not None
     except Exception:
         return False
 
