@@ -4,6 +4,15 @@
 
 ---
 
+## [1.12.26] - 2026-06-26
+
+### 資安 — OWASP ZAP 掃描修正一輪（CSRF token + 升級 DOMPurify + 內建 fabric.js）
+
+- **CSRF 防護（double-submit token）**：新增 `app/core/csrf.py` pure-ASGI middleware，疊在既有 SameSite=Lax 之上。每個瀏覽器一個隨機 token（`jtdt_csrf` cookie），AJAX 自動帶 `X-CSRF-Token` 標頭（`static/js/csrf.js` 包裝 fetch）、原生表單注入隱藏 `csrf_token` 欄位；後端對不安全方法（POST/PUT/PATCH/DELETE）比對。豁免 bearer-token API 與 SSO 跨站回呼（SAML ACS/SLS）。
+- **DOMPurify 3.1.6 → 3.4.11**：修多個 XSS bypass CVE（`static/vendor/marked/purify.min.js`）。
+- **fabric.js 改內建本機**：pdf-editor 原從 jsDelivr CDN 載 `fabric@5.3.0`（Sub Resource Integrity 缺失 + 跨網域腳本），改 vendor 到 `static/vendor/fabric/`，並從 CSP `script-src` 移除 jsDelivr（不再開任何外部 CDN）。
+- 其餘 ZAP 項目：Private IP 揭露（/admin OCR 設定，管理員專用且為其自設位址）、時戳揭露屬可接受；CSP `unsafe-inline` 需全站 nonce 化，列為後續 hardening。
+
 ## [1.12.25] - 2026-06-26
 
 ### 資安 — 統編查詢 SQL 改全常數字串（根治 CodeQL 4 個 High 誤判）

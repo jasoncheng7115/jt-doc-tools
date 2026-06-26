@@ -56,6 +56,7 @@
 </head>
 <body>
   <form class="login-card" method="post" action="/login" autocomplete="on">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
     <div class="login-brand">
       <img src="{{ _brand_logo or '/static/images/logo-on-light.png' }}" alt="" />
       <div>

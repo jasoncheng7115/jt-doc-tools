@@ -14,12 +14,17 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.12.25"
+VERSION = "1.12.26"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
 
 app = FastAPI(title=settings.app_name, version=VERSION)
+
+# CSRF 防護（pure-ASGI，最外層）— double-submit token，疊在 SameSite=Lax 之上。
+# 最後 add_middleware 者最外層：最先驗證不安全方法、最後設 jtdt_csrf cookie。
+from app.core.csrf import CSRFMiddleware  # noqa: E402
+app.add_middleware(CSRFMiddleware)
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR.parent / "static"
@@ -583,9 +588,10 @@ async def _security_headers(request: Request, call_next):
     # plugin objects.
     h.setdefault("Content-Security-Policy", (
         "default-src 'self'; "
-        # inline 'unsafe-inline' needed for templates' <style> + event handlers;
-        # jsDelivr allowed for Fabric.js (pdf-editor) only.
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        # inline 'unsafe-inline' needed for templates' <style> + event handlers.
+        # 所有第三方 JS（Fabric.js / PDF.js / DOMPurify 等）一律 vendor 到本機，
+        # script-src 不開任何外部 CDN（移除 jsDelivr → 無外部腳本注入面）。
+        "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
         # data: for QR PNGs (TOTP setup) + base64 thumbs; blob: for PDF.js
         "img-src 'self' data: blob:; "

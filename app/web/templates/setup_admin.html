@@ -66,6 +66,7 @@
         如果忘記密碼，請以系統管理員身分在主機上跑 <code>sudo jtdt reset-password &lt;帳號&gt;</code> 重設。
       </p>
       <form method="post" action="/setup-admin/reuse-existing">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
         <button class="reuse-btn" type="submit">恢復本機認證（沿用既有 admin）</button>
       </form>
     </div>
@@ -74,6 +75,7 @@
     <details style="margin-bottom:14px;">
       <summary style="cursor:pointer; font-size:13px; color:#374151; padding:8px 0;">建立新管理員帳號（會與既有帳號並存）</summary>
       <form method="post" action="/setup-admin" autocomplete="off" style="margin-top:14px;">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
         {% if error %}<div class="setup-error">{{ error }}</div>{% endif %}
         <div class="form-row">
           <label for="username">管理員帳號</label>
@@ -99,6 +101,7 @@
   </div>
   {% else %}
   <form class="setup-card" method="post" action="/setup-admin" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
     <h1>🔐 啟用認證</h1>
     <p class="lead">啟用後，所有頁面都需要登入。請先建立第一個管理員帳號。</p>
 

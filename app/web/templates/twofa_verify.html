@@ -49,6 +49,7 @@
   {% endif %}
 
   <form method="post" action="/2fa-verify" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
     <div style="margin-bottom: 14px;">
       <label style="display: block; font-size: 13px; color: #475569;
                     margin-bottom: 6px;">驗證碼（6 位數字）</label>

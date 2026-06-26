@@ -19,6 +19,10 @@ import tempfile
 from io import BytesIO
 from pathlib import Path
 
+# ---- CSRF：測試套件預設跳過 double-submit 驗證（仍會設 cookie / state）----
+# 真正的 CSRF 邏輯由 tests/test_csrf.py 直接測 middleware（不靠此旗標）。
+os.environ.setdefault("JTDT_CSRF_DISABLE", "1")
+
 # ---- Isolate test data dir BEFORE any app.* import ----
 # (Module-level: runs once per pytest invocation.)
 if "JTDT_DATA_DIR" not in os.environ:
