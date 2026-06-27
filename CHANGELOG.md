@@ -4,6 +4,18 @@
 
 ---
 
+## [1.12.28] - 2026-06-27
+
+### 資安 — CSP 移除 script-src 'unsafe-inline'（Phase 1，nonce 化）
+
+回應 OWASP ZAP「CSP: script-src unsafe-inline」。移除 `script-src` 的 `'unsafe-inline'`，改用 **per-request nonce**：注入的 inline `<script>` 不帶 nonce 將無法執行，大幅強化 XSS 防護。
+
+- **84 個 inline `<script>` 加 nonce**（`{{ request.state.csp_nonce }}`，由 CSRF middleware 產生）。CSP `script-src 'self' 'nonce-…'`（nonce 缺失時退回 'unsafe-inline' 以免整站失效）。
+- **28 個 inline 事件處理器（onclick 等）改 addEventListener / 委派**：新增共用 `static/js/inline_actions.js`（data-stop-prop / data-submit-on-change / lazy-load）；submission-check、vat-lookup、pdf-fill 等改用 data-* + 委派。
+- 修 `{% raw %}` 內的 `<script nonce>`（Jinja 不渲染 → 無效 nonce）：markdown-to-doc / pdf-to-markdown / admin OCR 設定，把 `<script>` 標籤移出 raw。
+- **驗證**：headless 瀏覽器（Chrome）逐頁載入 **59 個頁面 0 CSP 違規 / 0 JS 錯誤**；**264 個寫入端點**全數無 CSRF 誤擋、bearer 豁免正常；submission-check 互動（委派 / 表單綁定）實測有效；新增 `tests/test_csp_nonce.py` 靜態回歸（每個 inline script 有 nonce、無 raw 包 script、無 inline handler）。
+- `style-src 'unsafe-inline'` 仍保留（1500+ inline style 屬性無法 nonce 涵蓋、CSS 注入風險低，列為後續）。
+
 ## [1.12.27] - 2026-06-27
 
 ### 修正 — CSRF cookie 在 HTTPS（反向代理）未帶 Secure flag

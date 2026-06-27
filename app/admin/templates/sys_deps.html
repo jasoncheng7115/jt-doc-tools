@@ -244,7 +244,7 @@
   }
 </style>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
   // ---- Async fetch + render ------------------------------------------
   // Page renders empty + spinner first; deps probe runs server-side via
   // /admin/api/sys-deps and only blocks the table area, not first paint.

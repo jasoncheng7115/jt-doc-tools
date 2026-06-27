@@ -107,7 +107,7 @@
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 (function() {
   const root = document.getElementById('p2iUpload');
   if (!root) { console.error('[p2i] #p2iUpload not found'); return; }

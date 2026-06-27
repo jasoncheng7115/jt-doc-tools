@@ -155,7 +155,7 @@
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const $ = (id) => document.getElementById(id);
 let fileA = null, fileB = null;
 

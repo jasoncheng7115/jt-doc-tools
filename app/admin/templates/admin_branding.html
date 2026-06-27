@@ -191,7 +191,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const fileInput = document.getElementById('logoFile');
 const btnUpload = document.getElementById('btnUpload');
 const btnReset  = document.getElementById('btnReset');

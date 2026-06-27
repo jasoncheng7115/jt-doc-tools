@@ -97,7 +97,7 @@
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const $ = (id) => document.getElementById(id);
 let lastResult = null;
 let lastFile   = null;
@@ -210,7 +210,7 @@ function _renderBakedGrid(r) {
   let html = "";
   for (let p = 1; p <= r.page_count; p++) {
     html += `<div class="thumb">`;
-    html += `<img loading="lazy" class="loading" src="/tools/pdf-annotations-flatten/baked-preview/${r.baked_uid}/${p}" alt="第 ${p} 頁" data-page="${p}" onload="this.classList.remove('loading')">`;
+    html += `<img loading="lazy" class="loading" src="/tools/pdf-annotations-flatten/baked-preview/${r.baked_uid}/${p}" alt="第 ${p} 頁" data-page="${p}">`;
     html += `<div class="cap">第 ${p} 頁</div>`;
     html += `</div>`;
   }

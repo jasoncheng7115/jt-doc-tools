@@ -255,7 +255,7 @@
 <script src="/static/js/file_upload.js"></script>
 <script src="/static/js/job_progress.js"></script>
 <script src="/static/js/drag_position_editor.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 let pickedFiles = [];
 let editor = null;
 let previewInfo = null;

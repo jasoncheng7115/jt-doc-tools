@@ -324,7 +324,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const $ = (id) => document.getElementById(id);
 const ENGINE = {{ office_engine|tojson }};
 

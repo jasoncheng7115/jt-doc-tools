@@ -411,7 +411,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const btn = document.getElementById('btnDisableAuth');
 if (btn) btn.addEventListener('click', async () => {
   if (!(await showConfirm('確定停用認證？所有 session 會立刻失效。',

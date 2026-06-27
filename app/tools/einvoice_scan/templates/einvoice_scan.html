@@ -771,7 +771,7 @@
 
 {% block scripts %}
 <script src="/static/vendor/jsqr/jsQR.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const $ = id => document.getElementById(id);
 
 function escapeHtml(s) {

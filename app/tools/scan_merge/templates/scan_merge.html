@@ -166,7 +166,7 @@
 
 {% block scripts %}
 <script src="/static/js/job_progress.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 // crops: [{crop_id, filename, page, natural_w, natural_h, url_raw, url_white, x, y, w, h}]
 // x/y/w/h 都是 A4 的 0..1 比例。
 let crops = [];

@@ -91,7 +91,7 @@
   {% endif %}
 </div>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 (function () {
   function pad(n) { return String(n).padStart(2, '0'); }
   function fmtTs(ts) {

@@ -90,7 +90,19 @@
 
 <script src="/static/js/friendly_error.js"></script>
 <script src="/static/js/file_upload.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
+// 縮圖載入失敗 → 換成副檔名色塊（取代 inline onerror；error 不冒泡用 capture 委派）
+document.addEventListener('error', function (e) {
+  var img = e.target;
+  if (!img || img.tagName !== 'IMG' || !img.closest) return;
+  var thumb = img.closest('.ws-thumb');
+  if (!thumb) return;
+  var ext = thumb.dataset.ext || '';
+  var span = document.createElement('span');
+  span.className = 'ws-badge ' + ext;
+  span.textContent = ext.toUpperCase();
+  img.replaceWith(span);
+}, true);
 const WS = {
   fmtBytes(n) {
     if (!n) return '0 B';
@@ -164,8 +176,7 @@ async function wsLoad() {
     const ext = (f.ext || '').replace('.', '');
     // First-page preview for PDF (rendered server-side) + the image itself for
     // PNG. Falls back to a coloured badge if the thumbnail can't be produced.
-    const thumb = `<img src="/workspace/thumb/${f.file_id}" alt="" loading="lazy" `
-      + `onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('span'),{className:'ws-badge ${ext}',textContent:'${ext.toUpperCase()}'}))">`;
+    const thumb = `<img src="/workspace/thumb/${f.file_id}" alt="" loading="lazy">`;
     return `<div class="ws-card" data-id="${f.file_id}">
       <input type="checkbox" class="ws-check" data-id="${f.file_id}" aria-label="選取">
       <div class="ws-thumb" data-id="${f.file_id}" data-ext="${ext}">${thumb}</div>

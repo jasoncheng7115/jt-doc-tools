@@ -341,7 +341,7 @@ mark.vl-hl {
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const $ = id => document.getElementById(id);
 
 function escapeHtml(s) {
@@ -604,7 +604,7 @@ async function smartQuery() {
       }
       const hdr = `<div class="vl-results-hdr">
         <span class="count">找到 <b>${j.count}</b> 筆${j.count >= 50 ? '（最多顯示 50 筆，可加更具體關鍵字縮小範圍）' : ''}${escapeHtml(catNote)}</span>
-        <span class="actions"><button class="vl-btn-sm" onclick="exportResultsCsv()">{{ icon('download', size=12) }} 下載 .csv</button></span>
+        <span class="actions"><button class="vl-btn-sm" data-act="export-csv">{{ icon('download', size=12) }} 下載 .csv</button></span>
       </div>`;
       _lastSearchResults = j.results;
       $('results').innerHTML = hdr + j.results.map(r => _renderCard(r, false, q)).join('');
@@ -646,6 +646,11 @@ if (_btnClearFilter) {
 }
 
 let _lastSearchResults = [];
+
+// 下載 .csv 按鈕是動態插入的 → 用委派（取代 inline onclick）
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-act="export-csv"]')) exportResultsCsv();
+});
 
 function exportResultsCsv() {
   if (!_lastSearchResults.length) return;

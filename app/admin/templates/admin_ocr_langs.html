@@ -345,8 +345,8 @@ ssh root@GPUServer 'bash /tmp/jt-ocr-server-install.sh'</pre>
   </div> {# /padding-top wrap #}
 </details>
 
+<script nonce="{{ request.state.csp_nonce }}">
 {% raw %}
-<script>
 // 外部 OCR Server 設定 UI
 (function(){
   const $ = (id) => document.getElementById(id);
@@ -455,8 +455,8 @@ ssh root@GPUServer 'bash /tmp/jt-ocr-server-install.sh'</pre>
 
   loadStatus();
 })();
-</script>
 {% endraw %}
+</script>
 
 <!-- ============== Tesseract Section (備用) ============== -->
 <details class="panel ocr-section" id="tesseractSection" style="border-left:4px solid #94a3b8;" {% if default_engine == 'tesseract' %}open{% endif %}>
@@ -605,7 +605,7 @@ ssh root@GPUServer 'bash /tmp/jt-ocr-server-install.sh'</pre>
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 (function(){
   function showToast(msg, kind){
     const t = document.getElementById('olToast');

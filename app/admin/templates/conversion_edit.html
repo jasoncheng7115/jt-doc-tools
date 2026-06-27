@@ -79,7 +79,7 @@
 
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const list = document.getElementById('path-list');
 
 // drag-reorder

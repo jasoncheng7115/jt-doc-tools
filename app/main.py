@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.12.27"
+VERSION = "1.12.28"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -587,12 +587,18 @@ async def _security_headers(request: Request, call_next):
     # used by templates + the one external CDN (Fabric.js for pdf-editor),
     # tight enough to block exfil to attacker hosts (XSS data exfil) and
     # plugin objects.
+    # script-src 用 per-request nonce（CSRF middleware 設於 request.state）→ 移除
+    # 'unsafe-inline'，注入的 inline <script> 不帶 nonce 無法執行（強化 XSS 防護）。
+    # 模板的 90 個 inline <script> 已加 nonce，inline 事件處理器已改 addEventListener。
+    # 萬一 nonce 缺失（理論上不會）退回 'unsafe-inline' 以免整站 JS 失效。
+    # style-src 仍 'unsafe-inline'：1500+ 個 inline style 屬性無法用 nonce 涵蓋，
+    # 且 CSS 注入風險遠低於 script，列為後續 hardening。
+    _nonce = getattr(getattr(request, "state", None), "csp_nonce", "") or ""
+    _script_src = (f"script-src 'self' 'nonce-{_nonce}'; " if _nonce
+                   else "script-src 'self' 'unsafe-inline'; ")
     h.setdefault("Content-Security-Policy", (
         "default-src 'self'; "
-        # inline 'unsafe-inline' needed for templates' <style> + event handlers.
-        # 所有第三方 JS（Fabric.js / PDF.js / DOMPurify 等）一律 vendor 到本機，
-        # script-src 不開任何外部 CDN（移除 jsDelivr → 無外部腳本注入面）。
-        "script-src 'self' 'unsafe-inline'; "
+        + _script_src +
         "style-src 'self' 'unsafe-inline'; "
         # data: for QR PNGs (TOTP setup) + base64 thumbs; blob: for PDF.js
         "img-src 'self' data: blob:; "

@@ -233,7 +233,7 @@
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script>
 <script src="/static/js/job_progress.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const $ = (id) => document.getElementById(id);
 let uploadId = null;
 

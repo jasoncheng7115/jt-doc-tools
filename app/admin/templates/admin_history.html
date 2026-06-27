@@ -31,7 +31,7 @@
 <form method="get" style="margin-bottom:10px;">
   <label>
     使用者篩選：
-    <select class="field" name="q_user" onchange="this.form.submit()">
+    <select class="field" name="q_user" data-submit-on-change>
       <option value="">所有人</option>
       {% for u in users %}
       <option value="{{ u }}" {% if u == q_user %}selected{% endif %}>{{ u }}</option>
@@ -50,7 +50,7 @@
       {% for e in entries %}
       <tr data-hid="{{ e.id }}">
         <td class="muted" style="font-size:11px;">
-          <script>document.currentScript.parentElement.textContent = new Date({{ (e.saved_at*1000)|int }}).toLocaleString('zh-TW');</script>
+          <script nonce="{{ request.state.csp_nonce }}">document.currentScript.parentElement.textContent = new Date({{ (e.saved_at*1000)|int }}).toLocaleString('zh-TW');</script>
         </td>
         <td>{{ e.filename }}</td>
         <td>{{ e.username or '(匿名)' }}</td>
@@ -80,7 +80,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const KIND = "{{ kind }}";
 document.querySelectorAll('[data-act="del"]').forEach(btn => {
   btn.addEventListener('click', async () => {

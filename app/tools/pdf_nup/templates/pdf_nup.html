@@ -221,7 +221,7 @@ input.field { padding: 6px 10px; border: 1px solid var(--border); border-radius:
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const $ = (id) => document.getElementById(id);
 let uploadId = null;
 let fileCount = 0;

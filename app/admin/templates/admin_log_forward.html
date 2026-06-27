@@ -42,7 +42,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const initial = {{ destinations|tojson }};
 
 function row(d) {

@@ -489,7 +489,7 @@
 
 {% block scripts %}
 {% if llm_enabled %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 // ----------------------------------------------------------------------
 // JtSelect — 自製下拉，取代瀏覽器原生 <select>。每個 .jt-select 元素
 // 透過 data-options 帶選項清單（JSON）+ data-value 帶當前值。提供 .value

@@ -149,7 +149,7 @@
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const $ = (id) => document.getElementById(id);
 let lastResult = null;
 let lastFile   = null;
@@ -335,7 +335,7 @@ function redrawList() {
       const who = a.author || "(未署名)";
       const body = a.content || a.subject || "<em style='color:#94a3b8'>(無文字內容)</em>";
       const thumb = lastResult.upload_id
-        ? `<div class="thumb"><img loading="lazy" class="loading" src="/tools/pdf-annotations/preview/${lastResult.upload_id}/${a.page}" alt="第 ${a.page} 頁預覽" data-page="${a.page}" onload="this.classList.remove('loading')"></div>`
+        ? `<div class="thumb"><img loading="lazy" class="loading" src="/tools/pdf-annotations/preview/${lastResult.upload_id}/${a.page}" alt="第 ${a.page} 頁預覽" data-page="${a.page}"></div>`
         : "";
       html += `<div class="an-row">`;
       html += thumb;

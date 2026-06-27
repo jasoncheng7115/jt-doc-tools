@@ -137,7 +137,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const ALL_USERS = {{ all_users|tojson }};
 const ALL_ROLES = {{ all_roles|tojson }};
 

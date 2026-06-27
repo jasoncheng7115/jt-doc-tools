@@ -39,7 +39,7 @@
         <span class="fnt-group-title">
           {{ g.title }} <span class="muted" style="font-weight:normal; font-size:12px;">({{ g.fonts|length }})</span>
         </span>
-        <span class="fnt-group-actions" onclick="event.preventDefault(); event.stopPropagation();">
+        <span class="fnt-group-actions" data-stop-prop data-prevent-default>
           <button type="button" class="btn btn-sm fnt-bulk-show" data-ids='{{ group_ids|tojson }}'
                   title="這個分類全部設為顯示">
             {{ icon('eye', size=13) }} 全部顯示
@@ -159,7 +159,7 @@
 
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const status = document.getElementById('uploadStatus');
 const fontDropZone = document.getElementById('fontDropZone');
 const fontFile = document.getElementById('fontFile');

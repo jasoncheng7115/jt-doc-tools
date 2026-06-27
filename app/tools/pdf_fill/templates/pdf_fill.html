@@ -11,7 +11,7 @@
       <div style="display:flex; gap:10px; align-items:center;">
         <h2 style="margin:0;">公司資料</h2>
         {% if companies|length > 1 %}
-        <select id="companySwitch" onclick="event.stopPropagation()">
+        <select id="companySwitch" data-stop-prop>
           {% for c in companies %}
           <option value="{{ c.id }}" {% if c.id == selected_id %}selected{% endif %}>{{ c.name }}{% if c.is_active %} ★{% endif %}</option>
           {% endfor %}
@@ -20,7 +20,7 @@
         <span class="muted">{{ profile.name }}</span>
         {% endif %}
       </div>
-      <a class="btn btn-small" href="/admin/profile?cid={{ selected_id }}" onclick="event.stopPropagation()">{{ icon('edit') }}編輯</a>
+      <a class="btn btn-small" href="/admin/profile?cid={{ selected_id }}" data-stop-prop>{{ icon('edit') }}編輯</a>
     </div>
   </summary>
   <p class="muted" style="font-size:12px; margin:6px 0 8px;">這些欄位會被自動帶入偵測到的對應欄位。</p>
@@ -277,7 +277,7 @@
 
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const form = document.getElementById('uploadForm');
 const uploadRoot = document.getElementById('pdfFileUpload');
 const fileInput = uploadRoot.querySelector('input[type=file]');

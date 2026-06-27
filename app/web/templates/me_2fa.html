@@ -69,7 +69,7 @@
   </div>
 </div>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const $ = (id) => document.getElementById(id);
 async function startEnroll() {
   const r = await fetch('/me/2fa/start', {method: 'POST'});

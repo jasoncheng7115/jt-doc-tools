@@ -14,7 +14,7 @@
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script><script src="/static/js/job_progress.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 let files=[]; const fu = new FileUpload(document.getElementById('upO'),(_f,fs)=>{files=Array.isArray(fs)?fs:(fs?[fs]:[]);});
 const jp = new JobProgress(document.getElementById('jp'),{onReset:()=>{fu.reset();files=[];}});
 document.getElementById('btn-submit').addEventListener('click', async () => {

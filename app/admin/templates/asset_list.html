@@ -83,7 +83,7 @@
 
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 // Wire drop-zone → submit button
 (function(){
   const root = document.getElementById('assetUpload');
@@ -115,7 +115,7 @@
   });
 })();
 </script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-act]');
   if (btn) {

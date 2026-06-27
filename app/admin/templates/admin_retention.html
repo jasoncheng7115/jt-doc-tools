@@ -70,7 +70,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 document.getElementById('saveBtn').addEventListener('click', async () => {
   const body = {};
   document.querySelectorAll('[data-key]').forEach(el => {

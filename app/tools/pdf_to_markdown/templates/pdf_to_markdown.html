@@ -324,8 +324,8 @@
 <script src="/static/js/custom_select.js"></script>
 <script src="/static/vendor/marked/marked.min.js"></script>
 <script src="/static/vendor/marked/purify.min.js"></script>
+<script nonce="{{ request.state.csp_nonce }}">
 {% raw %}
-<script>
 (function(){
   const $ = (id) => document.getElementById(id);
   let pickedFile = null;
@@ -480,6 +480,6 @@
     }
   });
 })();
-</script>
 {% endraw %}
+</script>
 {% endblock %}

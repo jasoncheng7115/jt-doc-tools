@@ -118,7 +118,12 @@ class CSRFMiddleware:
         cookie_tok = _cookie_token(scope)
         token = cookie_tok or new_token()
         # 曝露給模板（login / setup-admin 等原生表單以隱藏欄位 render）
-        scope.setdefault("state", {})["csrf_token"] = token
+        st = scope.setdefault("state", {})
+        st["csrf_token"] = token
+        # CSP nonce（pure-ASGI 設 scope state → 必傳到 handler / 模板）；
+        # 每請求一個，模板 inline <script> 用 {{ request.state.csp_nonce }}，
+        # _security_headers 讀同值放進 CSP script-src 'nonce-...'。
+        st["csp_nonce"] = secrets.token_urlsafe(16)
 
         method = scope.get("method", "GET")
         replay_messages = None

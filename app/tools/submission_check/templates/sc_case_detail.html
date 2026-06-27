@@ -112,8 +112,8 @@
     {% endif %}
   </dl>
   <div style="margin-top:12px;">
-    <button class="btn btn-primary" onclick="rerunCheck('{{ case.case_id }}')">{{ icon('refresh', size=14) }} 重新檢核（新版本）</button>
-    <button class="btn" onclick="location.reload()" style="margin-left:6px;">{{ icon('refresh', size=14) }} 重新整理</button>
+    <button class="btn btn-primary" data-act="rerun">{{ icon('refresh', size=14) }} 重新檢核（新版本）</button>
+    <button class="btn" data-act="reload" style="margin-left:6px;">{{ icon('refresh', size=14) }} 重新整理</button>
   </div>
 </div>
 
@@ -178,7 +178,7 @@
           <span class="scd-finding-title">{{ fd.title }}</span>
           <div class="scd-finding-detail">{{ fd.detail }}</div>
           {% if fd.evidence and fd.evidence|length > 0 %}
-          <button class="scd-evidence-toggle" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none'; this.textContent = this.nextElementSibling.style.display === 'none' ? '▸ 顯示細節' : '▾ 收合細節';">▸ 顯示細節</button>
+          <button class="scd-evidence-toggle" data-act="toggle">▸ 顯示細節</button>
           <pre class="scd-evidence" style="display:none;">{{ fd.evidence|tojson(indent=2) }}</pre>
           {% endif %}
           {% if fd._override %}
@@ -192,20 +192,20 @@
               {% for _fid in _files_in_evidence[:5] %}
               {% set _short = _fid2name.get(_fid, _fid[:8]) %}
               {% set _short = (_short[:18] + '…') if _short|length > 20 else _short %}
-              <button class="prev" onclick="previewPage('{{ case.case_id }}', '{{ _fid }}', {{ fd.page }})" title="{{ _fid2name.get(_fid, _fid) }} p.{{ fd.page }}">{{ icon('eye', size=12) }} {{ _short }} p.{{ fd.page }}</button>
+              <button class="prev" data-act="preview" data-fid="{{ _fid }}" data-page="{{ fd.page }}" title="{{ _fid2name.get(_fid, _fid) }} p.{{ fd.page }}">{{ icon('eye', size=12) }} {{ _short }} p.{{ fd.page }}</button>
               {% endfor %}
             {% elif _files_in_evidence %}
               {% for _fid in _files_in_evidence[:5] %}
               {% set _short = _fid2name.get(_fid, _fid[:8]) %}
               {% set _short = (_short[:18] + '…') if _short|length > 20 else _short %}
-              <button class="prev" onclick="previewPage('{{ case.case_id }}', '{{ _fid }}', 1)" title="{{ _fid2name.get(_fid, _fid) }} p.1">{{ icon('eye', size=12) }} {{ _short }} p.1</button>
+              <button class="prev" data-act="preview" data-fid="{{ _fid }}" data-page="1" title="{{ _fid2name.get(_fid, _fid) }} p.1">{{ icon('eye', size=12) }} {{ _short }} p.1</button>
               {% endfor %}
             {% endif %}
             {% if not fd._override %}
-            <button class="ok" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'confirmed_ok')">標已確認 OK</button>
-            <button class="fp" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'false_positive')">標誤報</button>
+            <button class="ok" data-act="mark" data-key="{{ fd.finding_key|e }}" data-status="confirmed_ok">標已確認 OK</button>
+            <button class="fp" data-act="mark" data-key="{{ fd.finding_key|e }}" data-status="false_positive">標誤報</button>
             {% else %}
-            <button onclick="removeOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}')">移除標記</button>
+            <button data-act="removeMark" data-key="{{ fd.finding_key|e }}">移除標記</button>
             {% endif %}
           </div>
         </div>
@@ -230,13 +230,13 @@
             {% endif %}
             <div class="scd-finding-actions">
               {% if fd.page %}
-              <button class="prev" onclick="previewPage('{{ case.case_id }}', '{{ f.file_id }}', {{ fd.page }})">{{ icon('eye', size=12) }} 預覽 p.{{ fd.page }}</button>
+              <button class="prev" data-act="preview" data-fid="{{ f.file_id }}" data-page="{{ fd.page }}">{{ icon('eye', size=12) }} 預覽 p.{{ fd.page }}</button>
               {% endif %}
               {% if not fd._override %}
-              <button class="ok" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'confirmed_ok')">標已確認 OK</button>
-              <button class="fp" onclick="markOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}', 'false_positive')">標誤報</button>
+              <button class="ok" data-act="mark" data-key="{{ fd.finding_key|e }}" data-status="confirmed_ok">標已確認 OK</button>
+              <button class="fp" data-act="mark" data-key="{{ fd.finding_key|e }}" data-status="false_positive">標誤報</button>
               {% else %}
-              <button onclick="removeOverride('{{ case.case_id }}', '{{ fd.finding_key|e }}')">移除標記</button>
+              <button data-act="removeMark" data-key="{{ fd.finding_key|e }}">移除標記</button>
               {% endif %}
             </div>
           </div>
@@ -252,9 +252,9 @@
   </details>
 {% endfor %}
 
-<div class="scd-modal" id="prevModal" onclick="if(event.target===this) closePreview()">
+<div class="scd-modal" id="prevModal">
   <div class="scd-modal-content">
-    <button class="scd-modal-close" onclick="closePreview()">×</button>
+    <button class="scd-modal-close" data-act="closePreview">×</button>
     <div class="scd-modal-title" id="prevTitle">預覽中…</div>
     <img id="prevImg" alt="頁面預覽">
   </div>
@@ -263,7 +263,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 async function rerunCheck(caseId) {
   const ok = await window.showConfirm("建立新版本並重新檢核？", { title: "重新檢核", okText: "確認" });
   if (!ok) return;
@@ -315,6 +315,33 @@ function closePreview() {
 }
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closePreview();
+});
+
+// 委派綁定（取代 inline onclick）。CASE_ID 模板帶入一次。
+const CASE_ID = "{{ case.case_id }}";
+document.addEventListener("click", function (ev) {
+  const b = ev.target.closest("[data-act]");
+  if (!b) return;
+  const a = b.dataset;
+  switch (a.act) {
+    case "rerun": rerunCheck(CASE_ID); break;
+    case "reload": location.reload(); break;
+    case "toggle": {
+      const box = b.nextElementSibling;
+      const show = box.style.display === "none";
+      box.style.display = show ? "block" : "none";
+      b.textContent = show ? "▾ 收合細節" : "▸ 顯示細節";
+      break;
+    }
+    case "preview": previewPage(CASE_ID, a.fid, parseInt(a.page, 10)); break;
+    case "mark": markOverride(CASE_ID, a.key, a.status); break;
+    case "removeMark": removeOverride(CASE_ID, a.key); break;
+    case "closePreview": closePreview(); break;
+  }
+});
+const _prevModal = document.getElementById("prevModal");
+if (_prevModal) _prevModal.addEventListener("click", function (e) {
+  if (e.target === _prevModal) closePreview();
 });
 
 // 進行中時自動 poll，完成自動 reload

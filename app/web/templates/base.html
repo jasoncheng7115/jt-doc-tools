@@ -36,7 +36,7 @@
                   style="padding:2px 8px; font-size:11px;"
                   title="登出">{{ icon('back', size=11) }} 登出</button>
         </form>
-        <script>
+        <script nonce="{{ request.state.csp_nonce }}">
           (function(){
             var lbtn = document.getElementById('logoutBtn');
             var form = document.getElementById('logoutForm');
@@ -414,7 +414,7 @@
       .home-fab-text { display: none; }
     }
   </style>
-  <script>
+  <script nonce="{{ request.state.csp_nonce }}">
     (function(){
       var fab = document.getElementById('homeFab');
       if (!fab) return;
@@ -425,13 +425,14 @@
     })();
   </script>
   <script src="/static/js/csrf.js"></script>
+  <script src="/static/js/inline_actions.js"></script>
   <script src="/static/js/safe_url.js"></script>
   <script src="/static/js/toast.js"></script>
   <script src="/static/js/modal.js"></script>
   <script src="/static/js/error_format.js"></script>
   <script src="/static/js/friendly_error.js"></script>
   {% if workspace_enabled(request) %}<script src="/static/js/workspace_picker.js"></script>{% endif %}
-  <script>
+  <script nonce="{{ request.state.csp_nonce }}">
     (function(){
       const btn = document.getElementById('sidebarToggle');
       const collapseBtn = document.getElementById('sidebarCollapse');

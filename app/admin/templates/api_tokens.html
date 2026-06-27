@@ -62,11 +62,11 @@
           <button class="btn btn-small btn-copy" type="button" title="複製到剪貼簿">複製</button>
         </td>
         <td class="muted" style="font-size:12px;">
-          <script>document.write(new Date({{ t.created_at * 1000 | int }}).toLocaleString('zh-TW'));</script>
+          <script nonce="{{ request.state.csp_nonce }}">document.write(new Date({{ t.created_at * 1000 | int }}).toLocaleString('zh-TW'));</script>
         </td>
         <td class="muted" style="font-size:12px;">
           {% if t.last_used_at %}
-            <script>document.write(new Date({{ t.last_used_at * 1000 | int }}).toLocaleString('zh-TW'));</script>
+            <script nonce="{{ request.state.csp_nonce }}">document.write(new Date({{ t.last_used_at * 1000 | int }}).toLocaleString('zh-TW'));</script>
           {% else %}—{% endif %}
         </td>
         <td>
@@ -117,7 +117,7 @@ r = httpx.post(
 
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const $ = (id) => document.getElementById(id);
 
 $('enforce').addEventListener('change', async () => {

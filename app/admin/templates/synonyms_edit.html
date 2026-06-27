@@ -47,7 +47,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const rowsEl = document.getElementById('rows');
 const statusEl = document.getElementById('status');
 

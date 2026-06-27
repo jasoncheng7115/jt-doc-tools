@@ -31,7 +31,7 @@
 
 <details class="panel" {% if not entities %}open{% endif %}>
   <summary>新增 / 編輯實體</summary>
-  <form id="seForm" class="se-form" onsubmit="return submitForm(event)">
+  <form id="seForm" class="se-form">
     <input type="hidden" id="seId">
     <div>
       <label>名稱（必填）<span class="muted">公司全名 / 機關全名</span></label>
@@ -66,7 +66,7 @@
     </div>
     <div class="full" style="display:flex; gap:8px;">
       <button type="submit" class="btn btn-primary">{{ icon('save', size=14) }} <span id="seSubmitLabel">新增</span></button>
-      <button type="button" class="btn" onclick="resetForm()">清除</button>
+      <button type="button" class="btn" data-act="reset">清除</button>
     </div>
   </form>
 </details>
@@ -89,8 +89,8 @@
           {% if e.note %}<br><span style="color:#64748b; font-size:11px;">{{ e.note }}</span>{% endif %}
         </td>
         <td class="actions">
-          <button class="btn" onclick='editRow({{ e|tojson }})'>編輯</button>
-          <button class="btn" onclick="delRow('{{ e.id }}', '{{ e.name|e }}')" style="color:#dc2626;">刪除</button>
+          <button class="btn" data-act="edit" data-entity='{{ e|tojson }}'>編輯</button>
+          <button class="btn" data-act="del" data-id="{{ e.id }}" data-name="{{ e.name|e }}" style="color:#dc2626;">刪除</button>
         </td>
       </tr>
     {% endfor %}
@@ -106,7 +106,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 function editRow(e) {
   document.getElementById("seId").value = e.id || "";
   document.getElementById("seName").value = e.name || "";
@@ -163,5 +163,16 @@ async function delRow(id, name) {
     window.showAlert("失敗：" + e.message);
   }
 }
+
+// 綁定（取代 inline onsubmit / onclick）
+document.getElementById("seForm").addEventListener("submit", submitForm);
+document.addEventListener("click", function (ev) {
+  const b = ev.target.closest("[data-act]");
+  if (!b) return;
+  const act = b.dataset.act;
+  if (act === "reset") resetForm();
+  else if (act === "edit") { try { editRow(JSON.parse(b.dataset.entity)); } catch (e) {} }
+  else if (act === "del") delRow(b.dataset.id, b.dataset.name);
+});
 </script>
 {% endblock %}

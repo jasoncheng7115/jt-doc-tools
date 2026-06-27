@@ -343,7 +343,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const $ = id => document.getElementById(id);
 
 function setStatus(msg, kind) {

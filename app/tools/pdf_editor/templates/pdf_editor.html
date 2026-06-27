@@ -3,7 +3,7 @@
 {% block title %}PDF 編輯器 · {{ app_name }}{% endblock %}
 {% block head %}
 <script src="/static/vendor/fabric/fabric.min.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
   // Monkey-patch Canvas API: Fabric 5.x 內部把 textBaseline 設為 'alphabetical'
   // (typo)，新版 Chrome 拒絕並噴 console warning，更糟的是寬度量測 / IText
   // initDimensions 會計算錯誤，間接造成擷取既有文字後文字位置 / 寬度全部歪掉、
@@ -692,7 +692,7 @@ body.pe-pan-active { cursor: grabbing !important; }
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 // ============ State ============
 let uploadId = null;
 let originalFilename = null;

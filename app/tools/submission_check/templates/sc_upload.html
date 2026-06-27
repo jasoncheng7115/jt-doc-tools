@@ -113,7 +113,7 @@
 
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 (function(){
   const $ = (id) => document.getElementById(id);
   const fileList = $('fileList');

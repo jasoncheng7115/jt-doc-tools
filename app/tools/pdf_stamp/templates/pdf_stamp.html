@@ -389,7 +389,7 @@
 <script src="/static/js/drag_position_editor.js"></script>
 <script src="/static/js/stamp_date_overlay.js"></script>
 <script src="/static/js/custom_select.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 let pickedFiles = [];   // all picked PDFs
 let editor = null;
 let paperJt = null;     // JtSelect wrapping the 紙張 dropdown

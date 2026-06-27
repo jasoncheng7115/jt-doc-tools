@@ -564,7 +564,7 @@ details.po-langs-group > summary .more-hint { color:#94a3b8; font-weight:normal;
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script>
 {# Pre-render icon SVGs into JS constants so JS-built innerHTML can use them #}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const PO_ICON_FILE = {{ icon('file-text', size=14) | tojson }};
 const PO_ICON_LAYERS = {{ icon('layers', size=14) | tojson }};
 const PO_ICON_INFO = {{ icon('info', size=14) | tojson }};
@@ -572,7 +572,7 @@ const PO_ICON_WRAP = (svg) => '<span style="display:inline-flex; align-items:cen
 const PO_ICON_COPY = {{ icon('copy', size=12) | tojson }};
 const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
 </script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 (function(){
   const $ = (id) => document.getElementById(id);
   let uploadId = null;

@@ -99,7 +99,7 @@
         <td data-sort-value="{{ c.updated_at|int }}"><span title="epoch {{ c.updated_at|int|string }}">{{ c.updated_at_str }}</span></td>
         <td>
           {% if not c.deleted_at %}
-            <button class="scl-del" title="刪除案件" onclick="deleteCase('{{ c.case_id }}')">{{ icon('trash', size=16) }}</button>
+            <button class="scl-del" title="刪除案件" data-case-id="{{ c.case_id }}">{{ icon('trash', size=16) }}</button>
           {% endif %}
         </td>
       </tr>
@@ -116,7 +116,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 async function deleteCase(caseId) {
   const ok = await window.showConfirm(
     "確定刪除此案件？（會保留歷史紀錄供稽核員調閱，但不會出現在您的清單中）",
@@ -131,6 +131,12 @@ async function deleteCase(caseId) {
     window.showAlert("刪除失敗：" + e.message);
   }
 }
+
+// 綁定刪除按鈕（取代 inline onclick）
+document.addEventListener("click", function (ev) {
+  const b = ev.target.closest(".scl-del");
+  if (b) deleteCase(b.dataset.caseId);
+});
 
 // 簡易表格排序：點 th 切 asc / desc / 取消
 (function() {

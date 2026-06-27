@@ -89,7 +89,7 @@
 
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 let extractedBatch = null;
 let extractedItems = [];
 let picked = new Set();
@@ -140,7 +140,7 @@ function renderExtracted() {
     const sizeKB = (it.size / 1024).toFixed(1);
     return `<label class="img-card ${isPicked ? 'picked' : ''}" data-id="${it.id}" title="點擊勾選">
       <span class="pick" title="勾選 / 取消勾選">${isPicked ? '✓' : ''}</span>
-      <a class="dl-link" href="${it.url}" download="${it.id}" onclick="event.stopPropagation()" title="下載這張">
+      <a class="dl-link" href="${it.url}" download="${it.id}" data-stop-prop title="下載這張">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
       </a>
       <div class="img-thumb" data-zoom-src="${it.url}">
@@ -149,6 +149,7 @@ function renderExtracted() {
       <div class="img-num">原第 ${it.page} 頁 · ${sizeKB} KB · ${it.ext.toUpperCase()}</div>
     </label>`;
   }).join('');
+  if (window.bindStopProp) window.bindStopProp(grid);  // dl-link 動態插入後綁定
 }
 
 document.getElementById('img-grid').addEventListener('click', (e) => {

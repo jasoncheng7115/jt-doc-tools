@@ -233,8 +233,8 @@ def hello():
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/custom_select.js"></script>
+<script nonce="{{ request.state.csp_nonce }}">
 {% raw %}
-<script>
 (function () {
   const $ = (id) => document.getElementById(id);
   let lastResult = null;
@@ -443,6 +443,6 @@ def hello():
     return el ? el.textContent : id;
   }
 })();
-</script>
 {% endraw %}
+</script>
 {% endblock %}

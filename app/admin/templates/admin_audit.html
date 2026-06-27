@@ -73,7 +73,7 @@
     </tbody>
   </table>
 
-  <script>
+  <script nonce="{{ request.state.csp_nonce }}">
     // Format every timestamp client-side as yyyy/MM/dd HH:mm:ss (24-hour,
     // local timezone). Avoids the shifty zh-TW locale formatter that emits
     // 上午/下午 + missing leading zeros.

@@ -78,7 +78,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const selAll = document.getElementById('selAll');
 const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
 const selCountEl = document.getElementById('selCount');

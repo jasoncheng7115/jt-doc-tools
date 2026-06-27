@@ -146,7 +146,7 @@
 
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const $ = id => document.getElementById(id);
 function esc(s) {
   return String(s == null ? "" : s).replace(/[<>&"']/g, c =>

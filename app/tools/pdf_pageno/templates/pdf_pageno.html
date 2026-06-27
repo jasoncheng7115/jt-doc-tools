@@ -330,7 +330,7 @@
 {% block scripts %}
 <script src="/static/js/file_upload.js"></script>
 <script src="/static/js/job_progress.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 let files = [];
 let uploadId = null;
 let pages = [];

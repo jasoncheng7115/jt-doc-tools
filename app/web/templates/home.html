@@ -154,7 +154,7 @@
 .tool-name { font-size: 15.5px; font-weight: 600; }
 .tool-desc { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
 </style>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 // 首頁釘選 — 同 sidebar 用 localStorage['jtdt:pinned']
 (function(){
   const PINS_KEY = 'jtdt:pinned';

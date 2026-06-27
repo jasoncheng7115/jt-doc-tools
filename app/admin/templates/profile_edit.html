@@ -92,7 +92,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const EDIT_ID = {{ edit_id|tojson }};
 const statusEl = document.getElementById('status');
 
