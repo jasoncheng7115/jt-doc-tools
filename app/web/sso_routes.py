@@ -15,6 +15,7 @@ import base64
 import hashlib
 import hmac
 import json
+import secrets
 import time
 from typing import Optional
 
@@ -123,11 +124,15 @@ def build_router(templates) -> APIRouter:
                                       redirect_uri=redirect_uri)
         except oidc.OIDCError as e:
             _audit("login_fail", _client_ip(request), detail=f"oidc build: {e}")
-            return _login_error(str(e))
+            return _login_error("OIDC 登入失敗，請重試或聯絡管理員")
         resp = RedirectResponse(url, status_code=302)
-        tx = _sign({"state": state, "nonce": nonce, "next": safe_next(next),
-                    "ts": time.time()})
-        resp.set_cookie(_SSO_TX_COOKIE, tx, max_age=_SSO_TX_TTL, httponly=True,
+        # OIDC 交易（state/nonce/next）存伺服器端，cookie 只放隨機 txid →
+        # cookie 不含使用者輸入。next 功能完整保留。
+        from ..core import sso_store
+        txid = secrets.token_urlsafe(32)
+        sso_store.save_oidc_tx(txid, state, nonce, safe_next(next),
+                               time.time() + _SSO_TX_TTL)
+        resp.set_cookie(_SSO_TX_COOKIE, txid, max_age=_SSO_TX_TTL, httponly=True,
                         secure=redirect_uri.startswith("https"), samesite="lax", path="/")
         return resp
 
@@ -139,8 +144,9 @@ def build_router(templates) -> APIRouter:
             return _login_error("OIDC 登入未啟用")
         if error:
             _audit("login_fail", ip, detail=f"oidc idp error: {error}")
-            return _login_error(f"OIDC 供應商回傳錯誤：{error[:80]}")
-        tx = _unsign(request.cookies.get(_SSO_TX_COOKIE, ""))
+            return _login_error("OIDC 供應商回傳錯誤，請重試或聯絡管理員")
+        from ..core import sso_store
+        tx = sso_store.pop_oidc_tx(request.cookies.get(_SSO_TX_COOKIE, ""))
         if not tx or not state or not hmac.compare_digest(str(tx.get("state", "")), state):
             _audit("login_fail", ip, detail="oidc state mismatch")
             return _login_error("OIDC state 驗證失敗（請重新登入）")
@@ -158,7 +164,7 @@ def build_router(templates) -> APIRouter:
                 admin_group=cfg.get("admin_group", ""))
         except (oidc.OIDCError, sso_provision.SSOProvisionError) as e:
             _audit("login_fail", ip, detail=f"oidc: {e}")
-            return _login_error(str(e))
+            return _login_error("OIDC 登入失敗，請重試或聯絡管理員")
         return _finish_login(request, user, tx.get("next", "/"))
 
     # ---------------- SAML ----------------
@@ -172,7 +178,7 @@ def build_router(templates) -> APIRouter:
                                       relay_state=safe_next(next))
         except saml.SAMLError as e:
             _audit("login_fail", _client_ip(request), detail=f"saml build: {e}")
-            return _login_error(str(e))
+            return _login_error("SAML 登入設定錯誤，請聯絡管理員")
         return RedirectResponse(url, status_code=302)
 
     @router.post("/auth/saml/acs")
@@ -191,7 +197,7 @@ def build_router(templates) -> APIRouter:
                 admin_group=cfg.get("admin_group", ""))
         except (saml.SAMLError, sso_provision.SSOProvisionError) as e:
             _audit("login_fail", ip, detail=f"saml: {e}")
-            return _login_error(str(e))
+            return _login_error("SAML 登入失敗，請重試或聯絡管理員")
         return _finish_login(request, user, ident.get("relay_state", "/"),
                              saml_session={"nameid": ident.get("nameid", ""),
                                            "session_index": ident.get("session_index", "")})

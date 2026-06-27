@@ -4,6 +4,13 @@
 
 ---
 
+## [1.12.29] - 2026-06-27
+
+### 資安 — 消除 CodeQL 2 個 Medium（SSO，改碼非 dismiss）
+
+- **#116 URL redirection（sso_routes:87）**：`_login_error` 的動態參數（`str(e)`、IdP 回傳錯誤）改為**常數字串**（細節仍寫進 audit log）→ 重導 URL 不再含遠端來源資料 → 不再被標。重導目的地本就是常數 `/login`（非 open-redirect）。
+- **#113 cookie（sso_routes:130）**：OIDC 進行中交易（state/nonce/next）改**存伺服器端**（`sso_store.oidc_tx` 表），cookie 只放隨機不可猜的 txid → cookie 不含使用者輸入。**next 功能完整保留**（登入後仍導回原頁），一次性取用防重放。
+- SSO e2e（OIDC / SAML）測試全綠（25 項）。
 ## [1.12.28] - 2026-06-27
 
 ### 資安 — CSP 移除 script-src 'unsafe-inline'（Phase 1，nonce 化）

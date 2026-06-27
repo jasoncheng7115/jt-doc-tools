@@ -43,6 +43,11 @@ def _conn() -> sqlite3.Connection:
         c.execute("CREATE TABLE IF NOT EXISTS saml_session "
                   "(token_hash TEXT PRIMARY KEY, name_id TEXT, session_index TEXT, "
                   "expires REAL NOT NULL)")
+        # OIDC 進行中交易（state/nonce/next）改存伺服器端，cookie 只放隨機 txid →
+        # cookie 不含使用者輸入（next），避免「cookie 用 user input」靜態分析告警。
+        c.execute("CREATE TABLE IF NOT EXISTS oidc_tx "
+                  "(txid TEXT PRIMARY KEY, state TEXT, nonce TEXT, next TEXT, "
+                  "expires REAL NOT NULL)")
         _CONN = c
     return _CONN
 
@@ -98,6 +103,40 @@ def pop_saml_session(token_hash: str) -> tuple[str, str]:
     except Exception as e:
         logger.warning("saml session store read failed: %s", e)
         return "", ""
+
+
+def save_oidc_tx(txid: str, state: str, nonce: str, next_url: str,
+                 expires: float) -> None:
+    """存 OIDC 進行中交易（IdP 往返期間）。txid 是隨機不可猜的 cookie 值。"""
+    if not txid:
+        return
+    try:
+        with _LOCK:
+            c = _conn()
+            c.execute("DELETE FROM oidc_tx WHERE expires < ?", (time.time(),))
+            c.execute("INSERT OR REPLACE INTO oidc_tx"
+                      "(txid, state, nonce, next, expires) VALUES (?,?,?,?,?)",
+                      (txid, state or "", nonce or "", next_url or "/", expires))
+    except Exception as e:
+        logger.warning("oidc tx store write failed: %s", e)
+
+
+def pop_oidc_tx(txid: str) -> dict:
+    """取出並刪除 OIDC 交易（一次性，防重放）。回 {state,nonce,next} 或 {}。"""
+    if not txid:
+        return {}
+    try:
+        with _LOCK:
+            c = _conn()
+            row = c.execute("SELECT state, nonce, next, expires FROM oidc_tx "
+                            "WHERE txid=?", (txid,)).fetchone()
+            c.execute("DELETE FROM oidc_tx WHERE txid=?", (txid,))
+            if not row or row[3] < time.time():
+                return {}
+            return {"state": row[0], "nonce": row[1], "next": row[2]}
+    except Exception as e:
+        logger.warning("oidc tx store read failed: %s", e)
+        return {}
 
 
 def _reset_for_tests() -> None:
