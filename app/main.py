@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.12.31"
+VERSION = "1.12.32"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -624,8 +624,10 @@ async def _security_headers(request: Request, call_next):
         or request.headers.get("X-Forwarded-Proto", "").lower() == "https"
     )
     if is_https:
+        # 1 年（反向代理建議由「app 或 nginx 擇一」設 HSTS,避免重複標頭;
+        # 見 OPS.md / docs 反向代理章節）
         h.setdefault("Strict-Transport-Security",
-                     "max-age=15552000; includeSubDomains")
+                     "max-age=31536000; includeSubDomains")
     return response
 
 

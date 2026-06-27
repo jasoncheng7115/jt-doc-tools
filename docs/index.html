@@ -916,7 +916,19 @@
       所有檔案處理只發生在你的伺服器上。<br>
       可在 Linux 架站給內網多人使用，或單機本地用，<b>不上傳任何雲端服務</b>。
     </p>
+    <div style="max-width:760px;margin:0 auto 28px;padding:16px 20px;background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:10px;text-align:left;color:#7f1d1d;line-height:1.7;">
+      <strong style="display:block;font-size:15px;margin-bottom:6px;">⚠ 非本機存取一律走 nginx 反向代理 + HTTPS</strong>
+      只要不是「本機單人」使用 —— <b>任何網路 / 多人 / 內網其他電腦 / 對外</b> —— 一律放在
+      <b>nginx（或 Caddy）反向代理 + HTTPS</b> 後面，<b>絕不要把 <code>:8765</code> 直接對網路開放</b>。
+      應用程式預設只綁 <code>127.0.0.1:8765</code>（純 HTTP、無 TLS）；直接對外等於明文傳輸帳號密碼與
+      文件內容。反向代理負責 TLS 終結、HSTS、憑證、隱藏版本、安全標頭。完整 nginx / Caddy 設定範例見
+      <a href="https://github.com/jasoncheng7115/jt-doc-tools/blob/main/OPS.md" target="_blank" rel="noopener" style="color:#b91c1c;text-decoration:underline;">OPS.md 反向代理章節</a>。
+    </div>
     <div class="privacy-points">
+      <div class="privacy-point">
+        <strong>反向代理 + TLS（非本機必備）</strong>
+        <span>後端只聽 <code>127.0.0.1:8765</code>，對外由 nginx / Caddy 提供 HTTPS。後端自動設 CSP / HSTS / X-Frame-Options 等安全標頭（依 <code>X-Forwarded-Proto</code> 判斷 https）；nginx 加 <code>server_tokens off</code> 不洩版本，安全標頭擇一來源即可</span>
+      </div>
       <div class="privacy-point">
         <strong>不上雲</strong>
         <span>檔案永遠不離開你的伺服器，沒有第三方 API、沒有外部分析、沒有 telemetry</span>
@@ -959,7 +971,7 @@
       </div>
       <div class="mode-band-card">
         <div class="mode-band-h">伺服器模式（團隊 / 企業）</div>
-        <div class="mode-band-d">部署到 Linux server，到「認證設定」啟用<b>本機帳號 / LDAP / AD</b>，搭配角色與權限矩陣 + 稽核 + 記錄轉送。內網多人共用，可控管。<br><br>預設只聽 <code>127.0.0.1:8765</code>，要對外（內網其他電腦）開放，安裝完跑 <code>jtdt bind 0.0.0.0</code> 即可（會改 systemd / launchd / Windows Service 設定並重啟）；要綁特定 port 例 <code>jtdt bind 0.0.0.0:9999</code>。Linux / macOS 前面加 <code>sudo</code>，Windows 以系統管理員身分執行 PowerShell。</div>
+        <div class="mode-band-d">部署到 Linux server，到「認證設定」啟用<b>本機帳號 / LDAP / AD</b>，搭配角色與權限矩陣 + 稽核 + 記錄轉送。內網多人共用，可控管。<br><br><b style="color:#b91c1c;">⚠ 對外存取一律走 nginx 反向代理 + HTTPS</b>：建議 <code>:8765</code> 維持只聽 <code>127.0.0.1</code>，由 nginx / Caddy 反向代理對外提供 HTTPS（TLS 終結 + HSTS + 憑證）。<b>不要</b>直接 <code>bind 0.0.0.0</code> 把純 HTTP 對網路開放（明文傳帳密）。反向代理設定見 <a href="https://github.com/jasoncheng7115/jt-doc-tools/blob/main/OPS.md" target="_blank" rel="noopener">OPS.md</a>。<br><br>（若內網受信任、暫時要直接對內網開放，<code>jtdt bind 0.0.0.0</code> 會改 systemd / launchd / Windows Service 設定並重啟；要綁特定 port 例 <code>jtdt bind 0.0.0.0:9999</code>。Linux / macOS 前面加 <code>sudo</code>，Windows 以系統管理員身分執行 PowerShell。）</div>
       </div>
     </div>
 

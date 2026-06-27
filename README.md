@@ -1,4 +1,4 @@
-# Jason Tools 文件工具箱 v1.12.31
+# Jason Tools 文件工具箱 v1.12.32
 
 > 整合式 PDF / Office 文件處理平台，39 個工具一站式解決：**填單用印**、**浮水印**、**多頁合併 / 拆分 / 旋轉 / 整理**、**轉檔**、**掃描拼合**、**去識別化**、**字數統計**、**註解整理**、**差異比對**、**逐句翻譯**、**清單處理**、**電子發票處理**、**統編查詢**、**頁面編輯器**、**加密 / 解密**等。
 >
@@ -154,11 +154,48 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 
 ## 隱私 / 安全要點
 
+- **⚠ 非本機存取一律走反向代理 + HTTPS** — 只要不是「本機單人」使用（任何網路 /
+  多人 / 內網 / 對外），**一律放在 nginx（或 Caddy）反向代理 + HTTPS 後面,不要把
+  `:8765` 直接對網路開放**。應用程式預設只綁 `127.0.0.1:8765`（純 HTTP 無 TLS）,
+  直接對外等於明文傳帳密與文件。正確做法見下方與 [OPS.md](OPS.md)。
 - **不上雲、資料留在自己手中** — 所有檔案處理發生在你的伺服器上
 - **資料目錄獨立** — 不會跟使用者個人檔案混在一起，Windows 不 roam
 - **預設不啟用認證**（單機模式） — 全新安裝跟以前一樣大家直接用；要多人或內網部署再啟用
 - **稽核記錄 + SIEM 轉送** — 啟用認證後所有敏感操作記下並可即時轉發
 - **可選 LLM 校驗** — 預設關閉，自接 Ollama / 本機 LLM 才會啟用，不打雲端
+
+### 反向代理（nginx）資安設定
+
+```nginx
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name docs.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/docs.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/docs.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    server_tokens off;            # 不洩 nginx 版本（ZAP「Server Leaks Version」）
+    client_max_body_size 300M;    # 必設：上傳大檔
+    proxy_read_timeout 900s;      # 必設：LLM 工具單筆推理可能數分鐘
+    proxy_send_timeout 900s;
+    proxy_buffering off;
+
+    location / {
+        proxy_pass http://127.0.0.1:8765/;          # 後端只聽 127.0.0.1
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;  # 必設：後端據此設 Secure cookie + HSTS
+    }
+}
+```
+
+安全標頭（CSP / HSTS / X-Frame-Options / X-Content-Type-Options / Referrer-Policy）由
+**後端 app 自動設定**（HSTS 依 `X-Forwarded-Proto` 判斷 https）→ **nginx 不要再
+`add_header` 一次**,否則會出現重複標頭。三個常見地雷(必掛 root 路徑、`client_max_body_size`、
+逾時)與 Caddy 範例見 [OPS.md](OPS.md)。
 
 詳見 [SECURITY.md](SECURITY.md)。
 

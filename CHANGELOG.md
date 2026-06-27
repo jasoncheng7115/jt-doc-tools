@@ -4,6 +4,13 @@
 
 ---
 
+## [1.12.32] - 2026-06-27
+
+### 文件 — 反向代理資安強制要求（README / Pages / OPS）+ HSTS 升 1 年
+
+- **明確要求:非本機（任何網路 / 多人 / 內網 / 對外）存取一律走 nginx（或 Caddy）反向代理 + HTTPS,不要把 `:8765` 直接對網路開放**。README「隱私 / 安全要點」、GitHub Pages（docs/index.html）「不上雲」段加醒目紅框警示 + 完整含資安設定的 nginx 範例（`server_tokens off`、`X-Forwarded-Proto`、安全標頭擇一來源避免重複），安裝頁「伺服器模式」卡片也補反向代理警示。OPS.md 反向代理章節加強制警示。
+- 應用層 HSTS `max-age` 從 180 天升 **1 年**（`max-age=31536000`），對齊反向代理建議值。
+- 配套:doc.jason.tools 的反向代理（nginx）已設 `server_tokens off` + 移除重複的 HSTS `add_header`（HSTS 由後端統一設）→ ZAP 全頁掃 **High 0 / Medium 0 / Low 0**。
 ## [1.12.31] - 2026-06-27
 
 ### 資安 — CSRF cookie 改 HttpOnly（消除 ZAP「Cookie No HttpOnly」Low）
