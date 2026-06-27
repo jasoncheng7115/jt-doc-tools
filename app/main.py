@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.12.34"
+VERSION = "1.12.35"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -619,6 +619,10 @@ async def _security_headers(request: Request, call_next):
     h.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     h.setdefault("Permissions-Policy",
                  "camera=(), microphone=(), geolocation=(), interest-cohort=()")
+    # 動態 HTML 頁不快取（可能含敏感內容；清 ZAP「Re-examine Cache-control」Info）。
+    # 靜態資產（CSS/JS/字型/圖）content-type 非 text/html → 不受影響，維持可快取。
+    if "text/html" in h.get("content-type", ""):
+        h.setdefault("Cache-Control", "no-store")
     is_https = (
         request.url.scheme == "https"
         or request.headers.get("X-Forwarded-Proto", "").lower() == "https"

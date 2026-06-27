@@ -4,6 +4,13 @@
 
 ---
 
+## [1.12.35] - 2026-06-27
+
+### 資安 — HTML 頁加 Cache-Control: no-store（清 ZAP「Re-examine Cache-control」Info）
+
+- 動態 HTML 回應加 `Cache-Control: no-store`（可能含敏感內容,避免瀏覽器/代理快取）。只對 `text/html` 套用,靜態資產（CSS/JS/字型/圖）維持可快取不受影響。
+- doc.jason.tools 4 個 ZAP Info 評估:`Cache-control` 本版處理;`User Controllable HTML Attribute`（next 參數）已有 `safe_next()` 防 open redirect + autoescape,屬安全誤報;`Authentication Request Identified`／`Session Management Response Identified` 是 ZAP 對正常登入/session 的識別,非弱點無法消除。
+- 全功能 headless 回歸:39 工具後端處理、25 admin 頁、264 API 端點 CSRF、工作區、40 頁 CSP 全綠。
 ## [1.12.34] - 2026-06-27
 
 ### 修正（重要）— CSRF 沒處理 XMLHttpRequest → 所有檔案上傳 403
