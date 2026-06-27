@@ -154,7 +154,9 @@ class CSRFMiddleware:
         async def _send(message):
             if set_cookie and message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
-                cookie = (f"{COOKIE_NAME}={token}; Path=/; SameSite=Lax"
+                # HttpOnly：cookie 不給 JS 讀（避免 XSS 偷 token + ZAP「No HttpOnly」）。
+                # token 另以 <meta name="csrf-token"> 提供給 csrf.js 讀 → 仍是雙提交。
+                cookie = (f"{COOKIE_NAME}={token}; Path=/; SameSite=Lax; HttpOnly"
                           + ("; Secure" if is_https else ""))
                 headers.append((b"set-cookie", cookie.encode("latin-1")))
                 message = {**message, "headers": headers}

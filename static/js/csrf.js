@@ -4,6 +4,10 @@
 // 後端（app/core/csrf.py）比對 cookie 與提交值。須早於其他 script 載入。
 (function () {
   function token() {
+    // cookie 為 HttpOnly（JS 讀不到）→ 從 <meta name="csrf-token"> 讀（server
+    // render，與 cookie 同值）。退回 cookie（萬一 meta 缺、cookie 非 httponly）。
+    var el = document.querySelector('meta[name="csrf-token"]');
+    if (el && el.content) return el.content;
     var m = document.cookie.match(/(?:^|;\s*)jtdt_csrf=([^;]+)/);
     return m ? decodeURIComponent(m[1]) : '';
   }

@@ -4,6 +4,13 @@
 
 ---
 
+## [1.12.31] - 2026-06-27
+
+### 資安 — CSRF cookie 改 HttpOnly（消除 ZAP「Cookie No HttpOnly」Low）
+
+- `jtdt_csrf` cookie 加上 `HttpOnly`（JS 不可讀,降低 XSS 偷 token 風險）。token 改以 `<meta name="csrf-token">`（server render,與 cookie 同值）提供給 `csrf.js` 讀 → 仍是雙提交比對,機制不變。base.html + login + setup-admin 都加 meta。
+- 驗證:meta token == cookie token、帶 token POST 過、不帶擋;15 項 csrf 測試 + 完整 pytest 綠。
+- ZAP doc.jason.tools 另 2 個 Low（Server 版本外洩、HSTS 重複標頭）屬 **nginx 層**（`server_tokens off;` + 移除 nginx 重複的 HSTS,見 OPS.md）,app 無法修。
 ## [1.12.30] - 2026-06-27
 
 ### 資安 — CSP 移除 style-src 'unsafe-inline'（Phase 2）→ ZAP 0 中風險

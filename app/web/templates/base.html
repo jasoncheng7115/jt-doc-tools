@@ -4,6 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="csrf-token" content="{{ request.state.csrf_token }}">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
   {% set _brand_logo = branding_logo_url() %}
   <link rel="icon" type="image/png" href="{{ _brand_logo or '/static/images/logo-on-light.png' }}" />
