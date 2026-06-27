@@ -55,6 +55,11 @@
 - 匯出 → 合併匯入（會重新分配 id）後縮圖仍載入得到（防 import 沒同步 file_key/thumb_key → 縮圖 404 破圖,2026-06-27 客戶回報）
 - file_key/thumb_key 指向不存在的檔時退回 `{id}.png`
 
+### 1.7 授權邊界 (`tests/test_authz_boundaries.py`)
+- **垂直越權**:已登入的非 admin 一般使用者 → 所有 /admin/* 頁 + admin 寫入（改站名/關認證/列使用者/建 token）一律非 200（401/403/302）
+- **工具權限**:default-user 沒有的工具（pdf-fill/pdf-stamp）UI 與後端動作端點都擋；有的（pdf-merge）可用
+- **水平越權**:B 使用者不可下載 A 的工作區檔（/workspace/file/{id}）與 A 的上傳檔（/tools/pdf-editor/file/{upload_id}）
+
 ## 2. 手動驗收清單（每個版本）
 
 ### 2.1 填單用印
