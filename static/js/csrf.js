@@ -36,6 +36,28 @@
     };
   }
 
+  // ②b 包裝 XMLHttpRequest：file_upload.js 用 XHR 做上傳進度條（fetch 無上傳
+  //     進度 spec）→ 也要補 X-CSRF-Token，否則所有檔案上傳被 CSRF 擋成 403。
+  var XO = window.XMLHttpRequest;
+  if (XO && XO.prototype) {
+    var _open = XO.prototype.open;
+    var _send = XO.prototype.send;
+    XO.prototype.open = function (method, url) {
+      this.__csrfM = (method || 'GET').toUpperCase();
+      this.__csrfU = url || '';
+      return _open.apply(this, arguments);
+    };
+    XO.prototype.send = function () {
+      var m = this.__csrfM, u = this.__csrfU;
+      var isAbs = /^([a-z][a-z0-9+.-]*:)?\/\//i.test(u);
+      var sameOrigin = !isAbs || u.indexOf(window.location.origin) === 0;
+      if (sameOrigin && ['POST', 'PUT', 'PATCH', 'DELETE'].indexOf(m) >= 0) {
+        try { this.setRequestHeader('X-CSRF-Token', token()); } catch (e) {}
+      }
+      return _send.apply(this, arguments);
+    };
+  }
+
   // ② 原生 POST 表單：補隱藏 csrf_token 欄位
   function ensureField(form) {
     if (!form || form.tagName !== 'FORM') return;

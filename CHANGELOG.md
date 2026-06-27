@@ -4,6 +4,12 @@
 
 ---
 
+## [1.12.34] - 2026-06-27
+
+### 修正（重要）— CSRF 沒處理 XMLHttpRequest → 所有檔案上傳 403
+
+- 共用 `static/js/file_upload.js` 用 **XMLHttpRequest**（fetch 無上傳進度 spec，要進度條只能用 XHR）做檔案上傳，但 `csrf.js` 只包裝了 `window.fetch`、**沒包裝 XHR** → 上傳請求沒帶 `X-CSRF-Token` → 被 CSRF 中介層擋成 403。**自 CSRF 上線（v1.12.26）起,啟用認證下絕大多數工具的檔案上傳（PDF 字數 / 中繼資料 / 隱藏掃描 / 附件 / 壓縮 / 旋轉 / 發票 / 去識別化 …）全部失效**。
+- 修：`csrf.js` 同步包裝 `XMLHttpRequest.prototype.open/send`，同源不安全請求自動補 `X-CSRF-Token`。headless 實測 10 個上傳工具全程 0 個 403。
 ## [1.12.33] - 2026-06-27
 
 ### 修正（重要）— CSRF 漏掉相對 URL fetch 導致部分工具 AJAX 403
