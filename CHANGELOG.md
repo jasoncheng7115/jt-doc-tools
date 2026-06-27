@@ -4,6 +4,12 @@
 
 ---
 
+## [1.12.41] - 2026-06-27
+
+### 調整 — default-user 角色補齊 5 個無害工具 + 登入授權邊界測試
+
+- 排查時發現 `default-user`（一般使用者）角色漏掉 5 個無害文件工具:**字數統計、送件前檢核、註解整理 / 平面化 / 清除**。補進 `_NON_ADMIN_TOOL_IDS`,一般使用者現在用得到（仍只有 pdf-fill / 用印與簽名 因敏感保留給 finance/sales）。既有客戶啟動時由 `seed_builtin_roles()` 自動 top-up,不需手動。
+- 新增 `tests/test_authz_boundaries.py`（8 項）:垂直越權（非 admin → admin 頁/寫入/關認證/列 user/建 token 全擋）、工具權限（沒權限的 pdf-fill/pdf-stamp UI+後端都擋）、水平越權（B 拿不到 A 的工作區檔 / 上傳檔）。TEST_PLAN §1.7。
 ## [1.12.40] - 2026-06-27
 
 ### 強化 — 排查同類「靜默破圖 / key 不一致」問題並補強

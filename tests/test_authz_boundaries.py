@@ -78,8 +78,12 @@ def test_default_user_blocked_from_unpermitted_tools(admin_session):
 
 def test_default_user_can_use_permitted_tool(admin_session):
     _, c = _user_client("bob_ok")
-    r = c.get("/tools/pdf-merge/", follow_redirects=False)
-    assert r.status_code == 200, f"default-user 開不了被授權的 pdf-merge → {r.status_code}"
+    # 含 v1.12.41 補進 default-user 的 5 個無害工具
+    for tool in ["pdf-merge", "pdf-wordcount", "submission-check",
+                 "pdf-annotations", "pdf-annotations-flatten",
+                 "pdf-annotations-strip"]:
+        r = c.get(f"/tools/{tool}/", follow_redirects=False)
+        assert r.status_code == 200, f"default-user 開不了被授權的 {tool} → {r.status_code}"
 
 
 def test_unpermitted_tool_api_also_blocked(admin_session):

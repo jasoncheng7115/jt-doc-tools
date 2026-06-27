@@ -39,6 +39,8 @@ _NON_ADMIN_TOOL_IDS = [
     "pdf-hidden-scan", "doc-diff", "text-diff", "doc-deident", "text-deident",
     "pdf-editor", "translate-doc", "pdf-ocr", "text-list", "einvoice-scan",
     "vat-lookup", "pdf-to-office", "pdf-to-markdown", "markdown-to-doc",
+    "pdf-wordcount", "submission-check",
+    "pdf-annotations", "pdf-annotations-flatten", "pdf-annotations-strip",
     # Sensitive — not in default-user; granted explicitly by finance/sales.
     # "pdf-fill", "pdf-stamp",
 ]
