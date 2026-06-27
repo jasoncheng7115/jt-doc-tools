@@ -4,6 +4,13 @@
 
 ---
 
+## [1.12.39] - 2026-06-27
+
+### 修正 — 資產匯入後印章/簽名縮圖破圖（file_key/thumb_key 與磁碟檔名不一致）
+
+- **客戶回報**:pdf-stamp 用印頁有一個簽名縮圖破圖,但 admin 資產管理裡看得到。根因:admin 資產**匯入**（合併/取代）時把圖檔以 `{new_id}.png` 寫入磁碟,但登錄沿用了 ZIP 內原始的 `file_key`/`thumb_key`（不同 uuid）→ `/assets/{id}/thumb` 用 file_key 找檔 → 404 破圖（受影響的是所有匯入過的資產,只是部分被瀏覽器快取掩蓋）。
+- 修:① import 同步 `file_key`/`thumb_key = {new_id}.png`；② `asset_manager.file_path/thumb_path` 找不到時退回 `{id}.png`（防既有殘留資料,免手動遷移即生效）。
+- 測試 `tests/test_asset_thumbnails_resolve.py`（每個資產縮圖/原圖端點 200 + 匯出→合併匯入 round-trip 縮圖仍載入 + file_key 退回）。TEST_PLAN §1.6 + pdf-stamp 手動清單新增「所有縮圖實際載入無破圖」。
 ## [1.12.38] - 2026-06-27
 
 ### 資安 — modal.js 改用 DOMPurify 清洗（取代手刻 sanitizer,清 CodeQL modal.js 全部告警）

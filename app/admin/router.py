@@ -226,6 +226,10 @@ def build_router(templates) -> APIRouter:
                 pass  # 沒 thumb 就算了
             new_meta = dict(a)
             new_meta["id"] = new_id
+            # 檔案是以 new_id 寫入磁碟（{new_id}.png / {new_id}_thumb.png），
+            # file_key/thumb_key 必須同步,否則登錄指向舊 uuid 檔→縮圖 404 破圖。
+            new_meta["file_key"] = f"{new_id}.png"
+            new_meta["thumb_key"] = f"{new_id}_thumb.png"
             new_meta["updated_at"] = time.time()
             existing["assets"].append(new_meta)
             existing_ids.add(new_id)

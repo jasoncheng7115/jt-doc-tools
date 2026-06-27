@@ -298,10 +298,22 @@ class AssetManager:
             return True
 
     def file_path(self, asset: Asset) -> Path:
-        return self._files_dir / asset.file_key
+        p = self._files_dir / asset.file_key
+        # 防護：若登錄的 file_key 與磁碟檔名不一致（如舊 import 沒同步更新
+        # file_key），退回以 asset id 命名的檔（建檔慣例 `{id}.png`）。
+        if not p.exists():
+            alt = self._files_dir / f"{asset.id}.png"
+            if alt.exists():
+                return alt
+        return p
 
     def thumb_path(self, asset: Asset) -> Path:
-        return self._files_dir / asset.thumb_key
+        p = self._files_dir / asset.thumb_key
+        if not p.exists():
+            alt = self._files_dir / f"{asset.id}_thumb.png"
+            if alt.exists():
+                return alt
+        return p
 
 
 asset_manager = AssetManager()
