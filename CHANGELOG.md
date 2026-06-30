@@ -4,6 +4,14 @@
 
 ---
 
+## [1.12.43] - 2026-06-30
+
+### 修正（企業環境）— TLS 攔截下無法下載更新 / tessdata（CERTIFICATE_VERIFY_FAILED）
+
+- **客戶回報**：公司有 TLS 檢查代理把外部 HTTPS 憑證換成自家 CA。`jtdt update` 下載 tessdata（chi_tra / eng OCR 語言檔）時 `SSL: CERTIFICATE_VERIFY_FAILED ... Missing Authority Key Identifier`。根因：企業 CA 裝在 OS 系統信任庫,但 Python（尤其 uv 管理的 standalone Python）用內建 certifi,**不認**那個 CA。
+- 修：新增 `app/core/net_ssl.py:install_os_trust()`,用 **truststore** 把 Python stdlib ssl 接到 **OS 原生信任庫**（Windows 憑證存放區 / macOS 鑰匙圈 / Linux ca-certificates）→ 企業 CA 自然認得。一次 inject,`urllib`/`urlretrieve`/`httpx` 預設 context 全部受惠（tessdata 下載 / LLM / 遠端 OCR / SSO）。app 啟動 + CLI 入口 + tessdata 下載前都會呼叫（冪等）。
+- 仍可 `SSL_CERT_FILE` 指向企業 CA bundle；`JTDT_TLS_INSECURE=1` 為最後手段停用驗證（與既有 uv 設定一致,見 OPS）。
+- 新增依賴 `truststore`（純 Python，通用 wheel，pip 自身也用）。測試 `tests/test_net_ssl_corp_tls.py`。
 ## [1.12.42] - 2026-06-30
 
 ### 修正 — 編輯使用者/群組/權限的角色與群組勾選框長名稱溢出重疊

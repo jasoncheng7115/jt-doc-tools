@@ -294,6 +294,10 @@ def _download_variant(code: str, variant: str, tessdata: Path) -> tuple[bool, in
         return False, 0, f"未知 variant: {variant}"
     url = f"{base}/{code}.traineddata"
     try:
+        # 企業 TLS 攔截環境：讓下載走 OS 原生信任庫（認得企業 CA）,否則
+        # urlretrieve 用 Python 內建 certifi 會 CERTIFICATE_VERIFY_FAILED。
+        from .net_ssl import install_os_trust
+        install_os_trust()
         import urllib.request
         tmp = dst.with_suffix(".traineddata.part")
         urllib.request.urlretrieve(url, str(tmp))

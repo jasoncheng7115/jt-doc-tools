@@ -1,6 +1,6 @@
 [project]
 name = "jt-doc-tools"
-version = "1.12.42"
+version = "1.12.43"
 description = "Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台"
 authors = [{ name = "Jason Cheng (Jason Tools)", email = "jason@jason.tools" }]
 requires-python = ">=3.10"
@@ -44,6 +44,10 @@ dependencies = [
     # pyzipper 0.4.0 修了 small-file encryption bypass (Dependabot #45 Moderate)
     "pyzipper>=0.4.0",
     "httpx>=0.27,<1",
+    # truststore：企業 TLS 攔截環境讓 Python ssl 改用 OS 原生信任庫（認得企業
+    # CA），否則 tessdata 下載 / LLM / 遠端 OCR / SSO 等 HTTPS 會 CERT_VERIFY_FAILED。
+    # 純 Python，有通用 wheel；pip 自身也用它。見 app/core/net_ssl.py。
+    "truststore>=0.9",
     # idna>=3.15：CVE-2026-45409 (= CVE-2024-3651 不完整修補) — idna.encode()
     # 對特製輸入會耗大量資源 (DoS, CWE-1333)。idna 為 httpx / fastapi / starlette
     # 的 transitive dep，明確設下限避免 lock 退回 < 3.15。

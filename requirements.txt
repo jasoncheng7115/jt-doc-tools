@@ -55,3 +55,4 @@ openpyxl>=3.1,<4
 # lxml: pdf-to-office docx anchor XML）。原本只靠 transitive 帶入。
 numpy>=1.26,<3
 lxml>=4.9,<7
+truststore>=0.9

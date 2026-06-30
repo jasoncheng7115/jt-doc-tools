@@ -537,7 +537,7 @@ def svc_update() -> int:
     if venv_py.exists():
         print("Verifying critical deps (fastapi / fitz / ldap3 / PIL / pdfplumber / docx / odf / pyzipper / pdf2docx / rapidfuzz) ...")
         rc = subprocess.call([str(venv_py), "-c",
-            "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, openpyxl, pyzipper, httpx, psutil, pyotp, qrcode, pdf2docx, rapidfuzz, numpy, lxml, pymupdf4llm, markdown_it, jwt, onelogin.saml2.auth, xmlsec"])
+            "import fastapi, fitz, ldap3, PIL, pdfplumber, docx, odf, openpyxl, pyzipper, httpx, psutil, pyotp, qrcode, pdf2docx, rapidfuzz, numpy, lxml, pymupdf4llm, markdown_it, jwt, onelogin.saml2.auth, xmlsec, truststore"])
         if rc != 0:
             print("Dep import failed — upgrade may be incomplete, restoring", file=sys.stderr)
             _restore_ownership(root, owner)
@@ -2326,6 +2326,13 @@ def main(argv: list[str] | None = None) -> int:
     if not raw or raw[0] in ("-h", "--help", "help"):
         _print_friendly_help()
         return 0
+
+    # 企業 TLS 攔截環境：CLI 的下載（tessdata 等）也走 OS 原生信任庫。
+    try:
+        from .core.net_ssl import install_os_trust
+        install_os_trust()
+    except Exception:
+        pass
 
     p = argparse.ArgumentParser(
         prog="jtdt",

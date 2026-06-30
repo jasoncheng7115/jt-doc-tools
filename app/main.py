@@ -14,10 +14,15 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.12.42"
+VERSION = "1.12.43"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
+
+# 企業 TLS 攔截環境：讓 Python ssl 改用 OS 原生信任庫（認得企業 CA）,否則所有
+# 外部 HTTPS（tessdata 下載 / LLM / 遠端 OCR / SSO）會 CERTIFICATE_VERIFY_FAILED。
+from .core.net_ssl import install_os_trust  # noqa: E402
+install_os_trust()
 
 app = FastAPI(title=settings.app_name, version=VERSION)
 
