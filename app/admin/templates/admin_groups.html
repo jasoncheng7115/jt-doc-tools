@@ -126,8 +126,11 @@
   .picker-clear { padding:3px 10px !important; font-size:11px !important; }
   .picker-list { max-height:280px; overflow-y:auto; overflow-x:hidden; padding:4px;
     display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:2px; }
-  .picker-item { display:flex; align-items:flex-start; gap:6px; padding:5px 8px; border-radius:4px;
-    cursor:pointer; font-weight:normal; font-size:12.5px; min-width:0; line-height:1.4; }
+  /* `.picker-list .picker-item` (0,0,2,0) 蓋過 platform.css `.form-row label`
+     (0,0,1,1) 的 width:96px/white-space:nowrap，長群組名才會換行不溢出。 */
+  .picker-list .picker-item { display:flex; align-items:flex-start; gap:6px; padding:5px 8px; border-radius:4px;
+    cursor:pointer; font-weight:normal; font-size:12.5px; min-width:0; line-height:1.4;
+    width:auto; white-space:normal; }
   .picker-item:hover { background:#f3f4f6; }
   .picker-item input { margin:2px 0 0; flex-shrink:0; }
   .picker-item:has(input:checked) { background:#eef2ff; }

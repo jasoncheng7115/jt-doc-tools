@@ -240,10 +240,14 @@
     max-height:200px; overflow-y:auto; overflow-x:hidden; padding:4px;
     display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:2px;
   }
-  .picker-item {
+  /* `.picker-list .picker-item` 特異性 (0,0,2,0) 蓋過 platform.css 的
+     `.form-row label { width:96px; white-space:nowrap }` (0,0,1,1) —— 否則
+     picker 標籤繼承 nowrap 不換行,長群組名（AD DN）會溢出欄位互相重疊。 */
+  .picker-list .picker-item {
     display:flex; align-items:flex-start; gap:6px;
     padding:5px 8px; border-radius:4px; cursor:pointer;
     font-weight:normal; font-size:12.5px; min-width:0; line-height:1.4;
+    width:auto; white-space:normal;
   }
   .picker-item:hover { background:#f3f4f6; }
   .picker-item input { margin:2px 0 0; flex-shrink:0; }

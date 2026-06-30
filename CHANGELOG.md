@@ -4,6 +4,14 @@
 
 ---
 
+## [1.12.42] - 2026-06-30
+
+### 修正 — 編輯使用者/群組/權限的角色與群組勾選框長名稱溢出重疊
+
+- **客戶回報**：編輯使用者對話框的「群組（複選）」勾選框，長群組名（如 AD `UG_新北市政府警察局資訊室綜合股NTPD_Admin`）不換行,溢出欄位與相鄰勾選框互相重疊。
+- 根因：`static/css/platform.css` 的 `.form-row label { width:96px; white-space:nowrap }` 被巢狀於 `.form-row` 內的 picker `<label class="picker-item">` **繼承**了 `white-space:nowrap` → 長名稱不換行。原本各模板的 `.picker-item` 規則特異性 (0,0,1,0) 蓋不過 platform 的 (0,0,1,1)。
+- 修：admin_users / admin_groups / admin_permissions 三個有 picker 的模板,改用 `.picker-list .picker-item`（特異性 0,0,2,0）覆蓋成 `white-space:normal; width:auto`,長名稱正常換行不溢出。headless 重現（含 platform.css 衝突規則）前後比對確認。
+- 測試 `tests/test_admin_picker_css.py` 守住三模板的覆蓋。
 ## [1.12.41] - 2026-06-27
 
 ### 調整 — default-user 角色補齊 5 個無害工具 + 登入授權邊界測試
