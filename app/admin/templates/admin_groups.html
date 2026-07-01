@@ -16,7 +16,7 @@
 {% if is_directory_backend %}
 <div class="panel">
   <b>從 {{ auth_backend|upper }} 目錄同步群組</b>
-  <p class="muted">預設只有「使用者登入時」才把該人所屬群組帶進來，所以一開始只看得到登入過的人所屬的少數群組。按這裡可列舉目錄群組鏡射進來，方便先指派權限（不會更動成員）。</p>
+  <p class="muted">這裡的「群組清單」只是讓你<b>預先把權限指派給目錄群組</b>用。<b>權限判斷本身永遠正確</b> —— 每位使用者登入時是從他當下在 {{ auth_backend|upper }} 的即時群組解析權限，不靠這份清單。清單預設只含「登入過的人所屬群組」，按此可一次列舉目錄群組補齊（不會更動成員）。</p>
   <div class="grp-sync-row">
     <input class="field" type="text" id="syncNameFilter" maxlength="128"
            placeholder="只同步名稱含此字（選填，避免帶入 Domain Users 等系統群組）例：UG_ / NTPD">
@@ -112,20 +112,31 @@
   <div class="modal-card">
     <h3 data-s="s53896af7">目錄成員 <code id="dmGroupName"></code></h3>
     <p class="muted" id="dmSummary">查詢目錄中…</p>
+    <div class="dm-filters">
+      <button class="btn btn-small dm-fbtn is-active" type="button" data-f="all">全部 <span id="dmCntAll">0</span></button>
+      <button class="btn btn-small dm-fbtn" type="button" data-f="in">已登入本系統 <span id="dmCntIn">0</span></button>
+      <button class="btn btn-small dm-fbtn" type="button" data-f="out">未登入 <span id="dmCntOut">0</span></button>
+    </div>
     <input class="field" type="search" id="dmSearch" placeholder="篩選（帳號或姓名）…">
     <div class="dm-list" id="dmList"></div>
     <div data-s="s9fa82b78">
-      <button class="btn" type="button" id="dmClose">關閉</button>
+      <button class="btn" type="button" id="dmClose">{{ icon('close', size=14) }} 關閉</button>
     </div>
   </div>
 </div>
 
 <style nonce="{{ request.state.csp_nonce }}">
-  .dm-list { max-height:340px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:6px; margin-top:6px; }
+  .dm-filters { display:flex; gap:6px; margin:6px 0; flex-wrap:wrap; }
+  .dm-fbtn.is-active { background:#4f46e5; color:#fff; border-color:#4f46e5; }
+  .dm-fbtn span { opacity:.75; font-variant-numeric:tabular-nums; }
+  .dm-list { max-height:320px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:6px; margin-top:6px; }
   .dm-list .dm-row { display:flex; gap:10px; align-items:baseline; padding:6px 10px; border-bottom:1px solid #f1f5f9; font-size:13px; }
   .dm-list .dm-row:last-child { border-bottom:none; }
+  /* 已登入過本系統的成員：淡綠底 + 綠邊 + badge，一眼可辨 */
+  .dm-list .dm-row.is-local { background:#f0fdf4; box-shadow: inset 3px 0 0 #22c55e; }
   .dm-list .dm-name { font-weight:600; }
   .dm-list .dm-login { color:#6b7280; font-size:12px; }
+  .dm-list .dm-badge { margin-left:auto; font-size:11px; font-weight:600; padding:1px 8px; border-radius:10px; background:#dcfce7; color:#15803d; white-space:nowrap; }
   .dm-list .dm-empty { padding:16px; text-align:center; color:#9ca3af; }
   .grp-sync-row { display:flex; gap:8px; align-items:center; margin:6px 0; flex-wrap:wrap; }
   .grp-sync-row .field { flex:1; min-width:240px; max-width:520px; }
@@ -310,39 +321,63 @@ document.querySelectorAll('.grp-table button').forEach(btn => {
   });
 });
 
-// AD / LDAP 群組：向目錄查完整成員（唯讀）
+// AD / LDAP 群組：向目錄查完整成員（唯讀）+ 標註已登入過本系統者
 let _dmAll = [];
-function _renderDmList(filter) {
+let _dmFilter = 'all';   // all | in | out
+function _dmRender() {
   const list = document.getElementById('dmList');
-  const q = (filter || '').trim().toLowerCase();
-  const rows = _dmAll.filter(m => !q ||
-    (m.name || '').toLowerCase().includes(q) ||
-    (m.login || '').toLowerCase().includes(q));
+  const q = (document.getElementById('dmSearch').value || '').trim().toLowerCase();
+  const rows = _dmAll.filter(m => {
+    if (_dmFilter === 'in' && !m.local) return false;
+    if (_dmFilter === 'out' && m.local) return false;
+    if (q && !((m.name || '').toLowerCase().includes(q) ||
+               (m.login || '').toLowerCase().includes(q))) return false;
+    return true;
+  });
   if (!rows.length) {
-    list.innerHTML = '<div class="dm-empty">' + (_dmAll.length ? '沒有符合的成員' : '此群組在目錄中沒有直接成員') + '</div>';
+    list.innerHTML = '<div class="dm-empty">' +
+      (_dmAll.length ? '沒有符合的成員' : '此群組在目錄中沒有直接成員') + '</div>';
     return;
   }
   list.innerHTML = rows.map(m =>
-    `<div class="dm-row"><span class="dm-name">${escapeHtml(m.name || '')}</span>` +
-    (m.login ? `<span class="dm-login">${escapeHtml(m.login)}</span>` : '') + `</div>`
+    `<div class="dm-row${m.local ? ' is-local' : ''}">` +
+    `<span class="dm-name">${escapeHtml(m.name || '')}</span>` +
+    (m.login ? `<span class="dm-login">${escapeHtml(m.login)}</span>` : '') +
+    (m.local ? `<span class="dm-badge">✓ 已登入本系統</span>` : '') +
+    `</div>`
   ).join('');
+}
+function _dmSetFilter(f) {
+  _dmFilter = f;
+  document.querySelectorAll('.dm-fbtn').forEach(b =>
+    b.classList.toggle('is-active', b.dataset.f === f));
+  _dmRender();
 }
 async function openDirMembers(tr) {
   const gid = tr.dataset.gid;
   document.getElementById('dmGroupName').textContent = tr.dataset.gname || '';
   document.getElementById('dmSummary').textContent = '查詢目錄中…';
   document.getElementById('dmSearch').value = '';
-  _dmAll = [];
-  _renderDmList('');
+  _dmAll = []; _dmSetFilter('all');
+  document.getElementById('dmCntAll').textContent = '0';
+  document.getElementById('dmCntIn').textContent = '0';
+  document.getElementById('dmCntOut').textContent = '0';
+  _dmRender();
   document.getElementById('dirMembersModal').hidden = false;
   try {
     const r = await fetch(`/admin/groups/${gid}/members-ldap`);
     const j = await r.json();
     if (!r.ok) throw new Error(j.detail || ('HTTP ' + r.status));
     _dmAll = j.members || [];
+    document.getElementById('dmCntAll').textContent = j.count;
+    document.getElementById('dmCntIn').textContent = j.local_count;
+    document.getElementById('dmCntOut').textContent = j.not_local_count;
     document.getElementById('dmSummary').textContent =
-      `目錄中共 ${j.count} 位直接成員（含尚未登入過本系統的人）。`;
-    _renderDmList('');
+      `目錄中共 ${j.count} 位直接成員，其中 ${j.local_count} 位已登入過本系統、${j.not_local_count} 位尚未登入。`;
+    // 順手把清單頁該列的「成員數」更新成目錄實際數（原本顯示的是本地登入數，會不一致）
+    const cell = tr.children[3];
+    if (cell) cell.textContent = j.count;
+    _dmRender();
   } catch (e) {
     document.getElementById('dmSummary').textContent = '✗ ' + e.message;
   }
@@ -350,7 +385,9 @@ async function openDirMembers(tr) {
 document.getElementById('dmClose').addEventListener('click', () => {
   document.getElementById('dirMembersModal').hidden = true;
 });
-document.getElementById('dmSearch').addEventListener('input', e => _renderDmList(e.target.value));
+document.getElementById('dmSearch').addEventListener('input', _dmRender);
+document.querySelectorAll('.dm-fbtn').forEach(b =>
+  b.addEventListener('click', () => _dmSetFilter(b.dataset.f)));
 
 // 從 AD / LDAP 目錄同步所有群組
 const _btnSyncDir = document.getElementById('btnSyncDir');

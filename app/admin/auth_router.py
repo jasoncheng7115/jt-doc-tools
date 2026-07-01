@@ -519,7 +519,29 @@ def build_auth_router(templates) -> APIRouter:
             raise HTTPException(400, str(e))
         except Exception as e:  # noqa: BLE001
             raise HTTPException(500, f"查詢失敗：{type(e).__name__}: {e}")
+        # 標註哪些目錄成員「已登入過本系統」（本地 users 表有對應列）。以
+        # external_dn（AD DN）為主鍵比對,退回 username（sAMAccountName）。
+        local_dns, local_logins = set(), set()
+        for u in user_manager.list_users():
+            if u.get("source") in ("ldap", "ad"):
+                if u.get("external_dn"):
+                    local_dns.add(str(u["external_dn"]).strip().lower())
+                if u.get("username"):
+                    # username 可能是 sAMAccountName 或 name@realm，取 @ 前段一起比
+                    un = str(u["username"]).strip().lower()
+                    local_logins.add(un)
+                    local_logins.add(un.split("@", 1)[0])
+        local_count = 0
+        for m in members:
+            is_local = (
+                (m.get("dn", "").strip().lower() in local_dns)
+                or (m.get("login", "").strip().lower() in local_logins))
+            m["local"] = is_local
+            if is_local:
+                local_count += 1
         return {"ok": True, "group": g.get("name"), "count": len(members),
+                "local_count": local_count,
+                "not_local_count": len(members) - local_count,
                 "members": members}
 
     @router.post("/groups/{gid}/update")
