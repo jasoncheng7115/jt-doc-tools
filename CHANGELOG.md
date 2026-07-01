@@ -4,6 +4,12 @@
 
 ---
 
+## [1.12.51] - 2026-07-01
+
+### 修正 — 目錄瀏覽:OpenLDAP/Univention 看不到使用者 + 卡片樣式一致
+
+- **OU 下看不到使用者**（共 0）：使用者 filter 預設 `(&(objectCategory=person)(objectClass=user))` 是 **AD 專屬**（objectCategory + user 都是 AD schema），對 OpenLDAP / Univention（使用者是 inetOrgPerson / posixAccount）匹配不到 → 改跨相容 `(|(objectClass=inetOrgPerson)(objectClass=posixAccount)(&(objectClass=user)(!(objectClass=computer))))`,三值邏輯下各目錄只匹配它有的那組。仍可用 `directory_user_filter` cfg 覆寫。
+- **卡片樣式與其他頁不一致**：原本在單一 panel 內塞兩個自訂邊框 div → 雙重邊框。改成 intro 一張 .panel、OU 樹與詳情各自用標準 `.panel` 卡片（邊框/圓角/陰影一致）。
 ## [1.12.50] - 2026-07-01
 
 ### 修正 — 目錄瀏覽 non-AD schema 失敗 + 稽核使用者篩選改文字 + 群組成員數顯示目錄實際數

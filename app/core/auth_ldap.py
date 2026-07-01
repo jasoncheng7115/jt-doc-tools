@@ -587,8 +587,12 @@ def list_ou_users(ou_dn: str, recursive: bool = False) -> list[dict]:
         raise AuthError("Service Account / OU DN / 密碼 都需先填妥")
     if "(" in ou_dn or ")" in ou_dn:
         raise AuthError("OU DN 不合法。")
+    # 跨目錄相容:AD 用 objectClass=user(排除 computer);OpenLDAP / Univention
+    # 用 inetOrgPerson / posixAccount。check_names=False 讓未知 class 交給 server,
+    # 三值邏輯下各目錄只會匹配它有的那組。
     user_filter = (cfg.get("directory_user_filter")
-                   or "(&(objectCategory=person)(objectClass=user))")
+                   or "(|(objectClass=inetOrgPerson)(objectClass=posixAccount)"
+                      "(&(objectClass=user)(!(objectClass=computer))))")
     disp_attr = cfg.get("displayname_attr", "displayName")
     login_attr = cfg.get("username_attr", "sAMAccountName")
     server = _build_server(cfg)

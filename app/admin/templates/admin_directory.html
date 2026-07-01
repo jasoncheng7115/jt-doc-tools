@@ -8,20 +8,23 @@
 <div class="panel"><p class="muted">目前認證後端不是 LDAP / AD。到「認證設定」啟用後即可用樹狀瀏覽 OU、挑選使用者、把權限指派給 OU。</p></div>
 {% else %}
 <div class="panel">
-  <p class="muted">左側展開 OU 樹,點某個 OU 看它底下的使用者（<span class="dir-in-legend">綠底 = 已登入過本系統</span>）。把角色<b>指派給 OU</b> → 該 OU（含子 OU）下所有使用者登入時即生效,不必等他們先登入。</p>
-  <div class="dir-wrap">
-    <div class="dir-tree" id="dirTree"><div class="dir-loading">載入目錄樹…</div></div>
-    <div class="dir-detail" id="dirDetail">
-      <p class="muted">← 從左側點一個 OU</p>
-    </div>
+  <p class="muted dir-intro">左側展開 OU 樹,點某個 OU 看它底下的使用者（<span class="dir-in-legend">綠底 = 已登入過本系統</span>）。把角色<b>指派給 OU</b> → 該 OU（含子 OU）下所有使用者登入時即生效,不必等他們先登入。</p>
+</div>
+<div class="dir-wrap">
+  <div class="dir-tree panel" id="dirTree"><div class="dir-loading">載入目錄樹…</div></div>
+  <div class="dir-detail panel" id="dirDetail">
+    <p class="muted">← 從左側點一個 OU</p>
   </div>
 </div>
 {% endif %}
 
 <style nonce="{{ request.state.csp_nonce }}">
-  .dir-wrap { display:flex; gap:14px; align-items:flex-start; margin-top:8px; }
-  .dir-tree { flex:0 0 320px; max-width:44%; max-height:560px; overflow:auto; border:1px solid #e5e7eb; border-radius:8px; padding:6px; background:#fff; }
-  .dir-detail { flex:1; min-width:0; border:1px solid #e5e7eb; border-radius:8px; padding:12px 14px; background:#fff; min-height:200px; }
+  .dir-intro { margin:0; }
+  /* tree / detail 用標準 .panel 卡片樣式（邊框/圓角/陰影由 .panel 提供），這裡只
+     設版面（並排、寬度、可捲動）+ 覆寫 padding。 */
+  .dir-wrap { display:flex; gap:16px; align-items:flex-start; margin-top:16px; }
+  .dir-tree { flex:0 0 320px; max-width:44%; max-height:560px; overflow:auto; padding:10px; }
+  .dir-detail { flex:1; min-width:0; min-height:200px; }
   .dir-loading, .dir-empty { color:#9ca3af; padding:12px; font-size:13px; }
   .tn { }
   .tn-row { display:flex; align-items:center; gap:4px; padding:3px 4px; border-radius:5px; cursor:pointer; font-size:13px; white-space:nowrap; }
