@@ -4,6 +4,13 @@
 
 ---
 
+## [1.12.52] - 2026-07-01
+
+### 改善 — 目錄瀏覽使用者清單表格化 + 點看細節；修 CodeQL #127
+
+- **使用者清單改表格**:欄位標題（姓名 / 帳號 / 狀態），列高與 audit 頁一致（緊湊、hover、已登入者綠邊 + badge、未登入 —）。整理對齊與間距,與其他 admin 頁一致。
+- **點使用者看細節**:開唯讀 modal 列出該人完整目錄屬性（顯示名稱 / 帳號 / Email / 部門 / 所屬群組 / 建立異動時間 …,常見屬性中文標籤 + 優先排序,其餘照字母序），過濾二進位 / 密碼 / SID 等敏感屬性,標註是否已登入過本系統。端點 `/admin/directory/user`、`auth_ldap.get_user_detail`。
+- **CodeQL #127**（admin_groups.html:426 DOM text reinterpreted as HTML）：群組成員數 lazy update 原用 `cell.innerHTML` 把 DOM 文字塞回 → 改 `textContent` + `title`,不再把 DOM 文字當 HTML 解析。
 ## [1.12.51] - 2026-07-01
 
 ### 修正 — 目錄瀏覽:OpenLDAP/Univention 看不到使用者 + 卡片樣式一致

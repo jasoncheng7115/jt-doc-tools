@@ -423,7 +423,9 @@ document.querySelectorAll('.grp-table tbody tr').forEach(tr => {
   const cell = tr.children[3];
   if (!cell) return;
   const local = (cell.textContent || '').trim();
-  cell.innerHTML = `<span class="muted" title="本地登入數 ${local}，查詢目錄成員數中…">${local} …</span>`;
+  // 用 textContent（非 innerHTML）避免把 DOM 文字重新當 HTML 解析（CodeQL #127）。
+  cell.textContent = local + ' …';
+  cell.title = '本地登入數 ' + local + '，查詢目錄成員數中…';
   fetch(`/admin/groups/${tr.dataset.gid}/member-count`)
     .then(r => r.ok ? r.json() : null)
     .then(j => { cell.textContent = (j && typeof j.count === 'number') ? j.count : local; })

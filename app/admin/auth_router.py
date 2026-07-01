@@ -659,6 +659,30 @@ def build_auth_router(templates) -> APIRouter:
                 "ou_roles": permissions.list_roles_for_subject("ou", dn),
                 "users": users}
 
+    @router.get("/directory/user")
+    async def directory_user_detail(request: Request, dn: str):
+        """查單一目錄使用者的完整屬性（點使用者看細節用）+ 是否已登入過本系統。"""
+        from ..core import auth_ldap
+        _require_dir_backend()
+        if not dn:
+            raise HTTPException(400, "缺少使用者 DN")
+        try:
+            detail = auth_ldap.get_user_detail(dn)
+        except auth_ldap.AuthError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(500, f"查詢失敗：{type(e).__name__}: {e}")
+        # 是否已登入過本系統
+        local = False
+        dl = dn.strip().lower()
+        for u in user_manager.list_users():
+            if u.get("source") in ("ldap", "ad") and \
+                    str(u.get("external_dn") or "").strip().lower() == dl:
+                local = True
+                break
+        detail["local"] = local
+        return {"ok": True, **detail}
+
     @router.post("/directory/ou-roles")
     async def directory_ou_roles(request: Request):
         """指派角色給某 OU（subject_type=ou）。該 OU 下所有使用者登入時即生效。"""

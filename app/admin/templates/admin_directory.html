@@ -16,6 +16,19 @@
     <p class="muted">← 從左側點一個 OU</p>
   </div>
 </div>
+
+<!-- 使用者細節 modal -->
+<div id="udModal" hidden>
+  <div class="modal-backdrop"></div>
+  <div class="modal-card">
+    <h3 id="udName" data-s="s53896af7"></h3>
+    <div class="ud-dn" id="udDn"></div>
+    <div id="udBody"><p class="muted">查詢中…</p></div>
+    <div data-s="s9fa82b78">
+      <button class="btn" type="button" id="udClose">{{ icon('close', size=14) }} 關閉</button>
+    </div>
+  </div>
+</div>
 {% endif %}
 
 <style nonce="{{ request.state.csp_nonce }}">
@@ -38,14 +51,32 @@
   .dir-dn { font-size:11px; color:#9ca3af; word-break:break-all; margin-bottom:8px; }
   .dir-roles-box { background:#f8fafc; border:1px solid #e5e7eb; border-radius:6px; padding:8px 10px; margin:8px 0; }
   .dir-role-chk { display:inline-flex; align-items:center; gap:5px; margin:2px 10px 2px 0; font-size:13px; font-weight:normal; cursor:pointer; }
-  .dir-utable { width:100%; border-collapse:collapse; font-size:13px; margin-top:6px; }
-  .dir-utable td { padding:5px 8px; border-bottom:1px solid #f1f5f9; }
-  .dir-utable tr.is-local { background:#f0fdf4; box-shadow: inset 3px 0 0 #22c55e; }
+  .dir-utable { width:100%; border-collapse:collapse; font-size:12.5px; margin-top:8px; }
+  .dir-utable th, .dir-utable td { padding:6px 10px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:middle; }
+  .dir-utable th { background:#f9fafb; font-size:11px; color:#6b7280; font-weight:600; }
+  .dir-utable tbody tr { cursor:pointer; }
+  .dir-utable tbody tr:hover td { background:#f3f4f6; }
+  .dir-utable tr.is-local td:first-child { box-shadow: inset 3px 0 0 #22c55e; }
+  .dir-utable .du-login { color:#6b7280; font-family: ui-monospace, SFMono-Regular, monospace; font-size:12px; }
+  .dir-utable .du-st { text-align:center; white-space:nowrap; width:96px; }
   .dir-ubadge { font-size:11px; font-weight:600; padding:1px 8px; border-radius:10px; background:#dcfce7; color:#15803d; }
-  .du-bcell { text-align:right; white-space:nowrap; }
+  .du-dim { color:#cbd5e1; }
   .dir-in-legend { background:#f0fdf4; box-shadow: inset 3px 0 0 #22c55e; padding:0 6px; border-radius:3px; }
-  .dir-filters { display:flex; gap:6px; margin:6px 0; flex-wrap:wrap; }
+  .dir-filters { display:flex; gap:6px; margin:8px 0 6px; flex-wrap:wrap; }
   .dir-fbtn.is-active { background:#4f46e5; color:#fff; border-color:#4f46e5; }
+  .dir-detail h3 { margin:0 0 2px; }
+  .dir-sec-title { font-weight:600; margin:14px 0 2px; font-size:13px; }
+  /* user detail modal */
+  #udModal[hidden] { display:none !important; }
+  #udModal { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; }
+  #udModal .modal-backdrop { position:absolute; inset:0; background:rgba(15,23,42,.55); backdrop-filter:blur(2px); }
+  #udModal .modal-card { position:relative; background:#fff; border-radius:8px; padding:18px 20px; width:100%; max-width:560px; max-height:86vh; overflow:auto; box-shadow:0 16px 48px rgba(0,0,0,.35); z-index:1; }
+  .ud-dn { font-size:11px; color:#9ca3af; word-break:break-all; margin-bottom:8px; }
+  .ud-table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  .ud-table td { padding:5px 8px; border-bottom:1px solid #f1f5f9; vertical-align:top; }
+  .ud-table td.ud-k { color:#6b7280; white-space:nowrap; width:150px; font-weight:600; }
+  .ud-table td.ud-v { word-break:break-word; }
+  .ud-table td.ud-v .ud-multi { display:block; }
 </style>
 {% endblock %}
 
@@ -117,10 +148,13 @@ function renderUsers() {
     if (q && !((u.name||'').toLowerCase().includes(q) || (u.login||'').toLowerCase().includes(q))) return false;
     return true;
   });
-  if (!rows.length) { tbody.innerHTML = '<tr><td class="dir-empty">此 OU 下沒有符合的使用者</td></tr>'; return; }
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="3" class="dir-empty">此 OU 下沒有符合的使用者</td></tr>'; return; }
   tbody.innerHTML = rows.map(u =>
-    `<tr class="${u.local?'is-local':''}"><td><b>${esc(u.name)}</b> <span class="muted">${esc(u.login||'')}</span></td>` +
-    `<td class="du-bcell">${u.local?'<span class="dir-ubadge">✓ 已登入</span>':''}</td></tr>`
+    `<tr class="${u.local?'is-local':''}" data-dn="${esc(u.dn)}" data-name="${esc(u.name)}" title="點看細節">` +
+    `<td><b>${esc(u.name)}</b></td>` +
+    `<td class="du-login">${esc(u.login||'')}</td>` +
+    `<td class="du-st">${u.local?'<span class="dir-ubadge">✓ 已登入</span>':'<span class="du-dim">—</span>'}</td>` +
+    `</tr>`
   ).join('');
 }
 async function openOU(dn, name) {
@@ -142,14 +176,19 @@ async function openOU(dn, name) {
     `<h3>${esc(name)}</h3><div class="dir-dn">${esc(dn)}</div>` +
     `<div class="dir-roles-box"><b>指派角色給此 OU</b>（含子 OU 全部使用者登入時生效）<br>${roleChks}<br>` +
     `<button class="btn btn-primary btn-small" id="duSaveRoles" type="button">{{ icon('save', size=12) }} 儲存角色</button> <span class="muted" id="duRoleMsg"></span></div>` +
-    `<div><b>此 OU 直屬使用者</b>（共 ${j.count}，已登入 ${j.local_count} / 未登入 ${j.not_local_count}）</div>` +
+    `<div class="dir-sec-title">此 OU 直屬使用者（共 ${j.count}，已登入 ${j.local_count} / 未登入 ${j.not_local_count}）</div>` +
     `<div class="dir-filters"><button class="btn btn-small dir-fbtn is-active" data-f="all" type="button">全部</button>` +
     `<button class="btn btn-small dir-fbtn" data-f="in" type="button">已登入</button>` +
     `<button class="btn btn-small dir-fbtn" data-f="out" type="button">未登入</button></div>` +
     `<input class="field" id="duSearch" type="search" placeholder="篩選（帳號或姓名）…">` +
-    `<table class="dir-utable"><tbody id="duBody"></tbody></table>`;
+    `<table class="dir-utable"><thead><tr><th>姓名</th><th>帳號</th><th class="du-st">狀態</th></tr></thead><tbody id="duBody"></tbody></table>`;
   renderUsers();
   $('duSearch').addEventListener('input', renderUsers);
+  // 點使用者列 → 看細節
+  $('duBody').addEventListener('click', ev => {
+    const tr = ev.target.closest('tr[data-dn]');
+    if (tr) openUserDetail(tr.dataset.dn, tr.dataset.name);
+  });
   box.querySelectorAll('.dir-fbtn').forEach(b => b.addEventListener('click', () => {
     _ouFilter = b.dataset.f;
     box.querySelectorAll('.dir-fbtn').forEach(x => x.classList.toggle('is-active', x === b));
@@ -169,6 +208,51 @@ async function openOU(dn, name) {
     } catch (e) { msg.textContent = ' ✗ ' + e.message; }
   });
 }
+
+// ---- 點使用者看細節 ----
+// 常見屬性優先排序 + 中文標籤（其餘照字母序附後）
+const UD_LABELS = {
+  displayName:'顯示名稱', cn:'CN', sAMAccountName:'帳號(sAM)', uid:'帳號(uid)',
+  userPrincipalName:'UPN', mail:'Email', title:'職稱', department:'部門',
+  telephoneNumber:'電話', mobile:'手機', company:'公司', description:'描述',
+  memberOf:'所屬群組', distinguishedName:'DN', whenCreated:'建立時間',
+  whenChanged:'異動時間', uidNumber:'uidNumber', gidNumber:'gidNumber',
+  loginShell:'Shell', homeDirectory:'家目錄', objectClass:'objectClass',
+};
+const UD_ORDER = ['displayName','cn','sAMAccountName','uid','userPrincipalName',
+  'mail','title','department','company','telephoneNumber','mobile','description',
+  'memberOf','objectClass','whenCreated','whenChanged'];
+function openUserDetail(dn, name) {
+  $('udName').textContent = name || '';
+  $('udDn').textContent = dn || '';
+  $('udBody').innerHTML = '<p class="muted">查詢中…</p>';
+  $('udModal').hidden = false;
+  fetch('/admin/directory/user?dn=' + encodeURIComponent(dn))
+    .then(r => r.json().then(j => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => {
+      if (!ok) throw new Error(j.detail || '查詢失敗');
+      const a = j.attrs || {};
+      const keys = Object.keys(a);
+      const ordered = UD_ORDER.filter(k => keys.some(x => x.toLowerCase() === k.toLowerCase()));
+      const rest = keys.filter(k => !ordered.some(o => o.toLowerCase() === k.toLowerCase())).sort();
+      const realKey = want => keys.find(x => x.toLowerCase() === want.toLowerCase()) || want;
+      const rows = ordered.map(realKey).concat(rest).map(k => {
+        const v = a[k];
+        const label = UD_LABELS[k] || k;
+        const vhtml = Array.isArray(v)
+          ? v.map(x => `<span class="ud-multi">${esc(x)}</span>`).join('')
+          : esc(v);
+        return `<tr><td class="ud-k">${esc(label)}</td><td class="ud-v">${vhtml}</td></tr>`;
+      }).join('');
+      const badge = j.local ? '<span class="dir-ubadge">✓ 已登入過本系統</span> ' : '';
+      $('udBody').innerHTML = badge + `<table class="ud-table"><tbody>${rows}</tbody></table>`;
+    })
+    .catch(e => { $('udBody').innerHTML = '<p class="dir-empty">✗ ' + esc(e.message) + '</p>'; });
+}
+document.getElementById('udClose').addEventListener('click', () =>
+  { document.getElementById('udModal').hidden = true; });
+document.querySelector('#udModal .modal-backdrop').addEventListener('click', () =>
+  { document.getElementById('udModal').hidden = true; });
 </script>
 {% endif %}
 {% endblock %}

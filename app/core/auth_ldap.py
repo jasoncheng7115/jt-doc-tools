@@ -642,3 +642,55 @@ def count_group_members(group_dn: str) -> int:
     n = len(get_group_members(dn))
     _member_count_cache[key] = (n, now)
     return n
+
+
+def get_user_detail(user_dn: str) -> dict:
+    """查單一使用者的完整目錄屬性（base scope）。給目錄瀏覽點某人看細節用。
+    回 {dn, attrs: {attr: value|[values]}}。多值屬性回 list,單值回 str。"""
+    from ldap3 import Connection, BASE
+    user_dn = (user_dn or "").strip()
+    if not user_dn:
+        raise AuthError("缺少使用者 DN")
+    cfg = auth_settings.get().get("ldap", {})
+    svc_dn = (cfg.get("service_dn") or "").strip()
+    svc_pw = cfg.get("service_password") or ""
+    if not svc_dn or not svc_pw:
+        raise AuthError("Service Account / 密碼 需先填妥")
+    server = _build_server(cfg)
+    try:
+        with Connection(server, user=svc_dn, password=svc_pw,
+                        auto_bind=True, raise_exceptions=True, check_names=False) as conn:
+            conn.search(search_base=user_dn, search_filter="(objectClass=*)",
+                        search_scope=BASE, attributes=["*"])
+            if not conn.response:
+                raise AuthError("找不到該使用者")
+            entry = None
+            for e in conn.response:
+                if e.get("type") == "searchResEntry":
+                    entry = e; break
+            if entry is None:
+                raise AuthError("找不到該使用者")
+    except AuthError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise AuthError(f"查詢失敗：{type(exc).__name__}: {exc}")
+
+    raw = entry.get("attributes", {}) or {}
+    # 過濾掉二進位 / 敏感 / 太吵的屬性,值轉成可顯示字串。
+    HIDE = {"userpassword", "unicodepwd", "jpegphoto", "thumbnailphoto",
+            "objectsid", "objectguid", "usercertificate", "krb5key",
+            "sambantpassword", "sambalmpassword", "userpkcs12"}
+    attrs: dict = {}
+    for k, v in raw.items():
+        if k.lower() in HIDE:
+            continue
+        if isinstance(v, (bytes, bytearray)):
+            continue  # 略過二進位
+        if isinstance(v, list):
+            vv = [str(x) for x in v if not isinstance(x, (bytes, bytearray))]
+            if not vv:
+                continue
+            attrs[k] = vv if len(vv) > 1 else vv[0]
+        else:
+            attrs[k] = str(v)
+    return {"dn": user_dn, "attrs": attrs}
