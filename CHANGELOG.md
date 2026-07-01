@@ -4,6 +4,13 @@
 
 ---
 
+## [1.12.47] - 2026-07-01
+
+### 新增 — AD/LDAP 群組可點「成員」看目錄完整成員清單
+
+- 群組管理頁的 AD/LDAP 群組列新增**「成員」按鈕** → 開唯讀 modal,向目錄查該群組的**直接成員（含尚未登入過本系統的人）**並列出姓名 + 帳號,可即時篩選。原本「成員數」欄只算登入過的本地成員,現在能看到目錄裡的完整名單。
+- 後端 `auth_ldap.get_group_members()` 用 `(memberOf=<groupDN>)` 在使用者 base 下 paged_search（避開 AD 群組 member 多值 1500 筆上限的 ranged retrieval）,`escape_filter_chars` 防注入;可用 `group_member_filter` cfg 自訂。端點 `/admin/groups/{gid}/members-ldap`。
+- 測試 `tests/test_vat_upload_and_group_sync.py`。
 ## [1.12.46] - 2026-07-01
 
 ### 改善 — 目錄群組同步可過濾（避免帶入系統群組）+ 系統狀態特殊列即時說明

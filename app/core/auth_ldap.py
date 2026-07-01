@@ -470,3 +470,58 @@ def sync_all_groups(name_contains: str = "") -> dict:
                                 "total_seen": len(seen)})
     return {"synced": synced, "updated": updated, "total_seen": len(seen),
             "sample": [nm for _, nm in seen[:12]]}
+
+
+def get_group_members(group_dn: str) -> list[dict]:
+    """向 AD / LDAP 查某群組的**直接成員**（含尚未登入過本系統的人）。
+
+    用 `(memberOf=<groupDN>)` 在使用者 base 下 paged_search（避開 AD 群組 member
+    多值屬性 1500 筆上限的 ranged retrieval）。回 [{name, login, dn}, ...]（依名稱排序）。
+    """
+    from ldap3 import Connection, SUBTREE
+    from ldap3.utils.conv import escape_filter_chars
+
+    group_dn = (group_dn or "").strip()
+    if not group_dn:
+        raise AuthError("此群組沒有目錄 DN，無法查詢目錄成員。")
+    s = auth_settings.get()
+    cfg = s.get("ldap", {})
+    svc_dn = (cfg.get("service_dn") or "").strip()
+    svc_pw = cfg.get("service_password") or ""
+    user_base = (cfg.get("user_search_base") or "").strip()
+    disp_attr = cfg.get("displayname_attr", "displayName")
+    login_attr = cfg.get("username_attr", "sAMAccountName")
+    member_filter = (cfg.get("group_member_filter")
+                     or "(memberOf={group_dn})")
+    if not svc_dn or not svc_pw or not user_base:
+        raise AuthError("Service Account / 使用者搜尋 base / Service 密碼 都需先填妥")
+
+    filt = member_filter.replace("{group_dn}", escape_filter_chars(group_dn))
+    server = _build_server(cfg)
+    out: list[dict] = []
+    try:
+        with Connection(server, user=svc_dn, password=svc_pw,
+                        auto_bind=True, raise_exceptions=True) as conn:
+            entries = conn.extend.standard.paged_search(
+                search_base=user_base, search_filter=filt,
+                search_scope=SUBTREE, attributes=[disp_attr, login_attr],
+                paged_size=500, generator=False)
+            for e in entries:
+                dn = e.get("dn") or ""
+                if not dn or e.get("type") != "searchResEntry":
+                    continue
+                a = e.get("attributes", {}) or {}
+                def _one(v):
+                    return (v[0] if isinstance(v, list) and v else
+                            (v if isinstance(v, str) else None))
+                name = _one(a.get(disp_attr))
+                login = _one(a.get(login_attr))
+                out.append({
+                    "name": str(name) if name else (_cn_from_dn(dn) or dn),
+                    "login": str(login) if login else "",
+                    "dn": dn,
+                })
+    except Exception as exc:  # noqa: BLE001
+        raise AuthError(f"查詢目錄成員失敗：{type(exc).__name__}: {exc}")
+    out.sort(key=lambda x: (x["name"] or "").lower())
+    return out

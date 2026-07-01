@@ -53,3 +53,20 @@ def test_sync_all_groups_escapes_filter_injection():
     src = inspect.getsource(auth_ldap.sync_all_groups)
     assert "escape_filter_chars" in src
     assert "name_contains" in inspect.signature(auth_ldap.sync_all_groups).parameters
+
+
+def test_group_members_ldap_endpoint_requires_directory(admin_session):
+    """查目錄成員端點:非 LDAP/AD 後端回 400（admin_session 是 local）。"""
+    c, _, _ = admin_session
+    r = c.get("/admin/groups/1/members-ldap")
+    assert r.status_code == 400
+
+
+def test_get_group_members_function_exists():
+    from app.core import auth_ldap
+    import inspect
+    assert hasattr(auth_ldap, "get_group_members")
+    # 用 (memberOf=<dn>) 查 + escape 防注入
+    src = inspect.getsource(auth_ldap.get_group_members)
+    assert "memberOf" in src or "group_member_filter" in src
+    assert "escape_filter_chars" in src

@@ -500,6 +500,28 @@ def build_auth_router(templates) -> APIRouter:
         )
         return {"ok": True, **result}
 
+    @router.get("/groups/{gid}/members-ldap")
+    async def groups_members_ldap(gid: int, request: Request):
+        """查某 AD/LDAP 群組在**目錄**裡的直接成員（含尚未登入過本系統的人）。"""
+        from ..core import auth_settings, auth_ldap
+        backend = (auth_settings.get() or {}).get("backend", "off")
+        if backend not in ("ldap", "ad"):
+            raise HTTPException(400, "此功能僅適用 LDAP / AD 群組。")
+        g = group_manager.get(gid)
+        if not g:
+            raise HTTPException(404, "群組不存在")
+        dn = (g.get("external_dn") or "").strip()
+        if not dn:
+            raise HTTPException(400, "此群組沒有目錄 DN（可能是本機群組）。")
+        try:
+            members = auth_ldap.get_group_members(dn)
+        except auth_ldap.AuthError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(500, f"查詢失敗：{type(e).__name__}: {e}")
+        return {"ok": True, "group": g.get("name"), "count": len(members),
+                "members": members}
+
     @router.post("/groups/{gid}/update")
     async def groups_update(gid: int, request: Request):
         body = await request.json()
