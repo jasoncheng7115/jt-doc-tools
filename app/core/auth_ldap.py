@@ -639,7 +639,7 @@ def list_ou_children(parent_dn: str = "") -> list[dict]:
                         auto_bind=True, raise_exceptions=True, check_names=False) as conn:
             entries = conn.extend.standard.paged_search(
                 search_base=base, search_filter=node_filter,
-                search_scope=LEVEL, attributes=["ou", "cn"],
+                search_scope=LEVEL, attributes=["ou", "cn", "objectClass"],
                 paged_size=500, generator=False)
             for e in entries:
                 dn = e.get("dn") or ""
@@ -649,7 +649,24 @@ def list_ou_children(parent_dn: str = "") -> list[dict]:
                 nm = a.get("ou") or a.get("cn")
                 if isinstance(nm, list):
                     nm = nm[0] if nm else None
+                # 從 objectClass 判斷節點型別，讓 treeview 用不同 icon 區分
+                # OU / 容器(container) / 群組(group) / organizationalRole。
+                ocs = a.get("objectClass") or []
+                if isinstance(ocs, str):
+                    ocs = [ocs]
+                ocl = {str(x).lower() for x in ocs}
+                if "organizationalunit" in ocl:
+                    ntype = "ou"
+                elif "group" in ocl or "groupofnames" in ocl or "posixgroup" in ocl:
+                    ntype = "group"
+                elif "organizationalrole" in ocl:
+                    ntype = "role"
+                elif "container" in ocl:
+                    ntype = "container"
+                else:
+                    ntype = "node"
                 out.append({"dn": dn, "name": str(nm) if nm else (_cn_from_dn(dn) or dn),
+                            "type": ntype,
                             "has_children": True})  # 展開時再確認,先給展開箭頭
     except Exception as exc:  # noqa: BLE001
         raise AuthError(f"列目錄節點失敗：{type(exc).__name__}: {exc}")
@@ -762,7 +779,10 @@ def get_user_detail(user_dn: str) -> dict:
     # 過濾掉二進位 / 敏感 / 太吵的屬性,值轉成可顯示字串。
     HIDE = {"userpassword", "unicodepwd", "jpegphoto", "thumbnailphoto",
             "objectsid", "objectguid", "usercertificate", "krb5key",
-            "sambantpassword", "sambalmpassword", "userpkcs12"}
+            "sambantpassword", "sambalmpassword", "userpkcs12",
+            # 密碼歷史雜湊 — 屬憑證類敏感資料，即使是雜湊也不在 UI 顯示。
+            "pwhistory", "sambapasswordhistory", "krbprincipalkey",
+            "supplementalcredentials", "msds-keycredentiallink"}
     attrs: dict = {}
     for k, v in raw.items():
         if k.lower() in HIDE:

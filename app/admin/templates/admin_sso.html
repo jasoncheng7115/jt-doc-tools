@@ -17,6 +17,11 @@
   <input class="field" id="base_url" type="url" placeholder="https://docs.example.com" value="{{ sso.base_url }}" data-s="s6d567387" />
   <p class="muted" data-s="s6b9c179a">留空則依進來的請求推導（直連 / 開發用）。有反向代理時<b>務必</b>填對外 https 網址。</p>
   <div id="urlHints" class="muted" data-s="s77a268ab"></div>
+  <p class="sso-saverow">
+    <button class="btn btn-primary" id="saveBtnTop">{{ icon('save', size=14) }} 儲存設定</button>
+    <span class="muted sso-savehint">base URL 會與下方 OIDC / SAML 一起儲存</span>
+    <span id="saveResultTop" class="muted"></span>
+  </p>
 </div>
 
 <details class="panel">
@@ -63,7 +68,17 @@
         <td><code>groups</code>（需加 Group list mapper）</td></tr>
   </table>
   <p class="muted" data-s="s3bb8533d">SAML 也是 Entra 送群組 GUID；Google Workspace SAML 不送群組屬性。把本站 SP metadata（<code>&lt;base&gt;/auth/saml/metadata</code>）餵給 IdP 最省事。</p>
-  <style nonce="{{ request.state.csp_nonce }}">.sso-eg th, .sso-eg td { font-size:11px; vertical-align:top; padding:4px 8px; border:1px solid #e5e7eb; } .sso-eg code { font-size:10.5px; word-break:break-all; }</style>
+  <style nonce="{{ request.state.csp_nonce }}">
+    .sso-eg { width:100%; border-collapse:collapse; margin:10px 0 8px; font-size:12.5px; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+    .sso-eg th, .sso-eg td { padding:8px 12px; text-align:left; vertical-align:top; border-bottom:1px solid #eef2f7; }
+    .sso-eg tr:first-child th { background:#f1f5f9; color:#334155; font-weight:700; font-size:12px; border-bottom:1px solid #e2e8f0; }
+    .sso-eg td:first-child { color:#475569; font-weight:600; white-space:nowrap; background:#fafbfc; width:1%; }
+    .sso-eg tr:last-child td { border-bottom:none; }
+    .sso-eg tr:hover td { background:#f8fafc; }
+    .sso-eg tr:hover td:first-child { background:#f1f5f9; }
+    .sso-eg code { background:#eef2f7; color:#0f172a; padding:1px 6px; border-radius:4px; font-size:11.5px; word-break:break-all; }
+    .sso-eg td[colspan] { color:#475569; }
+  </style>
 </details>
 
 <div class="panel">
@@ -83,7 +98,7 @@
     <div><label>管理員群組（選填，此群組成員自動為 admin）</label><input class="field" id="o_admin_group" value="{{ sso.oidc.admin_group }}"/></div>
   </div>
   <label data-s="saf23b8d4"><input type="checkbox" id="o_require_https" {% if sso.oidc.require_https %}checked{% endif %}/> 強制 HTTPS（建議開啟；內網 http IdP 才取消）</label>
-  <p><button class="btn" id="testOidc">測試 OIDC discovery</button> <span id="oidcResult" class="muted"></span></p>
+  <p><button class="btn" id="testOidc">{{ icon('search', size=13) }} 測試 OIDC discovery</button> <span id="oidcResult" class="muted"></span></p>
 </div>
 
 <div class="panel">
@@ -105,11 +120,11 @@
   <label>IdP 簽章憑證 X.509（PEM 內容，不含 BEGIN/END 行）</label>
   <textarea class="field" id="s_idp_x509cert" rows="4" data-s="sa54bfe29">{{ sso.saml.idp_x509cert }}</textarea>
   <label data-s="s0ca67867"><input type="checkbox" id="s_want_assertions_signed" {% if sso.saml.want_assertions_signed %}checked{% endif %}/> 要求 IdP 簽署 Assertion（建議開啟）</label>
-  <p><button class="btn" id="testSaml">驗證 SAML SP metadata</button> <span id="samlResult" class="muted"></span></p>
+  <p><button class="btn" id="testSaml">{{ icon('search', size=13) }} 驗證 SAML SP metadata</button> <span id="samlResult" class="muted"></span></p>
 </div>
 
 <div class="panel">
-  <button class="btn btn-primary btn-lg" id="saveBtn">{{ icon('check', size=14) }} 儲存 SSO 設定</button>
+  <button class="btn btn-primary btn-lg" id="saveBtn">{{ icon('save', size=14) }} 儲存 OIDC / SAML / 共用設定</button>
   <span id="saveResult" class="muted" data-s="s610601bf"></span>
 </div>
 
@@ -173,6 +188,8 @@
 .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; margin:10px 0; }
 .grid2 input { width:100%; box-sizing:border-box; }
 .grid2 label, .panel > label { font-size:12px; font-weight:600; color:#374151; }
+.sso-saverow { display:flex; align-items:center; gap:10px; margin:12px 0 0; flex-wrap:wrap; }
+.sso-savehint { font-size:11.5px; }
 .px-inline { font-weight:400 !important; display:inline-flex; align-items:center; gap:6px; }
 .px-callout { border:1px solid #f59e0b; background:#fffbeb; border-radius:8px; padding:10px 14px; margin:12px 0; }
 .px-callout-title { font-weight:700; color:#92400e; font-size:13px; display:flex; align-items:center; gap:6px; }
@@ -241,16 +258,18 @@
     return r;
   }
 
-  $('saveBtn').addEventListener('click', async () => {
-    const btn = $('saveBtn'); btn.disabled = true;
-    $('saveResult').textContent = '儲存中…';
+  // base URL + OIDC + SAML 一起原子儲存（後端 /admin/sso/save 一次收全部），
+  // 所以頁面上有兩顆「儲存」（共用設定區一顆、底部一顆）都呼叫同一個儲存。
+  async function doSaveAll(btn, resultEl){
+    btn.disabled = true; resultEl.textContent = '儲存中…';
     try {
       const r = await postJson('/admin/sso/save', collect());
-      if (!r.ok) { $('saveResult').textContent = '✗ ' + await window.friendlyServerError(r, '儲存失敗'); }
-      else { $('saveResult').textContent = '✓ 已儲存'; }
-    } catch(e){ $('saveResult').textContent = '✗ ' + e; }
+      resultEl.textContent = r.ok ? '✓ 已儲存' : ('✗ ' + await window.friendlyServerError(r, '儲存失敗'));
+    } catch(e){ resultEl.textContent = '✗ ' + e; }
     finally { btn.disabled = false; }
-  });
+  }
+  $('saveBtn').addEventListener('click', () => doSaveAll($('saveBtn'), $('saveResult')));
+  if ($('saveBtnTop')) $('saveBtnTop').addEventListener('click', () => doSaveAll($('saveBtnTop'), $('saveResultTop')));
 
   async function runTest(provider, resultEl){
     resultEl.textContent = '測試中…';

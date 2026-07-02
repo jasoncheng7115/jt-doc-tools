@@ -10,12 +10,22 @@
 <div class="panel">
   <p class="muted dir-intro">左側展開 OU 樹,點某個 OU 看它底下的使用者（<span class="dir-in-legend">綠底 = 已登入過本系統</span>）。把角色<b>指派給 OU</b> → 該 OU（含子 OU）下所有使用者登入時即生效,不必等他們先登入。</p>
 </div>
+<div class="tree-legend muted">
+  {{ icon('building', size=13) }} OU　{{ icon('layers', size=13) }} 容器 / 其他　{{ icon('user', size=13) }} 群組　{{ icon('id-card', size=13) }} 角色
+</div>
 <div class="dir-wrap">
-  <div class="dir-tree panel" id="dirTree"><div class="dir-loading">載入目錄樹…</div></div>
+  <div class="dir-tree panel"><div class="dir-tree-scroll" id="dirTree"><div class="dir-loading">載入目錄樹…</div></div></div>
   <div class="dir-detail panel" id="dirDetail">
     <p class="muted">← 從左側點一個 OU</p>
   </div>
 </div>
+
+<!-- 樹狀節點 icon 來源（server-render 一次，JS 依 node.type clone；避免在 JS 手刻 SVG） -->
+<span class="tn-ic-src" id="tnic-ou" hidden>{{ icon('building', size=14) }}</span>
+<span class="tn-ic-src" id="tnic-container" hidden>{{ icon('layers', size=14) }}</span>
+<span class="tn-ic-src" id="tnic-group" hidden>{{ icon('user', size=14) }}</span>
+<span class="tn-ic-src" id="tnic-role" hidden>{{ icon('id-card', size=14) }}</span>
+<span class="tn-ic-src" id="tnic-node" hidden>{{ icon('layers', size=14) }}</span>
 
 <!-- 使用者細節 modal -->
 <div id="udModal" hidden>
@@ -23,6 +33,7 @@
   <div class="modal-card">
     <h3 id="udName" data-s="s53896af7"></h3>
     <div class="ud-dn" id="udDn"></div>
+    <input class="field ud-filter" id="udFilter" type="search" placeholder="篩選欄位或值…" hidden>
     <div id="udBody"><p class="muted">查詢中…</p></div>
     <div data-s="s9fa82b78">
       <button class="btn" type="button" id="udClose">{{ icon('close', size=14) }} 關閉</button>
@@ -36,15 +47,29 @@
   /* tree / detail 用標準 .panel 卡片樣式（邊框/圓角/陰影由 .panel 提供），這裡只
      設版面（並排、寬度、可捲動）+ 覆寫 padding。 */
   .dir-wrap { display:flex; gap:16px; align-items:flex-start; margin-top:16px; }
-  .dir-tree { flex:0 0 320px; max-width:44%; max-height:560px; overflow:auto; padding:10px; }
+  /* 覆寫 platform.css 的 `.panel + .panel { margin-top:16px }`：在 flex 橫向
+     排版下那條 margin 會把右欄往下推 16px，導致左右上緣不齊。 */
+  .dir-wrap > .panel { margin-top:0; }
+  /* 樹面板本身只當「有圓角、會裁切」的外框（overflow:hidden 讓內容貼合圓角），
+     實際捲動放到內層 .dir-tree-scroll，捲軸就不會蓋到面板圓角。 */
+  .dir-tree { flex:0 0 320px; max-width:44%; padding:8px; overflow:hidden; }
+  .dir-tree-scroll { max-height:544px; overflow-y:auto; }
   .dir-detail { flex:1; min-width:0; min-height:200px; }
   .dir-loading, .dir-empty { color:#9ca3af; padding:12px; font-size:13px; }
   .tn { }
   .tn-row { display:flex; align-items:center; gap:4px; padding:3px 4px; border-radius:5px; cursor:pointer; font-size:13px; white-space:nowrap; }
   .tn-row:hover { background:#f3f4f6; }
   .tn-row.is-sel { background:#eef2ff; font-weight:600; }
-  .tn-toggle { width:16px; text-align:center; color:#6b7280; user-select:none; }
+  .tn-toggle { width:16px; text-align:center; color:#6b7280; user-select:none; flex:0 0 auto; }
+  .tn-ic { flex:0 0 auto; color:#94a3b8; display:inline-flex; }
+  .tn-ic-ou { color:#4f46e5; }
+  .tn-ic-container { color:#0891b2; }
+  .tn-ic-group { color:#16a34a; }
+  .tn-ic-role { color:#d97706; }
   .tn-name { overflow:hidden; text-overflow:ellipsis; }
+  .tree-legend { display:flex; align-items:center; gap:4px; flex-wrap:wrap; font-size:12px; margin:14px 0 0; }
+  .tree-legend svg { vertical-align:middle; }
+  .tree-legend .tn-ic, .tree-legend svg { color:inherit; }
   .tn-hasrole { margin-left:4px; font-size:10px; color:#4f46e5; }
   .tn-children { margin-left:14px; border-left:1px dashed #e5e7eb; padding-left:2px; }
   .dir-detail h3 { margin:0 0 4px; font-size:15px; }
@@ -74,7 +99,9 @@
   #udModal[hidden] { display:none !important; }
   #udModal { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; }
   #udModal .modal-backdrop { position:absolute; inset:0; background:rgba(15,23,42,.55); backdrop-filter:blur(2px); }
-  #udModal .modal-card { position:relative; background:#fff; border-radius:8px; padding:18px 20px; width:100%; max-width:560px; max-height:86vh; overflow:auto; box-shadow:0 16px 48px rgba(0,0,0,.35); z-index:1; }
+  #udModal .modal-card { position:relative; background:#fff; border-radius:8px; padding:18px 20px; width:100%; max-width:840px; max-height:86vh; overflow:auto; box-shadow:0 16px 48px rgba(0,0,0,.35); z-index:1; }
+  .ud-filter { width:100%; margin:2px 0 10px; }
+  .ud-table tr[hidden] { display:none; }
   .ud-dn { font-size:11px; color:#9ca3af; word-break:break-all; margin-bottom:8px; }
   .ud-table { width:100%; border-collapse:collapse; font-size:12.5px; }
   .ud-table td { padding:5px 8px; border-bottom:1px solid #f1f5f9; vertical-align:top; }
@@ -103,7 +130,17 @@ function makeNode(node) {
   const row = document.createElement('div'); row.className = 'tn-row'; row.dataset.dn = node.dn;
   const tog = document.createElement('span'); tog.className = 'tn-toggle'; tog.textContent = '▸';
   const nm = document.createElement('span'); nm.className = 'tn-name'; nm.textContent = node.name;
-  row.appendChild(tog); row.appendChild(nm);
+  row.appendChild(tog);
+  // 依節點型別 clone 對應 icon（OU / 容器 / 群組 / 角色），區分目錄物件種類
+  const nt = node.type || 'node';
+  const icSrc = document.getElementById('tnic-' + nt) || document.getElementById('tnic-node');
+  if (icSrc && icSrc.firstElementChild) {
+    const ic = icSrc.firstElementChild.cloneNode(true);
+    ic.classList.add('tn-ic', 'tn-ic-' + nt);
+    ic.setAttribute('title', {ou:'OU', container:'容器', group:'群組', role:'角色', node:'節點'}[nt] || '節點');
+    row.appendChild(ic);
+  }
+  row.appendChild(nm);
   if (node.roles && node.roles.length) {
     const b = document.createElement('span'); b.className = 'tn-hasrole'; b.textContent = '● 有權限'; row.appendChild(b);
   }
@@ -230,6 +267,7 @@ function openUserDetail(dn, name) {
   $('udName').textContent = name || '';
   $('udDn').textContent = dn || '';
   $('udBody').innerHTML = '<p class="muted">查詢中…</p>';
+  const uf = $('udFilter'); if (uf) { uf.value = ''; uf.hidden = true; }
   $('udModal').hidden = false;
   fetch('/admin/directory/user?dn=' + encodeURIComponent(dn))
     .then(r => r.json().then(j => ({ ok: r.ok, j })))
@@ -246,13 +284,23 @@ function openUserDetail(dn, name) {
         const vhtml = Array.isArray(v)
           ? v.map(x => `<span class="ud-multi">${esc(x)}</span>`).join('')
           : esc(v);
-        return `<tr><td class="ud-k">${esc(label)}</td><td class="ud-v">${vhtml}</td></tr>`;
+        const vtext = Array.isArray(v) ? v.join(' ') : String(v == null ? '' : v);
+        const sf = (label + ' ' + k + ' ' + vtext).toLowerCase();
+        return `<tr data-f="${esc(sf)}"><td class="ud-k">${esc(label)}</td><td class="ud-v">${vhtml}</td></tr>`;
       }).join('');
       const badge = j.local ? '<span class="dir-ubadge">✓ 已登入過本系統</span> ' : '';
       $('udBody').innerHTML = badge + `<table class="ud-table"><tbody>${rows}</tbody></table>`;
+      if (uf) uf.hidden = false;
     })
     .catch(e => { $('udBody').innerHTML = '<p class="dir-empty">✗ ' + esc(e.message) + '</p>'; });
 }
+// 卡片內篩選：比對「欄位名稱 + 值」（含中文標籤），即時隱藏不符的列。
+document.getElementById('udFilter').addEventListener('input', function () {
+  const q = this.value.trim().toLowerCase();
+  document.querySelectorAll('#udBody .ud-table tr').forEach(tr => {
+    tr.hidden = !!q && !(tr.dataset.f || '').includes(q);
+  });
+});
 document.getElementById('udClose').addEventListener('click', () =>
   { document.getElementById('udModal').hidden = true; });
 document.querySelector('#udModal .modal-backdrop').addEventListener('click', () =>
