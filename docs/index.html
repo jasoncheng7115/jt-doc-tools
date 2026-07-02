@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Jason Tools 文件工具箱：整合式 PDF / Office 文件處理平台。39 個工具一站處理：表單填寫、用印簽名、浮水印、OCR 文字辨識、送件前檢核、敏感資料去識別化、PDF 加密、隱藏內容掃描、差異比對、逐句翻譯、電子發票處理、統編查詢等。可選 LDAP / AD 認證、SSO 單一登入（OIDC / SAML）、角色權限、稽核、記錄轉送。不上雲，資料留在自己手中。">
+<meta name="description" content="Jason Tools 文件工具箱：整合式 PDF / Office 文件處理平台。39 個工具一站處理：表單填寫、用印簽名、浮水印、OCR 文字辨識、送件前檢核、敏感資料去識別化、PDF 加密、隱藏內容掃描、差異比對、逐句翻譯、電子發票處理、統編查詢等。可選 LDAP / AD 認證、SSO 單一登入（OIDC / SAML / Kerberos）、角色權限、稽核、記錄轉送。不上雲，資料留在自己手中。">
 <title>Jason Tools 文件工具箱 — PDF / Office 整合式文件處理平台</title>
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
@@ -88,7 +88,7 @@
     </h1>
     <p class="hero-lead">
       表單自動填寫、用印與簽名、浮水印、敏感資料去識別化、PDF 加密、中繼資料清除、隱藏內容掃描、差異比對、頁面編輯…
-      可選 LDAP / AD 認證、SSO 單一登入（OIDC / SAML）、角色權限、稽核、記錄轉送。<br>
+      可選 LDAP / AD 認證、SSO 單一登入（OIDC / SAML / Kerberos）、角色權限、稽核、記錄轉送。<br>
       <b>所有檔案處理只發生在你的伺服器，且原始碼完全公開。</b>
     </p>
     <div class="hero-cta">
@@ -817,6 +817,7 @@
         <h3>多領域認證 + SSO</h3>
         <p>同時支援 <b>本機帳號</b> / <b>LDAP</b> / <b>Active Directory</b>。同名帳號可分屬不同領域並存 （<code>jason@local</code> + <code>jason@ldap</code>），登入時於下拉選擇來源。LDAP 設定有「測試伺服器連線」+「測試帳號登入」按鈕，一鍵驗證設定是否正確。</p>
         <p>另支援 <b>SSO 單一登入</b>（<b>OIDC</b> + <b>SAML</b>），可接 Microsoft 365 / Entra ID、Google Workspace、Keycloak、Okta、Authentik 等。與上述認證<b>並存</b>（保留本機 break-glass），首次登入自動建帳號、IdP 群組對應角色，並支援單一登出（SLO）。</p>
+        <p>再支援 <b>Reverse Proxy SSO</b>（<b>Kerberos / SPNEGO</b>）：已加入 AD 網域、已登入 Windows 的使用者，經前端 Nginx 驗證後<b>自動登入</b>免再輸入帳密；非網域電腦仍回到登入頁用其他方式登入。沿用既有 LDAP / AD 查詢 + 角色 / 稽核 / 2FA，並以「信任的反向代理 IP + 標頭覆寫」防偽造。設定與部署見 <a href="https://github.com/jasoncheng7115/jt-doc-tools/blob/main/reverse_proxy_sso.md" target="_blank" rel="noopener">reverse_proxy_sso.md</a>。</p>
       </div>
 
       <div class="ent-card">
