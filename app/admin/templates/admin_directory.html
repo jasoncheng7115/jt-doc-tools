@@ -101,7 +101,12 @@
   .dir-in-legend { background:#f0fdf4; box-shadow: inset 3px 0 0 #22c55e; padding:0 6px; border-radius:3px; }
   .dir-filters { display:flex; gap:6px; margin:8px 0 6px; flex-wrap:wrap; }
   .dir-fbtn.is-active { background:#4f46e5; color:#fff; border-color:#4f46e5; }
-  .dir-sec-title { font-weight:600; margin:16px 0 6px; font-size:13px; }
+  .dir-sec-title { font-weight:600; font-size:13px; }
+  .dir-users-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin:18px 0 8px; padding-bottom:6px; border-bottom:1px solid #eef2f7; flex-wrap:wrap; }
+  .dir-users-meta { font-size:12px; color:#6b7280; }
+  .dir-users-empty { color:#9ca3af; font-size:13px; padding:10px 2px; }
+  .dir-role-chk { padding:3px 8px; border:1px solid #e5e7eb; border-radius:6px; background:#fff; }
+  .dir-role-chk:hover { border-color:#c7d2fe; }
   /* user detail modal */
   #udModal[hidden] { display:none !important; }
   #udModal { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; }
@@ -220,6 +225,15 @@ async function openOU(dn, name) {
     const rid = role.id, on = (j.ou_roles||[]).includes(rid);
     return `<label class="dir-role-chk"><input type="checkbox" class="du-role" value="${esc(rid)}" ${on?'checked':''}> ${esc(role.display_name||rid)}</label>`;
   }).join('');
+  const cnt = j.count || 0;
+  // 有使用者才顯示篩選 / 搜尋 / 表格；0 人就給乾淨的空狀態，不擺一堆空鷹架。
+  const usersBody = cnt > 0
+    ? `<div class="dir-filters"><button class="btn btn-small dir-fbtn is-active" data-f="all" type="button">全部</button>` +
+      `<button class="btn btn-small dir-fbtn" data-f="in" type="button">已登入</button>` +
+      `<button class="btn btn-small dir-fbtn" data-f="out" type="button">未登入</button></div>` +
+      `<input class="field" id="duSearch" type="search" placeholder="篩選（帳號或姓名）…">` +
+      `<table class="dir-utable"><thead><tr><th>姓名</th><th>帳號</th><th class="du-st">狀態</th></tr></thead><tbody id="duBody"></tbody></table>`
+    : `<p class="dir-users-empty">此 OU 底下沒有直屬使用者。</p>`;
   box.innerHTML =
     `<div class="dir-detail-head"><h3>${esc(name)}</h3><div class="dir-dn">${esc(dn)}</div></div>` +
     `<div class="dir-roles-box">` +
@@ -227,24 +241,23 @@ async function openOU(dn, name) {
       `<div class="dir-roles-chks">${roleChks}</div>` +
       `<div class="dir-roles-actions"><button class="btn btn-primary btn-small" id="duSaveRoles" type="button">{{ icon('save', size=12) }} 儲存角色</button> <span class="muted" id="duRoleMsg"></span></div>` +
     `</div>` +
-    `<div class="dir-sec-title">此 OU 直屬使用者（共 ${j.count}，已登入 ${j.local_count} / 未登入 ${j.not_local_count}）</div>` +
-    `<div class="dir-filters"><button class="btn btn-small dir-fbtn is-active" data-f="all" type="button">全部</button>` +
-    `<button class="btn btn-small dir-fbtn" data-f="in" type="button">已登入</button>` +
-    `<button class="btn btn-small dir-fbtn" data-f="out" type="button">未登入</button></div>` +
-    `<input class="field" id="duSearch" type="search" placeholder="篩選（帳號或姓名）…">` +
-    `<table class="dir-utable"><thead><tr><th>姓名</th><th>帳號</th><th class="du-st">狀態</th></tr></thead><tbody id="duBody"></tbody></table>`;
-  renderUsers();
-  $('duSearch').addEventListener('input', renderUsers);
-  // 點使用者列 → 看細節
-  $('duBody').addEventListener('click', ev => {
-    const tr = ev.target.closest('tr[data-dn]');
-    if (tr) openUserDetail(tr.dataset.dn, tr.dataset.name);
-  });
-  box.querySelectorAll('.dir-fbtn').forEach(b => b.addEventListener('click', () => {
-    _ouFilter = b.dataset.f;
-    box.querySelectorAll('.dir-fbtn').forEach(x => x.classList.toggle('is-active', x === b));
+    `<div class="dir-users-head"><span class="dir-sec-title">此 OU 直屬使用者</span>` +
+      `<span class="dir-users-meta">共 ${cnt}${cnt > 0 ? `　·　已登入 ${j.local_count} / 未登入 ${j.not_local_count}` : ''}</span></div>` +
+    usersBody;
+  if (cnt > 0) {
     renderUsers();
-  }));
+    $('duSearch').addEventListener('input', renderUsers);
+    // 點使用者列 → 看細節
+    $('duBody').addEventListener('click', ev => {
+      const tr = ev.target.closest('tr[data-dn]');
+      if (tr) openUserDetail(tr.dataset.dn, tr.dataset.name);
+    });
+    box.querySelectorAll('.dir-fbtn').forEach(b => b.addEventListener('click', () => {
+      _ouFilter = b.dataset.f;
+      box.querySelectorAll('.dir-fbtn').forEach(x => x.classList.toggle('is-active', x === b));
+      renderUsers();
+    }));
+  }
   $('duSaveRoles').addEventListener('click', async () => {
     const roles = Array.from(box.querySelectorAll('.du-role:checked')).map(c => c.value);
     const msg = $('duRoleMsg'); msg.textContent = ' 儲存中…';
