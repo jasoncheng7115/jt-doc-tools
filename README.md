@@ -155,6 +155,11 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 
 ## 隱私 / 安全要點
 
+- **⚠ 不建議直接對「公開網際網路」開放** — 本工具會解析使用者上傳的 PDF / Office /
+  圖片（底層是 MuPDF / LibreOffice / Pillow 等記憶體不安全的原生程式，屬高風險攻擊
+  面），且可能含統編資料庫等資料。**首選只在內網 / VPN 使用**；若因業務必須對外屬
+  「風險自負」，至少要反向代理 + HTTPS + 認證 + 強制 2FA + WAF / 速率限制 + 持續更新
+  相依。詳見 [OPS.md](OPS.md)。
 - **⚠ 非本機存取一律走反向代理 + HTTPS** — 只要不是「本機單人」使用（任何網路 /
   多人 / 內網 / 對外），**一律放在 nginx（或 Caddy）反向代理 + HTTPS 後面,不要把
   `:8765` 直接對網路開放**。應用程式預設只綁 `127.0.0.1:8765`（純 HTTP 無 TLS）,

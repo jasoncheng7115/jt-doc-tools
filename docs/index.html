@@ -917,6 +917,13 @@
       所有檔案處理只發生在你的伺服器上。<br>
       可在 Linux 架站給內網多人使用，或單機本地用，<b>不上傳任何雲端服務</b>。
     </p>
+    <div style="max-width:760px;margin:0 auto 16px;padding:16px 20px;background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #b91c1c;border-radius:10px;text-align:left;color:#7f1d1d;line-height:1.7;">
+      <strong style="display:block;font-size:15px;margin-bottom:6px;">⚠ 不建議直接對「公開網際網路」開放</strong>
+      本工具會解析使用者上傳的 PDF / Office / 圖片（底層是 MuPDF / LibreOffice / Pillow 等
+      記憶體不安全的原生程式，屬<b>高風險攻擊面</b>），且可能含統編資料庫等資料。<b>首選只在
+      內網 / VPN 使用</b>；若因業務必須對外屬「風險自負」，至少要反向代理 + HTTPS + 認證 +
+      <b>強制 2FA</b> + WAF / 速率限制 + 持續更新相依套件。
+    </div>
     <div style="max-width:760px;margin:0 auto 28px;padding:16px 20px;background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:10px;text-align:left;color:#7f1d1d;line-height:1.7;">
       <strong style="display:block;font-size:15px;margin-bottom:6px;">⚠ 非本機存取一律走 nginx 反向代理 + HTTPS</strong>
       只要不是「本機單人」使用 —— <b>任何網路 / 多人 / 內網其他電腦 / 對外</b> —— 一律放在

@@ -196,6 +196,10 @@ if [ "$BIND_HOST" = "0.0.0.0" ]; then
         ADVERTISED_HOST="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
     fi
     [ -z "$ADVERTISED_HOST" ] && ADVERTISED_HOST="127.0.0.1"
+    warn "已綁 0.0.0.0：服務將對區網開放。請務必：①放在 nginx/Caddy 反向代理 + HTTPS 後面"
+    warn "  ②啟用認證 + 強密碼 + 2FA ③設防火牆只放需要的來源。"
+    warn "  ⚠ 不建議直接對『公開網際網路』開放（本工具解析上傳檔案，屬高風險攻擊面）；"
+    warn "     首選只在內網 / VPN 使用。詳見 OPS.md。"
 fi
 
 # --------------------------------------------------------------------- 工具
