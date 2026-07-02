@@ -1153,13 +1153,13 @@ def build_router(templates) -> APIRouter:
     # ---- 全站設定匯出 / 匯入 -------------------------------------------------
     @router.get("/settings-export", response_class=HTMLResponse)
     async def settings_export_page(request: Request):
-        from ..core import settings_export
-        return templates.TemplateResponse(request, 
+        from ..core import settings_export, scheduled_export
+        return templates.TemplateResponse(request,
             "admin_settings_export.html",
             {
                 "request": request,
-                "summary": settings_export.collect_summary(),
-                "optional_dirs": settings_export._OPTIONAL_DIRS,
+                "categories": settings_export.list_categories(),
+                "sched": scheduled_export.get_settings(),
             },
         )
 
@@ -1168,52 +1168,96 @@ def build_router(templates) -> APIRouter:
         from ..core import settings_export
         from ..main import VERSION
         body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
-        include_optional = list(body.get("include_optional") or [])
+        selected = body.get("selected")
+        selected = list(selected) if selected is not None else None
         out_name = (
             f"jtdt-settings-{time.strftime('%Y%m%d-%H%M%S')}-v{VERSION}.zip"
         )
         out_path = settings.temp_dir / out_name
-        result = settings_export.export_to_zip(out_path, include_optional, app_version=VERSION)
+        result = settings_export.export_to_zip(out_path, selected, app_version=VERSION)
         return FileResponse(
             str(out_path), media_type="application/zip",
             filename=out_name, headers={"X-File-Count": str(result["file_count"])},
         )
 
-    @router.post("/settings-export/import")
-    async def settings_export_import(
-        file: UploadFile = File(...),
-        overwrite_optional: str = Form("0"),
-    ):
-        from ..core import settings_export
-        from ..main import VERSION
-        data = await file.read()
+    def _stash_import_zip(data: bytes) -> Path:
         if not data:
             raise HTTPException(400, "empty file")
         if len(data) > 200 * 1024 * 1024:
             raise HTTPException(400, "import file too large (>200 MB)")
-        # Save to temp then import
         zip_path = settings.temp_dir / f"settings_import_{uuid.uuid4().hex}.zip"
         zip_path.write_bytes(data)
+        return zip_path
+
+    @router.post("/settings-export/preview")
+    async def settings_export_preview(file: UploadFile = File(...)):
+        """Read the uploaded backup's manifest so the UI can show which
+        categories are inside for the admin to pick from. Keeps the zip in
+        temp and returns its token so import can reuse it without re-upload."""
+        from ..core import settings_export
+        zip_path = _stash_import_zip(await file.read())
+        try:
+            manifest = settings_export.read_manifest(zip_path)
+        except (ValueError, FileNotFoundError):
+            import logging as _lg
+            _lg.getLogger("app.admin").exception("preview_settings failed")
+            try: zip_path.unlink()
+            except OSError: pass
+            raise HTTPException(400, "無法讀取備份檔（可能不是 jt-doc-tools 設定備份）")
+        return {"token": zip_path.stem, "manifest": manifest}
+
+    @router.post("/settings-export/import")
+    async def settings_export_import(request: Request):
+        """Restore selected categories from a previously-previewed backup.
+        Body: {token, selected:[category ids]}."""
+        from ..core import settings_export
+        from ..main import VERSION
+        body = await request.json()
+        token = (body.get("token") or "").strip()
+        if not re.fullmatch(r"settings_import_[0-9a-f]{32}", token):
+            raise HTTPException(400, "無效的匯入 token")
+        selected = body.get("selected")
+        selected = list(selected) if selected is not None else None
+        zip_path = settings.temp_dir / f"{token}.zip"
+        if not zip_path.exists():
+            raise HTTPException(410, "匯入檔已過期，請重新上傳")
         try:
             result = settings_export.import_from_zip(
-                zip_path,
-                overwrite_optional=(overwrite_optional == "1"),
-                app_version=VERSION,
-            )
+                zip_path, selected, app_version=VERSION)
         except (ValueError, FileNotFoundError):
-            # v1.5.8: 通用訊息防 stack-trace-exposure（admin 看 server log 取細節）
             import logging as _lg
             _lg.getLogger("app.admin").exception("import_settings failed")
-            raise HTTPException(400, "匯入設定失敗,請檢查 server log 取詳細錯誤")
+            raise HTTPException(400, "匯入設定失敗，請檢查 server log 取詳細錯誤")
         finally:
             try: zip_path.unlink()
             except OSError: pass
         return result
 
-    @router.get("/api/settings-export/summary")
-    async def settings_export_summary_api():
+    @router.post("/settings-export/schedule")
+    async def settings_export_schedule(request: Request):
+        from ..core import scheduled_export
+        body = await request.json()
+        try:
+            saved = scheduled_export.save_settings(body)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"ok": True, "settings": saved}
+
+    @router.post("/settings-export/run-now")
+    async def settings_export_run_now():
+        from ..core import scheduled_export
+        try:
+            res = scheduled_export.run_export_now()
+        except Exception as e:  # noqa: BLE001
+            import logging as _lg
+            _lg.getLogger("app.admin").exception("run_export_now failed")
+            raise HTTPException(400, f"排程匯出測試失敗：{type(e).__name__}")
+        return {"ok": True, "result": res}
+
+    @router.get("/api/settings-export/categories")
+    async def settings_export_categories_api():
         from ..core import settings_export
-        return settings_export.collect_summary()
+        return {"categories": settings_export.list_categories()}
 
     # ---------- OCR 訓練檔（tesseract trained data） ----------
     @router.get("/ocr-langs", response_class=HTMLResponse)

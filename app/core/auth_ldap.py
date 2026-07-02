@@ -33,6 +33,14 @@ class AuthError(Exception):
     pass
 
 
+class UserNotFoundError(AuthError):
+    """Raised when the service-account search finds no (or several) matching
+    user. Separated so the password path can map it to the generic
+    "帳號或密碼錯誤" (no user enumeration) while reverse-proxy SSO can audit it
+    as its own proxy_sso_login_fail without leaking it as a bad password."""
+    pass
+
+
 def _build_server(cfg: dict):
     """Build a ldap3 Server from cfg dict. Raises AuthError on bad config /
     missing ldap3."""
@@ -172,8 +180,31 @@ def test_user_login(cfg: dict, username: str, password: str) -> dict:
             "groups": group_dns, "elapsed_ms": elapsed}
 
 
-def authenticate(username: str, password: str, *, ip: str = "") -> dict:
-    """Verify creds against AD/LDAP, sync the user, return user dict."""
+def _resolve_backend_and_cfg() -> tuple[str, dict]:
+    """Return (backend, ldap_cfg) for directory sync.
+
+    `backend` becomes the synced user's `source` column. Normally it mirrors
+    the primary `auth_settings.backend` ('ldap' / 'ad'). Reverse-proxy SSO may
+    run layered on a non-directory primary backend (e.g. local + proxy); in
+    that case directory users are still AD-sourced, so we default to 'ad'."""
+    s = auth_settings.get()
+    backend = s.get("backend", "ldap")
+    if backend not in ("ldap", "ad"):
+        backend = "ad"
+    return backend, s.get("ldap", {})
+
+
+def _search_ldap_user(username: str, cfg: dict) -> dict:
+    """Service-bind + search for a single user. Returns
+    {user_dn, display_name, group_dns}. Does NOT bind as the user (no password
+    check) and does NOT write audit — that's the caller's job.
+
+    Shared by the password `authenticate()` path and the reverse-proxy
+    `sync_user_by_username()` path (the client asked us not to duplicate the
+    LDAP search/sync logic). Raises:
+      - UserNotFoundError  when 0 (or >1) users match
+      - AuthError          on connection / config problems
+    """
     try:
         from ldap3 import Server, Connection, ALL, SUBTREE, Tls
         from ldap3.utils.conv import escape_filter_chars
@@ -181,11 +212,14 @@ def authenticate(username: str, password: str, *, ip: str = "") -> dict:
     except ImportError:
         raise AuthError("ldap3 套件未安裝；請聯絡管理員")
 
-    s = auth_settings.get()
-    cfg = s.get("ldap", {})
     server_url = cfg.get("server_url", "")
     if not server_url:
         raise AuthError("LDAP 伺服器尚未設定")
+    svc_dn = cfg.get("service_dn", "")
+    svc_pw = cfg.get("service_password", "")
+    base = cfg.get("user_search_base", "")
+    if not svc_dn or not svc_pw or not base:
+        raise AuthError("LDAP service account / search base 尚未設定")
 
     use_tls = bool(cfg.get("use_tls", True))
     verify = bool(cfg.get("verify_cert", True))
@@ -193,17 +227,9 @@ def authenticate(username: str, password: str, *, ip: str = "") -> dict:
     if use_tls or server_url.lower().startswith("ldaps://"):
         tls = Tls(validate=_ssl.CERT_REQUIRED if verify else _ssl.CERT_NONE,
                   version=_ssl.PROTOCOL_TLS_CLIENT)
-
     server = Server(server_url, get_info=ALL, tls=tls)
 
-    # Step 1+2: bind as service, search for the user.
-    svc_dn = cfg.get("service_dn", "")
-    svc_pw = cfg.get("service_password", "")
-    base = cfg.get("user_search_base", "")
     user_filter_tpl = cfg.get("user_search_filter", "(sAMAccountName={username})")
-    if not svc_dn or not svc_pw or not base:
-        raise AuthError("LDAP service account / search base 尚未設定")
-
     safe_username = escape_filter_chars((username or "").strip())
     user_filter = user_filter_tpl.replace("{username}", safe_username)
 
@@ -225,33 +251,73 @@ def authenticate(username: str, password: str, *, ip: str = "") -> dict:
     except Exception as exc:
         logger.warning("LDAP service bind/search failed: %s", exc)
         # Surface the real error class + message so admins can diagnose
-        # (wrong port, bad service password, TLS issue, …) instead of the
-        # opaque "無法連線到 LDAP 伺服器". Service password is never in the
-        # exception text itself, so this doesn't leak secrets.
+        # (wrong port, bad service password, TLS issue, …). Service password
+        # is never in the exception text itself, so this doesn't leak secrets.
         raise AuthError(f"無法連線/查詢 LDAP：{type(exc).__name__}: {exc}")
 
     if not entries:
-        # Same error as wrong password (no enumeration).
-        audit_db.log_event("login_fail", username=username, ip=ip,
-                           details={"reason": "ldap_user_not_found"})
-        raise AuthError("帳號或密碼錯誤")
+        raise UserNotFoundError("找不到使用者")
     if len(entries) > 1:
         from .log_safe import safe_log
         logger.warning("LDAP returned multiple users for %s — refusing", safe_log(username))
+        # NOT UserNotFoundError: this is a config error the admin should see
+        # verbatim (the password path maps UserNotFoundError to a generic
+        # "帳號或密碼錯誤" for no-enumeration; that would hide this misconfig).
         raise AuthError("LDAP 設定錯誤：搜尋到多筆同名使用者")
 
     entry = entries[0]
     user_dn = str(entry.entry_dn)
-    display_name = (str(entry[cfg.get("displayname_attr", "displayName")])
-                    if cfg.get("displayname_attr", "displayName") in entry else username)
-    groups_raw = entry[cfg.get("group_attr", "memberOf")] if (
-        cfg.get("group_attr", "memberOf") in entry) else []
+    dn_attr = cfg.get("displayname_attr", "displayName")
+    grp_attr = cfg.get("group_attr", "memberOf")
+    display_name = (str(entry[dn_attr]) if dn_attr in entry else username)
+    groups_raw = entry[grp_attr] if (grp_attr in entry) else []
     group_dns = [str(g) for g in groups_raw] if groups_raw else []
+    return {"user_dn": user_dn, "display_name": display_name,
+            "group_dns": group_dns}
+
+
+def _sync_directory_user(username: str, info: dict, backend: str) -> dict:
+    """Sync a searched user into local users/groups/OU. Shared tail of both
+    the password and reverse-proxy paths."""
+    user_row = _sync_user(username, info["display_name"], info["user_dn"],
+                          backend=backend)
+    _sync_groups(user_row["user_id"], info["group_dns"], backend=backend)
+    _sync_ous(user_row["user_id"], info["user_dn"])
+    return user_row
+
+
+def authenticate(username: str, password: str, *, ip: str = "") -> dict:
+    """Verify creds against AD/LDAP, sync the user, return user dict."""
+    try:
+        from ldap3 import Server, Connection, ALL, Tls
+        import ssl as _ssl
+    except ImportError:
+        raise AuthError("ldap3 套件未安裝；請聯絡管理員")
+
+    backend, cfg = _resolve_backend_and_cfg()
+
+    # Step 1+2: service bind + search (shared helper).
+    try:
+        info = _search_ldap_user(username, cfg)
+    except UserNotFoundError:
+        # Same error as wrong password (no user enumeration).
+        audit_db.log_event("login_fail", username=username, ip=ip,
+                           details={"reason": "ldap_user_not_found"})
+        raise AuthError("帳號或密碼錯誤")
+    user_dn = info["user_dn"]
 
     # Step 3: try to bind as the discovered user → password check.
+    server_url = cfg.get("server_url", "")
+    use_tls = bool(cfg.get("use_tls", True))
+    verify = bool(cfg.get("verify_cert", True))
+    tls = None
+    if use_tls or server_url.lower().startswith("ldaps://"):
+        tls = Tls(validate=_ssl.CERT_REQUIRED if verify else _ssl.CERT_NONE,
+                  version=_ssl.PROTOCOL_TLS_CLIENT)
+    server = Server(server_url, get_info=ALL, tls=tls)
     try:
         with Connection(server, user=user_dn, password=password,
-                        auto_bind=True, raise_exceptions=True, check_names=False) as user_conn:
+                        auto_bind=True, raise_exceptions=True, check_names=False):
             pass
     except Exception:
         audit_db.log_event("login_fail", username=username, ip=ip,
@@ -259,14 +325,29 @@ def authenticate(username: str, password: str, *, ip: str = "") -> dict:
         raise AuthError("帳號或密碼錯誤")
 
     # Step 4: sync into local users / groups tables.
-    user_row = _sync_user(username, display_name, user_dn,
-                          backend=s.get("backend", "ldap"))
-    _sync_groups(user_row["user_id"], group_dns, backend=s.get("backend", "ldap"))
-    _sync_ous(user_row["user_id"], user_dn)
+    user_row = _sync_directory_user(username, info, backend)
 
     audit_db.log_event("login_success", username=username, ip=ip,
-                       details={"source": s.get("backend"), "dn": user_dn})
+                       details={"source": backend, "dn": user_dn})
     return user_row
+
+
+def sync_user_by_username(username: str, *, ip: str = "") -> dict:
+    """Look up `username` in AD/LDAP via the service account and sync into the
+    local users/groups/OU tables WITHOUT any password bind.
+
+    Used by reverse-proxy SSO (`app/core/proxy_sso.py`): the identity has
+    already been asserted upstream by Nginx + Kerberos/SPNEGO, so we trust the
+    username and only need to resolve the DN + groups + OU. Returns the user
+    row (with an extra 'dn' key). Raises UserNotFoundError / AuthError.
+
+    NOTE: this performs NO credential check itself — callers MUST only invoke
+    it for a username they have already authenticated by other means.
+    """
+    backend, cfg = _resolve_backend_and_cfg()
+    info = _search_ldap_user(username, cfg)   # UserNotFoundError bubbles up
+    user_row = _sync_directory_user(username, info, backend)
+    return {**user_row, "dn": info["user_dn"]}
 
 
 def _sync_user(username: str, display_name: str, dn: str, backend: str) -> dict:
@@ -309,8 +390,10 @@ def _sync_user(username: str, display_name: str, dn: str, backend: str) -> dict:
             (username, display_name, backend, dn, now, now),
         )
         uid = cur.lastrowid
-    # New users get default-user role per spec
-    permissions.set_subject_roles("user", str(uid), ["default-user"])
+    # New users get the admin-configured new-user default role (default-user
+    # unless admin picked another). See roles.get_default_role_id().
+    from . import roles as _roles
+    permissions.set_subject_roles("user", str(uid), [_roles.get_default_role_id()])
     return {"user_id": uid, "username": username,
             "display_name": display_name, "source": backend}
 

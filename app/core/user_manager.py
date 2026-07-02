@@ -73,8 +73,10 @@ def create_local(username: str, display_name: str, password: str,
                  roles: Optional[list[str]] = None) -> int:
     """Create a local-mode user. Returns new user_id.
 
-    Default role assignment: 'default-user' if `roles` is None (admin-friendly
-    common case). Pass `roles=[]` to explicitly create with no roles.
+    Default role assignment: the admin-configured new-user default role (via
+    roles.get_default_role_id(), normally 'default-user') if `roles` is None
+    (admin-friendly common case). Pass `roles=[]` to explicitly create with no
+    roles.
     """
     username = _validate_username(username)
     display_name = (display_name or "").strip() or username
@@ -98,7 +100,8 @@ def create_local(username: str, display_name: str, password: str,
         )
         new_id = cur.lastrowid
     # Assign roles outside the tx (calls invalidate_cache, etc).
-    role_ids = list(roles) if roles is not None else ["default-user"]
+    from . import roles as _roles
+    role_ids = list(roles) if roles is not None else [_roles.get_default_role_id()]
     permissions.set_subject_roles("user", str(new_id), role_ids)
     return new_id
 

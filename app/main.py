@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.12.52"
+VERSION = "1.12.54"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -721,6 +721,36 @@ async def _auth_gate(request: Request, call_next):
         token = request.cookies.get(sessions.COOKIE_NAME, "")
         user = sessions.lookup(token) if token else None
         if not user:
+            # Reverse-proxy (Kerberos/SPNEGO) SSO: a trusted upstream proxy may
+            # have asserted the domain user via a header. Try that before
+            # falling back to /login. Only reached for PROTECTED paths (public
+            # prefixes already returned above), so proxy SSO never runs on
+            # /login itself → jtdt-admin break-glass stays reachable + no
+            # redirect loop (the success redirect carries a session cookie, so
+            # the follow-up request skips this branch entirely).
+            from .core import proxy_sso
+            if proxy_sso.is_enabled():
+                status, puser = proxy_sso.resolve_user(request)
+                if status == proxy_sso.OK and puser:
+                    from .web.auth_routes import complete_login
+                    ua = request.headers.get("User-Agent", "")
+                    # OK path means the proxy was verified trusted, so its
+                    # X-Forwarded-For names the real workstation → record that
+                    # as the session IP (consistent with password login).
+                    cip = proxy_sso._real_client_ip(request)
+                    nxt = path + ("?" + request.url.query if request.url.query else "")
+                    # 2FA-aware: auditor / totp_required users are still routed
+                    # through /2fa-verify — proxy SSO cannot bypass forced 2FA.
+                    return complete_login(request, puser, remember=False,
+                                          ip=cip, ua=ua, next_url=nxt)
+                # Header absent / untrusted / lookup failed. When fallback is
+                # OFF, a request without a valid trusted header gets a hard 401
+                # instead of the /login form.
+                if not proxy_sso.fallback_login_enabled():
+                    return _JSONResponse({"error": "unauthorized",
+                                          "detail": "需經企業入口 (Kerberos SSO) 登入"},
+                                         status_code=401)
+                # else fall through to the normal /login redirect below.
             if _looks_like_xhr(request):
                 return _JSONResponse({"error": "unauthorized",
                                       "detail": "請先登入"}, status_code=401)
@@ -1240,6 +1270,12 @@ async def _startup():
         # Start retention sweeper (runs once now + every 6h).
         from .core import retention as _retention
         _retention.start_scheduler()
+        # Start scheduled settings-export (checks hourly, default OFF).
+        try:
+            from .core import scheduled_export as _sched_export
+            _sched_export.start_scheduler()
+        except Exception:
+            logger.exception("scheduled_export scheduler start failed")
         # Start vat-db schedule (weekly auto-update, default OFF).
         try:
             from .core import vat_db as _vatdb

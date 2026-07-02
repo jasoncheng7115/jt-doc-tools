@@ -330,13 +330,50 @@ def _m8_sso_sources(conn: sqlite3.Connection) -> None:
     """)
 
 
+def _m9_role_seed_snapshot(conn: sqlite3.Connection) -> None:
+    """v9: 記錄「上次 seed 給過某內建角色哪些工具」的快照表（v1.12.53 起）。
+
+    修正「admin 手動移除內建角色某工具 → 升級又被 seed top-up 補回來」的問題。
+    `seed_builtin_roles()` 改成只補「這一版 seed 新增的」工具（seed − snapshot），
+    不再補 admin 刻意移除的工具。詳見 roles.py:seed_builtin_roles docstring。
+
+    這裡只建表，不寫入資料 —— 避免 migration import roles（會與 auth_db 形成
+    循環）。首次 bootstrap（快照為空）由 seed_builtin_roles() 於啟動時處理：
+    把當前這版的 seed 定義寫成基準線、本次不補任何工具（保守，保住既有 admin
+    的移除設定）。"""
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS role_seed_snapshot (
+        role_id     TEXT NOT NULL,
+        tool_id     TEXT NOT NULL,
+        PRIMARY KEY (role_id, tool_id)
+    );
+    """)
+
+
+def _m10_role_default_for_new(conn: sqlite3.Connection) -> None:
+    """v10: roles 加 `is_default_for_new` 欄位（v1.12.53 起）。
+
+    新使用者（LDAP/AD/SSO/proxy JIT 開通、admin 建帳號沒指定角色）要對應到
+    哪個角色，改由 admin 可設定 —— 可以是內建的 `default-user`，也可以是 admin
+    複製 / 自建的自訂角色。恰有一個角色的此旗標為 1。
+
+    ALTER ADD COLUMN 有預設值，不需重建表（避開 m8 那種 FK cascade 風險）。
+    實際把 default-user 設為初始預設，交給 roles.seed_builtin_roles() 於啟動時
+    ensure（migration 當下 roles 資料列可能還沒 seed）。"""
+    conn.executescript("""
+    ALTER TABLE roles ADD COLUMN is_default_for_new INTEGER NOT NULL DEFAULT 0;
+    """)
+
+
 MIGRATIONS = [_m1_initial, _m2_username_source_unique,
               _m3_rename_pdf_diff_to_doc_diff,
               _m4_grant_image_to_pdf,
               _m5_grant_translate_doc,
               _m6_totp_columns,
               _m7_audit_seed_column,
-              _m8_sso_sources]
+              _m8_sso_sources,
+              _m9_role_seed_snapshot,
+              _m10_role_default_for_new]
 
 
 def auth_db_path() -> Path:

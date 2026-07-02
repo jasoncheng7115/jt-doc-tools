@@ -60,6 +60,18 @@
 - **工具權限**:default-user 沒有的工具（pdf-fill/pdf-stamp）UI 與後端動作端點都擋；有的（pdf-merge）可用
 - **水平越權**:B 使用者不可下載 A 的工作區檔（/workspace/file/{id}）與 A 的上傳檔（/tools/pdf-editor/file/{upload_id}）
 
+### 1.8 角色預設 / seed 快照 (`tests/test_roles_default_and_seed.py`)
+- **新使用者預設角色**:seed 後預設為 default-user;可改指到自訂角色（恰一個 flagged）;禁止指定 admin / auditor;被設為預設的角色不可刪;flagged 角色消失時 get_default_role_id 自動回退
+- **seed 快照**:管理員移除內建角色某工具後,升級（re-seed）不再補回;連續多次升級仍維持;管理員自行加的工具保留;這一版真正新增的工具仍自動散布;bootstrap（既有客戶無快照）保守不補回舊移除
+- **端到端**:`/admin/roles/{id}/set-default` 端點 + 建本機使用者未指定角色時套用設定的預設角色
+
+### 1.9 Reverse Proxy SSO (`tests/test_proxy_sso.py`)
+- **正規化**:DOMAIN\\user / user@domain / user → user;控制字元 / 空白 / CRLF 一律拒
+- **信任判定**:只認直連來源 IP（含 CIDR、IPv4-mapped）;非法 peer（testclient）不信任
+- **resolve_user**:無標頭→MISSING+audit;不可信來源帶標頭→UNTRUSTED+audit 不登入;可信→OK 同步;查詢失敗→FAIL+audit
+- **中介層 e2e**:可信標頭→自動發 session→後續請求授權;無標頭→回 /login;不可信→回 /login 且不查目錄;fallback 關→401;/login 永遠可達（break-glass）;auditor 仍導 /2fa-verify;停用時完全 no-op
+- **admin 端點**:proxy-save 停用 OK;啟用但未設 LDAP→409;啟用但信任清單空→400;LDAP+清單齊備→啟用成功
+
 ## 2. 手動驗收清單（每個版本）
 
 ### 2.1 填單用印
@@ -742,4 +754,21 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 - [ ] **插入頁碼縮圖放大可正常顯示**（GitHub issue #32）：點縮圖放大不再黑遮罩 / file not found
 - [ ] **中文頁碼輸出 PDF**：「第 1 / 20 頁」等格式中文不缺字（非「·」）
 - [ ] **PDF 編輯器螢光筆可改色**（GitHub issue #35）：選螢光筆 → 屬性面板改顏色 → 畫布即時變色（半透明）→ 存檔輸出該色
+
+### 6.15 v1.12.53 — 角色預設 / seed 快照 + Reverse Proxy SSO（每次發版必過）
+
+**自動化測試**（`uv run pytest`）：
+- `test_roles_default_and_seed.py` — 新使用者預設角色 + seed 快照（管理員移除不被升級蓋回）
+- `test_proxy_sso.py` — 帳號正規化 / 信任 IP / resolve_user / 中介層 e2e / admin 端點守門
+
+**手動 / 環境相關（發版前確認）**：
+- [ ] **改內建角色權限後升級不被蓋回**：admin 到「角色管理」把「一般使用者」拿掉某工具 → 儲存 → 跑 `jtdt update`（或重啟）→ 該工具維持移除
+- [ ] **設定新使用者預設角色**：複製一個自訂角色 → 該角色按「設為預設」→ 出現「新使用者預設」徽章；新登入的 AD/LDAP 使用者或新建本機帳號（未指定角色）套用該角色
+- [ ] **Reverse Proxy SSO（需真 AD + Nginx + Kerberos 環境）**：
+  - [ ] 網域電腦 + Edge/Chrome（已信任站台）開站 → 自動登入（Nginx 傳 X-Remote-User）
+  - [ ] 非網域電腦（無標頭）→ 顯示原本 /login
+  - [ ] 首次 proxy 登入 → 自動同步 users / groups / OU；再次登入 → 更新 display_name / last_login / group
+  - [ ] 自送 X-Remote-User 的 untrusted client → 不得登入（稽核出現 `proxy_sso_untrusted_proxy`）
+  - [ ] jtdt-admin 仍可從 /login 登入；auditor 仍被導 /2fa-verify
+  - [ ] OIDC / SAML / 一般 Login / Logout 行為不受影響
 

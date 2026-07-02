@@ -44,6 +44,23 @@ _DEFAULTS: dict[str, Any] = {
         "username_attr": "sAMAccountName",
         "displayname_attr": "displayName",
     },
+    # Reverse-proxy (Kerberos/SPNEGO) SSO — an ADDITIVE login path, NOT a
+    # `backend` value. When enabled, a trusted upstream proxy (Nginx doing
+    # SPNEGO) asserts the domain user via a header; we look them up in
+    # LDAP/AD (the `ldap` block above), sync, and issue a normal session.
+    # Never the only login path: /login stays available for local / LDAP / AD
+    # / OIDC / SAML and for jtdt-admin break-glass. See app/core/proxy_sso.py
+    # and reverse_proxy_sso.md.
+    "proxy_sso": {
+        "enabled": False,
+        "header": "X-Remote-User",        # header the proxy sets to the user
+        "fallback_login": True,           # no header → show /login (else 401)
+        # Only these DIRECT client IPs (the immediate TCP peer, i.e. the proxy)
+        # are trusted to assert the header. X-Forwarded-For is NEVER consulted
+        # for this decision (spoofable). Bind the app to 127.0.0.1 so only the
+        # local Nginx can reach it.
+        "trusted_proxies": ["127.0.0.1", "::1"],
+    },
     "updated_at": 0.0,
 }
 

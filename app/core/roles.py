@@ -141,54 +141,138 @@ AUDIT_VISIBLE_ADMIN_URLS = (
 
 def seed_builtin_roles() -> None:
     """Insert built-in roles + their tool grants if not already present.
-    For roles that ALREADY exist, top-up with any new tools that have been
-    added to SEED_ROLES since the last seed (e.g. when a new release adds
-    a tool that should be available to default-user / finance / etc.).
-    Only ADDs — never removes a tool, so admin's prior 'unselect' edits
-    can be reversed by upgrade if a new release adds it back, but admin's
-    own ADDITIONS to built-in roles are preserved across upgrades.
 
-    This is what fixes the "升級後新工具沒人看得見" bug — without this
-    top-up, customers who installed BEFORE a new tool was introduced never
-    got the tool in their built-in roles, even though new SEED_ROLES code
-    listed it.
+    For roles that ALREADY exist, top-up ONLY with tools that this release
+    NEWLY added to SEED_ROLES since the last seed — computed against the
+    per-role `role_seed_snapshot` (= the seed definition we recorded last
+    time). Tools that admin has deliberately REMOVED from a built-in role are
+    NOT re-added, because they're already in the snapshot (not "newly
+    introduced"). Admin's own ADDITIONS (tools not in SEED_ROLES) are likewise
+    never touched. See auth_db `_m9_role_seed_snapshot`.
+
+    This fixes two things at once:
+      1. "升級後新工具沒人看得見" — genuinely new tools DO propagate to
+         existing customers' built-in roles.
+      2. "改過預設角色的權限，升級又被改回來" — admin's removals now persist.
+
+    Bootstrap (first run after the snapshot table lands): a built-in role with
+    NO snapshot rows yet is treated conservatively — we record the current seed
+    definition as the baseline and add NOTHING this run (so pre-existing admin
+    removals survive). New tools introduced in that same release rely on an
+    explicit backfill migration (the m4/m5 pattern), same as before.
     """
     conn = auth_db.conn()
     now = time.time()
     with db.tx(conn):
         for r in SEED_ROLES:
             row = conn.execute("SELECT 1 FROM roles WHERE id=?", (r["id"],)).fetchone()
+            seed_tools = set(r["tools"])
             if row:
-                # Existing role — top up with any tools added since last seed.
-                # Read what's currently granted, compute diff, INSERT OR IGNORE
-                # the rest. Tools removed by admin won't come back here unless
-                # they're in SEED_ROLES (then they return — accepted trade-off
-                # so new tools propagate to existing customers).
-                current = {x["tool_id"] for x in conn.execute(
-                    "SELECT tool_id FROM role_perms WHERE role_id=?", (r["id"],)
-                ).fetchall()}
-                for tool_id in r["tools"]:
-                    if tool_id not in current:
-                        conn.execute(
-                            "INSERT OR IGNORE INTO role_perms(role_id, tool_id) "
-                            "VALUES (?,?)", (r["id"], tool_id))
+                # Existing role — diff this release's seed def against the
+                # snapshot of the seed def we last recorded.
+                snapshot = {x["tool_id"] for x in conn.execute(
+                    "SELECT tool_id FROM role_seed_snapshot WHERE role_id=?",
+                    (r["id"],)).fetchall()}
+                if snapshot:
+                    current = {x["tool_id"] for x in conn.execute(
+                        "SELECT tool_id FROM role_perms WHERE role_id=?", (r["id"],)
+                    ).fetchall()}
+                    newly_introduced = seed_tools - snapshot
+                    for tool_id in newly_introduced:
+                        if tool_id not in current:
+                            conn.execute(
+                                "INSERT OR IGNORE INTO role_perms(role_id, tool_id) "
+                                "VALUES (?,?)", (r["id"], tool_id))
+                # else: no snapshot yet → bootstrap, add nothing this run.
+                # Refresh the snapshot to this release's seed definition either
+                # way, so the next upgrade diffs against the right baseline.
+                conn.execute("DELETE FROM role_seed_snapshot WHERE role_id=?",
+                             (r["id"],))
+                for tool_id in seed_tools:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO role_seed_snapshot(role_id, tool_id) "
+                        "VALUES (?,?)", (r["id"], tool_id))
                 continue
-            # Brand-new role — insert metadata + tools.
+            # Brand-new role — insert metadata + tools + snapshot baseline.
             conn.execute(
                 "INSERT INTO roles(id, display_name, description, is_builtin, "
                 "is_protected, created_at) VALUES (?,?,?,?,?,?)",
                 (r["id"], r["display_name"], r["description"],
                  1 if r["is_builtin"] else 0, 1 if r["is_protected"] else 0, now),
             )
-            for tool_id in r["tools"]:
+            for tool_id in seed_tools:
                 conn.execute("INSERT OR IGNORE INTO role_perms(role_id, tool_id) "
                              "VALUES (?,?)", (r["id"], tool_id))
+                conn.execute("INSERT OR IGNORE INTO role_seed_snapshot(role_id, "
+                             "tool_id) VALUES (?,?)", (r["id"], tool_id))
+    # Ensure exactly one role is flagged as the new-user default (default-user
+    # unless admin has picked another). Kept out of the migration because the
+    # roles rows may not exist at migration time on a fresh install.
+    _ensure_default_role_flag()
     # Invalidate the in-memory permissions cache so changes take effect immediately
     try:
         from . import permissions as _perm
         _perm.invalidate_cache()
     except Exception:
         pass
+
+
+# ---------- new-user default role ----------
+
+# Roles that must NEVER be the auto-assigned default for brand-new users:
+# admin (would auto-grant full access) and auditor (separation-of-duties +
+# forced 2FA; JIT-provisioned users shouldn't land there).
+_INELIGIBLE_DEFAULT_ROLES = frozenset({"admin", "auditor"})
+
+FALLBACK_DEFAULT_ROLE = "default-user"
+
+
+def _ensure_default_role_flag() -> None:
+    """Guarantee exactly one role has is_default_for_new=1. If none does
+    (fresh install / just-migrated existing DB), pick `default-user`."""
+    conn = auth_db.conn()
+    row = conn.execute(
+        "SELECT id FROM roles WHERE is_default_for_new=1 LIMIT 1").fetchone()
+    if row:
+        return
+    exists = conn.execute("SELECT 1 FROM roles WHERE id=?",
+                          (FALLBACK_DEFAULT_ROLE,)).fetchone()
+    if exists:
+        with db.tx(conn):
+            conn.execute("UPDATE roles SET is_default_for_new=1 WHERE id=?",
+                         (FALLBACK_DEFAULT_ROLE,))
+
+
+def get_default_role_id() -> str:
+    """Return the role id assigned to brand-new users who aren't given an
+    explicit role. Falls back to `default-user` if the flagged role was
+    somehow deleted or no flag is set."""
+    conn = auth_db.conn()
+    row = conn.execute(
+        "SELECT id FROM roles WHERE is_default_for_new=1 LIMIT 1").fetchone()
+    if row:
+        return row["id"]
+    # Self-heal if possible, then fall back.
+    _ensure_default_role_flag()
+    row = conn.execute(
+        "SELECT id FROM roles WHERE is_default_for_new=1 LIMIT 1").fetchone()
+    return row["id"] if row else FALLBACK_DEFAULT_ROLE
+
+
+def set_default_role_id(role_id: str) -> None:
+    """Mark `role_id` as the new-user default (clears the flag on every other
+    role). Rejects admin/auditor and non-existent roles."""
+    role_id = (role_id or "").strip()
+    if role_id in _INELIGIBLE_DEFAULT_ROLES:
+        raise ValueError("admin / auditor 角色不可設為新使用者預設角色")
+    conn = auth_db.conn()
+    if not conn.execute("SELECT 1 FROM roles WHERE id=?", (role_id,)).fetchone():
+        raise ValueError(f"role 「{role_id}」不存在")
+    with db.tx(conn):
+        conn.execute("UPDATE roles SET is_default_for_new=0 "
+                     "WHERE is_default_for_new=1")
+        conn.execute("UPDATE roles SET is_default_for_new=1 WHERE id=?",
+                     (role_id,))
 
 
 # 內建稽核員帳號名稱 — 升級時若不存在會自動建立（v1.5.0 起）
@@ -383,7 +467,8 @@ def list_roles() -> list[dict]:
     """Return every role with its tool grants."""
     conn = auth_db.conn()
     rows = conn.execute(
-        "SELECT id, display_name, description, is_builtin, is_protected, created_at "
+        "SELECT id, display_name, description, is_builtin, is_protected, "
+        "is_default_for_new, created_at "
         "FROM roles ORDER BY is_builtin DESC, id"
     ).fetchall()
     out = []
@@ -395,6 +480,7 @@ def list_roles() -> list[dict]:
             "id": r["id"], "display_name": r["display_name"],
             "description": r["description"], "is_builtin": bool(r["is_builtin"]),
             "is_protected": bool(r["is_protected"]),
+            "is_default_for_new": bool(r["is_default_for_new"]),
             "created_at": r["created_at"], "tools": tools,
         })
     return out
@@ -472,12 +558,15 @@ def update(role_id: str, *, display_name: Optional[str] = None,
 
 def delete(role_id: str) -> None:
     conn = auth_db.conn()
-    row = conn.execute("SELECT is_protected, is_builtin FROM roles WHERE id=?",
-                       (role_id,)).fetchone()
+    row = conn.execute(
+        "SELECT is_protected, is_builtin, is_default_for_new FROM roles WHERE id=?",
+        (role_id,)).fetchone()
     if not row:
         raise ValueError(f"role 「{role_id}」不存在")
     if row["is_protected"]:
         raise ValueError("此角色受保護，無法刪除")
+    if row["is_default_for_new"]:
+        raise ValueError("此角色被設為新使用者預設角色，請先把預設改指向其他角色再刪除")
     with db.tx(conn):
         # CASCADE removes role_perms rows; subject_roles also CASCADE.
         conn.execute("DELETE FROM roles WHERE id=?", (role_id,))

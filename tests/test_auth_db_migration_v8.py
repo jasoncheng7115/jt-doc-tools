@@ -46,7 +46,8 @@ def test_v8_preserves_users_groups_memberships():
 
     dbm.migrate(p, auth_db.MIGRATIONS)  # apply v8
 
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 8
+    # At least v8 must have run (later migrations may push the version higher).
+    assert c.execute("PRAGMA user_version").fetchone()[0] >= 8
     # users + groups copied over
     assert c.execute("SELECT COUNT(1) FROM users").fetchone()[0] == 2
     assert c.execute("SELECT COUNT(1) FROM groups").fetchone()[0] == 2

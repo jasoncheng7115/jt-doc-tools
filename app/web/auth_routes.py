@@ -135,6 +135,45 @@ def _drop_pending_2fa(token: str) -> None:
     _PENDING_2FA.pop(token, None)
 
 
+def complete_login(request: Request, user: dict, *, remember: bool, ip: str,
+                   ua: str, next_url: str) -> Response:
+    """Shared post-authentication tail: route through 2FA when required, else
+    issue a session cookie. Returns a redirect Response.
+
+    Used by BOTH the password login (``login_submit``) and reverse-proxy SSO
+    (``app/main.py:_auth_gate``). Centralising this guarantees proxy SSO can
+    NEVER bypass forced 2FA (auditor role / totp_required) — the exact same
+    check runs regardless of how the identity was established.
+    """
+    from ..core import totp as _totp, permissions as _perm
+    try:
+        tstate = _totp.get_user_totp_state(user["user_id"])
+    except Exception:
+        tstate = {"enabled": False, "required": False, "has_secret": False}
+    try:
+        forced_by_role = _perm.is_auditor(user["user_id"])
+    except Exception:
+        forced_by_role = False
+    needs_2fa = tstate["enabled"] or tstate["required"] or forced_by_role
+    if needs_2fa:
+        pending_token = _stash_pending_2fa(
+            user_id=user["user_id"], remember=remember, ip=ip, ua=ua,
+            next_url=safe_next(next_url), forced_setup=(not tstate["enabled"]),
+        )
+        resp = RedirectResponse("/2fa-verify", status_code=302)
+        resp.set_cookie(key=PENDING_2FA_COOKIE, value=pending_token,
+                        max_age=PENDING_2FA_TTL, httponly=True,
+                        samesite="lax", path="/")
+        return resp
+    token, expires_at = sessions.issue(
+        user["user_id"], remember=remember, ip=ip, ua=ua,
+    )
+    resp = RedirectResponse(safe_next(next_url), status_code=302)
+    _set_session_cookie(resp, token, remember=remember,
+                        request=request, expires_at=expires_at)
+    return resp
+
+
 def build_router(templates) -> APIRouter:
     router = APIRouter()
 
@@ -186,39 +225,11 @@ def build_router(templates) -> APIRouter:
                  "default_realm": realm or _auth.default_realm()},
                 status_code=200,
             )
-        # 2FA check — 在 issue session 之前。auditor role 強制 TOTP；
-        # 其他 user 自選。totp_required + 沒 setup → 強制走 setup；
-        # totp_enabled → 要求驗 6 碼。詳見 totp 模組 + /2fa-verify 路由。
-        from ..core import totp as _totp, permissions as _perm
-        try:
-            tstate = _totp.get_user_totp_state(user["user_id"])
-        except Exception:
-            tstate = {"enabled": False, "required": False, "has_secret": False}
-        # 預先計算「是否強制」（auditor role 自動視為 required，即使 DB
-        # 還沒設 totp_required，也強制；admin 後台另開的也吃 DB column）
-        try:
-            forced_by_role = _perm.is_auditor(user["user_id"])
-        except Exception:
-            forced_by_role = False
-        needs_2fa = tstate["enabled"] or tstate["required"] or forced_by_role
-        if needs_2fa:
-            pending_token = _stash_pending_2fa(
-                user_id=user["user_id"], remember=bool(remember),
-                ip=ip, ua=ua, next_url=safe_next(next),
-                forced_setup=(not tstate["enabled"]),
-            )
-            resp = RedirectResponse("/2fa-verify", status_code=302)
-            resp.set_cookie(key=PENDING_2FA_COOKIE, value=pending_token,
-                            max_age=PENDING_2FA_TTL, httponly=True,
-                            samesite="lax", path="/")
-            return resp
-        token, expires_at = sessions.issue(
-            user["user_id"], remember=bool(remember), ip=ip, ua=ua,
-        )
-        resp = RedirectResponse(safe_next(next), status_code=302)
-        _set_session_cookie(resp, token, remember=bool(remember),
-                            request=request, expires_at=expires_at)
-        return resp
+        # 2FA-aware session issue — shared with reverse-proxy SSO so forced
+        # TOTP (auditor role / totp_required) can never be bypassed. See
+        # complete_login().
+        return complete_login(request, user, remember=bool(remember),
+                              ip=ip, ua=ua, next_url=next)
 
     @router.post("/change-password")
     async def change_password(request: Request):

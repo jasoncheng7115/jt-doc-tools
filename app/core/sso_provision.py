@@ -82,7 +82,8 @@ def _sync_user(provider: str, external_id: str, username: str,
             (username, display_name, provider, external_id, now, now),
         )
         uid = cur.lastrowid
-    permissions.set_subject_roles("user", str(uid), ["default-user"])
+    from . import roles as _roles
+    permissions.set_subject_roles("user", str(uid), [_roles.get_default_role_id()])
     from .log_safe import safe_log
     # username comes from an IdP claim — sanitise (strip CR/LF) before logging
     # to prevent log injection (CodeQL #115).

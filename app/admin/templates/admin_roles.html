@@ -24,10 +24,14 @@
       <code data-s="sa9648fd5">{{ r.id }}</code>
       {% if r.is_builtin %}<span class="badge">預設</span>{% endif %}
       {% if r.is_protected %}<span class="badge" data-s="s5f951fed">受保護</span>{% endif %}
+      {% if r.is_default_for_new %}<span class="badge badge-newuser" title="新加入的使用者（AD / LDAP / SSO 首次登入、或管理員未指定角色時）會自動套用此角色">新使用者預設</span>{% endif %}
     </div>
     <div>
       {% if r.id not in ('admin', 'auditor') %}
       <button class="btn btn-small" data-act="save">{{ icon('save', size=12) }} 儲存</button>
+      {% endif %}
+      {% if r.id not in ('admin', 'auditor') and not r.is_default_for_new %}
+      <button class="btn btn-small" data-act="set-default" title="設為新使用者預設角色">{{ icon('star', size=12) }} 設為預設</button>
       {% endif %}
       {% if r.id != 'admin' %}
       <button class="btn btn-small" data-act="copy" title="複製此角色為新的可編輯角色">{{ icon('copy', size=12) }} 複製</button>
@@ -67,6 +71,7 @@
 
 <style nonce="{{ request.state.csp_nonce }}">
   .badge { background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:4px; font-size:10px; margin-left:6px; }
+  .badge-newuser { background:#dcfce7; color:#166534; }
   .tool-toolbar { display:flex; align-items:center; gap:6px; margin-top:10px; padding:6px 8px; background:#f8fafc; border:1px solid var(--border); border-radius:6px; }
   .tool-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:6px; margin-top:8px; }
   .tool-chk { display:flex; align-items:center; gap:6px; font-size:12.5px; padding:4px; }
@@ -161,6 +166,23 @@ document.querySelectorAll('[data-role] [data-act="copy"]').forEach(btn => {
     });
     if (r.ok) location.reload();
     else showAlert('複製失敗：' + await r.text());
+  });
+});
+
+// 設為新使用者預設角色：新使用者（AD / LDAP / SSO 首次登入、或管理員建帳號
+// 沒指定角色）會自動套用被設為預設的那個角色。可以是內建的，也可以是複製 /
+// 自建的自訂角色（但不可是 admin / auditor）。
+document.querySelectorAll('[data-role] [data-act="set-default"]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const panel = btn.closest('[data-role]');
+    const roleId = panel.dataset.role;
+    const roleName = panel.querySelector('h2').textContent.trim();
+    if (!(await showConfirm(
+        `把「${roleName}」設為新使用者預設角色？\n之後新加入的使用者若未指定角色，會自動套用此角色。`,
+        { title: '設為新使用者預設', okText: '設為預設' }))) return;
+    const r = await fetch(`/admin/roles/${roleId}/set-default`, {method:'POST'});
+    if (r.ok) location.reload();
+    else showAlert('設定失敗：' + await window.friendlyServerError(r, '設定失敗'));
   });
 });
 

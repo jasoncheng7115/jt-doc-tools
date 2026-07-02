@@ -44,11 +44,57 @@ def build_auth_router(templates) -> APIRouter:
     @router.get("/sso", response_class=HTMLResponse)
     async def sso_page(request: Request):
         from ..core import sso_provision  # noqa: F401 (ensure importable)
+        _s = auth_settings.get()
         return templates.TemplateResponse(request, "admin_sso.html", {
             "request": request,
             "sso": sso_settings.get(),          # secrets masked
             "auth_enabled": auth_settings.is_enabled(),
+            "proxy_sso": _s.get("proxy_sso", {}),
+            "ldap_configured": bool((_s.get("ldap") or {}).get("server_url")
+                                    and (_s.get("ldap") or {}).get("service_dn")),
+            # Direct TCP peer as this server sees it — for the proxy-SSO panel
+            # to hint which IP to trust (behind a reverse proxy this IS the
+            # proxy's IP, i.e. the value to put in trusted_proxies).
+            "peer_ip": (request.client.host if request.client else ""),
         })
+
+    @router.post("/sso/proxy-save")
+    async def sso_proxy_save(request: Request):
+        """Save the reverse-proxy (Kerberos/SPNEGO) SSO settings. Additive
+        login path — does not touch the primary backend. See proxy_sso.py."""
+        body = await request.json()
+        raw_proxies = body.get("trusted_proxies")
+        if isinstance(raw_proxies, str):
+            # Accept newline- or comma-separated text from a textarea.
+            raw_proxies = [p.strip() for p in raw_proxies.replace(",", "\n").splitlines()]
+        proxies = [p.strip() for p in (raw_proxies or []) if p and p.strip()]
+        enabled = bool(body.get("enabled"))
+        # Guard 1: enabling proxy SSO without auth on = no break-glass admin.
+        if enabled and not auth_settings.is_enabled():
+            raise HTTPException(409, "請先於「認證設定」啟用認證並建立管理員，再開啟 Reverse Proxy SSO（保留 break-glass 帳號）")
+        # Guard 2: it resolves users via LDAP/AD, so that must be configured.
+        _s = auth_settings.get()
+        ldap_ok = bool((_s.get("ldap") or {}).get("server_url")
+                       and (_s.get("ldap") or {}).get("service_dn"))
+        if enabled and not ldap_ok:
+            raise HTTPException(409, "Reverse Proxy SSO 需要先填妥 LDAP/AD 連線設定（用來查詢並同步網域使用者）")
+        # Guard 3: refuse to enable with an empty trusted-proxy list — that
+        # would trust the header from ANY source (spoofable).
+        if enabled and not proxies:
+            raise HTTPException(400, "啟用時「信任的反向代理 IP」不可空白，否則任何來源都能偽造帳號")
+        _s["proxy_sso"] = {
+            "enabled": enabled,
+            "header": (body.get("header") or "X-Remote-User").strip() or "X-Remote-User",
+            "fallback_login": bool(body.get("fallback_login", True)),
+            "trusted_proxies": proxies or ["127.0.0.1", "::1"],
+        }
+        auth_settings.save(_s)
+        audit_db.log_event("settings_change", username=_actor(request),
+                           ip=_client_ip(request), target="proxy_sso",
+                           details={"enabled": enabled, "header": _s["proxy_sso"]["header"],
+                                    "fallback_login": _s["proxy_sso"]["fallback_login"],
+                                    "trusted_proxies": proxies})
+        return JSONResponse({"ok": True})
 
     @router.post("/sso/save")
     async def sso_save(request: Request):
@@ -321,7 +367,7 @@ def build_auth_router(templates) -> APIRouter:
                 display_name=body.get("display_name", ""),
                 password=body.get("password", ""),
                 enabled=bool(body.get("enabled", True)),
-                roles=body.get("roles") or ["default-user"],
+                roles=body.get("roles") or [roles.get_default_role_id()],
             )
         except ValueError as e:
             raise HTTPException(400, str(e))
@@ -758,6 +804,21 @@ def build_auth_router(templates) -> APIRouter:
         audit_db.log_event(
             "role_delete", username=_actor(request), ip=_client_ip(request),
             target=role_id,
+        )
+        return {"ok": True}
+
+    @router.post("/roles/{role_id}/set-default")
+    async def roles_set_default(role_id: str, request: Request):
+        """Mark this role as the default assigned to brand-new users who
+        aren't given an explicit role (LDAP/AD/SSO JIT provisioning, admin
+        create-user without a role selection). Rejects admin / auditor."""
+        try:
+            roles.set_default_role_id(role_id)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        audit_db.log_event(
+            "role_set_default_for_new", username=_actor(request),
+            ip=_client_ip(request), target=role_id,
         )
         return {"ok": True}
 

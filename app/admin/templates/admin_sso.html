@@ -113,10 +113,75 @@
   <span id="saveResult" class="muted" data-s="s610601bf"></span>
 </div>
 
+<div class="panel">
+  <h2>{{ icon('shield', size=18) }} Reverse Proxy SSO（Kerberos / SPNEGO）</h2>
+  <p class="muted">
+    已加入 AD 網域、且在 Windows 已登入的使用者，經前端 Nginx（SPNEGO/Kerberos）驗證後，
+    由 Nginx 傳入使用者帳號標頭，自動登入本系統。非網域電腦或未帶標頭者，仍回到 /login
+    使用 Local / LDAP / AD / OIDC / SAML 登入。使用者查詢與同步沿用下方「認證設定」的
+    LDAP / AD 連線。完整部署（AD service account / setspn / ktpass / 瀏覽器設定）詳見文件 <code>reverse_proxy_sso.md</code>。
+  </p>
+
+  <div class="px-callout">
+    <div class="px-callout-title">{{ icon('shield', size=15) }} 反向代理主機（Nginx）必做設定 — 少任一項會不安全或無法登入</div>
+    <ol class="px-callout-list">
+      <li><b>Nginx 端做 SPNEGO / Kerberos 驗證，並「一律覆寫」帳號標頭</b>：在 <code>location</code> 內加
+        <code>proxy_set_header X-Remote-User $remote_user;</code> —— 先蓋掉客戶端自帶的同名標頭，只讓 Kerberos 驗到的帳號傳進來（沒這行＝任何人都能偽造身分）。</li>
+      <li><b>下方「信任的反向代理 IP」要填「實際直接連進本服務的那台反向代理」的 IP</b>。若是「瀏覽器 → 反向代理A → 反向代理B → 本服務」的多層架構，要填<b>最後那台（直接連本服務的 B）</b>的 IP。<b>除非 Nginx 與本服務在同一台，否則不要只留 127.0.0.1。</b></li>
+      <li><b>本服務只綁 <code>127.0.0.1</code>，或用防火牆只允許反向代理連 8765</b>。否則有人可繞過反向代理、直接對本服務送 <code>X-Remote-User</code> 冒充任何帳號。</li>
+    </ol>
+    <p class="px-callout-hint">提示：你這次開這個頁面，本服務看到的<b>直接來源 IP＝<code>{{ peer_ip or '(未知)' }}</code></b>。若你正是<b>經反向代理</b>連進來管理的，這通常就是要填到下面清單的值；若你是直接連本服務（未經代理）則不是。</p>
+    <details class="px-eg">
+      <summary>展開 Nginx 設定範例（可複製）</summary>
+{% raw %}<pre class="px-pre">location / {
+    # --- SPNEGO / Kerberos（需 libnginx-mod-http-auth-spnego） ---
+    auth_gss on;
+    auth_gss_realm EXAMPLE.LOCAL;
+    auth_gss_keytab /etc/nginx/jtdt.keytab;
+    auth_gss_service_name HTTP/doc.example.local;
+    auth_gss_allow_basic_fallback off;   # 非網域電腦不擋死，落回 /login
+
+    # --- 關鍵：一律覆寫帳號標頭（防偽造） ---
+    proxy_set_header X-Remote-User $remote_user;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_pass http://127.0.0.1:8765;   # 本服務只綁 127.0.0.1
+}</pre>{% endraw %}
+    </details>
+  </div>
+
+  {% if not ldap_configured %}
+  <p class="muted" data-s="warn-noldap">⚠ 尚未設定 LDAP / AD 連線；Reverse Proxy SSO 需要它來查詢並同步網域使用者。請先到「認證設定」設定 LDAP / AD。</p>
+  {% endif %}
+  <label data-s="s0ca67867"><input type="checkbox" id="px_enabled" {% if proxy_sso.enabled %}checked{% endif %}/> 啟用 Reverse Proxy SSO</label>
+  <div class="grid2">
+    <div><label>帳號標頭名稱</label><input id="px_header" value="{{ proxy_sso.header or 'X-Remote-User' }}"/></div>
+    <div>
+      <label>沒有標頭時的行為</label>
+      <label class="px-inline"><input type="checkbox" id="px_fallback" {% if proxy_sso.fallback_login %}checked{% endif %}/> 顯示 /login 登入頁（取消勾選則回 401）</label>
+    </div>
+  </div>
+  <label>信任的反向代理 IP（每行一個，或用逗號分隔；可用 CIDR，如 10.0.0.0/24）</label>
+  <textarea id="px_trusted" rows="3" data-s="sa54bfe29">{{ proxy_sso.trusted_proxies | join('\n') }}</textarea>
+  <p class="muted" data-s="px-sec">只有「直接連進本服務的來源 IP」在此清單內時才採信帳號標頭（不看 X-Forwarded-For，無法偽造）。請務必讓 Python 服務只綁 127.0.0.1，且 Nginx 一律覆寫此標頭。</p>
+  <p><button class="btn btn-primary" id="pxSaveBtn">{{ icon('check', size=14) }} 儲存 Reverse Proxy SSO</button> <span id="pxSaveResult" class="muted"></span></p>
+</div>
+
 <style nonce="{{ request.state.csp_nonce }}">
 .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; margin:10px 0; }
 .grid2 input { width:100%; box-sizing:border-box; }
 .grid2 label, .panel > label { font-size:12px; font-weight:600; color:#374151; }
+.px-inline { font-weight:400 !important; display:inline-flex; align-items:center; gap:6px; }
+.px-callout { border:1px solid #f59e0b; background:#fffbeb; border-radius:8px; padding:10px 14px; margin:12px 0; }
+.px-callout-title { font-weight:700; color:#92400e; font-size:13px; display:flex; align-items:center; gap:6px; }
+.px-callout-list { margin:8px 0 6px; padding-left:20px; font-size:12.5px; line-height:1.7; color:#374151; }
+.px-callout-list code, .px-callout-hint code { background:#fef3c7; padding:0 4px; border-radius:3px; font-size:11.5px; }
+.px-callout-hint { font-size:12px; color:#374151; background:#fef9c3; border-radius:6px; padding:6px 8px; margin:6px 0; }
+.px-eg { margin-top:6px; }
+.px-eg summary { cursor:pointer; font-size:12px; color:#2563eb; }
+.px-pre { background:#0f172a; color:#e2e8f0; font-size:11px; line-height:1.5; padding:10px 12px; border-radius:6px; overflow:auto; margin-top:6px; }
 </style>
 
 <script nonce="{{ request.state.csp_nonce }}">
@@ -200,6 +265,24 @@
   }
   $('testOidc').addEventListener('click', () => runTest('oidc', $('oidcResult')));
   $('testSaml').addEventListener('click', () => runTest('saml', $('samlResult')));
+
+  // --- Reverse Proxy SSO (separate save; own endpoint) ---
+  $('pxSaveBtn').addEventListener('click', async () => {
+    const btn = $('pxSaveBtn'); btn.disabled = true;
+    $('pxSaveResult').textContent = '儲存中…';
+    try {
+      const body = {
+        enabled: $('px_enabled').checked,
+        header: $('px_header').value,
+        fallback_login: $('px_fallback').checked,
+        trusted_proxies: $('px_trusted').value,
+      };
+      const r = await postJson('/admin/sso/proxy-save', body);
+      if (!r.ok) { $('pxSaveResult').textContent = '✗ ' + await window.friendlyServerError(r, '儲存失敗'); }
+      else { $('pxSaveResult').textContent = '✓ 已儲存'; }
+    } catch(e){ $('pxSaveResult').textContent = '✗ ' + e; }
+    finally { btn.disabled = false; }
+  });
 })();
 </script>
 {% endblock %}
