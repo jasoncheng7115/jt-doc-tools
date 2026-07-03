@@ -753,7 +753,10 @@ select.jt-select-native {
 }
 
 /* 對外開放風險提醒 banner（admin 頁、綁非 loopback 位址時顯示；見 base.html） */
-.net-expose-warn { display:flex; align-items:flex-start; gap:8px; background:#fef2f2; border:1px solid #fecaca; border-left:4px solid #dc2626; color:#7f1d1d; border-radius:8px; padding:10px 118px 10px 14px; margin:0 0 16px; font-size:13px; line-height:1.65; }
+.net-expose-warn { position:relative; display:flex; align-items:flex-start; gap:8px; background:#fef2f2; border:1px solid #fecaca; border-left:4px solid #dc2626; color:#7f1d1d; border-radius:8px; padding:10px 118px 10px 14px; margin:0 0 16px; font-size:13px; line-height:1.65; }
 .net-expose-warn code { background:#fee2e2; padding:0 5px; border-radius:4px; font-size:12px; }
 .net-expose-warn a { color:#b91c1c; text-decoration:underline; }
 .net-expose-warn svg { flex:0 0 auto; margin-top:2px; }
+/* 關閉鈕：放右下角，避開右上角浮動的「首頁」按鈕；關閉後本瀏覽器記住不再顯示 */
+.net-expose-x { position:absolute; right:10px; bottom:6px; width:24px; height:24px; padding:0; line-height:22px; text-align:center; font-size:18px; color:#b91c1c; background:#fee2e2; border:1px solid #fecaca; border-radius:6px; cursor:pointer; }
+.net-expose-x:hover { background:#fecaca; }

@@ -392,10 +392,23 @@
       </a>
     </div>
     {% if is_admin(request) and net_exposed() and (request.scope.get('path') or '').startswith('/admin') %}
-    <div class="net-expose-warn" role="alert">
+    <div class="net-expose-warn" role="alert" id="netExposeWarn">
       {{ icon('warn', size=16) }}
       <span><b>本服務已對網路開放</b>（綁定 <code>{{ bind_host() }}</code>）。本工具會處理公司<b>內部 / 機密文件</b>，若直接對<b>公開網際網路</b>開放，等於把這些文件與後台一併暴露出去，有<b>資料外洩風險</b>。建議<b>只在內網 / VPN 使用</b>，並置於<b>反向代理 + HTTPS + 認證</b>後面，勿把 <code>:8765</code> 直接對外開放。詳見 <a href="https://github.com/jasoncheng7115/jt-doc-tools/blob/main/OPS.md" target="_blank" rel="noopener">OPS.md</a>。</span>
+      <button type="button" class="net-expose-x" id="netExposeWarnX" aria-label="關閉此提醒" title="知道了，關閉此提醒（本瀏覽器記住，不再顯示）">&times;</button>
     </div>
+    <script nonce="{{ request.state.csp_nonce }}">
+      (function () {
+        var w = document.getElementById('netExposeWarn');
+        if (!w) return;
+        try { if (localStorage.getItem('jtdtNetExposeWarnHide') === '1') { w.style.display = 'none'; } } catch (e) {}
+        var x = document.getElementById('netExposeWarnX');
+        if (x) x.addEventListener('click', function () {
+          w.style.display = 'none';
+          try { localStorage.setItem('jtdtNetExposeWarnHide', '1'); } catch (e) {}
+        });
+      })();
+    </script>
     {% endif %}
     {% block content %}{% endblock %}
   </main>
