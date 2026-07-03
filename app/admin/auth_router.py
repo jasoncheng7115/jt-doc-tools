@@ -82,6 +82,24 @@ def build_auth_router(templates) -> APIRouter:
         # would trust the header from ANY source (spoofable).
         if enabled and not proxies:
             raise HTTPException(400, "啟用時「信任的反向代理 IP」不可空白，否則任何來源都能偽造帳號")
+        # Guard 4: every entry must be a valid IP or CIDR, and reject
+        # all-encompassing networks (0.0.0.0/0, ::/0, wildcards) — those trust
+        # EVERY source, making the header-spoofing defence meaningless.
+        import ipaddress as _ipa
+        for p in proxies:
+            if p in ("*", "0.0.0.0", "::", "0.0.0.0/0", "::/0"):
+                raise HTTPException(400, f"「{p}」會信任所有來源，等於關閉防偽造保護，不允許")
+            try:
+                if "/" in p:
+                    net = _ipa.ip_network(p, strict=False)
+                    if net.prefixlen == 0:
+                        raise HTTPException(400, f"「{p}」涵蓋所有位址，不允許（請填實際反向代理的 IP）")
+                else:
+                    _ipa.ip_address(p)
+            except HTTPException:
+                raise
+            except ValueError:
+                raise HTTPException(400, f"「{p}」不是合法的 IP 或 CIDR")
         _s["proxy_sso"] = {
             "enabled": enabled,
             "header": (body.get("header") or "X-Remote-User").strip() or "X-Remote-User",

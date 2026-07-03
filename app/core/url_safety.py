@@ -43,14 +43,21 @@ def safe_next(target: str) -> str:
     if not isinstance(target, str) or not target:
         return "/"
     s = target
-    if any(c in s for c in ("\r", "\n", "\0", "\\")):
-        return "/"
-    if "://" in s:
-        return "/"
-    if s.startswith("//"):
-        return "/"
-    if not s.startswith("/"):
-        return "/"
+    # Defence in depth: also re-check the once-percent-decoded form so encoded
+    # slash/backslash tricks (`/%2f%2fevil.com` → `///evil.com`, `/%5cevil`) and
+    # encoded CR/LF/NUL can't slip a protocol-relative / injection past the raw
+    # checks below. (A single leading '/' Location is same-origin in browsers,
+    # so these weren't exploitable, but we reject them anyway.)
+    from urllib.parse import unquote
+    for candidate in (s, unquote(s)):
+        if any(c in candidate for c in ("\r", "\n", "\0", "\\")):
+            return "/"
+        if "://" in candidate:
+            return "/"
+        if candidate.startswith("//"):
+            return "/"
+        if not candidate.startswith("/"):
+            return "/"
     try:
         u = urlparse(s)
         if u.scheme or u.netloc:

@@ -141,6 +141,11 @@ def _rbac_merge(data: dict) -> dict:
     Enforces the single is_default_for_new invariant. Returns a small summary.
     """
     from . import auth_db, db
+    # Roles that a crafted import backup must NEVER be able to hand out — a
+    # confused-deputy admin importing an attacker's "backup" could otherwise
+    # escalate: make `admin` the new-user default, or grant admin to a whole
+    # OU. Mirror roles._INELIGIBLE_DEFAULT_ROLES.
+    _INELIGIBLE_ROLES = {"admin", "auditor"}
     conn = auth_db.conn()
     roles = data.get("roles") or []
     role_perms = data.get("role_perms") or []
@@ -160,14 +165,18 @@ def _rbac_merge(data: dict) -> dict:
                     "UPDATE roles SET display_name=?, description=? WHERE id=?",
                     (r.get("display_name") or rid, r.get("description") or "", rid))
             else:
+                # An imported (new) role is always a CUSTOM role: force
+                # is_builtin=0 / is_protected=0 so a backup can't plant an
+                # undeletable "protected/builtin" fake role.
                 conn.execute(
                     "INSERT INTO roles(id, display_name, description, is_builtin, "
                     "is_protected, is_default_for_new, created_at) "
-                    "VALUES (?,?,?,?,?,0,?)",
-                    (rid, r.get("display_name") or rid, r.get("description") or "",
-                     1 if r.get("is_builtin") else 0,
-                     1 if r.get("is_protected") else 0, now))
-            if r.get("is_default_for_new"):
+                    "VALUES (?,?,?,0,0,0,?)",
+                    (rid, r.get("display_name") or rid, r.get("description") or "", now))
+            # Never let an import set admin/auditor as the new-user default
+            # (that would bypass roles.set_default_role_id's guard and make
+            # every JIT-provisioned user an admin).
+            if r.get("is_default_for_new") and rid not in _INELIGIBLE_ROLES:
                 imported_default = rid
         # Replace role_perms for the imported roles only.
         imported_role_ids = {r.get("id") for r in roles if r.get("id")}
@@ -183,6 +192,10 @@ def _rbac_merge(data: dict) -> dict:
                 conn.execute("INSERT OR IGNORE INTO role_seed_snapshot(role_id, "
                              "tool_id) VALUES (?,?)", (rid, tool))
         for key, rid in ou_roles:
+            # Block importing an OU→admin/auditor grant (e.g. granting admin to
+            # the domain root DN = escalate the whole directory).
+            if rid in _INELIGIBLE_ROLES:
+                continue
             conn.execute("INSERT OR IGNORE INTO subject_roles(subject_type, "
                          "subject_key, role_id) VALUES ('ou', ?, ?)", (key, rid))
         for key, tool in ou_perms:
@@ -344,12 +357,23 @@ def import_from_zip(zip_path: Path, selected_ids: Optional[list[str]] = None,
         manifest = json.loads(zf.read(MANIFEST_NAME).decode("utf-8"))
         if manifest.get("kind") != "jtdt-settings-export":
             raise ValueError(f"unknown export kind: {manifest.get('kind')!r}")
-        # zip-slip defence: only manifest, rbac.json, and data/ entries allowed.
-        for name in names:
+        # zip-slip defence + decompression-bomb cap: only manifest, rbac.json,
+        # and data/ entries allowed; reject archives that expand beyond sane
+        # limits (a small crafted zip can inflate to GBs → OOM/disk fill).
+        _MAX_TOTAL = 2 * 1024 * 1024 * 1024   # 2 GiB total uncompressed
+        _MAX_FILE = 512 * 1024 * 1024         # 512 MiB per member
+        total_uncompressed = 0
+        for info in zf.infolist():
+            name = info.filename
             if name in (MANIFEST_NAME, RBAC_NAME):
                 continue
             if not name.startswith("data/") or ".." in Path(name).parts:
                 raise ValueError(f"unsafe path in zip: {name!r}")
+            if info.file_size > _MAX_FILE:
+                raise ValueError("備份檔內有過大的檔案（疑似解壓縮炸彈），已中止")
+            total_uncompressed += info.file_size
+            if total_uncompressed > _MAX_TOTAL:
+                raise ValueError("備份檔解壓後過大（疑似解壓縮炸彈），已中止")
 
         entries_by_cat = manifest.get("entries_by_category") or {}
         is_legacy = not entries_by_cat

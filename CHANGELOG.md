@@ -4,6 +4,21 @@
 
 ---
 
+## [1.12.61] - 2026-07-03
+
+### 資安 — 攻防測試後的漏洞修正（建議盡快更新）
+
+經黑箱測試 + 多路程式碼安全稽核修正以下問題（黑箱面：CSP / CSRF / 標頭 / 路徑穿越 / HTTP 方法 / proxy SSO 偽造皆已擋，注入 / LDAP / 命令 / SSRF / zip-slip 稽核無可利用漏洞）：
+
+- **[Critical] Job 結果跨使用者存取（未授權任意讀取）**：`/api/*` 不經 cookie 認證閘，而 `/api/jobs/{id}/download`、`download-png`、狀態、取消端點原本**完全沒有 job 擁有者檢查**；更嚴重的是 download 的 fallback 會掃描**所有使用者**的 `*_work/` 目錄、依檔名（如 `output.pdf`）送檔 → 未登入者猜檔名即可讀到別人的產出文件。修正：四個端點一律強制 job 擁有者比對（非擁有者 / 未登入一律 404，不洩存在性），**移除跨使用者檔名 fallback**。
+- **[High] Reverse Proxy SSO 信任判定被 uvicorn proxy_headers 破壞**：uvicorn 預設 `proxy_headers=True` 會用 X-Forwarded-For 覆寫 `request.client.host`，使 proxy SSO 賴以判斷「來源是否為信任反向代理」的真實 peer IP 失真（同機 nginx 部署下會失效，或在 `FORWARDED_ALLOW_IPS=*` 下被偽造繞過）。修正：關閉 uvicorn `proxy_headers`（app 自行讀 X-Forwarded-Proto/Host），讓 `client.host` 恆為真實傳輸層來源。
+- **[High] 設定匯入的 RBAC 提權**：精心製作的「設定備份」zip 匯入時，可把 `admin` 設為新使用者預設角色、或把 admin 角色指派給整個 OU（網域根）、或植入無法刪除的「受保護 / 內建」假角色。修正：匯入時擋掉 admin/auditor 當預設、擋 OU→admin/auditor 指派、匯入的新角色一律為非內建/非受保護。
+- **[Low] Reverse Proxy SSO 信任清單防呆**：拒絕 `0.0.0.0/0`、`::/0`、`*` 等「信任所有來源」的設定，並驗證每筆為合法 IP / CIDR。
+- **[Low] 解壓縮炸彈防護**：設定匯入對解壓後大小設上限（單檔 512 MiB / 總計 2 GiB），擋 zip bomb。
+- **[Low] `safe_next` 強化**：多做一次 percent-decode 再檢查，擋掉 `/%2f%2fevil.com` 之類編碼繞過（原本非可利用，屬防禦強化）。
+
+（另檢視：稽核紀錄本身無任何手動刪除端點，僅由保留排程自動清理，維持防竄改。）
+
 ## [1.12.60] - 2026-07-02
 
 ### 改善 — 目錄瀏覽右側 OU 詳情排版

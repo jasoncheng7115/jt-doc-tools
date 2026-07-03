@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.12.60"
+VERSION = "1.12.61"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -928,33 +928,50 @@ async def _redirect_pdf_diff(rest: str = ""):
 
 
 # ---- Shared API: job status + result download ----
+# /api/* bypasses the cookie auth gate (it has its own token model), so these
+# job endpoints must enforce per-job ownership THEMSELVES — otherwise any
+# caller who knows/guesses a job_id could read/cancel another user's job
+# result. See _job_access below.
+def _job_access(job, request) -> bool:
+    """Access control for /api/jobs/*. Auth OFF → open (single-user install).
+    Auth ON → the caller must be the job's owner. An unclaimed job is claimed
+    by the first *authenticated* caller (normally the creator's own browser,
+    which polls status immediately after submit, over an unguessable uuid job
+    id). An unauthenticated caller is always denied when auth is on."""
+    try:
+        from .core import auth_settings as _as, sessions as _se
+        if not _as.is_enabled():
+            return True
+        u = getattr(request.state, "user", None)
+        if not u:
+            tok = request.cookies.get(_se.COOKIE_NAME, "")
+            u = _se.lookup(tok) if tok else None
+        uid = u.get("user_id") if u else None
+        if uid is None:
+            return False
+        if job.owner_id is None:
+            job.owner_id = int(uid)
+            return True
+        return int(job.owner_id) == int(uid)
+    except Exception:
+        return False
+
+
 @app.get("/api/jobs/{job_id}")
 async def api_job_status(job_id: str, request: Request):
     job = job_manager.get(job_id)
-    if not job:
+    # Same 404 for "not found" and "not your job" — don't confirm existence to
+    # non-owners (no enumeration).
+    if not job or not _job_access(job, request):
         return JSONResponse({"error": "job not found"}, status_code=404)
-    # Tag the owner on the first authenticated poll (creator's browser). Used to
-    # ACL "存至工作區 by job_id". /api/ bypasses the cookie auth gate, so resolve
-    # the session cookie directly here.
-    if job.owner_id is None:
-        try:
-            from .core import auth_settings as _as, sessions as _se
-            if _as.is_enabled():
-                tok = request.cookies.get(_se.COOKIE_NAME, "")
-                u = (getattr(request.state, "user", None)
-                     or (_se.lookup(tok) if tok else None))
-                if u and u.get("user_id") is not None:
-                    job.owner_id = int(u["user_id"])
-        except Exception:
-            pass
     return job.to_public()
 
 
 @app.post("/api/jobs/{job_id}/cancel")
-async def api_job_cancel(job_id: str):
+async def api_job_cancel(job_id: str, request: Request):
     """停止執行中的 job（標記取消，背景執行緒在下一 checkpoint 中止並丟棄結果）。"""
     job = job_manager.get(job_id)
-    if not job:
+    if not job or not _job_access(job, request):
         return JSONResponse({"error": "job not found"}, status_code=404)
     ok = job_manager.cancel(job_id)
     return {"ok": ok, "status": job.status}
@@ -1018,36 +1035,27 @@ async def api_convert_to_pdf(file: UploadFile = File(...)):
 
 @app.get("/api/jobs/{job_id}/download")
 @app.get("/api/jobs/{job_id}/download/{_filename}")
-async def api_job_download(job_id: str, _filename: str | None = None):
-    """v1.9.15：accept optional trailing filename segment so browser saves
-    file with proper extension even if response degrades to JSON 404.
+async def api_job_download(job_id: str, request: Request, _filename: str | None = None):
+    """Download a job's result. Enforces per-job ownership (see _job_access).
 
-    v1.9.32：服務重啟後 in-memory job state 會清空，原本回 404 → 使用者
-    看到「無法在網站上讀取檔案」。改用 fallback：若 in-memory 找不到 job
-    但傳入 _filename，掃描 temp_dir/*_work/<filename> 直接送檔。
+    The optional trailing filename segment is only so the browser saves with a
+    sane extension; the file served is ALWAYS the owning job's own result_path.
+
+    (Security note: an earlier version fell back to globbing every user's
+    `*_work/` dir for a file matching the basename — that let an unauthenticated
+    caller read any user's output by guessing a common name like `output.pdf`.
+    Removed. If in-memory job state was lost on restart, we now 404 and the
+    user re-runs, rather than risk cross-user disclosure.)
     """
     job = job_manager.get(job_id)
-    if job and job.result_path and job.result_path.exists():
+    if not job or not _job_access(job, request):
+        return JSONResponse({"error": "no result"}, status_code=404)
+    if job.result_path and job.result_path.exists():
         return FileResponse(
             path=str(job.result_path),
             filename=job.result_filename or job.result_path.name,
             media_type="application/octet-stream",
         )
-    # fallback：掃 temp_dir 任何 *_work/ 內同名檔（重啟後 in-memory 丟失情境）
-    if _filename:
-        from urllib.parse import unquote
-        safe_name = unquote(_filename)
-        # path traversal 防護：只允許 basename，不含 /
-        if "/" in safe_name or ".." in safe_name:
-            return JSONResponse({"error": "invalid filename"}, status_code=400)
-        for work_dir in settings.temp_dir.glob("*_work"):
-            candidate = work_dir / safe_name
-            if candidate.exists() and candidate.is_file():
-                return FileResponse(
-                    path=str(candidate),
-                    filename=safe_name,
-                    media_type="application/octet-stream",
-                )
     return JSONResponse({"error": "no result"}, status_code=404)
 
 
@@ -1123,7 +1131,7 @@ async def api_llm_review(
 
 
 @app.get("/api/jobs/{job_id}/download-png")
-async def api_job_download_png(job_id: str):
+async def api_job_download_png(job_id: str, request: Request):
     """Render the job's result PDF to PNG(s); zip when multi-page or batch.
 
     Single-PDF + single-page → PNG. Multi-page PDF → ZIP of PNGs (page_001.png,
@@ -1137,7 +1145,9 @@ async def api_job_download_png(job_id: str):
     import fitz
 
     job = job_manager.get(job_id)
-    if not job or not job.result_path or not job.result_path.exists():
+    if not job or not _job_access(job, request):
+        return JSONResponse({"error": "no result"}, status_code=404)
+    if not job.result_path or not job.result_path.exists():
         return JSONResponse({"error": "no result"}, status_code=404)
     src = job.result_path
     base_name = (job.result_filename or src.name)
@@ -1307,6 +1317,15 @@ def run():
         host=settings.host,
         port=settings.port,
         reload=settings.debug,
+        # proxy_headers=False (uvicorn default is True): with it ON, uvicorn's
+        # ProxyHeaders middleware REWRITES scope["client"] from X-Forwarded-For
+        # whenever the TCP peer is in forwarded_allow_ips (default 127.0.0.1).
+        # That would make request.client.host an XFF-derived (client-supplied)
+        # value — silently breaking Reverse Proxy SSO's trust gate, which MUST
+        # see the true TCP peer (the reverse proxy) to decide trust. We keep it
+        # OFF and read X-Forwarded-Proto / -Host / -For as raw headers ourselves
+        # where we deliberately want the client's view (is_https, audit IP).
+        proxy_headers=False,
     )
 
 

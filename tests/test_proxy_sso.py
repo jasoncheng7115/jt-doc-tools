@@ -344,6 +344,17 @@ def test_proxy_save_enable_empty_proxies_400(admin_session):
     assert r.status_code == 400
 
 
+def test_proxy_save_rejects_all_encompassing_proxy(admin_session):
+    """trusted_proxies must reject 0.0.0.0/0, ::/0, wildcards and invalid IPs —
+    an all-source list makes the header-spoofing defence meaningless."""
+    c, _, _ = admin_session
+    _set_ldap_configured()
+    for bad in ["0.0.0.0/0", "::/0", "0.0.0.0", "*", "not-an-ip", "10.0.0.0/0"]:
+        r = c.post("/admin/sso/proxy-save", json={
+            "enabled": True, "trusted_proxies": bad})
+        assert r.status_code == 400, f"{bad!r} should be rejected, got {r.status_code}"
+
+
 def test_proxy_save_enable_ok_with_ldap_and_proxies(admin_session):
     c, _, _ = admin_session
     _set_ldap_configured()

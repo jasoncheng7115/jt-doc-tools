@@ -63,10 +63,15 @@ async def handoff_qr(request: Request):
     使用者用桌面開此頁 → 點「手機掃描」→ 出現此 QR → 手機掃一下直接帶到同一頁。
     未登入 → 認證 middleware 會自動 redirect 去 /login?next=...，登入後回到此頁。"""
     import qrcode
-    # 完整 URL：以 request 本身的 host 為準，這樣不論本機 / 內網 / 反代都會帶對 host
-    # 反向代理時前端送的 X-Forwarded-Proto/Host 已由 uvicorn proxy_headers
-    # 處理（main.py 內 uvicorn.Config 預設 proxy_headers=True 應該有設）
-    target = f"{request.url.scheme}://{request.url.netloc}/tools/einvoice-scan"
+    # 完整 URL：以 request 本身的 host 為準，這樣不論本機 / 內網 / 反代都會帶對 host。
+    # app 端關掉 uvicorn proxy_headers（見 main.py，為了 Reverse Proxy SSO 的真實
+    # peer），所以這裡「自己」讀反向代理送的 X-Forwarded-Proto / -Host（沒有才退回
+    # 直連的 scheme / netloc），確保反代後產生的是對外 https 網址而非內部 http。
+    _xfp = (request.headers.get("X-Forwarded-Proto", "") or "").split(",")[0].strip()
+    _xfh = (request.headers.get("X-Forwarded-Host", "") or "").split(",")[0].strip()
+    scheme = _xfp or request.url.scheme
+    host = _xfh or request.headers.get("Host") or request.url.netloc
+    target = f"{scheme}://{host}/tools/einvoice-scan"
     img = qrcode.make(target, box_size=10, border=2)
     buf = io.BytesIO()
     img.save(buf, format="PNG")

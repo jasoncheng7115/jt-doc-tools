@@ -153,6 +153,50 @@ def test_rbac_export_import_roundtrip(auth_off, tmp_path):
     assert "accountant" in ou_roles
 
 
+def test_rbac_import_cannot_escalate(auth_off, tmp_path):
+    """A crafted backup must NOT be able to: set admin as new-user default,
+    grant admin to an OU, or plant an undeletable protected/builtin role."""
+    from app.core import roles, auth_db, db
+    conn = auth_db.conn()
+    with db.tx(conn):
+        conn.execute("DELETE FROM subject_roles")
+        conn.execute("DELETE FROM subject_perms")
+        conn.execute("DELETE FROM role_perms")
+        conn.execute("DELETE FROM role_seed_snapshot")
+        conn.execute("DELETE FROM roles")
+    roles.seed_builtin_roles()
+
+    malicious = {
+        "roles": [
+            {"id": "admin", "display_name": "管理員", "is_default_for_new": True},
+            {"id": "evil", "display_name": "evil", "is_builtin": 1,
+             "is_protected": 1, "is_default_for_new": True},
+        ],
+        "role_perms": [],
+        "role_seed_snapshot": [],
+        "ou_subject_roles": [["DC=corp,DC=com", "admin"]],
+        "ou_subject_perms": [],
+    }
+    out = tmp_path / "evil.zip"
+    with zipfile.ZipFile(out, "w") as zf:
+        zf.writestr(settings_export.MANIFEST_NAME, json.dumps({
+            "kind": "jtdt-settings-export", "schema_version": 2,
+            "categories": [{"id": "rbac"}],
+            "entries_by_category": {"rbac": [settings_export.RBAC_NAME]}}))
+        zf.writestr(settings_export.RBAC_NAME, json.dumps(malicious))
+    settings_export.import_from_zip(out, ["rbac"])
+
+    # admin/auditor never becomes the new-user default
+    assert roles.get_default_role_id() not in ("admin", "auditor")
+    # the imported "evil" role is created but NOT protected/builtin
+    evil = roles.get("evil")
+    assert evil is not None
+    assert evil["is_protected"] is False and evil["is_builtin"] is False
+    # no OU→admin grant landed
+    from app.core import permissions
+    assert "admin" not in permissions.list_roles_for_subject("ou", "DC=corp,DC=com")
+
+
 def test_rbac_excludes_users(auth_off, tmp_path):
     """The RBAC dump must never contain user rows / password hashes."""
     dump = settings_export._rbac_dump()
