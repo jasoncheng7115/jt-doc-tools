@@ -568,7 +568,7 @@ def build_auth_router(templates) -> APIRouter:
     @router.get("/groups", response_class=HTMLResponse)
     async def groups_page(request: Request):
         from ..core import auth_settings
-        groups = group_manager.list_groups()
+        groups = group_manager.order_groups_as_tree(group_manager.list_groups())
         all_users = user_manager.list_users()
         all_roles = roles.list_roles()
         backend = (auth_settings.get() or {}).get("backend", "off")

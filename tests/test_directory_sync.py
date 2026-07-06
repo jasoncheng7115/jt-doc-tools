@@ -137,6 +137,48 @@ def test_run_sync_noop_on_non_directory_backend(monkeypatch):
     assert "skipped" in rep
 
 
+# --------------------------------------------------- group hierarchy (tree)
+
+def _g(gid, name, dn="", parent=""):
+    return {"id": gid, "name": name, "source": "ldap",
+            "external_dn": dn, "parent_dn": parent}
+
+
+def test_order_groups_as_tree_nesting_and_depth():
+    groups = [
+        _g(1, "資訊處", "cn=it,dc=t"),
+        _g(2, "技術服務部", "cn=svc,dc=t", "cn=it,dc=t"),
+        _g(3, "網路組", "cn=net,dc=t", "cn=svc,dc=t"),
+        _g(4, "人資處", "cn=hr,dc=t"),
+    ]
+    out = group_manager.order_groups_as_tree(groups)
+    depth = {g["name"]: g["depth"] for g in out}
+    assert depth == {"資訊處": 0, "技術服務部": 1, "網路組": 2, "人資處": 0}
+    # parent always appears before its child
+    order = [g["name"] for g in out]
+    assert order.index("資訊處") < order.index("技術服務部") < order.index("網路組")
+    assert len(out) == 4                       # every group emitted exactly once
+
+
+def test_order_groups_as_tree_cycle_safe():
+    groups = [
+        _g(1, "A", "cn=a,dc=t", "cn=b,dc=t"),
+        _g(2, "B", "cn=b,dc=t", "cn=a,dc=t"),
+    ]
+    out = group_manager.order_groups_as_tree(groups)
+    assert {g["name"] for g in out} == {"A", "B"}   # no infinite loop, both once
+
+
+def test_order_groups_as_tree_local_and_unknown_parent_are_roots():
+    groups = [
+        _g(1, "本機群組", ""),                      # local → root
+        _g(2, "孤兒", "cn=x,dc=t", "cn=missing,dc=t"),  # parent not in set → root
+    ]
+    out = group_manager.order_groups_as_tree(groups)
+    assert all(g["depth"] == 0 for g in out)
+    assert len(out) == 2
+
+
 def test_run_sync_counts_failures(monkeypatch):
     gid = _mk_group("dsync_fail_g", source="ldap", dn="cn=bad,dc=t")
     try:

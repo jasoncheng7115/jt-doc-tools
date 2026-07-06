@@ -64,6 +64,51 @@ def list_groups(source: Optional[str] = None) -> list[dict]:
     return out
 
 
+def order_groups_as_tree(groups: list[dict]) -> list[dict]:
+    """Reorder a flat group list into parent-before-children tree order, adding
+    a `depth` key to each (0 = root). Nesting comes from `parent_dn` pointing at
+    another group's `external_dn` (nested AD/LDAP groups). Groups whose parent is
+    not in the set (or local groups) are roots. Cycle-safe; every input group is
+    emitted exactly once."""
+    by_dn: dict[str, dict] = {}
+    for g in groups:
+        dn = (g.get("external_dn") or "").strip().lower()
+        if dn:
+            by_dn[dn] = g
+    children: dict[str, list[dict]] = {}
+    roots: list[dict] = []
+    for g in groups:
+        own = (g.get("external_dn") or "").strip().lower()
+        pdn = (g.get("parent_dn") or "").strip().lower()
+        if pdn and pdn in by_dn and pdn != own:
+            children.setdefault(pdn, []).append(g)
+        else:
+            roots.append(g)
+    out: list[dict] = []
+    visited: set = set()
+
+    def emit(g: dict, depth: int) -> None:
+        if g["id"] in visited:
+            return
+        visited.add(g["id"])
+        g2 = dict(g)
+        g2["depth"] = depth
+        out.append(g2)
+        own = (g.get("external_dn") or "").strip().lower()
+        for c in sorted(children.get(own, []), key=lambda x: (x.get("name") or "")):
+            emit(c, depth + 1)
+
+    for r in sorted(roots, key=lambda x: (x.get("source") or "", x.get("name") or "")):
+        emit(r, 0)
+    for g in groups:                       # orphaned by a cycle → surface at root
+        if g["id"] not in visited:
+            g2 = dict(g)
+            g2["depth"] = 0
+            out.append(g2)
+            visited.add(g["id"])
+    return out
+
+
 def get(group_id: int) -> Optional[dict]:
     for g in list_groups():
         if g["id"] == group_id:

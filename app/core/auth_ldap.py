@@ -510,42 +510,64 @@ def sync_all_groups(name_contains: str = "") -> dict:
         raise AuthError("「搜尋 base DN」不能包含 ( 或 )；那是 filter 語法。")
 
     server = _build_server(cfg)
-    seen: list[tuple[str, str]] = []
+    # (dn, name, [memberOf parent DNs]) — memberOf gives nested-group parents
+    # (mainly AD; harmless-empty on directories without the memberOf overlay).
+    seen: list[tuple[str, str, list[str]]] = []
     try:
         with Connection(server, user=svc_dn, password=svc_pw,
                         auto_bind=True, raise_exceptions=True, check_names=False) as conn:
             entries = conn.extend.standard.paged_search(
                 search_base=base, search_filter=gfilter,
-                search_scope=SUBTREE, attributes=[name_attr],
+                search_scope=SUBTREE, attributes=[name_attr, "memberOf"],
                 paged_size=500, generator=False)
             for e in entries:
                 dn = e.get("dn") or ""
                 if not dn or e.get("type") != "searchResEntry":
                     continue
-                nm = (e.get("attributes", {}) or {}).get(name_attr)
+                attrs = e.get("attributes", {}) or {}
+                nm = attrs.get(name_attr)
                 if isinstance(nm, list):
                     nm = nm[0] if nm else None
-                seen.append((dn, str(nm) if nm else (_cn_from_dn(dn) or dn)))
+                mo = attrs.get("memberOf") or []
+                if isinstance(mo, str):
+                    mo = [mo]
+                seen.append((dn, str(nm) if nm else (_cn_from_dn(dn) or dn),
+                             [str(x) for x in mo]))
     except Exception as exc:
         raise AuthError(f"列舉群組失敗：{type(exc).__name__}: {exc}")
+
+    # Resolve each group's parent to the FIRST memberOf that is itself a synced
+    # group (so the tree only nests groups we actually show). Case-insensitive
+    # DN compare; groups with no in-set parent are roots.
+    dn_set = {dn.lower(): dn for dn, _, _ in seen}
+    parent_of: dict[str, str] = {}
+    for dn, _, mo in seen:
+        for p in mo:
+            if p.lower() in dn_set and p.lower() != dn.lower():
+                parent_of[dn] = dn_set[p.lower()]
+                break
 
     conn_db = auth_db.conn()
     synced = 0
     updated = 0
     with db.tx(conn_db):
-        for dn, nm in seen:
+        for dn, nm, _mo in seen:
+            pdn = parent_of.get(dn, "")
             row = conn_db.execute(
-                "SELECT id, name FROM groups WHERE source=? AND external_dn=?",
+                "SELECT id, name, parent_dn FROM groups WHERE source=? AND external_dn=?",
                 (backend, dn)).fetchone()
             if row:
                 if nm and row["name"] != nm:
                     conn_db.execute("UPDATE groups SET name=? WHERE id=?",
                                     (nm, row["id"]))
                     updated += 1
+                if (row["parent_dn"] or "") != pdn:
+                    conn_db.execute("UPDATE groups SET parent_dn=? WHERE id=?",
+                                    (pdn, row["id"]))
             else:
                 conn_db.execute(
-                    "INSERT INTO groups(name, source, external_dn, created_at) "
-                    "VALUES (?,?,?,?)", (nm, backend, dn, time.time()))
+                    "INSERT INTO groups(name, source, external_dn, created_at, parent_dn) "
+                    "VALUES (?,?,?,?,?)", (nm, backend, dn, time.time(), pdn))
                 synced += 1
     permissions.invalidate_cache()
     audit_db.log_event("ldap_group_sync",

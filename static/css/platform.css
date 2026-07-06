@@ -763,3 +763,7 @@ select.jt-select-native {
 
 /* 排程目錄同步面板：間隔小時的窄輸入框（見 admin_groups.html） */
 .field-narrow { width:64px; }
+
+/* 群組管理：巢狀群組（parent_dn）的樹狀縮排（見 admin_groups.html） */
+.grp-indent { display:inline-block; width:20px; }
+.grp-branch { color:#94a3b8; font-weight:400; }
