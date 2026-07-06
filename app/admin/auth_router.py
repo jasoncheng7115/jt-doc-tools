@@ -632,6 +632,7 @@ def build_auth_router(templates) -> APIRouter:
             "enabled": bool(s.get("enabled")),
             "interval_hours": int(s.get("interval_hours", 6)),
             "name_contains": s.get("name_contains", "") or "",
+            "sync_users": bool(s.get("sync_users", True)),
             "last_run_at": s.get("last_run_at"),
             "last_result": s.get("last_result"),
             "last_error": s.get("last_error"),
@@ -651,15 +652,18 @@ def build_auth_router(templates) -> APIRouter:
             enabled=bool(body.get("enabled", True)),
             interval_hours=int(body.get("interval_hours", 6) or 6),
             name_contains=str(body.get("name_contains", "") or ""),
+            sync_users=bool(body.get("sync_users", True)),
         )
         audit_db.log_event(
             "settings_change", username=_actor(request), ip=_client_ip(request),
             target="directory_sync",
-            details={"enabled": s["enabled"], "interval_hours": s["interval_hours"]},
+            details={"enabled": s["enabled"], "interval_hours": s["interval_hours"],
+                     "sync_users": s["sync_users"]},
         )
         return {"ok": True, "enabled": s["enabled"],
                 "interval_hours": s["interval_hours"],
-                "name_contains": s["name_contains"]}
+                "name_contains": s["name_contains"],
+                "sync_users": s["sync_users"]}
 
     @router.post("/groups/directory-sync/run")
     async def groups_dirsync_run(request: Request):

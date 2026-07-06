@@ -34,6 +34,7 @@ _DEFAULTS = {
     "enabled": True,
     "interval_hours": 6,
     "name_contains": "",              # optional filter to skip system groups
+    "sync_users": True,              # also mirror all directory users → local
     "last_run_at": None,              # epoch seconds
     "last_result": None,             # dict from the last run
     "last_error": None,
@@ -65,7 +66,8 @@ def get_settings() -> dict[str, Any]:
 
 def save_settings(*, enabled: Optional[bool] = None,
                   interval_hours: Optional[int] = None,
-                  name_contains: Optional[str] = None) -> dict[str, Any]:
+                  name_contains: Optional[str] = None,
+                  sync_users: Optional[bool] = None) -> dict[str, Any]:
     data = get_settings()
     if enabled is not None:
         data["enabled"] = bool(enabled)
@@ -73,6 +75,8 @@ def save_settings(*, enabled: Optional[bool] = None,
         data["interval_hours"] = max(1, min(168, int(interval_hours)))
     if name_contains is not None:
         data["name_contains"] = str(name_contains).strip()[:128]
+    if sync_users is not None:
+        data["sync_users"] = bool(sync_users)
     _write(data)
     return data
 
@@ -111,10 +115,12 @@ def run_sync(name_contains: Optional[str] = None) -> dict[str, Any]:
     _running = True
     started = time.time()
     from . import auth_ldap, auth_db
+    settings_now = get_settings()
     if name_contains is None:
-        name_contains = get_settings().get("name_contains", "") or ""
+        name_contains = settings_now.get("name_contains", "") or ""
     report: dict[str, Any] = {"groups_mirrored": None, "counts_updated": 0,
-                              "counts_failed": 0, "started_at": started}
+                              "counts_failed": 0, "users_synced": None,
+                              "started_at": started}
     try:
         # 1) mirror the directory group list into the local table
         mirror = auth_ldap.sync_all_groups(name_contains=name_contains)
@@ -138,6 +144,15 @@ def run_sync(name_contains: Optional[str] = None) -> dict[str, Any]:
             except Exception:  # noqa: BLE001
                 report["counts_failed"] += 1
         conn.commit()
+        # 3) mirror all directory users into the local users table (so 使用者管理
+        #    shows everyone + admin can pre-assign roles). Best-effort — a user
+        #    sync failure must not lose the group results already committed.
+        if settings_now.get("sync_users", True):
+            try:
+                report["users_synced"] = auth_ldap.sync_all_users()
+            except Exception as uexc:  # noqa: BLE001
+                report["users_synced"] = {"error": f"{type(uexc).__name__}: {uexc}"}
+                logger.exception("user sync failed (group sync kept)")
         report["elapsed_sec"] = round(time.time() - started, 1)
         _stamp(ok=True, result=report)
         logger.info("directory sync done: %s", report)

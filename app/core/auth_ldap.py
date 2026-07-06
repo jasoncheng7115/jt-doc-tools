@@ -574,7 +574,111 @@ def sync_all_groups(name_contains: str = "") -> dict:
                        details={"synced": synced, "updated": updated,
                                 "total_seen": len(seen)})
     return {"synced": synced, "updated": updated, "total_seen": len(seen),
-            "sample": [nm for _, nm in seen[:12]]}
+            "sample": [nm for _, nm, _mo in seen[:12]]}
+
+
+def sync_all_users(name_contains: str = "") -> dict:
+    """列舉目錄**所有使用者**,鏡射進本地 `users` 表，讓「使用者管理」預先看到所有
+    目錄使用者、可先指派權限，不必等對方登入過。
+
+    - 不設密碼（仍走 LDAP 驗證），不動 `last_login_at`（未登入者仍標示「從未登入」）。
+    - 新建的使用者給 admin 設定的「新使用者預設角色」（同 JIT 登入時的行為），否則
+      預先建立卻沒角色，登入時 JIT 只更新不再補角色 → 會變成無權限。
+    - 同名不同 DN 衝突（同 backend 內）跳過不覆蓋（避免身分接管），計入 skipped_clash。
+    回 {synced, updated, total_seen, skipped_clash}。
+    """
+    from ldap3 import Connection, SUBTREE
+    from ldap3.utils.conv import escape_filter_chars
+
+    s = auth_settings.get()
+    backend = s.get("backend", "ldap")
+    cfg = s.get("ldap", {})
+    svc_dn = (cfg.get("service_dn") or "").strip()
+    svc_pw = cfg.get("service_password") or ""
+    base = (cfg.get("user_search_base") or "").strip()
+    ufilter = (cfg.get("directory_user_filter")
+               or "(|(objectClass=inetOrgPerson)(objectClass=posixAccount)"
+                  "(&(objectClass=user)(!(objectClass=computer))))")
+    disp_attr = cfg.get("displayname_attr", "displayName")
+    login_attr = cfg.get("username_attr", "sAMAccountName")
+    nc = (name_contains or "").strip()
+    if nc:
+        ufilter = f"(&{ufilter}({login_attr}=*{escape_filter_chars(nc)}*))"
+    if not svc_dn or not svc_pw or not base:
+        raise AuthError("Service Account / 使用者搜尋 base DN / 密碼 都需先填妥")
+    if "(" in base or ")" in base:
+        raise AuthError("「使用者搜尋 base DN」不能包含 ( 或 )；那是 filter 語法。")
+
+    server = _build_server(cfg)
+    seen: list[tuple[str, str, str]] = []      # (dn, login, display)
+    try:
+        with Connection(server, user=svc_dn, password=svc_pw,
+                        auto_bind=True, raise_exceptions=True, check_names=False) as conn:
+            entries = conn.extend.standard.paged_search(
+                search_base=base, search_filter=ufilter,
+                search_scope=SUBTREE, attributes=[disp_attr, login_attr],
+                paged_size=500, generator=False)
+            for e in entries:
+                dn = e.get("dn") or ""
+                if not dn or e.get("type") != "searchResEntry":
+                    continue
+                a = e.get("attributes", {}) or {}
+
+                def _one(v):
+                    return (v[0] if isinstance(v, list) and v else
+                            (v if isinstance(v, str) else None))
+                login = _one(a.get(login_attr))
+                if not login:
+                    continue                    # no username → can't key it
+                disp = _one(a.get(disp_attr)) or login
+                seen.append((dn, str(login), str(disp)))
+    except Exception as exc:  # noqa: BLE001
+        raise AuthError(f"列舉使用者失敗：{type(exc).__name__}: {exc}")
+
+    conn_db = auth_db.conn()
+    synced = updated = skipped = 0
+    new_uids: list[int] = []
+    now = time.time()
+    with db.tx(conn_db):
+        for dn, login, disp in seen:
+            row = conn_db.execute(
+                "SELECT id, display_name FROM users WHERE source=? AND external_dn=?",
+                (backend, dn)).fetchone()
+            if row:
+                if disp and row["display_name"] != disp:
+                    conn_db.execute(
+                        "UPDATE users SET display_name=?, enabled=1 WHERE id=?",
+                        (disp, row["id"]))
+                    updated += 1
+                continue
+            clash = conn_db.execute(
+                "SELECT id FROM users WHERE username=? AND source=?",
+                (login, backend)).fetchone()
+            if clash:
+                skipped += 1
+                continue
+            cur = conn_db.execute(
+                "INSERT INTO users(username, display_name, source, external_dn, "
+                "enabled, is_admin_seed, created_at) VALUES (?,?,?,?,1,0,?)",
+                (login, disp, backend, dn, now))
+            new_uids.append(cur.lastrowid)
+            synced += 1
+    # Give freshly-mirrored users the configured new-user default role (mirrors
+    # the JIT-at-login path; set_subject_roles manages its own transaction).
+    if new_uids:
+        from . import roles as _roles
+        default_role = _roles.get_default_role_id()
+        for uid in new_uids:
+            try:
+                permissions.set_subject_roles("user", str(uid), [default_role])
+            except Exception:  # noqa: BLE001
+                logger.warning("failed to set default role for synced user %s", uid)
+    permissions.invalidate_cache()
+    audit_db.log_event("ldap_user_sync",
+                       details={"synced": synced, "updated": updated,
+                                "total_seen": len(seen), "skipped_clash": skipped})
+    return {"synced": synced, "updated": updated, "total_seen": len(seen),
+            "skipped_clash": skipped}
 
 
 def get_group_members(group_dn: str) -> list[dict]:

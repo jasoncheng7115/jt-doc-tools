@@ -31,10 +31,12 @@
   <p class="muted">群組的「目錄成員數」由背景排程<b>定期同步</b>寫進本機快取，本頁直接讀快取（毫秒），<b>不再每列即時查 LDAP</b>（群組數以千計時原本會很慢）。可設定間隔，或隨時「立即同步」。</p>
   <div class="grp-sync-row">
     <label class="chk"><input type="checkbox" id="dsEnabled"> 啟用排程同步</label>
+    <label class="chk"><input type="checkbox" id="dsSyncUsers"> 一併同步使用者（讓「使用者管理」預先看到所有目錄使用者）</label>
     <label>每 <input class="field field-narrow" type="number" id="dsInterval" min="1" max="168" value="6"> 小時</label>
     <button class="btn" type="button" id="dsSave">{{ icon('gear', size=14) }} 儲存設定</button>
     <button class="btn btn-primary" type="button" id="dsRun">{{ icon('refresh', size=14) }} 立即同步</button>
   </div>
+  <p class="muted">同步範圍：目錄群組（+ 巢狀從屬）、各群組成員數、以及（勾選時）所有目錄使用者。使用者只鏡射帳號 / 顯示名稱供預先指派權限，不設密碼、仍走 LDAP 驗證。</p>
   <p class="muted" id="dsStatus">載入同步狀態中…</p>
 </div>
 {% endif %}
@@ -440,6 +442,7 @@ if (_btnSyncDir) {
 // 排程目錄同步面板
 (function () {
   const ena = document.getElementById('dsEnabled');
+  const su = document.getElementById('dsSyncUsers');
   const itv = document.getElementById('dsInterval');
   const save = document.getElementById('dsSave');
   const run = document.getElementById('dsRun');
@@ -458,6 +461,7 @@ if (_btnSyncDir) {
       const r = await fetch('/admin/groups/directory-sync/status');
       const j = await r.json();
       if (ena) ena.checked = !!j.enabled;
+      if (su) su.checked = !!j.sync_users;
       if (itv) itv.value = j.interval_hours || 6;
       let s = '排程：' + (j.enabled ? ('每 ' + (j.interval_hours || 6) + ' 小時') : '已停用')
             + ' · 上次同步：' + fmtAge(j.last_run_at);
@@ -466,6 +470,14 @@ if (_btnSyncDir) {
       if (typeof lr.counts_updated === 'number') {
         s += ' · 更新 ' + lr.counts_updated + ' 個群組成員數'
            + (lr.counts_failed ? ('（' + lr.counts_failed + ' 個失敗）') : '');
+      }
+      const us = lr.users_synced;
+      if (us && typeof us.synced === 'number') {
+        s += ' · 使用者：新增 ' + us.synced + '、更新 ' + us.updated
+           + '（目錄共 ' + us.total_seen + '）'
+           + (us.skipped_clash ? ('，' + us.skipped_clash + ' 個同名衝突略過') : '');
+      } else if (us && us.error) {
+        s += ' · 使用者同步錯誤：' + us.error;
       }
       if (j.last_error) s += ' · 上次錯誤：' + j.last_error;
       st.textContent = s;
@@ -478,6 +490,7 @@ if (_btnSyncDir) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           enabled: !!(ena && ena.checked),
+          sync_users: !!(su && su.checked),
           interval_hours: parseInt((itv && itv.value) || '6', 10) || 6,
         }),
       });

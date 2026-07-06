@@ -117,9 +117,14 @@ def test_run_sync_caches_member_counts(monkeypatch):
             lambda name_contains="": {"synced": 0, "updated": 0, "total_seen": 2})
         counts = {"cn=g1,dc=t": 42, "cn=g2,dc=t": 7}
         monkeypatch.setattr(al, "count_group_members", lambda dn: counts[dn])
+        monkeypatch.setattr(al, "sync_all_users",
+                            lambda name_contains="": {"synced": 3, "updated": 1,
+                                                      "total_seen": 4, "skipped_clash": 0})
+        directory_sync.save_settings(sync_users=True)
         rep = directory_sync.run_sync()
         assert rep.get("counts_updated") == 2
         assert rep.get("counts_failed") == 0
+        assert rep.get("users_synced", {}).get("synced") == 3
         conn = auth_db.conn()
         r1 = conn.execute("SELECT member_count, member_count_synced_at FROM groups WHERE id=?",
                           (g1,)).fetchone()
@@ -190,8 +195,55 @@ def test_run_sync_counts_failures(monkeypatch):
         def _boom(dn):
             raise RuntimeError("ldap down")
         monkeypatch.setattr(al, "count_group_members", _boom)
+        monkeypatch.setattr(al, "sync_all_users",
+                            lambda name_contains="": {"synced": 0, "updated": 0,
+                                                      "total_seen": 0, "skipped_clash": 0})
         rep = directory_sync.run_sync()
         assert rep.get("counts_failed", 0) >= 1
         assert rep.get("counts_updated") == 0
     finally:
         _rm_group("dsync_fail_g")
+
+
+def test_run_sync_user_sync_failure_keeps_group_results(monkeypatch):
+    """A user-sync exception must not lose the already-committed group counts."""
+    gid = _mk_group("dsync_uf_g", source="ldap", dn="cn=ok,dc=t")
+    try:
+        monkeypatch.setattr(directory_sync, "is_directory_backend", lambda: True)
+        import app.core.auth_ldap as al
+        monkeypatch.setattr(al, "sync_all_groups",
+                            lambda name_contains="": {"total_seen": 1})
+        monkeypatch.setattr(al, "count_group_members", lambda dn: 5)
+
+        def _boom(name_contains=""):
+            raise RuntimeError("user enumerate failed")
+        monkeypatch.setattr(al, "sync_all_users", _boom)
+        directory_sync.save_settings(sync_users=True)
+        rep = directory_sync.run_sync()
+        assert rep.get("counts_updated") == 1                 # group result kept
+        assert "error" in (rep.get("users_synced") or {})     # user error captured
+    finally:
+        _rm_group("dsync_uf_g")
+
+
+def test_run_sync_skips_users_when_disabled(monkeypatch):
+    gid = _mk_group("dsync_nou_g", source="ldap", dn="cn=nou,dc=t")
+    try:
+        monkeypatch.setattr(directory_sync, "is_directory_backend", lambda: True)
+        import app.core.auth_ldap as al
+        monkeypatch.setattr(al, "sync_all_groups",
+                            lambda name_contains="": {"total_seen": 1})
+        monkeypatch.setattr(al, "count_group_members", lambda dn: 5)
+        called = {"users": False}
+
+        def _mark(name_contains=""):
+            called["users"] = True
+            return {}
+        monkeypatch.setattr(al, "sync_all_users", _mark)
+        directory_sync.save_settings(sync_users=False)
+        rep = directory_sync.run_sync()
+        assert called["users"] is False
+        assert rep.get("users_synced") is None
+    finally:
+        directory_sync.save_settings(sync_users=True)   # restore default
+        _rm_group("dsync_nou_g")
