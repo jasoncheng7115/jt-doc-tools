@@ -111,11 +111,11 @@ def require_admin(request: Request) -> dict:
 
 def _log_auditor_view(user: dict, request: Request, path: str) -> None:
     try:
-        from ..core import audit_db, sessions as _ses
+        from ..core import audit_db, sessions as _ses, client_ip as _cip
         audit_db.log_event(
             "auditor_view",
             username=_ses.user_label(user) or user.get("username") or str(user.get("user_id", 0)),
-            ip=(request.client.host if request.client else ""),
+            ip=_cip.real_client_ip(request),
             target=path,
             details={"method": request.method,
                      "query": str(request.url.query or "")[:200]},

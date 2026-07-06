@@ -14,7 +14,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.12.64"
+VERSION = "1.12.65"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -800,6 +800,7 @@ async def _auth_gate(request: Request, call_next):
     response = await call_next(request)
     if tool_id and request.method in ("POST", "PUT", "DELETE"):
         from .core import audit_db as _ad
+        from .core import client_ip as _cip
         rest = path[len("/tools/"):]
         action = rest.split("/", 2)[1] if "/" in rest else "(root)"
         clen = request.headers.get("content-length") or "0"
@@ -822,7 +823,7 @@ async def _auth_gate(request: Request, call_next):
         _ad.log_event(
             "tool_invoke",
             username=user["username"],
-            ip=request.client.host if request.client else "",
+            ip=_cip.real_client_ip(request),
             target=tool_id,
             details=details,
         )

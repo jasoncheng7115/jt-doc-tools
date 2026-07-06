@@ -109,14 +109,8 @@ def _real_client_ip(request) -> str:
     X-Forwarded-For to the real client, so it's safe to log here (we do NOT use
     it for the trust decision — that's always the direct peer). Falls back to
     the peer IP when no XFF is present."""
-    xff = ""
-    try:
-        xff = request.headers.get("X-Forwarded-For", "") or ""
-    except Exception:
-        xff = ""
-    if xff:
-        return xff.split(",", 1)[0].strip()[:64]
-    return _client_ip(request)
+    from . import client_ip as _cip
+    return _cip.real_client_ip(request)
 
 
 def client_is_trusted(request) -> bool:

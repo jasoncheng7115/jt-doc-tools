@@ -68,10 +68,11 @@ async def _resolve_watermark_source(
         # Audit (best-effort)
         try:
             from ...core import audit_db as _audit
+            from ...core import client_ip as _cip
             import hashlib as _hl
             ip = ""
             if request is not None:
-                ip = (request.client.host if request.client else "") or ""
+                ip = _cip.real_client_ip(request)
             _audit.log_event(
                 event_type="temp_asset_used",
                 username=actor_username or "",

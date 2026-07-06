@@ -25,10 +25,8 @@ logger = logging.getLogger(__name__)
 
 
 def _client_ip(r: Request) -> str:
-    xff = r.headers.get("X-Forwarded-For", "")
-    if xff:
-        return xff.split(",", 1)[0].strip()[:64]
-    return (r.client.host if r.client else "")[:64]
+    from ..core import client_ip as _cip
+    return _cip.real_client_ip(r)
 
 
 def _actor(r: Request) -> str:

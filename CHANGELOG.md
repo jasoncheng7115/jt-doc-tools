@@ -4,6 +4,15 @@
 
 ---
 
+## [1.12.65] - 2026-07-06
+
+### 修正（重要，建議升級）— 反向代理下稽核 / 歷史來源 IP 變成 127.0.0.1
+
+- **問題**：v1.12.61 為了修正 Reverse Proxy SSO 的信任判定，把 uvicorn 的 `proxy_headers` 關掉（改由程式自行讀 `X-Forwarded-Proto/Host`），讓 `request.client.host` 恆為真實傳輸層來源。但**稽核記錄的 `tool_invoke`（各工具操作）、稽核者瀏覽、用印 / 浮水印歷史**這幾處仍直接讀 `request.client.host`，在反向代理後面就變成代理端的 `127.0.0.1`，不再是使用者工作站 IP。登入事件（`login_success` / `login_fail`）因為走另一條有讀 `X-Forwarded-For` 的程式路徑，所以顯示正常——正是客戶「登入 IP 對、但所有工具操作 IP 都變 127.0.0.1」的現象。
+- **修正**：新增單一來源的 `app/core/client_ip.py:real_client_ip()`，統一以 `X-Forwarded-For`（最左側原始用戶端）解析來源 IP，無此標頭才退回傳輸層來源。所有稽核 / 歷史 / 顯示用 IP 一律走這個函式（`tool_invoke`、稽核者瀏覽、用印 / 浮水印歷史，登入 / 2FA / SSO / admin 也統一收斂到此），單一事實來源避免日後再度分岔。
+- **安全性不變**：Reverse Proxy SSO 的**信任判定仍只用真實傳輸層來源**（`request.client.host`），不受 `X-Forwarded-For` 影響——`real_client_ip()` 僅供稽核 / 顯示，不做為授權依據。反向代理務必照 OPS.md 設定為「移除進站的 X-Forwarded-For、改由代理自己填」。
+- 回歸測試 `tests/test_client_ip_audit.py`（12 項，含端到端：工具 POST 帶 `X-Forwarded-For` → 稽核記錄到工作站 IP 而非代理 127.0.0.1）。
+
 ## [1.12.64] - 2026-07-03
 
 ### 調整 — 對外開放警示條改為可關閉

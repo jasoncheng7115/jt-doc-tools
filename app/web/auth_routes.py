@@ -18,15 +18,13 @@ logger = logging.getLogger(__name__)
 
 
 def _client_ip(request: Request) -> str:
-    """Best-effort client IP. Honours X-Forwarded-For (first hop) when set
-    by a trusted reverse proxy. Caller MUST configure their reverse proxy
-    to strip incoming XFF and set its own; otherwise an attacker can spoof
-    by adding the header themselves."""
-    xff = request.headers.get("X-Forwarded-For", "")
-    if xff:
-        # left-most is the original client (per convention).
-        return xff.split(",", 1)[0].strip()[:64]
-    return (request.client.host if request.client else "")[:64]
+    """Best-effort client IP for audit / login records. Delegates to the
+    canonical resolver (honours X-Forwarded-For first hop from a trusted
+    reverse proxy, else the transport peer). Caller MUST configure their
+    reverse proxy to strip incoming XFF and set its own; otherwise an
+    attacker can spoof by adding the header themselves."""
+    from ..core import client_ip as _cip
+    return _cip.real_client_ip(request)
 
 
 def _set_session_cookie(response: Response, token: str, *, remember: bool,
