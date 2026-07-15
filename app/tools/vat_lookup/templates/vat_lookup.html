@@ -128,6 +128,20 @@ mark.vl-hl {
 .vl-card-meta .label { color: #64748b; }
 .vl-card-meta .val { color: #334155; word-break: break-all; }
 
+/* 可點選複製的欄位 */
+.vl-copy { cursor: pointer; border-radius: 4px; padding: 0 2px; margin: 0 -2px;
+  position: relative; transition: background .12s; }
+.vl-copy:hover { background: #eff6ff; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+.vl-copy:focus { outline: 2px solid #93c5fd; outline-offset: 1px; }
+.vl-copy.is-copied { background: #dcfce7; }
+.vl-copy.is-copied::after {
+  content: '已複製 ✓'; position: absolute; left: 50%; bottom: 100%;
+  transform: translateX(-50%); margin-bottom: 5px;
+  background: #15803d; color: #fff; font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 5px; white-space: nowrap;
+  pointer-events: none; z-index: 6; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}
+
 .vl-cat-chip {
   display: inline-block; padding: 1px 9px; border-radius: 999px;
   font-size: 11px; font-weight: 600; vertical-align: middle;
@@ -387,21 +401,64 @@ function _renderCard(r, isMiss, query) {
     </div>`;
   }
   const hl = s => _highlight(s, query);
+  // 每個欄位值包成可點選複製（data-copy 存原始值，attribute-escaped；顯示保留 highlight）
+  const cAttr = v => escapeHtml(String(v == null ? '' : v));
+  const metaRow = (label, val) =>
+    `<span class="label">${label}</span>` +
+    `<span class="val vl-copy" data-copy="${cAttr(val)}" title="點選複製" tabindex="0" role="button">${hl(val)}</span>`;
   let metaRows = '';
-  if (r.address)    metaRows += `<span class="label">地址</span><span class="val">${hl(r.address)}</span>`;
-  if (r.owner)      metaRows += `<span class="label">負責人</span><span class="val">${hl(r.owner)}</span>`;
-  if (r.org_type)   metaRows += `<span class="label">組織別</span><span class="val">${hl(r.org_type)}</span>`;
-  if (r.industries) metaRows += `<span class="label">行業</span><span class="val">${hl(r.industries)}</span>`;
-  if (r.status)     metaRows += `<span class="label">狀態</span><span class="val">${hl(r.status)}</span>`;
+  if (r.address)    metaRows += metaRow('地址', r.address);
+  if (r.owner)      metaRows += metaRow('負責人', r.owner);
+  if (r.org_type)   metaRows += metaRow('組織別', r.org_type);
+  if (r.industries) metaRows += metaRow('行業', r.industries);
+  if (r.status)     metaRows += metaRow('狀態', r.status);
   return `<div class="vl-card found">
     <div class="vl-card-head">
-      <span class="vl-card-vat">${hl(r.vat)}</span>
-      <span class="vl-card-name">${hl(r.name)}</span>
+      <span class="vl-card-vat vl-copy" data-copy="${cAttr(r.vat)}" title="點選複製統編" tabindex="0" role="button">${hl(r.vat)}</span>
+      <span class="vl-card-name vl-copy" data-copy="${cAttr(r.name)}" title="點選複製公司名稱" tabindex="0" role="button">${hl(r.name)}</span>
       ${_catChip(r.category)}
     </div>
     ${metaRows ? `<div class="vl-card-meta">${metaRows}</div>` : ''}
   </div>`;
 }
+
+// 點選欄位 → 複製原始值到剪貼簿（事件委派，CSP 合規，無 inline handler）
+function _vlCopyFallback(text, done) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    document.execCommand('copy'); ta.remove(); done();
+  } catch (e) {}
+}
+function _vlDoCopy(text, el) {
+  const done = () => {
+    if (!el) return;
+    el.classList.add('is-copied');
+    setTimeout(() => el.classList.remove('is-copied'), 1000);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => _vlCopyFallback(text, done));
+  } else {
+    _vlCopyFallback(text, done);
+  }
+}
+(function wireCopy() {
+  const box = document.getElementById('results');
+  if (!box) return;
+  box.addEventListener('click', (e) => {
+    const el = e.target.closest('.vl-copy');
+    if (!el || !box.contains(el)) return;
+    _vlDoCopy(el.getAttribute('data-copy') || '', el);
+  });
+  box.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target.closest('.vl-copy');
+    if (!el || !box.contains(el)) return;
+    e.preventDefault();
+    _vlDoCopy(el.getAttribute('data-copy') || '', el);
+  });
+})();
 
 function _showResultsEmpty() {
   _hideStats();
