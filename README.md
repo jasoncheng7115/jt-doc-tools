@@ -57,7 +57,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 
 詳細安裝說明見 **[INSTALL.md](INSTALL.md)**（含必要工具、平台差異、解除安裝）。
 
-> **程式碼簽章**：Windows 安裝程式由 [SignPath Foundation](https://signpath.org/) 的開源專案免費程式碼簽章計畫簽署，簽章基礎架構由 [SignPath.io](https://signpath.io/) 提供。
+> **程式碼簽章 / Code signing**：Free code signing on Windows provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).<br>（Windows 安裝程式由 SignPath.io 提供免費程式碼簽章，憑證由 SignPath Foundation 核發。）
 
 ---
 
