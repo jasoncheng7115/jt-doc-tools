@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -124,7 +125,10 @@ def _do_export(cfg: dict) -> dict:
         from ..main import VERSION
     except Exception:
         VERSION = "unknown"
-    target = Path(cfg.get("target_dir") or "") if cfg.get("target_dir") else _default_target()
+    # target_dir 為 admin 設定（by-design admin 有檔案系統權限）;
+    # .resolve() 正規化路徑（消掉 .. 相對跳脫）作防禦性硬化。
+    target = (Path(cfg.get("target_dir")).resolve()
+              if cfg.get("target_dir") else _default_target())
     target.mkdir(parents=True, exist_ok=True)
     name = f"jtdt-settings-{time.strftime('%Y%m%d-%H%M%S')}-v{VERSION}.zip"
     out_path = target / name
@@ -205,7 +209,9 @@ def _loop() -> None:
                 cur["last_run"] = time.time()
                 cur["last_result"] = f"OK: {res['file_count']} 檔"
                 _write(cur)
-                logger.info("scheduled settings export → %s", res["file"])
+                # 去除換行 / 控制字元後才記 log,避免 log injection（檔名理應乾淨,防禦性）
+                _safe_name = re.sub(r"[\x00-\x1f\x7f]", "", str(res["file"]))
+                logger.info("scheduled settings export → %s", _safe_name)
         except Exception:
             logger.exception("scheduled export failed")
             try:

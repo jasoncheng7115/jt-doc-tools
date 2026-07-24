@@ -366,7 +366,7 @@ async def analyze(
         except Exception as exc:
             import logging as _lg
             _lg.getLogger(__name__).warning("LLM grouping failed: %s", exc)
-            payload["llm"] = {"error": str(exc)}
+            payload["llm"] = {"error": "LLM 加值處理失敗（詳見伺服器日誌）"}
     # Save sidecar; PDF stays for /preview thumbnails.
     _, sidecar = _cached_paths(upload_id)
     sidecar.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")

@@ -33,6 +33,26 @@ class AuthError(Exception):
     pass
 
 
+def _safe_search_base(dn: str) -> str:
+    """Validate + normalise a user-supplied DN before using it as an LDAP
+    ``search_base``. ``parse_dn`` rejects malformed / injection-shaped input
+    (raises on anything that isn't a well-formed sequence of RDNs) and
+    ``safe_dn`` returns the escaped canonical form — so caller-controlled DNs
+    (directory-browser node / user selection) can't smuggle extra filter or
+    control characters into the search request."""
+    from ldap3.utils.dn import parse_dn, safe_dn
+    dn = (dn or "").strip()
+    if not dn:
+        raise AuthError("缺少 DN")
+    try:
+        parse_dn(dn)  # raises LDAPInvalidDnError on malformed / unsafe input
+        return safe_dn(dn)
+    except AuthError:
+        raise
+    except Exception:  # noqa: BLE001 — any parse failure → reject
+        raise AuthError("DN 格式不正確")
+
+
 class UserNotFoundError(AuthError):
     """Raised when the service-account search finds no (or several) matching
     user. Separated so the password path can map it to the generic
@@ -841,7 +861,7 @@ def list_ou_users(ou_dn: str, recursive: bool = False) -> list[dict]:
         with Connection(server, user=svc_dn, password=svc_pw,
                         auto_bind=True, raise_exceptions=True, check_names=False) as conn:
             entries = conn.extend.standard.paged_search(
-                search_base=ou_dn, search_filter=user_filter,
+                search_base=_safe_search_base(ou_dn), search_filter=user_filter,
                 search_scope=(SUBTREE if recursive else LEVEL),
                 attributes=[disp_attr, login_attr],
                 paged_size=500, generator=False)
@@ -976,7 +996,8 @@ def get_user_detail(user_dn: str) -> dict:
     try:
         with Connection(server, user=svc_dn, password=svc_pw,
                         auto_bind=True, raise_exceptions=True, check_names=False) as conn:
-            conn.search(search_base=user_dn, search_filter="(objectClass=*)",
+            conn.search(search_base=_safe_search_base(user_dn),
+                        search_filter="(objectClass=*)",
                         search_scope=BASE, attributes=["*"])
             if not conn.response:
                 raise AuthError("找不到該使用者")

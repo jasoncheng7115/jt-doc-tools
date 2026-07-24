@@ -265,6 +265,8 @@ def export_to_zip(out_path: Path, selected_ids: Optional[list[str]] = None,
     entries_by_cat: dict[str, list[str]] = {}
     files_added = 0
     total_bytes = 0
+    # out_path 來自 admin 設定的匯出目錄;.resolve() 正規化（消 .. 跳脫）防禦性硬化。
+    out_path = Path(out_path).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
         for c in selected:

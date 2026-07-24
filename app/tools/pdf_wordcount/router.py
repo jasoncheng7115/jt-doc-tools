@@ -286,7 +286,7 @@ async def analyze(
         except Exception as exc:
             import logging as _lg
             _lg.getLogger(__name__).warning("LLM summarize failed: %s", exc)
-            result["llm"] = {"error": str(exc)}
+            result["llm"] = {"error": "LLM 加值處理失敗（詳見伺服器日誌）"}
     return JSONResponse(result)
 
 
@@ -309,7 +309,7 @@ async def analyze_text(
         except Exception as exc:
             import logging as _lg
             _lg.getLogger(__name__).warning("LLM summarize failed: %s", exc)
-            result["llm"] = {"error": str(exc)}
+            result["llm"] = {"error": "LLM 加值處理失敗（詳見伺服器日誌）"}
     return JSONResponse(result)
 
 

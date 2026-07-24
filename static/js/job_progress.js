@@ -44,7 +44,7 @@
       const btn = this.saveWsBtn;
       if (!btn || !window.saveToWorkspace) return;
       const fname = j.result_filename || '';
-      if (!/\.(pdf|png)$/i.test(fname)) { btn.hidden = true; return; }  // workspace = PDF/PNG only
+      if (!/\.(pdf|png|docx|odt)$/i.test(fname)) { btn.hidden = true; return; }  // workspace = PDF/PNG/DOCX/ODT
       btn.hidden = false;
       btn.disabled = false;
       const orig = btn.dataset.origHtml || (btn.dataset.origHtml = btn.innerHTML);

@@ -268,6 +268,7 @@
 <div class="panel p2o-result" id="resultPanel" hidden>
   <div class="p2o-result-bar">
     <a class="btn btn-primary" id="rDownload" download>{{ icon('download', size=14) }} 下載</a>
+    {% if workspace_enabled(request) %}<button class="btn" type="button" id="rSaveWs" hidden>{{ icon('archive', size=14) }} 存至工作區</button>{% endif %}
     <div class="p2o-result-summary">
       <span class="p2o-done">{{ icon('check', size=14) }} 轉換完成</span>
       <span class="p2o-kv">引擎 <b id="rEngine">-</b></span>
@@ -457,6 +458,12 @@ const jp = new JobProgress($('p2oJob'), {
     const _fn = jobData.result_filename || `${(sm.output_format||'odt')}-result.${(sm.output_format||'odt')}`;
     $('rDownload').href = `/api/jobs/${jobData.id}/download/${encodeURIComponent(_fn)}`;
     $('rDownload').setAttribute('download', _fn);
+    // 存至工作區（docx/odt）：走 job_id server 端複製，免重新下載
+    const _wsBtn = $('rSaveWs');
+    if (_wsBtn && window.attachWorkspaceSave) {
+      window.attachWorkspaceSave(_wsBtn, () => ({
+        jobId: jobData.id, name: _fn, tool: 'pdf-to-office' }));
+    }
     const rows = [];
     const primaryEng = rep.primary_engine || sm.engine || '-';
     // v1.10.1：引擎 / 格式 移到結果列頂端 bar（下載鈕右側），不再放進 rMeta 細表

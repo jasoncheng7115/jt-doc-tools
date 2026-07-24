@@ -484,7 +484,7 @@ async def llm_reflow(request: Request):
             except Exception as exc:
                 elapsed = _time.time() - t0
                 skipped += 1
-                last_err = f"{type(exc).__name__}: {exc}"
+                last_err = type(exc).__name__  # 不外洩 str(exc)；完整細節在 logger.exception traceback
                 logger.exception(
                     "LLM reflow [%d/%d] FAIL in %.1fs — %s",
                     done, total, elapsed, last_err,

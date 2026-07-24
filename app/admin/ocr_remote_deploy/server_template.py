@@ -283,7 +283,7 @@ def healthz() -> JSONResponse:
         import easyocr  # type: ignore
         info["easyocr"] = easyocr.__version__ if hasattr(easyocr, "__version__") else "?"
     except Exception as e:
-        info["easyocr_error"] = str(e)
+        info["easyocr_error"] = type(e).__name__
     info["readers_cached"] = list(_readers.keys())
     return JSONResponse(info)
 

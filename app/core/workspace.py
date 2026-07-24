@@ -36,10 +36,13 @@ from fastapi import Request
 
 logger = logging.getLogger(__name__)
 
-# mime -> extension. Intentionally tiny: feature is scoped to PDF + PNG.
+# mime -> extension. Scoped to PDF / PNG + Office documents (DOCX / ODT).
 ALLOWED: dict[str, str] = {
     "application/pdf": ".pdf",
     "image/png": ".png",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        ".docx",
+    "application/vnd.oasis.opendocument.text": ".odt",
 }
 
 _SINGLE_KEY = "__single__"  # auth-OFF shared workspace
@@ -199,12 +202,37 @@ def _user_dir(request: Request, create: bool = False) -> Path:
 # Type detection
 # --------------------------------------------------------------------------- #
 
+_DOCX_MIME = ("application/vnd.openxmlformats-officedocument"
+              ".wordprocessingml.document")
+_ODT_MIME = "application/vnd.oasis.opendocument.text"
+
+
 def detect_kind(data: bytes) -> Optional[tuple[str, str]]:
-    """Return (mime, ext) for a supported file by magic bytes, else None."""
+    """Return (mime, ext) for a supported file by magic bytes, else None.
+
+    PDF / PNG are matched by their leading signature. DOCX / ODT are both
+    ZIP containers (PK\\x03\\x04) — we open the archive and inspect its
+    internal structure to tell them apart (and reject arbitrary zips), so a
+    renamed .zip can't slip in claiming to be a document."""
     if data[:4] == b"%PDF":
         return "application/pdf", ".pdf"
     if data[:8] == b"\x89PNG\r\n\x1a\n":
         return "image/png", ".png"
+    if data[:4] == b"PK\x03\x04":  # ZIP-based Office document
+        try:
+            import io
+            import zipfile
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                names = set(z.namelist())
+                # ODF: a leading uncompressed "mimetype" member states the type.
+                if "mimetype" in names:
+                    if z.read("mimetype")[:64] == _ODT_MIME.encode():
+                        return _ODT_MIME, ".odt"
+                # OOXML docx: content-types map + the main document part.
+                if "[Content_Types].xml" in names and "word/document.xml" in names:
+                    return _DOCX_MIME, ".docx"
+        except Exception:  # noqa: BLE001 — malformed zip → unsupported
+            return None
     return None
 
 
@@ -283,7 +311,7 @@ def save_bytes(request: Request, data: bytes, display_name: str,
         raise WorkspaceError("檔案為空")
     kind = detect_kind(data)
     if kind is None:
-        raise UnsupportedType("工作區只接受 PDF 或 PNG 檔")
+        raise UnsupportedType("工作區只接受 PDF / PNG / Word (.docx) / OpenDocument (.odt) 檔")
     mime, ext = kind
     s = get_settings()
     max_file_mb = int(s.get("max_file_mb") or 0)
@@ -382,6 +410,10 @@ def get_thumbnail(request: Request, file_id: str) -> tuple[Path, str]:
         if not fp.exists():
             raise NotFound("檔案不存在")
         return fp, "image/png"
+    if ext in (".docx", ".odt"):
+        # Office documents have no cheap first-page render (would need soffice);
+        # caller serves the placeholder icon.
+        raise WorkspaceError("此格式無縮圖預覽")
     # PDF → render first page (cache thumb.png).
     thumb = d / "thumb.png"
     if thumb.exists():

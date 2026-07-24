@@ -1,6 +1,6 @@
 [project]
 name = "jt-doc-tools"
-version = "1.12.84"
+version = "1.12.86"
 description = "Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台"
 authors = [{ name = "Jason Cheng (Jason Tools)", email = "jason@jason.tools" }]
 requires-python = ">=3.10"
@@ -39,7 +39,8 @@ dependencies = [
     # markdown-it-py — CommonMark + GFM 解析器,給 markdown-to-doc 工具
     # MIT licensed,純 Python,~150KB,支援 table / code / footnote / strikethrough
     "markdown-it-py>=3.0,<4",
-    "Pillow>=12.2.0,<13",
+    "Pillow>=12.3.0,<13",
+    "pyasn1>=0.6.4",  # 安全: 修 DoS (uncontrolled resource / quadratic OID)
     "pdfplumber>=0.11.0",
     # pyzipper 0.4.0 修了 small-file encryption bypass (Dependabot #45 Moderate)
     "pyzipper>=0.4.0",
@@ -112,7 +113,7 @@ dependencies = [
 jtdt = "app.cli:main"
 
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=78.1.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]

@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import io
+import logging
 import re
 from datetime import datetime
 from typing import List
+
+logger = logging.getLogger(__name__)
 
 import fitz
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
@@ -185,9 +188,11 @@ async def export(request: Request):
             s.get("field_formats") or {}, fmt,
             export_labels=s.get("export_labels") or {})
     except RuntimeError as e:
-        raise HTTPException(500, str(e))
+        logger.warning("transit-proof 匯出失敗: %s", e)
+        raise HTTPException(500, "匯出失敗，請稍後再試")
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        logger.info("transit-proof 匯出參數錯誤: %s", e)
+        raise HTTPException(400, "匯出參數不正確")
     filename = f"transit-proof-{datetime.now().strftime('%Y%m%d-%H%M%S')}.{suffix}"
     return StreamingResponse(io.BytesIO(data), media_type=mimetype,
                              headers={"Content-Disposition": content_disposition(filename)})

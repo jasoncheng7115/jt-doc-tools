@@ -4,6 +4,23 @@
 
 ---
 
+## [1.12.86] - 2026-07-24
+
+### 安全 — 相依套件升級 + LDAP DN 驗證硬化
+
+- **相依套件升級（修 Dependabot 告警）**：Pillow `12.2.0 → 12.3.0`（一輪 JPEG2000 / mmap OOB / RankFilter / ImageCms / Image.paste crop / Decompression Bomb / 多個字型 bomb-bypass 的 High CVE）、pyasn1 `0.6.3 → 0.6.4`（OID 處理二次方複雜度 / 資源耗盡 DoS）、setuptools build 相依 floor 提到 `78.1.1`（MANIFEST.in 排除繞過）。影像相關功能 203 項測試在 Pillow 12.3.0 下全數通過。
+- **LDAP 目錄查詢 DN 驗證（CodeQL Critical）**：目錄瀏覽的「看使用者細節」`get_user_detail` 與「列 OU 使用者」把呼叫端傳入的 DN 直接當 `search_base`。新增 `_safe_search_base()`：用 ldap3 `parse_dn` 驗證是合法 DN 結構（畸形 / 帶注入字元的輸入直接拒）+ `safe_dn` 正規化後才送查詢，防止 caller 控制的 DN 夾帶額外 filter / 控制字元。兩處 `search_base` 都套用。
+- **例外訊息不外洩（CodeQL Medium）**：多個工具把例外 `str(exc)` 回給前端 → 改通用訊息 + 完整細節只記伺服器日誌。涵蓋 pdf-wordcount / pdf-annotations / pdf-diff / translate 的 LLM 加值錯誤、pdf-extract-text 逐句重排的 SSE `last_error`、乘車證明匯出（RuntimeError→「匯出失敗」）、jt-ocr-server health 的 easyocr 錯誤。
+- **log injection 防禦 + 匯出路徑正規化（CodeQL Medium/High）**：排程匯出記 log 前把檔名的換行 / 控制字元濾掉；設定匯出 / 排程匯出的 admin 設定目錄改 `Path(...).resolve()` 正規化（消 `..` 相對跳脫）作防禦性硬化（此類 admin-only 設定目錄屬 by-design，admin 本就有檔案系統權限）。
+
+## [1.12.85] - 2026-07-24
+
+### 新增 — 工作區支援 Word (.docx) / OpenDocument (.odt) + PDF 轉文書檔可存工作區
+
+- **使用者工作區新增支援 Word (.docx) / OpenDocument (.odt)**（原本只收 PDF / PNG）。維持以 magic bytes 驗證：docx / odt 皆為 ZIP 容器，開啟後檢查內部結構（docx 需 `[Content_Types].xml` + `word/document.xml`；odt 需開頭未壓縮的 `mimetype` 成員標示為 ODF text）才接受——改名的任意 .zip 無法冒充文件。office 檔無縮圖預覽（改用預留圖示，不影響清單）。
+- **PDF 轉文書檔（pdf-to-office）結果新增「存至工作區」按鈕**：轉出的 docx / odt 可直接存進工作區跨工具接力，不必先下載再上傳。走 job_id 由伺服器端複製結果（免重新上傳），沿用工作區既有的帳號隔離 / 額度 / 保留期限。
+- 測試 `tests/test_workspace_api.py` 補 docx / odt 接受 + 拒絕改名 zip 的案例。
+
 ## [1.12.84] - 2026-07-24
 
 ### 修正 — API 文件契約徹查（照文件呼叫會出錯的問題全修）

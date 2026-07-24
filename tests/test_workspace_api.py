@@ -54,6 +54,62 @@ def test_save_rejects_non_pdf_png(client):
     assert r.status_code == 400
 
 
+def _make_docx() -> bytes:
+    from docx import Document
+    from io import BytesIO
+    d = Document(); d.add_paragraph("測試 workspace docx")
+    buf = BytesIO(); d.save(buf); return buf.getvalue()
+
+
+def _make_odt() -> bytes:
+    """Minimal-but-valid ODT: leading uncompressed 'mimetype' + content.xml."""
+    import zipfile
+    from io import BytesIO
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("mimetype", "application/vnd.oasis.opendocument.text",
+                   compress_type=zipfile.ZIP_STORED)
+        z.writestr("content.xml",
+                   "<?xml version='1.0'?><office:document-content/>")
+    return buf.getvalue()
+
+
+def test_detect_kind_office_and_rejects_plain_zip():
+    import io
+    import zipfile
+    assert ws.detect_kind(_make_docx())[1] == ".docx"
+    assert ws.detect_kind(_make_odt())[1] == ".odt"
+    # a renamed arbitrary zip (no doc structure) must NOT pass
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        z.writestr("hello.txt", "not a document")
+    assert ws.detect_kind(b.getvalue()) is None
+    assert ws.detect_kind(b"PK\x03\x04garbage") is None
+
+
+def test_save_accepts_docx_and_odt(client):
+    ws.save_settings({"enabled": True, "per_user_quota_mb": 500,
+                      "max_file_mb": 50, "retention_hours": -1})
+    for fname, blob, want_mime in [
+        ("報告.docx", _make_docx(), "wordprocessingml"),
+        ("報告.odt", _make_odt(), "opendocument.text"),
+    ]:
+        r = client.post(
+            "/workspace/save",
+            files={"file": (fname, blob, "application/octet-stream")},
+            data={"source_tool": "pdf-to-office"},
+        )
+        assert r.status_code == 200, r.text
+        meta = r.json()["file"]
+        assert want_mime in meta["mime"]
+        # served back with the right extension
+        fp = client.get(f"/workspace/file/{meta['file_id']}")
+        assert fp.status_code == 200
+        # office docs have no thumbnail → placeholder PNG, not a 5xx
+        th = client.get(f"/workspace/thumb/{meta['file_id']}")
+        assert th.status_code == 200
+
+
 def test_list_accept_filter(client):
     ws.save_settings({"enabled": True, "per_user_quota_mb": 500,
                       "max_file_mb": 50, "retention_hours": -1})

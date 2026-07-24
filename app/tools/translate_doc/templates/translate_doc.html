@@ -125,6 +125,11 @@
         <button type="button" data-format="docx">Word (.docx)</button>
         <button type="button" data-format="odt">OpenDocument (.odt)</button>
         <button type="button" data-format="pdf">PDF (.pdf)</button>
+        {% if workspace_enabled(request) %}
+        <button type="button" data-ws-format="docx">＋ 存 Word 至工作區</button>
+        <button type="button" data-ws-format="odt">＋ 存 ODT 至工作區</button>
+        <button type="button" data-ws-format="pdf">＋ 存 PDF 至工作區</button>
+        {% endif %}
       </div>
     </span>
     <span class="trd-export-wrap">
@@ -1267,6 +1272,32 @@ function _trdGetPairs() {
   }
   return pairs;
 }
+// 產生文件檔（docx/odt/pdf）後直接存進工作區，免下載再上傳。
+async function _trdSaveToWorkspace(format) {
+  const pairs = _trdGetPairs();
+  if (!pairs.length) { showToast?.('沒有可匯出的內容', 'err'); return; }
+  if (!window.saveToWorkspace) { showToast?.('工作區未啟用', 'err'); return; }
+  showToast?.(`產生 ${format} 中…`, 'ok');
+  try {
+    const r = await fetch('/tools/translate-doc/export', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ format, pairs,
+        source_filename: trdUploadedName || '',
+        translated_at: trdTranslatedAt || new Date().toISOString() }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const blob = await r.blob();
+    const cd = r.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+    const fname = m ? decodeURIComponent(m[1]) : `translated.${format}`;
+    const res = await window.saveToWorkspace({ blob }, fname, 'translate-doc');
+    showToast?.((res && res.duplicate)
+      ? '已存至工作區（工作區已有同名檔，已另存一份）' : '已存至工作區', 'ok');
+  } catch (e) {
+    showToast?.('存至工作區失敗：' + e.message, 'err');
+  }
+}
+
 async function _trdExport(format) {
   const pairs = _trdGetPairs();
   if (!pairs.length) { showToast?.('沒有可匯出的內容', 'err'); return; }
@@ -1316,9 +1347,9 @@ document.querySelectorAll('.trd-export-btn').forEach(btn => {
 document.querySelectorAll('.trd-export-menu button').forEach(opt => {
   opt.addEventListener('click', (e) => {
     e.stopPropagation();
-    const fmt = opt.dataset.format;
     opt.closest('.trd-export-menu').hidden = true;
-    _trdExport(fmt);
+    if (opt.dataset.wsFormat) { _trdSaveToWorkspace(opt.dataset.wsFormat); }
+    else { _trdExport(opt.dataset.format); }
   });
 });
 document.addEventListener('click', () => {

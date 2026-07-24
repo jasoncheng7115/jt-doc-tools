@@ -164,11 +164,24 @@ function renderResult(d) {
               href="${href || '#'}" ${disabled ? 'aria-disabled="true"' : 'download'}>
               ${dlIcon} ${label}</a>`;
   };
+  // 存至工作區：工作區收 docx / odt（txt / md 不支援）。僅在工作區啟用時出現。
+  const wsIcon = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>`;
+  const wsBtn = (key, label) => (d.downloads[key] && window.saveToWorkspace)
+    ? `<button class="btn" type="button" data-ws="${key}">${wsIcon} ${label}存至工作區</button>` : '';
   $('dlGroup').innerHTML =
     dl('txt',  '下載 TXT') +
     dl('md',   '下載 Markdown') +
     dl('docx', '下載 Word (.docx)') +
-    dl('odt',  '下載 ODT');
+    dl('odt',  '下載 ODT') +
+    wsBtn('docx', 'Word ') +
+    wsBtn('odt', 'ODT ');
+  $('dlGroup').querySelectorAll('button[data-ws]').forEach((btn) => {
+    const key = btn.getAttribute('data-ws');
+    window.attachWorkspaceSave(btn, () => ({
+      url: d.downloads[key],
+      name: ((d.downloads[key] || '').split('/').pop() || ('extract.' + key)).split('?')[0],
+      tool: 'pdf-extract-text' }));
+  });
   // Reset preview state for the new batch — original known, reflowed empty.
   originalPreview = d.preview_md || '';
   reflowedPreview = '';
