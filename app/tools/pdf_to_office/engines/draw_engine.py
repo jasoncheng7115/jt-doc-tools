@@ -383,7 +383,11 @@ def _page_has_transformed_image(page) -> bool:
 
 def _emit_raster_page(para, autostyles, pics: dict, png: bytes,
                       i: int, w: float, h: float) -> None:
-    """把整頁 PNG 以頁面錨定 frame 塞進段落（設計頁 raster fallback 用）。"""
+    """把整頁 PNG 以頁面錨定 frame 塞進段落（設計頁 raster fallback 用）。
+
+    raster 圖放在**最上層（高 z-index、不透明覆蓋）**——這樣底下若還保留原始文字框
+    （見 caller），視覺上只看到完美的 raster 圖，但文字仍在文件內可搜尋 / 可選取
+    （類似「可搜尋的掃描 PDF」）。"""
     pic_name = "Pictures/jtraster_%d.png" % i
     pics[pic_name] = png
     gstyle = etree.SubElement(autostyles, _q("style", "style"))
@@ -395,9 +399,10 @@ def _emit_raster_page(para, autostyles, pics: dict, png: bytes,
     ggp.set(_q("style", "vertical-pos"), "from-top")
     ggp.set(_q("style", "vertical-rel"), "page")
     ggp.set(_q("style", "wrap"), "run-through")
-    ggp.set(_q("style", "run-through"), "background")
+    ggp.set(_q("style", "run-through"), "foreground")
     frame = etree.SubElement(para, _q("draw", "frame"))
     frame.set(_q("draw", "style-name"), "JtRaster%d" % i)
+    frame.set(_q("draw", "z-index"), "10000")  # 蓋在所有原始文字框之上
     frame.set(_q("text", "anchor-type"), "page")
     frame.set(_q("text", "anchor-page-number"), str(i))
     frame.set(_q("svg", "x"), "0cm")
@@ -409,6 +414,28 @@ def _emit_raster_page(para, autostyles, pics: dict, png: bytes,
     img.set(_q("xlink", "type"), "simple")
     img.set(_q("xlink", "show"), "embed")
     img.set(_q("xlink", "actuate"), "onLoad")
+
+
+def _move_text_frames_under_raster(page, para, i: int, page_w_cm: float) -> int:
+    """raster 頁：把原始「含文字」的框搬到段落（錨定第 i 頁、低 z-index，在 raster
+    圖底下）——保留文字可搜尋 / 可選取，但視覺被上層 raster 圖蓋住。不搬非文字形狀
+    （漸層色塊 / 失真向量），避免檔案肥大又不會露出。回搬移的文字框數。"""
+    n = 0
+    for shape in list(page):
+        if not isinstance(shape.tag, str):
+            continue
+        tb = next(shape.iter(_q("draw", "text-box")), None)
+        if tb is None or not "".join(tb.itertext()).strip():
+            continue  # 只保留有文字的框
+        tag = etree.QName(shape).localname
+        shape.set(_q("text", "anchor-type"), "page")
+        shape.set(_q("text", "anchor-page-number"), str(i))
+        shape.set(_q("draw", "z-index"), "0")  # 壓低,確保在 raster 圖之下
+        if tag == "frame":
+            _pad_frame_width(shape, page_w_cm=page_w_cm)
+        para.append(shape)
+        n += 1
+    return n
 
 
 def _build_writer_odt(odg_path: Path, odt_out: Path,
@@ -543,7 +570,9 @@ def _build_writer_odt(odg_path: Path, odt_out: Path,
             png = _render_pdf_page_png(pdf_path, i - 1)
             if png is not None:
                 _emit_raster_page(para, autostyles, pics, png, i, w, h)
-                continue  # 跳過該頁向量形狀搬移
+                # 保留原始文字框在 raster 圖底下 → 文字仍可搜尋 / 選取（視覺被圖蓋住）。
+                _move_text_frames_under_raster(page, para, i, w)
+                continue  # 非文字形狀（漸層色塊）不搬
         # 先清掉 PDF 疊印假粗體造成的重複 / 被覆蓋文字框（見 _dedup_overprint）
         _dedup_overprint(page)
         # 搬移該頁所有頂層形狀（frame / line / rect / custom-shape / …）
