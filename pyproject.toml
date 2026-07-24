@@ -1,6 +1,6 @@
 [project]
 name = "jt-doc-tools"
-version = "1.12.86"
+version = "1.12.87"
 description = "Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台"
 authors = [{ name = "Jason Cheng (Jason Tools)", email = "jason@jason.tools" }]
 requires-python = ">=3.10"
@@ -41,6 +41,13 @@ dependencies = [
     "markdown-it-py>=3.0,<4",
     "Pillow>=12.3.0,<13",
     "pyasn1>=0.6.4",  # 安全: 修 DoS (uncontrolled resource / quadratic OID)
+    # torch 釘 2.11.x：EasyOCR 主 OCR 引擎依賴(~700MB),防其他 dep re-lock 時意外
+    # 升大版(2.13 未驗證 OCR、install/upgrade 兩路都有風險)。連帶效應:torch 2.11.x
+    # 要求 setuptools<82,故 setuptools 停在 81 → Dependabot 的 setuptools MANIFEST.in
+    # bypass(GHSA-h35f,fixed 83) 無法升(要升需 torch 2.13);惟該 CVE 屬「build sdist
+    # 階段 macOS 問題」,本 app 執行期從不 build sdist → 不可利用,屬 dismiss。
+    # torch Low CVE(#69 torch.jit.script)目前亦無上游修補。
+    "torch>=2.11,<2.12",
     "pdfplumber>=0.11.0",
     # pyzipper 0.4.0 修了 small-file encryption bypass (Dependabot #45 Moderate)
     "pyzipper>=0.4.0",

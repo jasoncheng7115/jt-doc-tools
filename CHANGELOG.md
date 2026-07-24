@@ -4,6 +4,19 @@
 
 ---
 
+## [1.12.87] - 2026-07-24
+
+### 修正 — pdf-to-office jtdt-layout：設計封面 raster fallback + 文字框溢頁位移
+
+- **設計感頁面 raster fallback**：LibreOffice / OxOffice 的 Draw PDF 匯入器會把「漸層 / 裁切 / 圖案背景」用純色拼塊近似（一頁可爆出上千個色塊且色彩失真——實測某設計封面深藍漸層 → 被匯入成一大塊平橘色）。這失真發生在 Draw 匯入階段（jtdt-layout 之前），向量已不可信。改為：頂層色塊數超過門檻（400）的頁面，直接把「原 PDF 該頁整頁」render 成圖嵌入 → **像素級忠於原稿**（代價：該頁不可編輯；設計封面本就不會去編）。一般表單 / 文件的色塊數遠低於門檻，維持可編輯向量。
+- **文字框加寬 clamp 修正**：`_pad_frame_width` 舊邏輯在「文字框原本就已接近頁寬」時會整個跳過頁緣 clamp → 套 1.18× 加寬後溢出頁面，Writer 渲染該框時位移（某頁「現階段使用…」段落第一行往左突出頁緣、換行後才回正常左界）。改為一律把加寬後寬度 cap 在頁緣、但不縮到比原寬還小。
+
+### 安全 — CodeQL 例外訊息外洩補完 + 相依決策
+
+- 乘車證明 ParseError → 固定通用訊息；SSO 連線測試錯誤 → 例外型別名（給 admin 線索）+ 完整細節記日誌；系統狀態 host stats cpu / mem 讀取錯誤 → 型別名。至此例外訊息外洩類 CodeQL 全數改為「通用訊息 + 細節只入日誌」。
+- **torch 顯式釘 2.11.x**（pyproject / uv.lock / requirements 三處一致）：EasyOCR 主 OCR 引擎依賴 ~700MB，避免其他相依 re-lock 時把 torch 意外升大版（2.13 未在本輪驗證 OCR，install / upgrade 兩路都有風險）。
+- **已知議題（Dependabot 保留）**：① setuptools MANIFEST.in bypass（GHSA-h35f，修補版 83.0.0）—— torch 2.11.x 要求 setuptools<82 無法共鎖；且該 CVE 屬「build sdist 階段的 macOS 問題」，本 app 執行期從不 build sdist → **不可利用**。② torch `torch.jit.script` 記憶體毀損（Low）—— 目前無上游修補。
+
 ## [1.12.86] - 2026-07-24
 
 ### 安全 — 相依套件升級 + LDAP DN 驗證硬化

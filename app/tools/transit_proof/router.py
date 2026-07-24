@@ -57,8 +57,9 @@ def _parse_uploads(files: List[UploadFile], datas: List[bytes]) -> tuple[list, l
             continue
         try:
             entry = parser.parse_text(text)
-        except parser.ParseError as e:
-            errors.append({"file": fname, "error": str(e)})
+        except parser.ParseError:
+            errors.append({"file": fname,
+                           "error": "無法辨識為乘車證明（格式不符或版面不支援）"})
             continue
         except Exception as e:  # noqa: BLE001
             errors.append({"file": fname, "error": f"解析失敗（{type(e).__name__}）"})

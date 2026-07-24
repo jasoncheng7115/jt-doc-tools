@@ -596,3 +596,74 @@ def test_e2e_service_dispatch_draw(tmp_path):
     assert res.ok, res.error
     assert res.engine_used == "jtdt-layout"
     assert res.output_path and res.output_path.exists()
+
+
+# --------------------------------------------------------------------------
+# 回歸：_pad_frame_width clamp（框已接近頁緣不可溢出）+ 設計頁 raster fallback
+# --------------------------------------------------------------------------
+def test_pad_frame_width_never_overflows_page():
+    """框原本就接近頁寬時，加寬後不可超出頁緣（頁6「現階段使用」往左突出的根因）。"""
+    from lxml import etree
+    page_w = 9.6
+    # 框 x=0.8, w=8.818 → 已接近頁緣；舊 bug 會套 1.18× 變 ~10.55cm 溢出
+    xml = ('<draw:frame xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"'
+           ' xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"'
+           ' xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"'
+           ' svg:x="0.8cm" svg:width="8.818cm">'
+           '<draw:text-box><text:p>現階段使用</text:p></draw:text-box></draw:frame>')
+    fr = etree.fromstring(xml)
+    de._pad_frame_width(fr, page_w_cm=page_w)
+    w = float(fr.get("{urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0}width")[:-2])
+    # 不變量：加寬後右緣不得超過 max(頁緣, 原框右緣)——即不會比 Draw 原本更溢出。
+    orig_right = 0.8 + 8.818
+    assert 0.8 + w <= max(page_w, orig_right) + 0.001, \
+        f"框比原本更溢出: x0.8 + w{w}"
+    # 關鍵：不可套成 1.18× 的 10.55cm（舊 bug）
+    assert w < 8.818 * de._FRAME_WIDTH_FACTOR, "不可套滿 1.18× 而溢出"
+    assert w >= 8.818 - 0.001, "不可縮到比原寬還小（否則換行）"
+
+
+def test_pad_frame_width_normal_padding_still_applies():
+    """一般（有餘裕的）框仍照常加寬防裁尾。"""
+    from lxml import etree
+    xml = ('<draw:frame xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"'
+           ' xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"'
+           ' svg:x="1cm" svg:width="3cm"/>')
+    fr = etree.fromstring(xml)
+    de._pad_frame_width(fr, page_w_cm=21.0)
+    w = float(fr.get("{urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0}width")[:-2])
+    assert w > 3.0, "一般框應被加寬"
+
+
+def test_raster_fallback_for_design_heavy_page(tmp_path):
+    """色塊數超過門檻的設計頁 → 改嵌原 PDF 整頁圖（像素級），不搬上千個失真向量。"""
+    import fitz
+    # 造一張單頁 PDF 當 raster 來源
+    doc = fitz.open(); doc.new_page(width=595, height=842).insert_text((72, 100), "COVER")
+    pdf = tmp_path / "src.pdf"; doc.save(str(pdf)); doc.close()
+    # odg：一頁塞 _RASTER_SHAPE_THRESHOLD+1 個小色塊（模擬漸層被拆碎）
+    n = de._RASTER_SHAPE_THRESHOLD + 1
+    shapes = [(0.1, 0.1 + i * 0.01, 1.0, 0.5, "x") for i in range(n)]
+    odg = tmp_path / "d.odg"; _make_odg(odg, [shapes])
+    odt = tmp_path / "d.odt"
+    de._build_writer_odt(odg, odt, [(21.0, 29.7)], pdf_path=pdf)
+    z = zipfile.ZipFile(odt)
+    names = z.namelist()
+    assert any(x.startswith("Pictures/jtraster_") for x in names), "設計頁應嵌 raster 圖"
+    content = z.read("content.xml").decode()
+    assert "jtraster_1.png" in content, "content.xml 應引用 raster 圖"
+    # 上千個小色塊不應全被搬進來（只剩整頁圖 frame）
+    assert content.count("draw:frame") <= 2, "向量色塊應被 raster 取代"
+
+
+def test_no_raster_for_normal_page(tmp_path):
+    """一般頁（色塊少）維持向量搬移，不觸發 raster。"""
+    import fitz
+    doc = fitz.open(); doc.new_page(); pdf = tmp_path / "s.pdf"; doc.save(str(pdf)); doc.close()
+    shapes = [(1.0, 1.0 + i, 3.0, 0.5, "text%d" % i) for i in range(5)]
+    odg = tmp_path / "n.odg"; _make_odg(odg, [shapes])
+    odt = tmp_path / "n.odt"
+    de._build_writer_odt(odg, odt, [(21.0, 29.7)], pdf_path=pdf)
+    content = zipfile.ZipFile(odt).read("content.xml").decode()
+    assert "jtraster" not in content, "一般頁不應觸發 raster"
+    assert "text0" in content, "一般頁向量文字應保留"

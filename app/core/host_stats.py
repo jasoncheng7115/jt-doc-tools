@@ -335,7 +335,7 @@ def get_host_stats() -> dict:
             except (AttributeError, OSError):
                 out["cpu"]["loadavg"] = None
     except Exception as e:
-        out["cpu"] = {"error": str(e)}
+        out["cpu"] = {"error": type(e).__name__}
     # RAM — 容器內改讀 cgroup（與 Proxmox 顯示一致，含 cache）；實機 / VM 用 psutil
     try:
         cm = _container_mem(psutil) if in_container else None
@@ -350,7 +350,7 @@ def get_host_stats() -> dict:
                 "swap_total": swap.total, "swap_used": swap.used, "swap_percent": swap.percent,
             }
     except Exception as e:
-        out["mem"] = {"error": str(e)}
+        out["mem"] = {"error": type(e).__name__}
     # Disk — DATA_DIR 所在的盤 (最相關) + system root
     try:
         from ..config import settings as _s

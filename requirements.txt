@@ -38,6 +38,9 @@ pytesseract>=0.3.10,<0.4
 # EasyOCR — 主 OCR 引擎（CJK 識別率優於 tesseract）；JaidedAI 泰國公司
 # Pulls in PyTorch (~700MB)，install 時間會較久。失敗 graceful 降回 tesseract
 easyocr>=1.7,<2
+# torch 釘 2.11.x：與 pyproject/uv.lock 一致,防 pip fallback 安裝時意外升大版
+# (2.13 未驗證 OCR)。torch 2.11.x 要求 setuptools<82。
+torch>=2.11,<2.12
 # 主機資源監控 — admin /admin/system-status 頁顯示 CPU / RAM / disk / IO
 psutil>=5.9,<7
 # TOTP 2FA — 稽核員角色強制 + 其他角色可選

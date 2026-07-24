@@ -203,7 +203,8 @@ def build_auth_router(templates) -> APIRouter:
                                "authorization_endpoint": doc.get("authorization_endpoint"),
                                "token_endpoint": doc.get("token_endpoint")}
             except Exception as e:
-                out["oidc"] = {"ok": False, "error": str(e)[:200]}
+                logger.warning("SSO OIDC 連線測試失敗: %s", e)
+                out["oidc"] = {"ok": False, "error": f"測試失敗（{type(e).__name__}），詳見伺服器日誌"}
         if which in (None, "saml"):
             try:
                 from ..core import saml as _saml
@@ -212,7 +213,8 @@ def build_auth_router(templates) -> APIRouter:
                 _saml.sp_metadata(cfg, base)
                 out["saml"] = {"ok": True, "metadata_url": (base + "/auth/saml/metadata") if base else ""}
             except Exception as e:
-                out["saml"] = {"ok": False, "error": str(e)[:200]}
+                logger.warning("SSO SAML 連線測試失敗: %s", e)
+                out["saml"] = {"ok": False, "error": f"測試失敗（{type(e).__name__}），詳見伺服器日誌"}
         return JSONResponse({"ok": True, "result": out})
 
     # ---------- /admin/auth-settings ----------

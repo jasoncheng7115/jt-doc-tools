@@ -46,7 +46,16 @@ _NS = {
     "draw": "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0",
     "svg": "urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0",
     "fo": "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0",
+    "xlink": "http://www.w3.org/1999/xlink",
 }
+
+# 設計感頁面（漸層 / 圖案背景）raster fallback：LibreOffice/OxOffice Draw 的 PDF
+# 匯入器會把漸層 / 裁切 / 圖案背景「用純色拼塊近似」，一頁可爆出上千個色塊且色彩
+# 失真（實測 OSSII 設計封面：深藍漸層 → 一大塊平橘色）。此類頁面的向量已不可信，
+# 改把「原 PDF 該頁整頁」render 成圖嵌入 → 像素級忠於原稿（代價：該頁不可編輯，
+# 設計封面本就不會去編）。門檻用頂層形狀數；一般表單 / 文件遠低於此。
+_RASTER_SHAPE_THRESHOLD = 400
+_RASTER_DPI = 150
 
 
 # 安全解析器：關掉外部實體（防 XXE）、關網路、限制樹規模（防資源耗盡）。
@@ -204,8 +213,10 @@ def _pad_frame_width(frame, page_w_cm: float | None = None) -> None:
         xparsed = _parse_len_cm(frame.get(_q("svg", "x")) or "")
         x_cm = xparsed[0] if xparsed else 0.0
         max_w = page_w_cm - x_cm - 0.05          # 留 0.05cm 不貼頁緣
-        if max_w > w_cm:                          # 只在不會反而縮小時才 clamp
-            new_cm = min(new_cm, max_w)
+        # 一律把加寬後的寬度 cap 在頁緣，但絕不縮到比「原寬」還小（否則反而換行）。
+        # 舊版寫 `if max_w > w_cm` 會在「框原本就已接近頁寬」時整個跳過 clamp → 套
+        # 1.18× 後溢出頁面，Writer render 該框時位移（頁6「現階段使用」往左突出）。
+        new_cm = min(new_cm, max(max_w, w_cm))
     frame.set(wkey, "%.3fcm" % new_cm)
 
 
@@ -303,9 +314,26 @@ def _dedup_overprint(page) -> int:
     return removed
 
 
+def _render_pdf_page_png(pdf_path: Path, page_index: int) -> bytes | None:
+    """把原 PDF 第 page_index（0-based）頁 render 成 PNG bytes（設計頁 raster fallback 用）。"""
+    try:
+        import fitz  # noqa: PLC0415
+        with fitz.open(str(pdf_path)) as doc:
+            if page_index >= doc.page_count:
+                return None
+            pix = doc[page_index].get_pixmap(dpi=_RASTER_DPI, alpha=False)
+            return pix.tobytes("png")
+    except Exception:  # noqa: BLE001 — render 失敗就退回向量搬移
+        return None
+
+
 def _build_writer_odt(odg_path: Path, odt_out: Path,
-                      page_sizes: list[tuple[float, float]]) -> tuple[int, int]:
-    """把 Draw 的 .odg 重組成合法 Writer .odt（支援每頁不同尺寸）。回 (頁數, 圖片數)。"""
+                      page_sizes: list[tuple[float, float]],
+                      pdf_path: Path | None = None) -> tuple[int, int]:
+    """把 Draw 的 .odg 重組成合法 Writer .odt（支援每頁不同尺寸）。回 (頁數, 圖片數)。
+
+    pdf_path 有給且某頁色塊數超過 `_RASTER_SHAPE_THRESHOLD`（設計感漸層 / 圖案頁，
+    Draw 匯入必失真）→ 該頁改嵌原 PDF 整頁圖（像素級還原）。"""
     with zipfile.ZipFile(odg_path) as zin:
         names = zin.namelist()
         if "content.xml" not in names:
@@ -413,6 +441,39 @@ def _build_writer_odt(odg_path: Path, odt_out: Path,
         pstyle.set(_q("style", "master-page-name"), "JtMP%d" % g)
         para = etree.SubElement(text_el, _q("text", "p"))
         para.set(_q("text", "style-name"), "JtPg%d" % i)
+        # 設計感頁面 raster fallback：色塊數爆量（漸層 / 圖案被 Draw 拆成純色拼塊、
+        # 色彩已失真）→ 改嵌原 PDF 整頁圖，像素級還原（該頁不可編輯，設計封面本就
+        # 不會去編）。一般表單 / 文件的形狀數遠低於門檻，不受影響。
+        shape_count = sum(1 for c in page if isinstance(c.tag, str))
+        if pdf_path is not None and shape_count > _RASTER_SHAPE_THRESHOLD:
+            png = _render_pdf_page_png(pdf_path, i - 1)
+            if png is not None:
+                pic_name = "Pictures/jtraster_%d.png" % i
+                pics[pic_name] = png
+                gstyle = etree.SubElement(autostyles, _q("style", "style"))
+                gstyle.set(_q("style", "name"), "JtRaster%d" % i)
+                gstyle.set(_q("style", "family"), "graphic")
+                ggp = etree.SubElement(gstyle, _q("style", "graphic-properties"))
+                ggp.set(_q("style", "horizontal-pos"), "from-left")
+                ggp.set(_q("style", "horizontal-rel"), "page")
+                ggp.set(_q("style", "vertical-pos"), "from-top")
+                ggp.set(_q("style", "vertical-rel"), "page")
+                ggp.set(_q("style", "wrap"), "run-through")
+                ggp.set(_q("style", "run-through"), "background")
+                frame = etree.SubElement(para, _q("draw", "frame"))
+                frame.set(_q("draw", "style-name"), "JtRaster%d" % i)
+                frame.set(_q("text", "anchor-type"), "page")
+                frame.set(_q("text", "anchor-page-number"), str(i))
+                frame.set(_q("svg", "x"), "0cm")
+                frame.set(_q("svg", "y"), "0cm")
+                frame.set(_q("svg", "width"), "%.3fcm" % w)
+                frame.set(_q("svg", "height"), "%.3fcm" % h)
+                img = etree.SubElement(frame, _q("draw", "image"))
+                img.set(_q("xlink", "href"), pic_name)
+                img.set(_q("xlink", "type"), "simple")
+                img.set(_q("xlink", "show"), "embed")
+                img.set(_q("xlink", "actuate"), "onLoad")
+                continue  # 跳過該頁向量形狀搬移
         # 先清掉 PDF 疊印假粗體造成的重複 / 被覆蓋文字框（見 _dedup_overprint）
         _dedup_overprint(page)
         # 搬移該頁所有頂層形狀（frame / line / rect / custom-shape / …）
@@ -579,7 +640,7 @@ def convert_via_draw(pdf_path: Path, out_path: Path,
             return {"ok": False, "pages": 0, "images": 0, "engine": "draw", "error": msg}
         # 2) odg → 合法 Writer odt（每頁尺寸）
         page_sizes = _pdf_page_sizes_cm(pdf_path)
-        n_pages, n_imgs = _build_writer_odt(odg, odt, page_sizes)
+        n_pages, n_imgs = _build_writer_odt(odg, odt, page_sizes, pdf_path=pdf_path)
         # 3) 要 docx 再走標準 Writer→Word
         if output_format == "docx":
             office_convert.convert_to_docx(odt, out_path, timeout=timeout)
