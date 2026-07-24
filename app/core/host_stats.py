@@ -371,7 +371,7 @@ def get_host_stats() -> dict:
         out["disks"] = roots
     except Exception as e:
         out["disks"] = []
-        out["disks_error"] = str(e)
+        out["disks_error"] = type(e).__name__
     # Disk IO (cumulative counter — UI 算 delta)
     # 容器內 psutil 讀 /proc/diskstats 是實體主機的（會看到 TB 級累計）→ 改讀
     # cgroup io.stat 的本容器 I/O；實機 / VM 用 psutil。

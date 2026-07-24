@@ -4,6 +4,14 @@
 
 ---
 
+## [1.12.89] - 2026-07-24
+
+### 安全 — CodeQL 例外訊息外洩補完（上輪漏修的 3 處）
+
+- jt-ocr-server health 的 `torch_error`、系統狀態 host stats 的 `disks_error` 仍把例外 `str(e)` 回前端（上輪只修了 easyocr_error / cpu / mem）→ 一併改型別名。
+- 排程匯出的 log injection：改為**從源頭不記檔名**（只記 int 檔案數），徹底移除 tainted 資料進 log（CodeQL 不認 re.sub 為 sanitizer）。
+- 剩餘 CodeQL 路徑類 High（admin 設定的匯出目錄）與 Dependabot（setuptools build-only、torch Low 無上游修補）屬 by-design / 不可利用，建議於 GitHub dismiss。
+
 ## [1.12.88] - 2026-07-24
 
 ### 改善 — pdf-to-office jtdt-layout 設計頁 raster fallback 擴充（對抗式驗證）

@@ -278,7 +278,7 @@ def healthz() -> JSONResponse:
                 if "total_mb" in sel:
                     info["vram_total_mb"] = sel["total_mb"]
     except Exception as e:
-        info["torch_error"] = str(e).splitlines()[0][:200]
+        info["torch_error"] = type(e).__name__
     try:
         import easyocr  # type: ignore
         info["easyocr"] = easyocr.__version__ if hasattr(easyocr, "__version__") else "?"

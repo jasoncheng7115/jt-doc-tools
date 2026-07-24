@@ -209,9 +209,10 @@ def _loop() -> None:
                 cur["last_run"] = time.time()
                 cur["last_result"] = f"OK: {res['file_count']} 檔"
                 _write(cur)
-                # 去除換行 / 控制字元後才記 log,避免 log injection（檔名理應乾淨,防禦性）
-                _safe_name = re.sub(r"[\x00-\x1f\x7f]", "", str(res["file"]))
-                logger.info("scheduled settings export → %s", _safe_name)
+                # 只記檔案數（int，非使用者可控），不把檔名塞進 log → 徹底無 log
+                # injection 疑慮（CodeQL 不認 re.sub 為 sanitizer，改從源頭不記 tainted 值）。
+                logger.info("scheduled settings export done: %d files",
+                            int(res["file_count"]))
         except Exception:
             logger.exception("scheduled export failed")
             try:
