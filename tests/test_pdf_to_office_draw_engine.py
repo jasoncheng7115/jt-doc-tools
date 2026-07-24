@@ -641,9 +641,10 @@ def test_raster_fallback_for_design_heavy_page(tmp_path):
     # 造一張單頁 PDF 當 raster 來源
     doc = fitz.open(); doc.new_page(width=595, height=842).insert_text((72, 100), "COVER")
     pdf = tmp_path / "src.pdf"; doc.save(str(pdf)); doc.close()
-    # odg：一頁塞 _RASTER_SHAPE_THRESHOLD+1 個小色塊（模擬漸層被拆碎）
+    # odg：一頁塞 _RASTER_SHAPE_THRESHOLD+1 個**無文字**小色塊（模擬漸層被拆碎、
+    # 文字框比例極低）→ 應觸發 raster。
     n = de._RASTER_SHAPE_THRESHOLD + 1
-    shapes = [(0.1, 0.1 + i * 0.01, 1.0, 0.5, "x") for i in range(n)]
+    shapes = [(0.1, 0.1 + i * 0.01, 1.0, 0.5, "") for i in range(n)]  # 空文字=純色塊
     odg = tmp_path / "d.odg"; _make_odg(odg, [shapes])
     odt = tmp_path / "d.odt"
     de._build_writer_odt(odg, odt, [(21.0, 29.7)], pdf_path=pdf)
@@ -654,6 +655,22 @@ def test_raster_fallback_for_design_heavy_page(tmp_path):
     assert "jtraster_1.png" in content, "content.xml 應引用 raster 圖"
     # 上千個小色塊不應全被搬進來（只剩整頁圖 frame）
     assert content.count("draw:frame") <= 2, "向量色塊應被 raster 取代"
+
+
+def test_no_raster_for_text_rich_dense_form(tmp_path):
+    """密集表單：形狀數超門檻但**文字框比例高（>10%）**→ 維持可編輯 vector，不 raster。
+    （IRS 1040 慘案：1010 形狀 / 503 文字框 = 50% 被誤 raster 成不可填的圖片。）"""
+    import fitz
+    doc = fitz.open(); doc.new_page(); pdf = tmp_path / "form.pdf"; doc.save(str(pdf)); doc.close()
+    n = de._RASTER_SHAPE_THRESHOLD + 1
+    # 全部都是有文字的框（模擬表單的欄位標籤 / 數字）→ 文字框比例 100%
+    shapes = [(0.1, 0.1 + i * 0.01, 1.0, 0.5, "label%d" % i) for i in range(n)]
+    odg = tmp_path / "f.odg"; _make_odg(odg, [shapes])
+    odt = tmp_path / "f.odt"
+    de._build_writer_odt(odg, odt, [(21.0, 29.7)], pdf_path=pdf)
+    content = zipfile.ZipFile(odt).read("content.xml").decode()
+    assert "jtraster" not in content, "文字密集表單不應被 raster"
+    assert "label0" in content, "表單文字應保留為可編輯 vector"
 
 
 def test_no_raster_for_normal_page(tmp_path):

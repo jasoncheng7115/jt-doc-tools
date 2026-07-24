@@ -351,6 +351,21 @@ def _page_has_large_image(page, page_w_cm: float, page_h_cm: float,
     return False
 
 
+def _text_frame_count(page) -> int:
+    """該頁「含實際文字」的頂層形狀數（draw:text-box 有非空白內容）。用來分辨
+    **密集表單（大量文字框）** 與 **漸層設計頁（幾乎無文字、只有色塊）**——兩者
+    形狀數都可能上千，但表單的文字框比例高（IRS 1040：1010 形狀 / 503 文字框 =
+    50%），漸層封面極低（OxOffice 封面：1255 / 9 = 1%）。"""
+    n = 0
+    for shape in page:
+        if not isinstance(shape.tag, str):
+            continue
+        tb = next(shape.iter(_q("draw", "text-box")), None)
+        if tb is not None and "".join(tb.itertext()).strip():
+            n += 1
+    return n
+
+
 def _page_has_transformed_image(page) -> bool:
     """頁面是否有「被斜切 / 旋轉」的圖片（draw:transform 含 skew / rotate + 內含
     draw:image）。設計年報常把照片嵌進等角（isometric）幾何造型 → **Writer 無法渲染
@@ -513,13 +528,16 @@ def _build_writer_odt(odg_path: Path, odt_out: Path,
         para = etree.SubElement(text_el, _q("text", "p"))
         para.set(_q("text", "style-name"), "JtPg%d" % i)
         # 設計感頁面 raster fallback → 改嵌原 PDF 整頁圖，像素級還原（該頁不可編輯，
-        # 設計封面本就不會去編）。兩種觸發：
-        #  ① 色塊數爆量（漸層 / 圖案被 Draw 拆成上千純色拼塊、色彩已失真）；
-        #  ② 全出血大圖 + 疊字（照片封面，Draw 把疊字的透明度 / 位置搞壞）。
-        # 一般表單 / 文件的形狀數遠低於門檻、也無覆蓋整頁的圖片，不受影響。
+        # 設計封面本就不會去編）。三種觸發：
+        #  ① 色塊爆量 **且文字框比例極低**（漸層 / 圖案被 Draw 拆成上千純色拼塊、
+        #     幾乎無文字）——**密集表單雖形狀多但文字框比例高（IRS 1040 = 50%），
+        #     必須排除、保留可編輯 vector**（否則整份表單變不可填的圖片）；
+        #  ② 全出血大圖 + 疊字（照片封面）；③ 斜切 / 旋轉圖片（Writer 渲染變黑）。
         shape_count = sum(1 for c in page if isinstance(c.tag, str))
+        gradient_heavy = (shape_count > _RASTER_SHAPE_THRESHOLD
+                          and _text_frame_count(page) < shape_count * 0.10)
         if pdf_path is not None and (
-                shape_count > _RASTER_SHAPE_THRESHOLD
+                gradient_heavy
                 or _page_has_large_image(page, w, h)
                 or _page_has_transformed_image(page)):
             png = _render_pdf_page_png(pdf_path, i - 1)

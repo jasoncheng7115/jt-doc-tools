@@ -8,8 +8,10 @@
 <div class="panel">
   <h2 data-s="s53896af7">1. 選擇要蓋的圖片（印章 / 簽名 / Logo）</h2>
   {% if not stamps %}
-    <div class="empty">還沒有共用印章 / 簽名 / Logo，可請管理員到「<a href="/admin/assets">資產管理</a>」上傳，或使用下方「臨時上傳」一張（僅本次有效，不存於伺服器）。</div>
-  {% else %}
+    <div class="empty">還沒有共用印章 / 簽名 / Logo，可請管理員到「<a href="/admin/assets">資產管理</a>」上傳，或使用下方「臨時上傳」一張（僅本次有效，不存於伺服器）。也可以直接選下方「<b>不蓋印章 / 簽名</b>」，只套用日期 / 個資限用章。</div>
+  {% endif %}
+  {# 資產清單永遠 render：即使沒有共用資產，也要能選「不蓋印章 / 簽名」（只用日期 / #}
+  {# 個資限用章），或搭配下方臨時上傳。#}
   <div class="asset-list" id="stampAssetList" data-s="sbc85c9de">
     {% for s in stamps %}
     <label class="asset-item" data-s="sb202c6d4">
@@ -29,14 +31,13 @@
         </div>
       </div>
       <div class="name">
-        <input type="radio" name="stamp" value="__none__" id="noneStampRadio" />
+        <input type="radio" name="stamp" value="__none__" id="noneStampRadio" {% if not stamps %}checked{% endif %} />
         <span>不蓋印章 / 簽名</span>
         <span class="type-chip" data-s="s3f18db9a">無</span>
       </div>
       <div class="meta">只用下方日期 / 個資限用章</div>
     </label>
   </div>
-  {% endif %}
   <div data-s="s51512563">
     <div data-s="s31c90b93">
       <input type="file" id="tempAssetFile" accept="image/png,image/jpeg,image/webp" hidden />

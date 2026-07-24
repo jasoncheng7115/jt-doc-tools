@@ -119,6 +119,8 @@
 .p2o-preview .preview-cell { background:#fff; border:1px solid #86efac; border-radius:8px;
   padding:8px; display:flex; flex-direction:column; gap:6px; }
 .p2o-preview .preview-label { font-size:11.5px; font-weight:600; color:#065f46; text-align:center; }
+/* 設計 / 圖片版面（jtdt-layout 整頁 raster）中性說明——非「內容遺失」紅字警示 */
+.p2o-raster-note { color:#0f766e; font-weight:400; font-size:11px; }
 .p2o-preview .preview-cell img { width:100%; height:auto; display:block;
   border:1px solid #d1fae5; border-radius:4px; background:#fafafa; }
 @media (max-width: 720px) {
@@ -556,10 +558,16 @@ const jp = new JobProgress($('p2oJob'), {
         ? ` <span data-s="se93eb165">— 擷取 ${oc} 字</span>` : '';
       const rcLabel = (rc !== undefined && rc !== null)
         ? ` <span data-s="se93eb165">— 擷取 ${rc} 字</span>` : '';
-      // 若結果字數遠少於原始 (< 50% 且原始 > 50)，警示紅色
+      // rc===0：此頁被 jtdt-layout 判為設計 / 圖片版面，已用整頁圖保真還原（無可
+      //   選取文字，屬正常，非遺失）→ 中性說明。
+      // 0<rc<oc*0.5 且 oc>50：結果字數遠少於原始 → 真的部分遺失，紅色警示。
       let rcExtra = '';
-      if (oc !== undefined && rc !== undefined && oc > 50 && rc < oc * 0.5) {
-        rcExtra = ` <span data-s="s901fdc89">⚠ 內容大量遺失</span>`;
+      if (oc !== undefined && rc !== undefined && oc > 50) {
+        if (rc === 0) {
+          rcExtra = ` <span class="p2o-raster-note">此頁為設計 / 圖片版面，已用整頁圖保真還原（無可選取文字）</span>`;
+        } else if (rc < oc * 0.5) {
+          rcExtra = ` <span data-s="s901fdc89">⚠ 內容部分遺失</span>`;
+        }
       }
       const block = document.createElement('div');
       block.style.marginBottom = '14px';
