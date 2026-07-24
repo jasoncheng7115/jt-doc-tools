@@ -197,6 +197,67 @@ def convert_to_pdf(src: Path, dst_pdf: Path, timeout: float = 60.0) -> None:
         shutil.move(str(produced), str(dst_pdf))
 
 
+def convert_to_odg(src: Path, dst_odg: Path, timeout: float = 120.0) -> None:
+    """Run soffice headless to import ``src`` (a PDF) into a Draw drawing ``.odg``.
+
+    soffice 的 PDF 匯入濾鏡屬 Draw 模組（libpdfimportlo）—— 匯入後是繪圖文件，
+    每段文字變成有絕對座標的文字方塊、圖片保留、框線變向量形狀，版面幾乎 1:1。
+    pdf-to-office 的 draw 引擎用它當第一步（再重組成合法 Writer .odt）。
+
+    Same lock / profile / safety pattern as convert_to_pdf — see that function's
+    docstring. 需要 LibreOffice-draw 或 OxOffice 全套（install.sh 兩條 office 路徑
+    都含 Draw）。
+    """
+    soffice = find_soffice()
+    if not soffice:
+        raise RuntimeError(
+            "找不到 LibreOffice / OxOffice。請安裝其中一個，或先自行轉成 PDF 上傳。"
+        )
+    with tempfile.TemporaryDirectory() as td:
+        profile_path = Path(td) / "profile"
+        soffice_args = [
+            f"-env:UserInstallation={_profile_uri(profile_path)}",
+            "--safe-mode",
+            "--headless",
+            "--norestore",
+            "--nologo",
+            "--nolockcheck",
+            "--nodefault",
+            "--nofirststartwizard",
+            "--convert-to", "odg",
+            "--outdir", td,
+            str(src),
+        ]
+        cmd, popen_kwargs = _build_soffice_cmd(soffice, soffice_args)
+        with _soffice_lock:
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                **popen_kwargs,
+            )
+            try:
+                stdout, stderr = proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                try:
+                    proc.communicate(timeout=5)
+                except Exception:
+                    pass
+                raise RuntimeError(
+                    f"PDF 匯入 Draw 卡住（超過 {int(timeout)} 秒）。這份 PDF 可能已毀損"
+                    f"或含 LibreOffice/OxOffice 無法解析的內容。"
+                )
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    "PDF 匯入 Draw 失敗（可能缺 LibreOffice-draw 模組）："
+                    + (stderr.decode("utf-8", "replace") or stdout.decode("utf-8", "replace"))
+                )
+        produced = Path(td) / (src.stem + ".odg")
+        if not produced.exists():
+            raise RuntimeError("PDF 匯入成功但找不到輸出的 .odg")
+        dst_odg.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(produced), str(dst_odg))
+
+
 def convert_to_docx(src: Path, dst_docx: Path, timeout: float = 60.0,
                      input_filter: Optional[str] = None) -> None:
     """Run soffice headless to convert ``src`` (e.g. legacy .doc) into modern .docx.

@@ -158,7 +158,7 @@ POST /tools/pdf-to-office/convert
 |---|---|---|---|
 | `file` | file | ✓ | PDF |
 | `output_format` | str | | `docx`（預設）/ `odt` |
-| `engine` | str | | 轉換引擎：`pdf2docx-refine`（預設，穩定）/ `jtdt-reform`（自家版面重組） |
+| `engine` | str | | 轉換引擎：`pdf2docx-refine`（預設，穩定）/ `jtdt-reform`（自家版面重組）/ `jtdt-layout`（版面重現：LibreOffice/OxOffice Draw 精準匯入 + 自家轉換引擎重組成 docx/odt，版面近 1:1 的頁面錨定文字方塊，含圖片 / 框線；本質非流動文字、無真表格） |
 | `enable_postprocess` | bool | | 僅 `pdf2docx-refine` 有效：是否套 jtdt-refine 後處理（25 fixer），預設 `false` |
 
 ```bash
@@ -173,6 +173,12 @@ curl -X POST http://localhost:8765/tools/pdf-to-office/convert \
 curl -X POST http://localhost:8765/tools/pdf-to-office/convert \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -F "file=@form.pdf" -F "output_format=odt" -F "engine=jtdt-reform" \
+  | jq
+
+# 改用 jtdt-layout 版面重現引擎（表單 / 多欄 / 含框線表格版面最接近原 PDF）
+curl -X POST http://localhost:8765/tools/pdf-to-office/convert \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "file=@form.pdf" -F "output_format=odt" -F "engine=jtdt-layout" \
   | jq
 ```
 
@@ -359,12 +365,12 @@ POST /tools/pdf-compress/api/pdf-compress
 | 參數 | 類型 | 必填 | 說明 |
 |---|---|---|---|
 | `file` | file | ✓ | PDF |
-| `preset` | str | | `screen`（最小）/ `ebook`（預設）/ `printer` / `prepress` |
+| `preset` | str | | `gentle`（輕度）/ `balanced`（預設，平衡）/ `aggressive`（最小） |
 
 ```bash
 curl -X POST http://localhost:8765/tools/pdf-compress/api/pdf-compress \
   -H "Authorization: Bearer YOUR_TOKEN" \
-  -F "file=@large.pdf" -F "preset=ebook" \
+  -F "file=@large.pdf" -F "preset=balanced" \
   --output small.pdf
 ```
 
@@ -1269,11 +1275,11 @@ curl http://localhost:8765/admin/api/branding \
 ### 設定匯出清單
 
 ```text
-GET /admin/api/settings-export/summary
+GET /admin/api/settings-export/categories
 ```
 
 ```bash
-curl http://localhost:8765/admin/api/settings-export/summary \
+curl http://localhost:8765/admin/api/settings-export/categories \
   -H "Authorization: Bearer ADMIN_TOKEN" | jq
 ```
 

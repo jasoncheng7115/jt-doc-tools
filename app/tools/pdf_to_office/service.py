@@ -45,7 +45,7 @@ def convert_pdf_to_office(
     enable_postprocess: bool = True,
     keep_intermediate: bool = False,
     fixer_opts: dict | None = None,
-    engine: Literal["pdf2docx-refine", "jtdt-reform"] = "jtdt-reform",
+    engine: Literal["pdf2docx-refine", "jtdt-reform", "jtdt-layout"] = "jtdt-reform",
 ) -> ConvertResult:
     """主入口。
 
@@ -137,6 +137,36 @@ def convert_pdf_to_office(
         return ConvertResult(
             ok=True, output_path=output_path, output_format=output_format,
             engine_used="jtdt-reform", postprocess_done=False, report=report,
+        )
+
+    # ----- 分流：jtdt-layout engine（v1.12.83+ 版面重現，完全隔離不碰另兩顆）-----
+    if engine == "jtdt-layout":
+        from .engines.draw_engine import convert_via_draw
+        log.info("pdf-to-office: converting %s via jtdt-layout (版面重現)", pdf_path.name)
+        out = work_dir / ("final.odt" if output_format == "odt" else "final.docx")
+        if output_format not in ("odt", "docx"):
+            return ConvertResult(
+                ok=False, output_path=None, output_format=output_format,
+                engine_used="jtdt-layout", postprocess_done=False, report={},
+                error=f"不支援的輸出格式：{output_format}",
+            )
+        res = convert_via_draw(pdf_path, out, output_format, timeout=180.0)
+        if not res.get("ok") or not out.exists():
+            return ConvertResult(
+                ok=False, output_path=None, output_format=output_format,
+                engine_used="jtdt-layout", postprocess_done=False, report=res,
+                error=res.get("error") or "jtdt-layout engine 失敗",
+            )
+        report = {
+            "primary_engine": "jtdt-layout",
+            "postprocess_engine": "",
+            "postprocess_engine_version": "",
+            "postprocess_fixers_count": 0,
+            "native_stats": res,
+        }
+        return ConvertResult(
+            ok=True, output_path=out, output_format=output_format,
+            engine_used="jtdt-layout", postprocess_done=False, report=report,
         )
 
     # ----- Step 1: pdf2docx (預設 engine) -----

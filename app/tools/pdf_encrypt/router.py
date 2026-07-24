@@ -60,6 +60,7 @@ async def submit(
 ):
     if not user_pw and not owner_pw:
         raise HTTPException(400, "至少需設定開啟密碼或擁有者密碼其中之一")
+    algorithm = (algorithm or "aes-256").strip().lower()
     if algorithm not in ALGO_MAP:
         raise HTTPException(400, f"algorithm 必須是 {list(ALGO_MAP)}")
     files = file or []
@@ -146,6 +147,7 @@ async def api_pdf_encrypt(
         raise HTTPException(400, "只支援 PDF")
     if not user_pw and not owner_pw:
         raise HTTPException(400, "至少需設定 user_pw 或 owner_pw 其中之一")
+    algorithm = (algorithm or "aes-256").strip().lower()
     if algorithm not in ALGO_MAP:
         raise HTTPException(400, f"algorithm 必須是 {list(ALGO_MAP)}")
     data = await file.read()

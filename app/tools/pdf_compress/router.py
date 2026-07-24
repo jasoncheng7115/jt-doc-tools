@@ -443,7 +443,13 @@ async def submit(request: Request):
             "strip_metadata": bool(body.get("strip_metadata", True)),
         }
     else:
-        params = _preset_params(preset)
+        try:
+            params = _preset_params(preset)
+        except ValueError:
+            raise HTTPException(
+                400,
+                "preset 必須是 gentle / balanced / aggressive / advanced",
+            )
 
     use_gs = bool(body.get("use_ghostscript"))
     gs_preset = (body.get("gs_preset") or "ebook").strip()
@@ -570,7 +576,14 @@ async def api_pdf_compress(
     src = settings.temp_dir / f"cmp_{uid}_in.pdf"
     src.write_bytes(data)
     stem = Path(file.filename or "document.pdf").stem
-    params = _preset_params(preset)
+    preset = (preset or "balanced").strip().lower()
+    try:
+        params = _preset_params(preset)
+    except ValueError:
+        raise HTTPException(
+            400,
+            "preset 必須是 gentle / balanced / aggressive（預設 balanced）",
+        )
     out = settings.temp_dir / f"cmp_{uid}_out.pdf"
     import asyncio as _asyncio
     def _do():

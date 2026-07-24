@@ -314,7 +314,7 @@
 <h4 id="pdf-轉-office">PDF 轉 Office</h4>
 <p>把 PDF 反轉成 Word（.docx）或 OpenDocument（.odt）。走 job 模式回 <code>job_id</code>。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-to-office/convert</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>output_format</code></td><td>str</td><td></td><td><code>docx</code>（預設）/ <code>odt</code></td></tr><tr><td><code>engine</code></td><td>str</td><td></td><td>轉換引擎：<code>pdf2docx-refine</code>（預設，穩定）/ <code>jtdt-reform</code>（自家版面重組）</td></tr><tr><td><code>enable_postprocess</code></td><td>bool</td><td></td><td>僅 <code>pdf2docx-refine</code> 有效：是否套 jtdt-refine 後處理（25 fixer），預設 <code>false</code></td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>output_format</code></td><td>str</td><td></td><td><code>docx</code>（預設）/ <code>odt</code></td></tr><tr><td><code>engine</code></td><td>str</td><td></td><td>轉換引擎：<code>pdf2docx-refine</code>（預設，穩定）/ <code>jtdt-reform</code>（自家版面重組）/ <code>jtdt-layout</code>（版面重現：LibreOffice/OxOffice Draw 精準匯入 + 自家轉換引擎重組成 docx/odt，版面近 1:1 的頁面錨定文字方塊，含圖片 / 框線；本質非流動文字、無真表格）</td></tr><tr><td><code>enable_postprocess</code></td><td>bool</td><td></td><td>僅 <code>pdf2docx-refine</code> 有效：是否套 jtdt-refine 後處理（25 fixer），預設 <code>false</code></td></tr></tbody></table></div>
 <pre><code class="lang-bash"><span class="hl-cmt"># 預設引擎 pdf2docx-refine</span>
 curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-to-office/convert</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
@@ -326,6 +326,12 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
 curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-to-office/convert</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@form.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;output_format=odt&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;engine=jtdt-reform&quot;</span> \
+  | jq
+
+<span class="hl-cmt"># 改用 jtdt-layout 版面重現引擎（表單 / 多欄 / 含框線表格版面最接近原 PDF）</span>
+curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-to-office/convert</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@form.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;output_format=odt&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;engine=jtdt-layout&quot;</span> \
   | jq</code></pre>
 <p>回應：<code>{&quot;job_id&quot;: &quot;...&quot;, &quot;download_url&quot;: &quot;...&quot;}</code>；之後用第 10 章的 job API 輪詢 + 取結果。</p>
 <p><strong>取得轉換前後對照縮圖</strong>：job 完成後，<code>GET /api/jobs/{job_id}</code> 的 <code>meta.preview</code> 內含 <code>page_indices</code>（要預覽的 0-based 頁碼清單，≤ 6 頁全取 / &gt; 6 頁取前 2 + 中 2 + 後 2）、 <code>orig_pages</code>、<code>result_pages</code>、<code>orig_chars</code>、<code>result_chars</code>。逐頁縮圖用：</p>
@@ -421,10 +427,10 @@ curl <span class="hl-flag">-s</span> <span class="hl-url">http://localhost:8765/
 <h4 id="pdf-壓縮">PDF 壓縮</h4>
 <p>縮小 PDF 檔案大小。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-compress/api/pdf-compress</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>preset</code></td><td>str</td><td></td><td><code>screen</code>（最小）/ <code>ebook</code>（預設）/ <code>printer</code> / <code>prepress</code></td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>preset</code></td><td>str</td><td></td><td><code>gentle</code>（輕度）/ <code>balanced</code>（預設，平衡）/ <code>aggressive</code>（最小）</td></tr></tbody></table></div>
 <pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-compress/api/pdf-compress</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
-  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@large.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;preset=ebook&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@large.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;preset=balanced&quot;</span> \
   <span class="hl-flag">--output</span> small.pdf</code></pre>
 <p>回應：壓縮後的 PDF。</p>
       </section>
@@ -935,8 +941,8 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
       <section class="doc-section" data-sec="設定匯出清單" data-title="設定匯出清單" hidden>
 <div class="doc-crumb">11. 管理端 API</div>
 <h4 id="設定匯出清單">設定匯出清單</h4>
-<pre><code class="lang-text"><span class="hl-method">GET</span> /admin/api/settings-export/summary</code></pre>
-<pre><code class="lang-bash">curl <span class="hl-url">http://localhost:8765/admin/api/settings-export/summary</span> \
+<pre><code class="lang-text"><span class="hl-method">GET</span> /admin/api/settings-export/categories</code></pre>
+<pre><code class="lang-bash">curl <span class="hl-url">http://localhost:8765/admin/api/settings-export/categories</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer ADMIN_TOKEN&quot;</span> | jq</code></pre>
       </section>
       <section class="doc-section" data-sec="token-管理" data-title="Token 管理" hidden>

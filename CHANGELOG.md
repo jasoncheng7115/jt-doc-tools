@@ -4,6 +4,31 @@
 
 ---
 
+## [1.12.84] - 2026-07-24
+
+### 修正 — API 文件契約徹查（照文件呼叫會出錯的問題全修）
+
+全面比對「API 文件端點 vs 實際路由」並逐一實際呼叫 51 個文件範例，修好會讓使用者照文件呼叫卻失敗的問題：
+
+- **pdf-compress 非法 preset 造成伺服器錯誤（重要）**：送出不在合法清單內的 `preset` 會讓 `_preset_params` 拋出未接住的例外 → HTTP 500。改為優雅回 400 並提示合法值（`gentle` / `balanced` / `aggressive`）；任何非法輸入都不再 500。同時修正 API 文件範例誤用 `preset=ebook`（`ebook` 其實是 Ghostscript 專用參數，非本 API 的 preset）與參數表的合法值說明。
+- **pdf-pages 文件寫 mode=keep / delete 但程式不認**：API 文件標示 `keep`（只留）/ `delete`（刪除）/ `reorder`（重排），但程式實際只接受 `reorder` / `drop`——照文件呼叫 `keep` 會被誤當 `drop`（批次端點）或直接 400（API 端點）。改為程式接受 `keep`→`reorder`、`delete`→`drop` 友善別名，文件與行為一致，原生 `reorder` / `drop` 維持相容。
+- **pdf-encrypt algorithm 大小寫不敏感**：API 文件範例用 `algorithm=AES-256`（大寫），但程式只認小寫 `aes-256` → 照文件呼叫直接 400。改為大小寫不敏感（`AES-256` / `aes-256` 皆可）。
+- **設定匯出清單端點文件路徑錯誤**：API 文件寫 `GET /admin/api/settings-export/summary`（實際 404），實際端點為 `…/categories`。已更正文件與線上 API 網頁。
+
+其餘文件端點（含 39 個工具 API、job 模式、管理端）實測皆正常；`/version`、`/ocr` 屬外接 jt-ocr-server 端點（文件已標示）、`translate-doc` / `einvoice-scan` 未設定 LLM / QR 後端時回優雅 503——皆非問題。新增回歸測試 `tests/test_api_doc_contract.py`（8 項）守住此契約。
+
+## [1.12.83] - 2026-07-24
+
+### 新增 — PDF 轉文書檔第三種引擎「jtdt-layout 版面重現」
+
+- **pdf-to-office 新增第三種可選引擎「jtdt-layout 版面重現」**（與既有 pdf2docx-refine / jtdt-reform 完全隔離，不影響原有兩顆）。用 LibreOffice / OxOffice 的 Draw 匯入 PDF（版面幾乎 1:1 還原成頁面錨定的文字方塊，含圖片、框線），再重組成**合法的 Writer .odt / .docx**（正確 mimetype、可在 Word / Writer 開啟編輯）。
+- **強項**：表單（欄位＋底線＋核取＋簽名表格）、多欄版面、含框線表格、彩色文字、內嵌圖片、每頁不同尺寸（A4 / A5 / 橫向混合）、掃描圖檔、旋轉頁、多頁文件都能忠實還原位置。實測台鐵購票證明、IRS 1040 稅表、學術論文等真實複雜文件皆近 1:1。
+- **透明背景**：文字方塊搬到 Writer 時補 `style:background-transparency="100%"`，避免白底遮住底下的灰底表頭 / 綠底等背景色塊（有 solid 填色的形狀維持填色）。
+- **字型風格對應**（參考 pdf2docx font_normalize）：CJK 字型依明體 / 楷書 / 黑體風格對應標準台灣字型名（新細明體 / 標楷體 / 微軟正黑體）+ ODF `font-family-generic`（roman / script / swiss），讓 Windows 客戶 render 正確、其他 OS 也 fallback 到同風格；Latin 字型（Liberation / Noto / Arial…）保護不動。
+- **誠實限制**（UI 已標示）：本質是浮動文字方塊、非流動文字、沒有真表格；適合「要一份長得跟原 PDF 一樣、再微調」，要編輯內文 / 表格請用另兩顆引擎。字型真實 render 依客戶開檔機器所裝字型而定。
+- Web UI 第三張引擎卡 + REST API `engine=jtdt-layout`（`/tools/pdf-to-office/convert`；舊別名 `draw` 仍相容）。
+- 安全 / 穩健：lxml 安全解析器（防 XXE，且每次呼叫新建避免執行緒競爭）、manifest 檔名 XML 跳脫 + zip-slip / 控制字元過濾、content.xml / 圖片大小上限（防資源耗盡）、原子寫入（中途失敗不留半截檔）、加密 / 毀損 PDF 優雅報錯。測試 `tests/test_pdf_to_office_draw_engine.py`（29 項）。
+
 ## [1.12.82] - 2026-07-15
 
 ### 改善 — 統編查詢結果卡片欄位可點選複製

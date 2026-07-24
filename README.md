@@ -1,4 +1,4 @@
-# Jason Tools 文件工具箱 v1.12.82
+# Jason Tools 文件工具箱 v1.12.84
 
 > 整合式 PDF / Office 文件處理平台，40 個工具一站式解決：**填單用印**、**浮水印**、**多頁合併 / 拆分 / 旋轉 / 整理**、**轉檔**、**掃描拼合**、**去識別化**、**字數統計**、**註解整理**、**差異比對**、**逐句翻譯**、**清單處理**、**電子發票處理**、**統編查詢**、**頁面編輯器**、**加密 / 解密**等。
 >
@@ -88,7 +88,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 ### 格式轉換 [需 OxOffice/LibreOffice]
 - **文書轉 PDF / 圖片** — Word / Excel / PowerPoint / ODF
 - **圖片轉 PDF**
-- **PDF 轉文書檔（Beta）** — PDF 反轉成 Word (.docx) / OpenDocument (.odt)，雙引擎可選：pdf2docx 與自家 jtdt-reform，還原版面 / 表格 / 圖片
+- **PDF 轉文書檔（Beta）** — PDF 反轉成 Word (.docx) / OpenDocument (.odt)，三引擎可選：pdf2docx（經典穩定）、自家 jtdt-reform（幾何規則重組成可編輯內文）、自家 jtdt-layout（版面最忠於原稿：頁面錨定文字方塊，位置 / 圖片 / 框線近 1:1 保留）
 
 ### 資安處理
 - **文件去識別化 / 文字去識別化** — 身分證 / 電話 / 銀行帳號 / 統編 / AD DN 等 14+ 種敏感資料

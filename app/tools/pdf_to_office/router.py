@@ -254,7 +254,9 @@ async def submit(request: Request):
     # 舊 alias 給 API 相容
     if engine in ("jtdt-native", "jtreform"):
         engine = "jtdt-reform"
-    if engine not in ("pdf2docx-refine", "jtdt-reform"):
+    if engine in ("draw", "draw-import", "libreoffice-draw", "layout", "jt-layout"):
+        engine = "jtdt-layout"
+    if engine not in ("pdf2docx-refine", "jtdt-reform", "jtdt-layout"):
         engine = "pdf2docx-refine"
     # Per-fixer toggle dict（key 例：enable_font_normalize）— 白名單過濾，不接 unknown
     raw_opts = body.get("fixer_opts") or {}
@@ -280,6 +282,8 @@ async def submit(request: Request):
 
         if engine == "jtdt-reform":
             engine_label = "jtdt-reform (Beta)"
+        elif engine == "jtdt-layout":
+            engine_label = "jtdt-layout 版面重現"
         elif enable_postprocess:
             engine_label = "pdf2docx + jtdt-refine 後處理"
         else:
@@ -363,7 +367,9 @@ async def api_convert(request: Request,
                       enable_postprocess: bool = Form(False)):
     """對外 API：單次上傳 PDF + return job_id。
 
-    engine: "pdf2docx-refine"（預設，穩定）或 "jtdt-reform"（自家版面重組）。
+    engine: "pdf2docx-refine"（預設，穩定）/ "jtdt-reform"（自家版面重組）/
+        "jtdt-layout"（版面重現：LibreOffice/OxOffice Draw 匯入 → 頁面錨定文字方塊，
+        版面近 1:1 但非流動文字、無真表格）。
     enable_postprocess: 僅 pdf2docx-refine 有效，是否套 jtdt-refine 後處理（25 fixer）。
     """
     if not _API_FORMAT_RE.match(output_format or ""):
@@ -372,7 +378,9 @@ async def api_convert(request: Request,
     engine = (engine or "pdf2docx-refine").strip()
     if engine in ("jtdt-native", "jtreform"):
         engine = "jtdt-reform"
-    if engine not in ("pdf2docx-refine", "jtdt-reform"):
+    if engine in ("draw", "draw-import", "libreoffice-draw", "layout", "jt-layout"):
+        engine = "jtdt-layout"
+    if engine not in ("pdf2docx-refine", "jtdt-reform", "jtdt-layout"):
         engine = "pdf2docx-refine"
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF 輸入")

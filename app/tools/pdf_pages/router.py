@@ -52,6 +52,17 @@ def _parse_drop(text: str, n: int) -> set[int]:
     return out
 
 
+def _norm_mode(mode: str) -> str:
+    """正規化 mode：接受友善別名 keep/pick→reorder、delete/remove→drop。"""
+    m = (mode or "reorder").strip().lower()
+    m = {"keep": "reorder", "pick": "reorder",
+         "delete": "drop", "remove": "drop"}.get(m, m)
+    if m not in ("reorder", "drop"):
+        raise HTTPException(
+            400, "mode 必須是 keep/reorder（只留）或 delete/drop（刪除）")
+    return m
+
+
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     templates = request.app.state.templates
@@ -153,6 +164,7 @@ async def submit(
 ):
     files = file or []
     if not files: raise HTTPException(400, "沒有檔案")
+    mode = _norm_mode(mode)
     bid = uuid.uuid4().hex
     from ...core import upload_owner as _uo
     _uo.record(bid, request)
@@ -211,8 +223,7 @@ async def api_pdf_pages(
     spec 範例：reorder=「1,3,5,2」；drop=「2,4-6」。"""
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF")
-    if mode not in ("reorder", "drop"):
-        raise HTTPException(400, "mode 必須是 reorder 或 drop")
+    mode = _norm_mode(mode)
     data = await file.read()
     if not data or data[:4] != b"%PDF":
         raise HTTPException(400, "不是有效的 PDF")

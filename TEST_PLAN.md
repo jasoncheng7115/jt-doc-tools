@@ -189,6 +189,20 @@
 - [ ] **Office 檔案（docx/xlsx/pptx/odt）先自動轉 PDF 再轉圖**
 - [ ] 單頁直接下 PNG、多頁自動 ZIP
 
+#### PDF 轉文書檔 (pdf-to-office) — 三引擎
+- [ ] pdf2docx-refine（預設）：一份表單轉 docx / odt，開得起來、結構在
+- [ ] jtdt-reform：同一份轉 odt，版面重組
+- [ ] **jtdt-layout 版面重現 🆕（v1.12.83）**：
+  - [ ] 表單 PDF → odt / docx：標題 / 標籤 / 底線 / 核取 / 簽名表格位置忠實還原
+  - [ ] 含框線表格（估價單類）：框線在、金額欄不裁尾（1,200 不變 1,20）
+  - [ ] 多欄版面：左右欄各在原位置（不線性化錯亂）
+  - [ ] 多頁 + 混合頁尺寸（A4/A5/橫向）：每頁尺寸正確
+  - [ ] 產出為**真 Writer**（mimetype `…opendocument.text`，非繪圖檔），可轉 docx
+  - [ ] 加密 / 毀損 / 非 PDF：優雅報錯（不 crash、清楚訊息）
+  - [ ] REST API `engine=jtdt-layout`（`/tools/pdf-to-office/convert`）端到端
+  - [ ] 需 LibreOffice-draw / OxOffice（install.sh 兩條 office 路徑都含 Draw）
+  - [ ] `tests/test_pdf_to_office_draw_engine.py`（21 項）全綠
+
 ### 2.5 資安處理 🆕 全新分類
 
 #### 文件去識別化 (doc-deident) 🆕
@@ -322,7 +336,7 @@ for n in 5 10 30 50; do
   uv run python tests/stress/run_stress.py --users $n --duration 60
 done
 
-# 打遠端 (.30 / .154)
+# 打遠端（自架伺服器）
 uv run python tests/stress/run_stress.py --users 10 --duration 60 \
     --base-url http://your-server:8765
 ```
