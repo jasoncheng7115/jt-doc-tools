@@ -667,3 +667,38 @@ def test_no_raster_for_normal_page(tmp_path):
     content = zipfile.ZipFile(odt).read("content.xml").decode()
     assert "jtraster" not in content, "一般頁不應觸發 raster"
     assert "text0" in content, "一般頁向量文字應保留"
+
+
+def test_raster_trigger_large_image(tmp_path):
+    """全出血大圖（>55% 頁面）→ 觸發 raster（照片 / 設計封面）。"""
+    from lxml import etree
+    ns = {"draw": "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0",
+          "svg": "urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0",
+          "xlink": "http://www.w3.org/1999/xlink"}
+    # 頁 21x29.7；一張 20x28 的圖(覆蓋 ~90%)
+    frame = etree.SubElement(etree.Element("{%s}page" % ns["draw"]), "{%s}frame" % ns["draw"])
+    frame.set("{%s}x" % ns["svg"], "0.5cm"); frame.set("{%s}y" % ns["svg"], "0.5cm")
+    frame.set("{%s}width" % ns["svg"], "20cm"); frame.set("{%s}height" % ns["svg"], "28cm")
+    etree.SubElement(frame, "{%s}image" % ns["draw"]).set("{%s}href" % ns["xlink"], "Pictures/x.png")
+    assert de._page_has_large_image(frame.getparent(), 21.0, 29.7) is True
+    # 小圖(覆蓋 ~15%)不觸發
+    frame.set("{%s}width" % ns["svg"], "6cm"); frame.set("{%s}height" % ns["svg"], "6cm")
+    assert de._page_has_large_image(frame.getparent(), 21.0, 29.7) is False
+
+
+def test_raster_trigger_skewed_image(tmp_path):
+    """斜切 / 旋轉的圖片（Writer 渲染會變黑）→ 觸發 raster。"""
+    from lxml import etree
+    ns = {"draw": "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"}
+    page = etree.Element("{%s}page" % ns["draw"])
+    frame = etree.SubElement(page, "{%s}frame" % ns["draw"])
+    frame.set("{%s}transform" % ns["draw"], "skewX(-0.4) rotate(0.2) translate(3cm 4cm)")
+    etree.SubElement(frame, "{%s}image" % ns["draw"])
+    assert de._page_has_transformed_image(page) is True
+    # 未斜切的圖片不觸發
+    frame.attrib.pop("{%s}transform" % ns["draw"])
+    assert de._page_has_transformed_image(page) is False
+    # 斜切但無圖片(純形狀)不觸發
+    frame.set("{%s}transform" % ns["draw"], "skewX(-0.4)")
+    frame.remove(frame[0])
+    assert de._page_has_transformed_image(page) is False

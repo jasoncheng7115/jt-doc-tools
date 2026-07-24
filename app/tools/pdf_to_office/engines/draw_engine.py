@@ -327,6 +327,75 @@ def _render_pdf_page_png(pdf_path: Path, page_index: int) -> bytes | None:
         return None
 
 
+def _page_has_large_image(page, page_w_cm: float, page_h_cm: float,
+                          frac: float = 0.55) -> bool:
+    """頁面是否有單一「圖片」(draw:image) 覆蓋 > frac 的頁面面積。
+
+    抓「全出血照片 / 設計封面」——這種頁面上面疊的向量文字框，Draw 匯入常搞壞
+    透明度 / 位置（實測 ISO 封面：疊字下方多出黑框、半透明字變實心放大），改走整頁
+    raster。**只認 draw:image（照片 / 點陣圖），不認純填色矩形**——否則表單 / 內文的
+    整頁底色會被誤判成設計頁。"""
+    if not (page_w_cm and page_h_cm):
+        return False
+    page_area = page_w_cm * page_h_cm
+    for shape in page:
+        if not isinstance(shape.tag, str):
+            continue
+        if next(shape.iter(_q("draw", "image")), None) is None:
+            continue  # 該頂層形狀（或其後代）不含點陣圖 → 跳過
+        bbox = _frame_bbox(shape)
+        if not bbox:
+            continue
+        if (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) >= frac * page_area:
+            return True
+    return False
+
+
+def _page_has_transformed_image(page) -> bool:
+    """頁面是否有「被斜切 / 旋轉」的圖片（draw:transform 含 skew / rotate + 內含
+    draw:image）。設計年報常把照片嵌進等角（isometric）幾何造型 → **Writer 無法渲染
+    斜切 / 裁切的圖片 → 整塊變黑**（實測國藝會年報目錄的照片幾何塊）。這種頁面改走
+    整頁 raster。一般表單 / 文件的圖片不會斜切，不受影響。"""
+    for shape in page:
+        if not isinstance(shape.tag, str):
+            continue
+        tr = shape.get(_q("draw", "transform")) or ""
+        if ("skew" in tr or "rotate" in tr) and \
+                next(shape.iter(_q("draw", "image")), None) is not None:
+            return True
+    return False
+
+
+def _emit_raster_page(para, autostyles, pics: dict, png: bytes,
+                      i: int, w: float, h: float) -> None:
+    """把整頁 PNG 以頁面錨定 frame 塞進段落（設計頁 raster fallback 用）。"""
+    pic_name = "Pictures/jtraster_%d.png" % i
+    pics[pic_name] = png
+    gstyle = etree.SubElement(autostyles, _q("style", "style"))
+    gstyle.set(_q("style", "name"), "JtRaster%d" % i)
+    gstyle.set(_q("style", "family"), "graphic")
+    ggp = etree.SubElement(gstyle, _q("style", "graphic-properties"))
+    ggp.set(_q("style", "horizontal-pos"), "from-left")
+    ggp.set(_q("style", "horizontal-rel"), "page")
+    ggp.set(_q("style", "vertical-pos"), "from-top")
+    ggp.set(_q("style", "vertical-rel"), "page")
+    ggp.set(_q("style", "wrap"), "run-through")
+    ggp.set(_q("style", "run-through"), "background")
+    frame = etree.SubElement(para, _q("draw", "frame"))
+    frame.set(_q("draw", "style-name"), "JtRaster%d" % i)
+    frame.set(_q("text", "anchor-type"), "page")
+    frame.set(_q("text", "anchor-page-number"), str(i))
+    frame.set(_q("svg", "x"), "0cm")
+    frame.set(_q("svg", "y"), "0cm")
+    frame.set(_q("svg", "width"), "%.3fcm" % w)
+    frame.set(_q("svg", "height"), "%.3fcm" % h)
+    img = etree.SubElement(frame, _q("draw", "image"))
+    img.set(_q("xlink", "href"), pic_name)
+    img.set(_q("xlink", "type"), "simple")
+    img.set(_q("xlink", "show"), "embed")
+    img.set(_q("xlink", "actuate"), "onLoad")
+
+
 def _build_writer_odt(odg_path: Path, odt_out: Path,
                       page_sizes: list[tuple[float, float]],
                       pdf_path: Path | None = None) -> tuple[int, int]:
@@ -394,9 +463,11 @@ def _build_writer_odt(odg_path: Path, odt_out: Path,
             # Writer 會**預設補白色不透明底**，遮住底下的灰底表頭 / 綠底等背景。
             # 關鍵：Writer 文字框的透明度要用 **style:background-transparency="100%"**
             # （fo:background-color / draw:fill="none" 在 Writer 文字框 context 都無效，
-            # 實測踩過）。對「非 solid 填色」的樣式套 100% 透明，讓它真透明；**有 solid
-            # 填色的形狀（灰底表頭 / 綠底背景）不動，維持填色**。
-            if gp.get(_q("draw", "fill")) != "solid":
+            # 實測踩過）。**只對「本來就無填色（none / 未設）」的框套 100% 透明**——
+            # 絕不能碰 gradient / bitmap / solid 填色！舊版寫 `!= "solid"` 會把裝飾用的
+            # **漸層 / 點陣填色一起清成 none** → 國藝會年報目錄的漸層幾何圖案變成實心黑塊。
+            _fill = gp.get(_q("draw", "fill"))
+            if _fill in (None, "none"):
                 gp.set(_q("draw", "fill"), "none")
                 gp.set(_q("style", "background-transparency"), "100%")
 
@@ -441,38 +512,19 @@ def _build_writer_odt(odg_path: Path, odt_out: Path,
         pstyle.set(_q("style", "master-page-name"), "JtMP%d" % g)
         para = etree.SubElement(text_el, _q("text", "p"))
         para.set(_q("text", "style-name"), "JtPg%d" % i)
-        # 設計感頁面 raster fallback：色塊數爆量（漸層 / 圖案被 Draw 拆成純色拼塊、
-        # 色彩已失真）→ 改嵌原 PDF 整頁圖，像素級還原（該頁不可編輯，設計封面本就
-        # 不會去編）。一般表單 / 文件的形狀數遠低於門檻，不受影響。
+        # 設計感頁面 raster fallback → 改嵌原 PDF 整頁圖，像素級還原（該頁不可編輯，
+        # 設計封面本就不會去編）。兩種觸發：
+        #  ① 色塊數爆量（漸層 / 圖案被 Draw 拆成上千純色拼塊、色彩已失真）；
+        #  ② 全出血大圖 + 疊字（照片封面，Draw 把疊字的透明度 / 位置搞壞）。
+        # 一般表單 / 文件的形狀數遠低於門檻、也無覆蓋整頁的圖片，不受影響。
         shape_count = sum(1 for c in page if isinstance(c.tag, str))
-        if pdf_path is not None and shape_count > _RASTER_SHAPE_THRESHOLD:
+        if pdf_path is not None and (
+                shape_count > _RASTER_SHAPE_THRESHOLD
+                or _page_has_large_image(page, w, h)
+                or _page_has_transformed_image(page)):
             png = _render_pdf_page_png(pdf_path, i - 1)
             if png is not None:
-                pic_name = "Pictures/jtraster_%d.png" % i
-                pics[pic_name] = png
-                gstyle = etree.SubElement(autostyles, _q("style", "style"))
-                gstyle.set(_q("style", "name"), "JtRaster%d" % i)
-                gstyle.set(_q("style", "family"), "graphic")
-                ggp = etree.SubElement(gstyle, _q("style", "graphic-properties"))
-                ggp.set(_q("style", "horizontal-pos"), "from-left")
-                ggp.set(_q("style", "horizontal-rel"), "page")
-                ggp.set(_q("style", "vertical-pos"), "from-top")
-                ggp.set(_q("style", "vertical-rel"), "page")
-                ggp.set(_q("style", "wrap"), "run-through")
-                ggp.set(_q("style", "run-through"), "background")
-                frame = etree.SubElement(para, _q("draw", "frame"))
-                frame.set(_q("draw", "style-name"), "JtRaster%d" % i)
-                frame.set(_q("text", "anchor-type"), "page")
-                frame.set(_q("text", "anchor-page-number"), str(i))
-                frame.set(_q("svg", "x"), "0cm")
-                frame.set(_q("svg", "y"), "0cm")
-                frame.set(_q("svg", "width"), "%.3fcm" % w)
-                frame.set(_q("svg", "height"), "%.3fcm" % h)
-                img = etree.SubElement(frame, _q("draw", "image"))
-                img.set(_q("xlink", "href"), pic_name)
-                img.set(_q("xlink", "type"), "simple")
-                img.set(_q("xlink", "show"), "embed")
-                img.set(_q("xlink", "actuate"), "onLoad")
+                _emit_raster_page(para, autostyles, pics, png, i, w, h)
                 continue  # 跳過該頁向量形狀搬移
         # 先清掉 PDF 疊印假粗體造成的重複 / 被覆蓋文字框（見 _dedup_overprint）
         _dedup_overprint(page)
