@@ -1659,6 +1659,7 @@ curl http://localhost:8765/api/jobs/abc123 \
 
 ```text
 GET /api/jobs/{job_id}/download
+GET /api/jobs/{job_id}/download/{filename}    # 同一份結果，只是讓瀏覽器存成這個檔名
 ```
 
 ```bash
@@ -1797,6 +1798,29 @@ curl -X POST http://localhost:8765/admin/api/tokens/enforce \
   -H "Content-Type: application/json" \
   -d '{"enforce":true}'
 ```
+
+---
+
+### 管理介面自己用的 XHR 端點
+
+下面這些是**管理頁面自己呼叫的端點**，不是穩定的對外介面：它們的參數與回傳
+會跟著頁面改，**不保證相容**。列出來的目的是「這份文件不漏掉任何端點」，
+需要自動化的話請優先用上面那些有明確契約的 API。
+
+| 端點 | 方法 | 對應的管理頁 |
+|---|---|---|
+| `/admin/api/check-latest-version` | POST | 系統狀態 —— 檢查有沒有新版 |
+| `/admin/api/upload-limit/probe` | POST | 系統狀態 —— 量反向代理的上傳上限 |
+| `/admin/api/ocr-langs/set-engine` | POST | OCR 語言包 —— 切換預設引擎 |
+| `/admin/api/ocr-langs/set-quality` | POST | OCR 語言包 —— 切換辨識品質 |
+| `/admin/api/ocr-langs/switch-active` | POST | OCR 語言包 —— 切換啟用的語言 |
+| `/admin/jobs/api/list` | GET | 作業佇列 —— 目前的作業清單 |
+| `/admin/jobs/api/history` | GET | 作業佇列 —— 歷史紀錄 |
+| `/admin/jobs/api/cancel/{job_id}` | POST | 作業佇列 —— 取消一件作業 |
+| `/admin/jobs/api/pause` | POST | 作業佇列 —— 暫停 / 恢復派送 |
+| `/admin/jobs/api/concurrency` | POST | 作業佇列 —— 最大同時作業數 |
+| `/admin/jobs/api/priority-users` | GET / POST | 作業佇列 —— 優先派送名單（**順序就是優先序**）|
+| `/admin/jobs/api/user-search` | GET | 作業佇列 —— 指定優先使用者時的搜尋框 |
 
 ---
 
@@ -1944,6 +1968,23 @@ sudo systemctl start jt-doc-tools
 | `/workspace/rename` | POST | 重新命名（`file_id`、`name`）|
 
 容量額度、單檔上限、保留時數、啟用 / 停用由 admin 在 `/admin/workspace` 設定（全站統一，無個人特例）。
+
+---
+
+## 14c. 使用者通知與收件匣（session 認證，非 Bearer API）
+
+跟 §14b 的工作區同性質：綁登入 session（cookie），**不屬於對外 Bearer API**，
+因為內容按登入者隔離。未登入一律 401 / 302。
+
+| 端點 | 方法 | 說明 |
+|---|---|---|
+| `/api/my/notify` | GET | 讀自己的通知設定（要不要在作業完成時通知、走哪些管道）|
+| `/api/my/notify` | POST | 存自己的通知設定 |
+| `/api/my/inbox` | GET | 站內通知列表（未讀優先）|
+| `/api/my/inbox/seen` | POST | 標記已讀（`id` 或 `all=1`）|
+
+> 這四支**刻意不列入 Bearer API**：它們回傳的是「這個登入者的」資料，
+> 拿 token 呼叫沒有意義（token 綁的是使用者，但這些端點的設計是給瀏覽器用的）。
 
 ---
 

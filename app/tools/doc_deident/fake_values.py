@@ -47,6 +47,46 @@ _COMPANY_POOL = [
     "樣本商行", "演示國際有限公司",
 ]
 
+#: 英文文件用的假值池（v1.15.32）。
+#:
+#: **為什麼一定要有**：替換模式的用途是「文件還要能被當成正常文件使用」
+#: （拿去測試系統、給外部看報表、內部教學範例）。英文合約裡換出「王大明」
+#: 與台灣格式的電話地址，那個模式在英文文件上等於不能用 —— 而且一眼就看得出
+#: 被動過。
+#:
+#: 名字刻意用**明顯是範例**的（`John Doe` 這類在英文語境就是「某人」的意思），
+#: 電話用官方保留的 `555-01xx`（NANP 規定不指派，不會撥到真人），
+#: 網域用 RFC 2606 的 `example.com`。
+_NAME_POOL_EN = [
+    "John Doe", "Jane Doe", "Alex Sample", "Mary Example",
+    "Robert Placeholder", "Sarah Specimen",
+]
+_COMPANY_POOL_EN = [
+    "Example Corporation", "Sample Industries Ltd.", "Demo Holdings Inc.",
+    "Placeholder Trading Co.", "Specimen International LLC",
+]
+#: 街名用「不存在但讀起來正常」的；城市 / 州 / ZIP 用固定一組，
+#: 讓產出看起來像地址而不是亂碼。
+_ADDR_POOL_EN = [
+    "{n} Example Street, Springfield, IL 62704",
+    "{n} Sample Avenue, Apt 2B, Madison, WI 53703",
+    "{n} Demo Road, Suite 100, Austin, TX 78701",
+]
+
+
+def _looks_latin(value: str) -> bool:
+    """原值看起來是拉丁字母（英文姓名 / 公司名）嗎？
+
+    判準是「有拉丁字母、而且沒有中日韓字」—— 不看文件語言，因為同一份文件裡
+    兩種都可能出現（中文合約裡的 `Acer Incorporated`）。
+    """
+    if not value:
+        return False
+    has_latin = any("a" <= c.lower() <= "z" for c in value)
+    has_cjk = any("\u3400" <= c <= "\u9fff" or "\uf900" <= c <= "\ufaff"
+                  for c in value)
+    return has_latin and not has_cjk
+
 
 def _digits_with_valid_tail(prefix: str, length: int, validator) -> str:
     """把最後一碼換成能讓 `validator` 通過的數字。湊不出來就回原字串。"""
@@ -119,11 +159,39 @@ class Replacer:
             return f"00:00:5E:00:53:{n % 256:02X}"   # RFC 7042 文件用保留段
 
         if type_id == "person_name":
+            # 原值是拉丁字母 → 回英文假名。中文文件換出 John Doe（或反過來）
+            # 都會讓產出一眼看得出被動過，而替換模式的目的正好相反。
+            if _looks_latin(value):
+                return _NAME_POOL_EN[(n - 1) % len(_NAME_POOL_EN)]
             return _NAME_POOL[(n - 1) % len(_NAME_POOL)]
         if type_id in ("company", "account_name"):
+            if _looks_latin(value):
+                return _COMPANY_POOL_EN[(n - 1) % len(_COMPANY_POOL_EN)]
             return _COMPANY_POOL[(n - 1) % len(_COMPANY_POOL)]
         if type_id == "addr":
             return f"台北市中正區範例路 {n} 號"
+
+        # --- 英文 / 英美專屬型別 ------------------------------------
+        if type_id == "us_addr":
+            tpl = _ADDR_POOL_EN[(n - 1) % len(_ADDR_POOL_EN)]
+            return tpl.format(n=100 + n)
+        if type_id in ("us_ssn", "us_ssn_label"):
+            # 官方不指派 9xx 開頭 → 保證撞不到真人
+            return f"900-{(n % 100):02d}-{(n % 10000):04d}"
+        if type_id == "uk_ni":
+            return f"AB {n % 100:02d} {n % 100:02d} {n % 100:02d} C"
+        if type_id in ("nanp_phone",):
+            # 555-01xx 是 NANP 保留給虛構用途的號段
+            return f"(555) 555-01{n % 100:02d}"
+        if type_id == "uk_phone":
+            return f"020 7946 0{n % 1000:03d}"   # Ofcom 保留給戲劇使用
+        if type_id == "uk_postcode":
+            return f"AB{n % 10}1 2CD"
+        if type_id == "iban":
+            # 不通過 mod-97（刻意）—— 驗得過的假 IBAN 可能真的存在
+            return f"GB00EXMP{n % 10000:04d}00000000"
+        if type_id == "dob_en":
+            return f"January {(n % 28) + 1}, 19{70 + (n % 30)}"
         if type_id == "dob":
             return _same_shape_date(value, n)
         if type_id == "plate":

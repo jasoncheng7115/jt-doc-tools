@@ -347,7 +347,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **233 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **245 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -364,6 +364,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_admin_exception_leak.py` | 管理區不可把例外原文吐到畫面上（CodeQL py/stack-trace-exposure） |
 | `test_admin_form_styles.py` | 管理區的設定頁要用同一套表單樣式 |
 | `test_admin_picker_css.py` | admin 角色/群組 picker 的長名稱不可溢出重疊（2026-06-30 客戶回報） |
+| `test_admin_privacy_boundary.py` | 管理員的隱私界線要是**一份**政策（F10，v1.15.28） |
 | `test_admin_users_table.py` | 使用者清單的欄位索引與排序型別要對得起來 |
 | `test_api_doc_contract.py` | API 文件契約回歸測試 |
 | `test_api_doc_coverage.py` | 每個工具的 API 都要在 `github/API.md` 與 `TEST_PLAN.md` §4 出現 |
@@ -372,6 +373,8 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_asset_image_acl.py` | ACL test for the login-gated shared-asset image endpoints (GitHub #28). |
 | `test_asset_thumbnails_resolve.py` | 資產縮圖必須載入得到 — 防「import 後 file_key/thumb_key 與磁碟檔名不一致 |
 | `test_assets_and_image_utils.py` | Asset upload + crop + match-aspect + remove-bg auto-crop. |
+| `test_audit_forward_framing.py` | 稽核轉送的訊框格式（外部稽核 F07，v1.15.28） |
+| `test_audit_forward_per_destination.py` | 稽核轉送：每個目的地各自一個游標、失敗不前移、不自我餵食（F08，v1.15.28） |
 | `test_audit_timezone.py` | 稽核 / 上傳記錄的時間解讀必須與畫面一致（GitHub issue #48） |
 | `test_auditor_readonly.py` | 稽核員必須是唯讀角色 —— 而 admin 不該因為隱私規則而失去管理能力 |
 | `test_auth_db_migration_v8.py` | Regression: auth_db migration v8 (SSO sources) must NOT wipe data. |
@@ -393,6 +396,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_cjk_font_renders.py` | 寫進 PDF 的中文**必須畫得出來** |
 | `test_cli_data_dir_ownership.py` | 以 root 寫資料目錄的 CLI 指令，收尾**一定要把擁有者改回去** |
 | `test_cli_health_check.py` | `jtdt update` 的健康檢查要探對地方，失敗要說得出原因 |
+| `test_cli_update_rollback.py` | 升級失敗時要真的回復，而且訊息要說出實際結果（外部稽核 F03，v1.15.28） |
 | `test_client_ip_audit.py` | Client-IP resolution for audit / history / display — app/core/client_ip.py. |
 | `test_cookie_flags_on_delete.py` | 刪除 cookie 的回應也要帶安全旗標 |
 | `test_cpu_limit.py` | CPU 限制（轉檔不影響網頁回應）的測試 |
@@ -407,6 +411,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_deident_label_not_value.py` | 跨格配對時，欄位標籤不可以被當成值（GitHub issue #50） |
 | `test_deident_replace_mode.py` | 文件去識別化的第三種模式：替換 |
 | `test_dependency_declaration_sop.py` | 新增 Python 相依時的六處宣告，一處都不能漏 |
+| `test_dependency_declarations_agree.py` | 三份相依宣告必須互相對得上（外部稽核 F12，v1.15.30） |
 | `test_dir_filter.py` | 目錄瀏覽「已選定」模式 filter 的純函式 + 設定測試 |
 | `test_directory_browser.py` | 目錄瀏覽（AD/LDAP OU treeview → 指派權限給 OU，2026-07-01） |
 | `test_directory_cleanup.py` | 批次停用「目錄已無 / AD 端已停用」的帳號，以及排程自動停用 |
@@ -416,6 +421,9 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_directory_schema_matrix.py` | 目錄查詢要能在 **AD / OpenLDAP / UCS** 三種結構上都跑得起來 |
 | `test_directory_sync.py` | Scheduled AD/LDAP directory sync + the perf fixes it enables (v1.12.67). |
 | `test_doc_deident_e2e.py` | 文件去識別化：**走完整條路徑**的驗收（issue #50 / #51） |
+| `test_doc_deident_english.py` | 英文文件的去識別化（第 2 批，v1.15.32） |
+| `test_doc_deident_english_e2e.py` | 英文文件去識別化的端到端（v1.15.32） |
+| `test_doc_deident_image_residue.py` | 去識別化必須把**圖片裡的**個資也刪掉（外部稽核 F01，v1.15.28） |
 | `test_doc_deident_table_labels.py` | 標籤與值分屬兩個表格儲存格時也要偵測得到（GitHub issue #43） |
 | `test_doc_diff.py` | Tests for the renamed 文件差異比對 tool (formerly pdf-diff). |
 | `test_doc_translate.py` | 文件翻譯：產出**同格式、同版面**的檔案 |
@@ -440,11 +448,15 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_i18n_catalog.py` | 語系檔與樣板的一致性守門 |
 | `test_i18n_dynamic_labels.py` | 程式端產生的顯示字串（`tr(變數)`）也必須有英文 |
 | `test_id_from_body_acl.py` | 「id 由使用者傳入」的端點一律要有 ACL —— 靜態全面掃描 |
+| `test_installer_languages.py` | Windows 安裝程式在英文 Windows 上要顯示英文（v1.15.27） |
+| `test_installer_product_name.py` | Windows 安裝程式的產品名稱多語系 + Linux 服務的安全強化（第 1 批，v1.15.31） |
 | `test_job_acl.py` | Regression tests for the /api/jobs/* per-job ownership ACL (v1.12.61). |
 | `test_job_api_acl.py` | 「我的工作」/ 管理區工作監控的 API 與權限邊界 |
 | `test_job_autosave.py` | 作業完成後自動存入工作區 |
 | `test_job_cancel.py` | Tests for job cancellation (停止轉換). |
 | `test_job_id_acl.py` | 換掉 job id 能不能看到別人的作業？ |
+| `test_job_manager_cancel_release.py` | 取消 / 清理之後不可以留著執行函式（外部稽核 F05，v1.15.28） |
+| `test_job_png_export.py` | PNG 匯出：不整份堆記憶體、暫存要有人清、要有併行上限（F09，v1.15.28） |
 | `test_job_priority.py` | 優先派送名單 —— 指定的使用者送出的作業會插到佇列最前面 |
 | `test_job_queue.py` | 背景工作的佇列 / 持久化 / 記憶體准入 |
 | `test_job_timestamps.py` | 作業的三個時間點：送出 / 開始 / 結束 |
@@ -1267,6 +1279,208 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `/admin/directory/tree`、`/admin/directory/user-roles`、`/admin/directory/group-roles` — 目錄瀏覽的樹狀展開與角色指派（含 OU / 群組 / 個人三種對象）
 - [ ] `/admin/system-status/databases` — 各資料庫大小與最舊一筆時間
 - [ ] `/admin/audit/export.csv` — 稽核記錄匯出；**公式注入防護**（`=` 開頭的欄位要被前綴處理，見 TEST_PLAN_SECURITY）
+
+### 4.6.1 之前靠「尾段字串」假通過的那幾支 🆕 v1.15.30
+
+> 涵蓋守門原本比對「`/api/` 之後那一截」—— `list` / `count` / `assets` /
+> `history` 這種字在四千行的文件裡**必然**找得到，所以那幾支端點從來沒有真的
+> 被檢查過（實算：84 支裡 8 支假通過）。判準已改成**完整路徑**。
+
+- [ ] `GET /workspace/api/count` —— 側欄的工作區檔案數
+  - [ ] **未登入不可以回數字**（那會洩漏「這台有多少檔案」）
+  - [ ] 工作區停用時回 0 或明確的停用狀態，**不可以 500**
+  - [ ] 數字要跟 `/workspace` 頁面實際列出的份數一致（別人的檔案不算）
+- [ ] `GET /tools/einvoice-scan/api/backend-status` —— 後端（QR 解碼器）可用狀態
+  - [ ] 缺相依時要回「不可用 + 說得出缺什麼」，**不可以 500**
+        （那是部署問題不是使用者送錯東西）
+  - [ ] 這支不吃使用者輸入 → 要驗它**不會洩漏路徑或版本細節**
+- [ ] `POST /tools/vat-lookup/api/vat-lookup/batch` —— 統編批次查詢
+  - [ ] 一次丟 500 筆要有上限與明確錯誤，不可以讓請求跑到逾時
+  - [ ] 混雜不合法統編時，**回報哪幾筆不合法**而不是整批失敗
+  - [ ] 查不到的統編與「資料庫還沒下載」要分得出來
+
+## 4.8 管理區「會改狀態」的端點 🆕 v1.15.30
+
+> **為什麼補這一節**：涵蓋守門原本把整個 `/admin` 前綴跳過（只有
+> `test_admin_pages_appear_in_the_plan` 守頁面本身），於是**103 支會改狀態的
+> 管理端點裡有 79 支一條驗收都沒有** —— 而這些正是「按下去會改到別人資料」
+> 的那些（刪使用者、清工作區、匯入設定、改權限矩陣）。
+>
+> **不逐支寫成一大段散文**：下面每一組共用同一份判準，組內只列端點與
+> 需要特別注意的地方。逐支抄同樣的四句話只會讓人不想讀，而不想讀的清單
+> 等於沒有清單。
+
+### 每一支都要過的四條（共用判準）
+
+- [ ] **未登入** → 302 / 401，**不可以**執行動作
+- [ ] **已登入但不是管理員** → 403，**而且動作沒有發生**（要回去確認狀態沒變，
+      不是只看回應碼）
+- [ ] **成功後有稽核記錄**（`/admin/audit` 查得到誰在什麼時候改了什麼）
+- [ ] **失敗訊息不外洩內部細節**（路徑、堆疊、SQL）—— 只回使用者看得懂的話
+
+> 破壞性動作（刪除、清空、匯入覆蓋）另外要有**前端二次確認**，
+> 而且**先試算再動手**（批次刪除那條在 v1.14.x 就是這樣做的）。
+
+### 逐組清單
+
+#### OCR 語言包（`/admin/ocr-langs/*`）
+
+- [ ] `/admin/ocr-langs/install`
+- [ ] `/admin/ocr-langs/uninstall`
+
+#### SSO 單一登入（`/admin/sso/*`）
+
+- [ ] `/admin/sso/proxy-save`
+- [ ] `/admin/sso/save`
+- [ ] `/admin/sso/test`
+
+#### 使用者管理（`/admin/users/*`）
+
+- [ ] `/admin/users/bulk/delete`
+- [ ] `/admin/users/bulk/disable-view`
+- [ ] `/admin/users/bulk/enabled`
+- [ ] `/admin/users/bulk/roles`
+- [ ] `/admin/users/create`
+- [ ] `/admin/users/{uid}/delete`
+- [ ] `/admin/users/{uid}/reset-password`
+- [ ] `/admin/users/{uid}/reset-totp`
+- [ ] `/admin/users/{uid}/sessions/revoke`
+- [ ] `/admin/users/{uid}/unlock`
+- [ ] `/admin/users/{uid}/update`
+
+#### 同義詞（`/admin/synonyms/*`）
+
+- [ ] `/admin/synonyms/add`
+- [ ] `/admin/synonyms/import`
+- [ ] `/admin/synonyms/save`
+
+#### 品牌外觀（`/admin/branding/*`）
+
+- [ ] `/admin/branding/reset`
+- [ ] `/admin/branding/site-name`
+- [ ] `/admin/branding/upload`
+
+#### 字型管理（`/admin/fonts/*`）
+
+- [ ] `/admin/fonts/bulk-hidden`
+- [ ] `/admin/fonts/delete`
+- [ ] `/admin/fonts/refresh`
+- [ ] `/admin/fonts/rename`
+- [ ] `/admin/fonts/toggle-hidden`
+- [ ] `/admin/fonts/upload`
+
+#### 工作區設定（`/admin/workspace/*`）
+
+- [ ] `/admin/workspace/clear-all`
+- [ ] `/admin/workspace/clear-user`
+- [ ] `/admin/workspace/save`
+
+#### 檔案保留 / 清理（`/admin/retention/*`）
+
+- [ ] `/admin/retention/save`
+- [ ] `/admin/retention/sweep-now`
+
+#### 權限矩陣（`/admin/permissions/*`）
+
+- [ ] `/admin/permissions/set`
+
+#### 歷史記錄（`/admin/history/*`）
+
+- [ ] `/admin/history/{kind}/{hid}/delete`
+
+#### 目錄瀏覽（`/admin/directory/*`）
+
+- [ ] `/admin/directory/filter`
+- [ ] `/admin/directory/group-roles`
+- [ ] `/admin/directory/ou-roles`
+- [ ] `/admin/directory/user-roles`
+
+#### 系統狀態（`/admin/system-status/*`）
+
+- [ ] `/admin/system-status/databases/backup`
+- [ ] `/admin/system-status/upload-limit`
+
+#### 統編資料庫（`/admin/vat-db/*`）
+
+- [ ] `/admin/vat-db/auto-download`
+- [ ] `/admin/vat-db/clear`
+- [ ] `/admin/vat-db/schedule`
+- [ ] `/admin/vat-db/upload`
+
+#### 群組管理（`/admin/groups/*`）
+
+- [ ] `/admin/groups/create`
+- [ ] `/admin/groups/directory-sync/run`
+- [ ] `/admin/groups/directory-sync/settings`
+- [ ] `/admin/groups/sync-ldap`
+- [ ] `/admin/groups/{gid}/delete`
+- [ ] `/admin/groups/{gid}/update`
+
+#### 翻譯對照字典（`/admin/translation-glossary/*`）
+
+- [ ] `/admin/translation-glossary/preview`
+- [ ] `/admin/translation-glossary/save`
+
+#### 表單範本（`/admin/templates/*`）
+
+- [ ] `/admin/templates/{tid}/delete`
+- [ ] `/admin/templates/{tid}/rename`
+
+#### 角色管理（`/admin/roles/*`）
+
+- [ ] `/admin/roles/create`
+- [ ] `/admin/roles/{role_id}/delete`
+- [ ] `/admin/roles/{role_id}/set-default`
+- [ ] `/admin/roles/{role_id}/update`
+
+#### 記錄轉發（`/admin/log-forward/*`）
+
+- [ ] `/admin/log-forward/save`
+
+#### 設定備份（`/admin/settings-export/*`）
+
+- [ ] `/admin/settings-export/download`
+- [ ] `/admin/settings-export/import`
+- [ ] `/admin/settings-export/preview`
+- [ ] `/admin/settings-export/run-now`
+- [ ] `/admin/settings-export/schedule`
+
+#### 設定檔（匯入 / 匯出）（`/admin/profile/*`）
+
+- [ ] `/admin/profile/create`
+- [ ] `/admin/profile/import`
+- [ ] `/admin/profile/save`
+- [ ] `/admin/profile/{cid}/activate`
+- [ ] `/admin/profile/{cid}/delete`
+
+#### 認證設定（`/admin/auth-settings/*`）
+
+- [ ] `/admin/auth-settings/disable`
+- [ ] `/admin/auth-settings/ldap-save`
+- [ ] `/admin/auth-settings/ldap-test-connection`
+- [ ] `/admin/auth-settings/ldap-test-login`
+- [ ] `/admin/auth-settings/policy-save`
+- [ ] `/admin/auth-settings/unlock-all`
+- [ ] `/admin/auth-settings/unlock-key`
+
+#### 資產管理（印章 / 簽名 / Logo / 浮水印）（`/admin/assets/*`）
+
+- [ ] `/admin/assets/import`
+- [ ] `/admin/assets/upload`
+- [ ] `/admin/assets/{asset_id}/crop`
+- [ ] `/admin/assets/{asset_id}/default`
+- [ ] `/admin/assets/{asset_id}/delete`
+- [ ] `/admin/assets/{asset_id}/match-aspect`
+- [ ] `/admin/assets/{asset_id}/save`
+
+#### 轉換設定（`/admin/conversion/*`）
+
+- [ ] `/admin/conversion/save`
+
+#### 通知設定（`/admin/notify/*`）
+
+- [ ] `/admin/notify/save`
+- [ ] `/admin/notify/test/{channel}`
 
 ## 4.7 工具的非 API 端點 —— **畫面上實際打的那些** 🆕 v1.14.95
 
@@ -3268,6 +3482,137 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
       資料不是顯示文字（書籤的 `{title, page, level}`），翻掉是改壞資料。
 - [ ] 新畫的 SVG 圖示要**算圖確認過**才收（snap chromium 的 `--screenshot`
       要寫到 `~/snap/chromium/common/`，寫 `/tmp` 會落在它自己的沙箱裡）。
+
+---
+
+### 6.98 v1.15.32 — 英文文件的去識別化（**每次發版必過**）
+
+- [ ] `pytest tests/test_doc_deident_english.py tests/test_doc_deident_english_e2e.py` 綠燈
+- [ ] **台灣真實樣本零退步**（`temp_pdfs`）—— 判準同表單回歸：
+      原本抓到的一筆都不可以少
+- [ ] **語系隔離兩個方向**：英文文件上台灣專屬式子不可以啟用
+      （它們在英文文件上是**抓錯**不是抓不到）；中文文件上英文式子也不啟用
+- [ ] **誤判語料**：一份滿是料號 / ISBN / 版本號的英文文件，
+      敏感類別命中必須是 **0**（只驗「抓得到」的話，放寬到抓一切也會過）
+- [ ] 有檢查碼的一律驗：IBAN mod-97、SSN 不發的號段、NANP 首位、NI 保留前綴
+- [ ] **端到端要打開產出看內容**（§0.5）：英文 PDF 跑完，
+      SSN / 電話 / Email / IBAN 都撈不回來，而標題等內容要留著
+- [ ] 替換模式：英文文件的假值**不含中文**，而且假 SSN / IBAN / 電話
+      **刻意不合法**（驗得過的假號碼可能真的屬於某個人）
+- [ ] 人名的式子不可以吃掉下一個欄位的第一個字（`\s+` → 單一空白）
+- [ ] 文件語言的下拉在兩支工具上都有，預設跟著介面語言、可以改
+- [ ] 反灰清單只剩五支（統編查詢 / 電子發票 / 送件前檢核 / 乘車證明 /
+      表單自動填寫）—— 它們靠的是台灣的資料庫與版型，不是語言問題
+
+---
+
+### 6.97 v1.15.31 — 產品名稱多語系與服務硬化（**每次發版必過**）
+
+- [ ] `pytest tests/test_installer_product_name.py tests/test_installer_languages.py` 綠燈
+- [ ] 安裝程式裡剩下的中文只有兩個刻意保留的字面值
+      （`APPNAME` 的預設值、`LEGACY_SM_FOLDER`）
+- [ ] **解除安裝要從登錄檔讀回開始功能表路徑**，不可以用當下的語系重算
+- [ ] 刪除前驗過那個路徑在 `$SMPROGRAMS\` 底下（可疑就拒絕並留痕跡）
+- [ ] 舊版的中文資料夾名仍然清得掉
+- [ ] `install.sh` 產生的 unit 與 `packaging/jt-doc-tools.service` **同一組
+      硬化設定**（判準是「整行的指令賦值」，不是字串出現過 ——
+      註解裡列了那些名字，用字串比對會沒有牙齒）
+- [ ] 可寫路徑只有資料目錄；外部匯出路徑的限制**寫在產生出來的 unit 裡**
+
+**人工（要真的機器）**
+
+- [ ] Windows 三種情境（已用獨立探針在 zh-TW 機器上驗過，
+      **不動既有安裝**）：記下的路徑刪得掉 / 可疑路徑被拒 / 舊資料夾清得掉
+- [ ] **完整循環仍待做**：裝 → 解除安裝 → 重裝，以及
+      「裝舊版（中文資料夾）→ 升級 → 解除安裝，舊資料夾也要消失」
+      —— 這個會讓測試機短暫離線，留給有人看著的時候跑
+- [ ] Linux：`systemd-run` 帶那五項設定逐項確認
+      （安裝目錄不可寫、資料目錄可寫、字型可讀、`/mnt` 被擋）
+- [ ] **英文畫面仍沒有人親眼看過** —— 手邊兩台 Windows 都是 zh-TW
+
+---
+
+### 6.96 v1.15.29 — 外部稽核第二批（**每次發版必過**）
+
+**F08 稽核轉送**
+
+- [ ] `pytest tests/test_audit_forward_per_destination.py` 綠燈
+- [ ] 一個目的地失敗 → **只有它的游標停住**，其他目的地照常前進
+- [ ] 失敗的目的地會退避（不然每輪都在重試，把迴圈拖垮）
+- [ ] **`audit_forward_failed` 不可以被轉送**（會自我餵食）；失敗記錄有冷卻
+- [ ] 升級時沿用舊的共用游標當起點（否則重送整份歷史）
+- [ ] 說明文字不可以再承諾「不漏送、不重複」
+- [ ] **要驗真的送到 Graylog**，不是只確認 socket 沒報錯（人工項）
+
+**F09 PNG 匯出**
+
+- [ ] `pytest tests/test_job_png_export.py` 綠燈
+- [ ] 不可以把每頁 bytes 堆成 list、也不可以用 BytesIO 組整包 zip
+- [ ] 暫存要落在 `settings.temp_dir`（清理只掃那裡、**而且只刪檔案跳過目錄**
+      → 產出必須平鋪）
+- [ ] 中間檔用完立刻刪；產出在下載結束後刪
+- [ ] 有併行上限（這條路不經過作業准入）
+- [ ] **人工**：反覆下載十次後看 `/tmp` 與資料磁碟有沒有長大
+
+**F10 管理員的隱私界線**
+
+- [ ] `pytest tests/test_admin_privacy_boundary.py` 綠燈
+- [ ] 上傳 / 預覽與作業產出**兩條路走同一份政策**（判準走 AST）
+- [ ] 越權讀取一定寫稽核；**讀自己的不算越權**；同一資源有去重視窗
+- [ ] 政策關掉時要真的拒絕，而且沒有東西可稽核
+- [ ] 改政策時，權限矩陣與產品說明要跟著改（人工項）
+
+---
+
+### 6.95 v1.15.28 — 外部稽核第一批（**每次發版必過**）
+
+**F01 去識別化要真的刪掉圖片裡的個資**
+
+- [ ] `pytest tests/test_doc_deident_image_residue.py` 綠燈
+- [ ] 判準是**把產出的圖片抽出來檢查像素**（有 tesseract 的話再 OCR 一次）
+      —— 「畫面有黑框、文字抽不到」完全不算
+- [ ] 遮罩 / 替換模式也要清掉圖片像素
+- [ ] **圖片不可以整張消失**（那樣掃描件會整頁空白）、選取範圍外的內容不可以動
+- [ ] `PDF_REDACT_IMAGE_NONE` 不可以出現在 `doc_deident`（判準走 AST）
+- [ ] 結果頁要提醒「檔案可能變大」並指路到 PDF 壓縮，**且只在真的動到圖片時顯示**
+
+**F03 升級失敗要真的回復**
+
+- [ ] `pytest tests/test_cli_update_rollback.py` 綠燈
+- [ ] 三條失敗路徑（降版偵測 / `uv sync` 失敗 / 相依 import 失敗）都會回復
+- [ ] 訊息要分得出三種結局：完整回復 ／ 程式碼回去了但相依沒 ／ 連程式碼都回不去
+- [ ] **不可以再出現 `restoring previous state` 這種只說不做的字串**
+- [ ] `uv` / `git` 不存在時不可以丟例外（那是錯誤處理途中的第二次爆炸）
+
+**F07 GELF TCP 的訊框**
+
+- [ ] `pytest tests/test_audit_forward_framing.py` 綠燈
+- [ ] GELF TCP 以 `\0` 結尾且訊息內無原始換行；GELF UDP 不加分隔符
+- [ ] syslog / CEF 維持換行（**修 GELF 不可以順手改掉這兩種**）
+- [ ] 分隔符只能在一個地方決定（formatter 裡不可以自己加）
+
+**F05 取消要釋放執行函式**
+
+- [ ] `pytest tests/test_job_manager_cancel_release.py` 綠燈
+- [ ] 取消排隊中的作業 → callable 立刻釋放，**但那一列要留著顯示「已取消」**
+- [ ] 記憶體裁切與過期清理丟掉作業列時，附帶狀態也要丟
+- [ ] 所有「這件作業結束了」的路徑都走同一個 `_forget`（判準走 AST）
+
+---
+
+### 6.94 v1.15.27 — 安裝程式在英文 Windows 上要是英文（**每次發版必過**）
+
+- [ ] `pytest tests/test_installer_languages.py` 綠燈
+- [ ] 對話框與元件名稱不可以寫死中文（解除安裝那三句最容易漏 ——
+      那條路徑在語言選擇之前就結束）
+- [ ] 每條 LangString 都要有全部宣告語言的版本
+      —— **`makensis` 不會警告這件事**（實測拿掉一條英文條目，零警告）
+- [ ] `makensis -DVERSION=<版本> installer.nsi` 編得過
+- [ ] 產品名稱 / 開始功能表捷徑**維持中文**是刻意的（它們是路徑）；
+      要改必須連同「刪除時試各語系舊名字」一起做，並實機跑
+      裝 → 解除安裝 → 重裝
+- [ ] **不要用執行期 `StrCpy $LANGUAGE` 去驗英文畫面** —— NSIS 在啟動時就
+      選定語言表，改了不會重新解析（繁中機器上實測過）
 
 ---
 

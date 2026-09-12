@@ -102,3 +102,56 @@ def test_tool_count_in_test_plan_is_current(tool_apis):
     assert m, "TEST_PLAN §4 標題格式變了，這條檢查要跟著改"
     assert int(m.group(1)) == actual, (
         f"TEST_PLAN §4 標題寫 {m.group(1)} 個工具，實際 {actual} 個")
+
+
+# ---------------------------------------------------------------------------
+# 全路由對照（v1.15.30）
+#
+# 上面那幾條的守備範圍是**每支工具至少一個** `/api/` 或 `/convert`。
+# 所以「非工具」的 API 完全不在它眼裡 —— 實算之後，作業佇列、通知、收件匣、
+# 管理介面的 XHR 共 16 支從來沒被檢查過有沒有寫進文件。
+#
+# 判準：**兩邊都把路徑參數正規化成 `{}` 再比**。路由叫 `{_filename}`、
+# 文件寫 `{filename}` 是常見的，不正規化就會變成假缺口（我第一次量就是這樣
+# 誤報的）。
+# ---------------------------------------------------------------------------
+
+_PARAM = re.compile(r"\{[^}]*\}")
+
+
+def _norm(path: str) -> str:
+    return _PARAM.sub("{}", path)
+
+
+def _all_api_routes() -> set[str]:
+    import app.main as app_main
+    return {r.path for r in app_main.app.routes
+            if "/api/" in getattr(r, "path", "")}
+
+
+def test_every_api_route_is_mentioned_in_api_md():
+    """新增 API 卻沒寫進手冊 —— 使用者不會知道它存在。"""
+    doc = _norm((_public_root(ROOT) / "API.md").read_text(encoding="utf-8"))
+    missing = sorted(p for p in _all_api_routes() if _norm(p) not in doc)
+    assert not missing, (
+        f"這 {len(missing)} 支 API 端點在 API.md 裡完全沒提到：\n  "
+        + "\n  ".join(missing)
+        + "\n對外穩定的請寫進對應章節；管理介面自己用的 XHR 請列進 §11 "
+          "那張「不保證相容」的表。")
+
+
+def test_api_md_and_api_html_are_in_sync():
+    """`api.html` 是從 `API.md` 生成的 —— 改了 md 沒重跑生成器，網頁版就停在
+    舊內容（既有慣例，v1.9.x 起）。抽查幾個章節標題有沒有同時存在。"""
+    pub = _public_root(ROOT)
+    md = (pub / "API.md").read_text(encoding="utf-8")
+    html_path = pub / "docs" / "api.html"
+    if not html_path.exists():
+        pytest.skip("公開樹沒有 docs/api.html")
+    html = html_path.read_text(encoding="utf-8")
+    heads = re.findall(r"^## (\d+[a-z]?\. .+)$", md, re.M)
+    assert heads, "API.md 的章節標題格式變了"
+    missing = [h for h in heads if h.split(". ", 1)[-1].strip() not in html]
+    assert not missing, (
+        f"api.html 沒有這些章節：{missing}\n"
+        "跑 `python3 github/build-api-page.py` 重新生成。")

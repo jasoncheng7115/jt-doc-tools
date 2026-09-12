@@ -4797,5 +4797,17 @@
   "🔒 auditor 角色僅可唯讀存取稽核紀錄與檔案歷史，沒有任何工具權限（職責分離原則）。此角色不可刪、不可改名、不可指派工具。": "The auditor role has read-only access to the audit log and file history and no tool permissions at all (separation of duties). It cannot be deleted, renamed, or given tools.",
   "🗑 批次刪除": "🗑 Bulk delete",
   "🗖 全圖": "🗖 Whole image",
-  "🤖 LLM 校驗結果": "LLM check result"
+  "🤖 LLM 校驗結果": "LLM check result",
+  "掃描件（圖片型 PDF）的圖片需要重新編碼才能真正刪掉像素，因此檔案可能變大。需要縮小請接著用「PDF 壓縮」工具。": "For scanned documents the images must be re-encoded so the pixels are really gone, so the output file may be larger. Run the PDF Compress tool afterwards if you need a smaller file.",
+  "文件語言": "Document language",
+  "決定套用哪一組偵測規則（台灣專屬的身分證 / 統編 / 市話，或英美的 SSN / IBAN / 郵遞區號）。換語言後請重新偵測。": "Chooses which detection rules apply: the Taiwan-specific ones (national ID, business number, landline) or the US / UK ones (SSN, IBAN, postcode). Run detection again after changing this.",
+  "美國社會安全號碼 (SSN)": "US Social Security Number (SSN)",
+  "美國社會安全號碼（標籤式）": "US Social Security Number (labelled)",
+  "英國國民保險號碼 (NI)": "UK National Insurance number (NI)",
+  "出生日期（英文月份）": "Date of birth (English month names)",
+  "電話（北美）": "Phone (North America)",
+  "電話（英國）": "Phone (United Kingdom)",
+  "地址（美式）": "Address (US format)",
+  "英國郵遞區號": "UK postcode",
+  "IBAN 國際帳號": "IBAN (international bank account number)"
 }

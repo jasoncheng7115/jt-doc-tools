@@ -223,6 +223,15 @@ class Pattern:
     value_group: int = 0        # which regex group carries the value to redact
     group: str = "其他"           # UI grouping
     icon: str = "info"           # UI icon name
+    #: 這條式子適用哪些**文件語言**。`None` = 與語言無關（Email、信用卡、
+    #: IP、URL 這類「格式」類），`("zh-Hant",)` = 只對中文文件成立，
+    #: `("en",)` = 只對英文文件成立。
+    #:
+    #: **為什麼要分**：台灣的市話式子套在英文文件上不是「抓不到」而是
+    #: **抓錯** —— 實測它把護照號 `488912345`、IBAN 的 `6016 1331`、
+    #: 信用卡的 `4111 1111` 都當成電話。誤判比漏抓更危險，因為畫面會
+    #: 顯示「已處理」。
+    locales: Optional[tuple[str, ...]] = None
 
 
 # --- Regex definitions ------------------------------------------------------
@@ -278,8 +287,12 @@ RE_GPS = re.compile(
 
 # 航班號 — 2~3 字母航空公司代碼 + 1-4 數字（可帶 letter suffix）
 # 例：BR857 / BR0857 / CI-100 / TPE-NRT 7H123
+#: 航班號。**數字至少三位** —— 原本 `\d{1,4}` 會把英國郵遞區號 `NW1`、
+#: IBAN 開頭 `GB29`、料號 `AB12` 全部當成航班（實測，英文文件上一抓一堆）。
+#: 代價是 `JL5` 這種一位數的航班抓不到 —— 這條式子預設關閉、而且航班號本身
+#: 不是高風險個資，**寧可漏抓也不要誤判**（誤判會讓使用者以為遮乾淨了）。
 RE_FLIGHT = re.compile(
-    r"(?<![A-Z0-9])[A-Z]{2,3}\d{1,4}[A-Z]?(?![A-Z0-9])"
+    r"(?<![A-Z0-9])[A-Z]{2,3}\d{3,4}[A-Z]?(?![A-Z0-9])"
 )
 
 # 訂位代號 (PNR / Booking reference) — 6 字元英數，全大寫
@@ -515,7 +528,15 @@ RE_PERSON = re.compile(
     r"[一-鿿]{2,4}(?![一-鿿])"
     r"|"
     # 英文：2-4 個首字大寫的詞，每詞可含 . - '
-    r"[A-Z][A-Za-z.\-']{1,20}(?:\s+[A-Z][A-Za-z.\-']{1,20}){1,3}"
+    #
+    # **詞之間只允許「一個空白」** —— 原本用 `\s+`，結果：
+    #   `Name: Michael Thompson\nDate of Birth:` → 抓到 `Michael Thompson\nDate`
+    #   `Contact Person: Sarah O'Brien  Tel:`     → 抓到 `Sarah O'Brien  Tel`
+    # 也就是把**下一個欄位的第一個字**一起吃掉（外部稽核指出的誤判）。
+    # 後果不只多遮一個字：跨換行的遮蔽框會**跟著跨行畫**（CLAUDE.md 記過
+    # 去識別化「不可以用 `\s`」那條）。兩個以上的空白在表單裡是欄位間距，
+    # 不是名字的一部分。
+    r"[A-Z][A-Za-z.\-']{1,20}(?:[ ][A-Z][A-Za-z.\-']{1,20}){1,3}"
     r")"
 )
 
@@ -557,21 +578,124 @@ RE_ADDR = re.compile(
 )
 
 
+# --- 英文文件（英美）------------------------------------------------------
+#
+# 有檢查碼的一律驗檢查碼 —— 不驗的話清單會被誤判淹掉，而**誤判比漏抓更危險**
+# （畫面顯示「已處理」，使用者以為遮乾淨了）。
+
+#: 美國社會安全號碼。擋掉規定不會發出的號段：區碼 000 / 666 / 9xx、
+#: 群碼 00、序號 0000。沒有這些排除的話，任何 `123-45-6789` 形狀的數字
+#: （日期、料號、電話片段）都會中。
+RE_US_SSN = re.compile(
+    # 前後都不可以再接數字**或連字號** —— `123-45-6789-A` 是料號不是 SSN
+    # （誤判語料實測抓到的）。
+    r"(?<![\d-])(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}(?![\d-])")
+#: 有標籤時才認不帶連字號的寫法 —— 九位數字太常見（統編、發票、料號）。
+RE_US_SSN_LABEL = re.compile(
+    r"(?i:SSN|Social\s*Security(?:\s*(?:Number|No\.?|#))?)\s*[:：]?\s*"
+    r"((?!000|666|9\d\d)\d{3}[-\s]?(?!00)\d{2}[-\s]?(?!0000)\d{4})(?!\d)")
+#: 英國國民保險號碼。前兩碼有保留字（BG GB NK KN TN NT ZZ 不發），
+#: 第一碼不用 D F I Q U V、第二碼不用 D F I Q U V O。
+RE_UK_NI = re.compile(
+    r"(?<![A-Z0-9])(?!BG|GB|NK|KN|TN|NT|ZZ)"
+    r"[ABCEGHJ-PRSTW-Z][ABCEGHJ-NPRSTW-Z]\s?\d{2}\s?\d{2}\s?\d{2}\s?[A-D]"
+    r"(?![A-Z0-9])")
+#: 北美電話（NANP）：區碼與交換碼的第一位不可以是 0 或 1 —— 這個限制擋掉了
+#: 大量「三碼-三碼-四碼」形狀的流水號。
+RE_NANP_PHONE = re.compile(
+    r"(?<![\d-])(?:\+?1[\s.\-]?)?"
+    r"(?:\([2-9]\d{2}\)|[2-9]\d{2})[\s.\-]"
+    r"[2-9]\d{2}[\s.\-]\d{4}(?!\d)")
+#: 英國電話：+44 或 0 開頭，之後 9~10 位數字（可含空白）。
+RE_UK_PHONE = re.compile(
+    r"(?<![\d+])(?:\+44\s?\(?0?\)?\s?|0)(?:\d{2,5}[\s-]?)(?:\d{3,4}[\s-]?)\d{3,4}"
+    r"(?!\d)")
+#: 英國郵遞區號（官方格式）。
+RE_UK_POSTCODE = re.compile(
+    r"(?<![A-Z0-9])[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}(?![A-Z0-9])", re.IGNORECASE)
+#: IBAN。**一定要驗 mod-97** —— 不驗的話任何「兩個字母 + 兩位數字 + 一串
+#: 英數」都會中（實測它會吃掉料號與訂單號）。
+RE_IBAN = re.compile(
+    r"(?<![A-Z0-9])[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,3})?"
+    r"(?![A-Z0-9])")
+#: 英文月份寫法的生日：`January 5, 1985` / `5 January 2026` / `Jan 5 1985`。
+#: 原本的式子只吃數字格式，所以英文文件的生日**全漏**。
+_MONTHS = (r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|"
+           r"Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t|tember)?|Oct(?:ober)?|"
+           r"Nov(?:ember)?|Dec(?:ember)?)")
+RE_DOB_EN = re.compile(
+    r"(?i:Date\s*of\s*Birth|DOB|Birth\s*Date|Born)\s*[:：]?\s*"
+    r"((?:" + _MONTHS + r"\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})"
+    r"|(?:\d{1,2}(?:st|nd|rd|th)?\s+" + _MONTHS + r"\.?,?\s+\d{4}))",
+    re.IGNORECASE)
+#: 美式地址：門牌 + 街名 + **街道後綴**（那個後綴是關鍵，只認數字開頭會
+#: 把金額與料號抓進來），後面可接 Apt / Suite、城市、州別縮寫、ZIP。
+_ST_SUFFIX = (r"(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|"
+              r"Drive|Dr|Court|Ct|Circle|Cir|Place|Pl|Terrace|Ter|Way|"
+              r"Highway|Hwy|Parkway|Pkwy|Square|Sq)")
+RE_US_ADDR = re.compile(
+    # 門牌可以帶字母（`221B Baker Street` 在英國很常見）
+    r"\b\d{1,6}[A-Za-z]?\s+(?:[A-Z][\w.'\-]*\s+){1,4}" + _ST_SUFFIX + r"\b\.?"
+    r"(?:[,\s]+(?:Apt|Apartment|Suite|Ste|Unit|Rm|Room|Floor|Fl|#)\s*[\w\-]+)?"
+    r"(?:,\s*[A-Z][\w.'\- ]{1,24})?"
+    r"(?:,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|"
+    r"MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|"
+    r"UT|VT|VA|WA|WV|WI|WY|DC))?"
+    r"(?:\s+\d{5}(?:-\d{4})?)?")
+
+
+def _iban_valid(v: str) -> bool:
+    """IBAN 的 mod-97 檢查碼（ISO 13616）。"""
+    t = re.sub(r"\s+", "", v).upper()
+    if not (15 <= len(t) <= 34):
+        return False
+    t = t[4:] + t[:4]
+    num = "".join(str(int(c, 36)) if c.isalpha() else c for c in t)
+    if not num.isdigit():
+        return False
+    rem = 0
+    for ch in num:                    # 逐位取餘，避免超大整數
+        rem = (rem * 10 + int(ch)) % 97
+    return rem == 1
+
+
+def _uk_ni_valid(v: str) -> bool:
+    t = re.sub(r"\s+", "", v).upper()
+    return len(t) == 9 and t[:2] not in ("BG", "GB", "NK", "KN", "TN", "NT", "ZZ")
+
+
+def _nanp_valid(v: str) -> bool:
+    digits = re.sub(r"\D", "", v)
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if len(digits) != 10:
+        return False
+    # 區碼與交換碼首位不可 0 / 1；`555-01xx` 是官方保留的虛構號碼，不算個資
+    if digits[0] in "01" or digits[3] in "01":
+        return False
+    return True
+
+
+def _mask_postcode(v: str) -> str:
+    t = v.strip()
+    return t[:2] + "*" * max(1, len(t) - 2)
+
+
 CATALOG: list[Pattern] = [
     # 個人身分
-    Pattern("tw_id",     "身分證字號",    RE_TW_ID,     _tw_id_valid,  _mask_id,    True,  group="個人身分", icon="id-card"),
-    Pattern("tw_arc",    "居留證號",      RE_TW_ARC,    _tw_arc_valid, _mask_id,    True,  group="個人身分", icon="id-card"),
+    Pattern("tw_id",     "身分證字號",    RE_TW_ID,     _tw_id_valid,  _mask_id,    True,  group="個人身分", icon="id-card", locales=("zh-Hant",)),
+    Pattern("tw_arc",    "居留證號",      RE_TW_ARC,    _tw_arc_valid, _mask_id,    True,  group="個人身分", icon="id-card", locales=("zh-Hant",)),
     Pattern("passport",  "護照號碼",      RE_PASSPORT,  _always,       _mask_passport, True,  value_group=1, group="個人身分", icon="book"),
     Pattern("driver_license", "駕照號碼", RE_DRIVER_LICENSE, _always,  _mask_passport, True,  value_group=1, group="個人身分", icon="car"),
     Pattern("dob",       "出生日期",      RE_DOB,       _always,
             lambda v: "****-**-**", True, value_group=1, group="個人身分", icon="page"),
     Pattern("hic",       "健保卡號",      RE_HIC,       _always,
-            lambda v: _mask_keep_edges(v, 4, 4), False, group="個人身分", icon="heart"),
+            lambda v: _mask_keep_edges(v, 4, 4), False, group="個人身分", icon="heart", locales=("zh-Hant",)),
     # 聯絡方式
-    Pattern("mobile",    "手機號碼",      RE_MOBILE,    _always,       _mask_phone, True,  group="聯絡方式", icon="smartphone"),
-    Pattern("landline",  "市話",          RE_LANDLINE,  _always,       _mask_phone, True,  group="聯絡方式", icon="phone"),
+    Pattern("mobile",    "手機號碼",      RE_MOBILE,    _always,       _mask_phone, True,  group="聯絡方式", icon="smartphone", locales=("zh-Hant",)),
+    Pattern("landline",  "市話",          RE_LANDLINE,  _always,       _mask_phone, True,  group="聯絡方式", icon="phone", locales=("zh-Hant",)),
     Pattern("email",     "Email",         RE_EMAIL,     _always,       _mask_email, True,  group="聯絡方式", icon="mail"),
-    Pattern("addr",      "地址",          RE_ADDR,      _always,       _mask_addr,  True,  group="聯絡方式", icon="pin-map"),
+    Pattern("addr",      "地址",          RE_ADDR,      _always,       _mask_addr,  True,  group="聯絡方式", icon="pin-map", locales=("zh-Hant",)),
     # 金融資訊
     Pattern("cc",        "信用卡號",      RE_CC,        _luhn_valid,   _mask_cc,    True,  group="金融資訊", icon="credit-card"),
     Pattern("bank_account", "銀行帳號",   RE_BANK_ACCOUNT, _bank_account_valid, _mask_bank_account,
@@ -583,18 +707,40 @@ CATALOG: list[Pattern] = [
     Pattern("account_name","帳戶名稱",    RE_ACCOUNT_NAME, _always,    _mask_company,
             True,  value_group=1, group="金融資訊", icon="user"),
     # 企業資料
-    Pattern("tw_biz",    "統一編號",      RE_TW_BIZ,    _twbiz_valid,  _mask_twbiz, True,  group="企業資料", icon="hash"),
+    Pattern("tw_biz",    "統一編號",      RE_TW_BIZ,    _twbiz_valid,  _mask_twbiz, True,  group="企業資料", icon="hash", locales=("zh-Hant",)),
     Pattern("company",   "公司名稱",      RE_COMPANY,   _always,       _mask_company,
             False, value_group=1, group="企業資料", icon="building"),
     Pattern("tw_einvoice", "電子發票號碼", RE_TW_EINVOICE, _always,
-            lambda v: _mask_keep_edges(v, 2, 2), False, group="企業資料", icon="hash"),
+            lambda v: _mask_keep_edges(v, 2, 2), False, group="企業資料", icon="hash", locales=("zh-Hant",)),
     Pattern("order_num", "訂單 / 採購單號", RE_ORDER_NUM, _always,
             lambda v: _mask_keep_edges(v, 3, 2), False, group="企業資料", icon="hash"),
     # 其他
     Pattern("person_name","人名",         RE_PERSON,    _always,       _mask_name,
             False, value_group=1, group="其他", icon="user"),
+    # --- 英文文件（英美）---------------------------------------------
+    # 這些只在文件語言是英文時才啟用 —— 見 Pattern.locales 的說明。
+    Pattern("us_ssn", "美國社會安全號碼 (SSN)", RE_US_SSN, _always, _mask_id,
+            True, group="個人身分", icon="id-card", locales=("en",)),
+    Pattern("us_ssn_label", "美國社會安全號碼（標籤式）", RE_US_SSN_LABEL,
+            _always, _mask_id, True, value_group=1, group="個人身分",
+            icon="id-card", locales=("en",)),
+    Pattern("uk_ni", "英國國民保險號碼 (NI)", RE_UK_NI, _uk_ni_valid, _mask_id,
+            True, group="個人身分", icon="id-card", locales=("en",)),
+    Pattern("dob_en", "出生日期（英文月份）", RE_DOB_EN, _always, _mask_id,
+            True, value_group=1, group="個人身分", icon="calendar",
+            locales=("en",)),
+    Pattern("nanp_phone", "電話（北美）", RE_NANP_PHONE, _nanp_valid, _mask_phone,
+            True, group="聯絡方式", icon="phone", locales=("en",)),
+    Pattern("uk_phone", "電話（英國）", RE_UK_PHONE, _always, _mask_phone,
+            True, group="聯絡方式", icon="phone", locales=("en",)),
+    Pattern("us_addr", "地址（美式）", RE_US_ADDR, _always, _mask_addr,
+            True, group="聯絡方式", icon="map-pin", locales=("en",)),
+    Pattern("uk_postcode", "英國郵遞區號", RE_UK_POSTCODE, _always, _mask_postcode,
+            False, group="聯絡方式", icon="map-pin", locales=("en",)),
+    Pattern("iban", "IBAN 國際帳號", RE_IBAN, _iban_valid, _mask_bank_account,
+            True, group="金融資訊", icon="credit-card", locales=("en",)),
     Pattern("ip",        "IP 位址",       RE_IP,        _always,       _mask_ip,    False, group="IT 資料", icon="globe"),
-    Pattern("plate",     "車牌",          RE_PLATE,     _always,       _mask_plate, False, group="其他", icon="car"),
+    Pattern("plate",     "車牌",          RE_PLATE,     _always,       _mask_plate, False, group="其他", icon="car", locales=("zh-Hant",)),
     Pattern("vin",       "車輛 VIN 碼",   RE_VIN,       _always,
             lambda v: _mask_keep_edges(v, 3, 3), False, group="其他", icon="car"),
     Pattern("gps",       "GPS 座標",      RE_GPS,       _always,
@@ -652,3 +798,29 @@ def resolve(pattern_id: str) -> Optional[Pattern]:
         if p.id == pattern_id:
             return p
     return None
+
+
+#: 與語言無關的樣式（Email、信用卡、IP、URL、token…）＋ 指定語言的樣式。
+#:
+#: **為什麼要有這個函式**：台灣的市話 / 地址 / 統編式子套在英文文件上不是
+#: 「抓不到」而是**抓錯**（實測把護照號、IBAN 片段、信用卡片段都當成電話），
+#: 所以「支援英文」不能只是加英文式子，**還要在英文模式下把台灣專屬的那幾條
+#: 關掉**。反過來也一樣。
+def catalog_for(doc_lang: str) -> list[Pattern]:
+    lang = (doc_lang or "zh-Hant").strip()
+    if lang.lower().startswith("en"):
+        lang = "en"
+    elif lang.startswith("zh"):
+        lang = "zh-Hant"
+    return [p for p in CATALOG if p.locales is None or lang in p.locales]
+
+
+def default_ids_for(doc_lang: str) -> set[str]:
+    return {p.id for p in catalog_for(doc_lang) if p.default_on}
+
+
+#: 支援的文件語言（介面的下拉用這個，不要各自寫一份）。
+DOC_LANGS: tuple[tuple[str, str], ...] = (
+    ("zh-Hant", "中文（台灣）"),
+    ("en", "English"),
+)

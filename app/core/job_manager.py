@@ -540,10 +540,27 @@ class JobManager:
                 self._notify(job)
         finally:
             with self._lock:
-                self._fns.pop(job_id, None)
-                self._subprocs.pop(job_id, None)
+                self._forget(job_id)
             _current_job_id.set(None)
             self._finish_slot(job_id)
+
+    def _forget(self, job_id: str, *, drop_row: bool = False) -> None:
+        """忘掉一件工作的附帶狀態（**呼叫前要先拿 `self._lock`**）。
+
+        `_fns` 存的是「還沒跑的那個函式」—— 它是個 closure，捕捉了上傳路徑、
+        參數，有時還有比較大的資料物件。**取消一件還在排隊的工作時，那個
+        closure 原本永遠不會被釋放**：清除寫在 `_run()` 的收尾裡，而取消掉的
+        排隊工作再也不會進 `_run()`（外部稽核 F05，實測連續取消 400 件後
+        `_fns` 還留著 400 筆）。
+
+        同一個洞也出現在 `_trim_memory()` 與 `cleanup_expired()` —— 它們丟掉
+        `_jobs` 那一列，卻沒有丟 `_fns` / `_subprocs`。所以**所有「這件工作
+        結束了」的路徑都要走這裡**，不要各自 pop。
+        """
+        self._fns.pop(job_id, None)
+        self._subprocs.pop(job_id, None)
+        if drop_row:
+            self._jobs.pop(job_id, None)
 
     def _finish_slot(self, job_id: str) -> None:
         with self._lock:
@@ -620,6 +637,10 @@ class JobManager:
                 self._pending.remove(job_id)
             except ValueError:
                 pass          # 已經在跑了 —— 靠 job.cancelled checkpoint 收尾
+            else:
+                # 排隊中就被取消 → 這個 callable 永遠不會執行，立刻放掉。
+                # （正在跑的那個要留著讓 `_run()` 收尾。）
+                self._forget(job_id)
         self._persist(job)
         self._dispatch()
         return True
@@ -642,7 +663,7 @@ class JobManager:
                     if j.status in TERMINAL and j.id not in self._running]
             done.sort()
             for _, jid in done[:len(self._jobs) - _MEM_KEEP]:
-                self._jobs.pop(jid, None)
+                self._forget(jid, drop_row=True)
 
     def cleanup_expired(self) -> int:
         cutoff = time.time() - settings.job_ttl_seconds
@@ -656,7 +677,7 @@ class JobManager:
                             j.result_path.unlink()
                         except OSError:
                             pass
-                    del self._jobs[jid]
+                    self._forget(jid, drop_row=True)
                     removed += 1
         try:
             from . import job_store

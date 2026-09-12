@@ -22,14 +22,29 @@ Unicode true
   !define VERSION "0.0.0"
 !endif
 
-!define APPNAME      "Jason Tools 文件工具箱 (jt-doc-tools)"
+; **顯示名稱**（會隨語系變）與**路徑用的名字**（永遠不變）要分開。
+;
+; `APPNAME` 原本同時當四種東西用：精靈標題、「程式和功能」的顯示名稱、
+; 開始功能表的資料夾名、捷徑檔名。前兩個隨語系變沒問題（一個是視窗標題、
+; 一個是登錄檔的值），**後兩個是路徑** —— 安裝時用語系 A 建了資料夾、
+; 解除安裝時系統語系變成 B，`RMDir` 就找不到那個資料夾：解除安裝「成功」，
+; 但開始功能表留著一個刪不掉的殘骸。
+;
+; 所以：路徑一律用 `SHORTNAME`（不變），而**實際建出來的開始功能表路徑寫進
+; 登錄檔**，解除安裝時讀回來（見 `SM_FOLDER_VALUE`）。
+!define APPNAME      "Jason Tools 文件工具箱 (jt-doc-tools)"   ; 僅作為 LangString 的預設值與舊版相容用
 !define SHORTNAME    "jt-doc-tools"
+;: 登錄檔裡記「這次安裝實際建的開始功能表資料夾」的值名稱。
+!define SM_FOLDER_VALUE "StartMenuFolder"
+;: v1.15.30 以前寫死的中文資料夾名 —— 升級上來的安裝要靠它才刪得掉。
+!define LEGACY_SM_FOLDER "Jason Tools 文件工具箱 (jt-doc-tools)"
 !define PUBLISHER    "Jason Cheng"
 !define WEBSITE      "https://jasoncheng7115.github.io/jt-doc-tools/"
 !define REPOURL      "https://github.com/jasoncheng7115/jt-doc-tools"
 !define ARP_KEY      "Software\Microsoft\Windows\CurrentVersion\Uninstall\${SHORTNAME}"
 
-Name "${APPNAME} ${VERSION}"
+; NSIS 的 `Name` 吃語言字串（每個語言各有一份），所以標題可以隨語系變。
+Name "$(APP_DISPLAY) ${VERSION}"
 OutFile "jt-doc-tools-${VERSION}-setup.exe"
 InstallDir "$PROGRAMFILES64\${SHORTNAME}"
 RequestExecutionLevel admin    ; system-level install (matches install.ps1)
@@ -44,6 +59,7 @@ ShowUninstDetails show
 !include "FileFunc.nsh"
 
 ; 解除安裝模式的狀態（同一支執行檔靠 `/uninstall` 分流）
+Var SM_DIR      ; 這次安裝實際建的開始功能表資料夾
 Var UNMODE
 Var UN_PURGE
 Var UN_DIR
@@ -82,12 +98,24 @@ Var UN_DIR
 !insertmacro MUI_LANGUAGE "English"
 
 ; ---- localized strings ----------------------------------------------
+; 產品顯示名稱。**只用於顯示**（視窗標題、「程式和功能」）——
+; 路徑請用 `SHORTNAME`，理由見檔案開頭那段說明。
+LangString APP_DISPLAY  ${LANG_TRADCHINESE} "Jason Tools 文件工具箱 (jt-doc-tools)"
+LangString APP_DISPLAY  ${LANG_ENGLISH}     "Jason Tools Document Toolbox (jt-doc-tools)"
+; 開始功能表的資料夾與兩個捷徑的檔名。**這些是路徑**，所以建出來之後要把
+; 實際路徑寫進登錄檔，解除安裝才刪得掉（語系換了也一樣）。
+LangString SM_FOLDER    ${LANG_TRADCHINESE} "Jason Tools 文件工具箱"
+LangString SM_FOLDER    ${LANG_ENGLISH}     "Jason Tools Document Toolbox"
+LangString SM_OPEN_LNK  ${LANG_TRADCHINESE} "開啟 jt-doc-tools"
+LangString SM_OPEN_LNK  ${LANG_ENGLISH}     "Open jt-doc-tools"
+LangString SM_UNINST_LNK ${LANG_TRADCHINESE} "解除安裝 jt-doc-tools"
+LangString SM_UNINST_LNK ${LANG_ENGLISH}     "Uninstall jt-doc-tools"
 LangString FINISH_OPEN  ${LANG_TRADCHINESE} "開啟 jt-doc-tools 網頁介面"
 LangString FINISH_OPEN  ${LANG_ENGLISH}     "Open the jt-doc-tools web interface"
 LangString FINISH_LINK  ${LANG_TRADCHINESE} "前往 jt-doc-tools 介紹網站"
 LangString FINISH_LINK  ${LANG_ENGLISH}     "Visit the jt-doc-tools website"
-LangString UNINST_TOP   ${LANG_TRADCHINESE} "這會移除 ${APPNAME}。使用者資料（銀行帳號、簽名、歷史記錄）預設保留，可在下一步選擇是否一併刪除。"
-LangString UNINST_TOP   ${LANG_ENGLISH}     "This will remove ${APPNAME}. User data (bank accounts, signatures, history) is kept by default; you can choose to delete it next."
+LangString UNINST_TOP   ${LANG_TRADCHINESE} "這會移除 $(APP_DISPLAY)。使用者資料（銀行帳號、簽名、歷史記錄）預設保留，可在下一步選擇是否一併刪除。"
+LangString UNINST_TOP   ${LANG_ENGLISH}     "This will remove $(APP_DISPLAY). User data (bank accounts, signatures, history) is kept by default; you can choose to delete it next."
 
 LangString DESC_Core    ${LANG_TRADCHINESE} "核心程式與 Python 執行環境（必要）。"
 LangString DESC_Core    ${LANG_ENGLISH}     "Core program and Python runtime (required)."
@@ -100,23 +128,51 @@ LangString DESC_Svc     ${LANG_ENGLISH}     "Register a Windows service that sta
 LangString DESC_Fw      ${LANG_TRADCHINESE} "允許區域網路其他電腦連入（防火牆例外；服務改綁 0.0.0.0）。不需要請取消。"
 LangString DESC_Fw      ${LANG_ENGLISH}     "Allow other LAN machines to connect (firewall rule; binds 0.0.0.0). Uncheck if not needed."
 
+; 元件清單的項目名稱。NSIS 的 `Section "名字"` 是編譯期字面值，要多語得在
+; .onInit 用 SectionSetText 覆寫（見下方）。原本寫成「中文 / English」並列，
+; 兩種語系的使用者都要讀一遍不屬於自己的那半段。
+LangString SEC_CORE     ${LANG_TRADCHINESE} "核心程式（必要）"
+LangString SEC_CORE     ${LANG_ENGLISH}     "Core program (required)"
+LangString SEC_OCR      ${LANG_TRADCHINESE} "OCR 文字辨識引擎"
+LangString SEC_OCR      ${LANG_ENGLISH}     "OCR engine"
+LangString SEC_OFFICE   ${LANG_TRADCHINESE} "Office 轉檔引擎"
+LangString SEC_OFFICE   ${LANG_ENGLISH}     "Office conversion engine"
+LangString SEC_SVC      ${LANG_TRADCHINESE} "Windows 服務（開機自動啟動）"
+LangString SEC_SVC      ${LANG_ENGLISH}     "Windows service (autostart)"
+LangString SEC_FW       ${LANG_TRADCHINESE} "區域網路存取"
+LangString SEC_FW       ${LANG_ENGLISH}     "LAN access"
+
+; 對話框。**解除安裝那三句特別重要**：解除安裝走的是 `.onInit` 裡在語言對話框
+; 之前就 `Return` 的那條路，原本寫死中文 → 英文使用者要移除程式時看到的是
+; 一整段看不懂的中文，而那正是在問「要不要順便刪掉你的資料」。
+; NSIS 會依**系統語系**預設 $LANGUAGE（在 zh-TW 機器上實測過：把 English
+; 宣告在第一個，解析出來的仍是中文那組），所以不經對話框也會選對。
+LangString ERR_INSTALL  ${LANG_TRADCHINESE} "安裝失敗 (install_core.ps1 exit code $1)。$\r$\n請查看 $\"%ProgramData%\${SHORTNAME}\Logs\installer.log$\" 以取得詳情。"
+LangString ERR_INSTALL  ${LANG_ENGLISH}     "Installation failed (install_core.ps1 exit code $1).$\r$\nSee $\"%ProgramData%\${SHORTNAME}\Logs\installer.log$\" for details."
+LangString UN_ASK_PURGE ${LANG_TRADCHINESE} "是否一併刪除使用者資料（銀行帳號、簽名、歷史記錄）？$\r$\n$\r$\n選「否」會保留資料，下次重新安裝可沿用。"
+LangString UN_ASK_PURGE ${LANG_ENGLISH}     "Also delete user data (bank accounts, signatures, history)?$\r$\n$\r$\nChoose No to keep it; a future reinstall will pick it up again."
+LangString UN_NO_DIR    ${LANG_TRADCHINESE} "找不到安裝目錄，已中止解除安裝。"
+LangString UN_NO_DIR    ${LANG_ENGLISH}     "Installation directory not found; uninstall aborted."
+LangString UN_NOT_OURS  ${LANG_TRADCHINESE} "$UN_DIR 看起來不是 ${SHORTNAME} 的安裝目錄，已中止解除安裝。"
+LangString UN_NOT_OURS  ${LANG_ENGLISH}     "$UN_DIR does not look like a ${SHORTNAME} installation; uninstall aborted."
+
 ; =====================================================================
 ;  Sections  (all optional sections default to selected = 全勾)
 ; =====================================================================
-Section "核心程式 / Core (required)" SecCore
+Section "Core" SecCore
   SectionIn RO
 SectionEnd
 
-Section "OCR 文字辨識引擎 / OCR engine" SecOcr
+Section "OCR" SecOcr
 SectionEnd
 
-Section "Office 轉檔引擎 / Office engine" SecOffice
+Section "Office" SecOffice
 SectionEnd
 
-Section "Windows 服務 / Service (autostart)" SecSvc
+Section "Service" SecSvc
 SectionEnd
 
-Section "區域網路存取 / LAN access" SecFw
+Section "LAN" SecFw
 SectionEnd
 
 ; Hidden section that performs the actual install once component choices
@@ -175,7 +231,7 @@ Section "-DoInstall"
   nsExec::ExecToLog '"$2" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\install_core.ps1" -InstallDir "$INSTDIR"$0'
   Pop $1
   ${If} $1 != 0
-    MessageBox MB_ICONSTOP "安裝失敗 (install_core.ps1 exit code $1)。$\r$\n請查看 $\"%ProgramData%\${SHORTNAME}\Logs\installer.log$\" 以取得詳情。"
+    MessageBox MB_ICONSTOP "$(ERR_INSTALL)"
     Abort
   ${EndIf}
 
@@ -196,7 +252,8 @@ Section "-DoInstall"
   ; 它已經沒有人指向它了，留著只是一支沒簽章、按了會出事的執行檔。
   Delete "$INSTDIR\uninstall.exe"
 
-  WriteRegStr   HKLM "${ARP_KEY}" "DisplayName"     "${APPNAME}"
+  ; 登錄檔的**值**（不是鍵路徑）→ 可以隨語系變，不影響升級或解除安裝的定位。
+  WriteRegStr   HKLM "${ARP_KEY}" "DisplayName"     "$(APP_DISPLAY)"
   WriteRegStr   HKLM "${ARP_KEY}" "DisplayVersion"  "${VERSION}"
   WriteRegStr   HKLM "${ARP_KEY}" "Publisher"       "${PUBLISHER}"
   WriteRegStr   HKLM "${ARP_KEY}" "URLInfoAbout"    "${WEBSITE}"
@@ -210,9 +267,13 @@ Section "-DoInstall"
   WriteRegDWORD HKLM "${ARP_KEY}" "NoRepair" 1
 
   ; Start menu shortcut (browser link to the local UI).
-  CreateDirectory "$SMPROGRAMS\${APPNAME}"
-  CreateShortcut  "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "http://127.0.0.1:8765/" "" "$INSTDIR\packaging\windows\assets\jtdt.ico"
-  CreateShortcut  "$SMPROGRAMS\${APPNAME}\解除安裝 Uninstall.lnk" "$INSTDIR\${SHORTNAME}-setup.exe" "/uninstall"
+  ; **把實際建出來的資料夾寫進登錄檔** —— 解除安裝時讀它，不要重算。
+  ; 重算的話，安裝與解除安裝的語系只要不同就刪不掉（那正是這批要修的事）。
+  StrCpy $SM_DIR "$SMPROGRAMS\$(SM_FOLDER)"
+  CreateDirectory "$SM_DIR"
+  CreateShortcut  "$SM_DIR\$(SM_OPEN_LNK).lnk" "http://127.0.0.1:8765/" "" "$INSTDIR\packaging\windows\assets\jtdt.ico"
+  CreateShortcut  "$SM_DIR\$(SM_UNINST_LNK).lnk" "$INSTDIR\${SHORTNAME}-setup.exe" "/uninstall"
+  WriteRegStr   HKLM "${ARP_KEY}" "${SM_FOLDER_VALUE}" "$SM_DIR"
 SectionEnd
 
 ; ---- component descriptions ----------------------------------------
@@ -274,7 +335,7 @@ Function .onInit
 
     ; 要不要一併刪掉使用者資料。`/SD IDNO`：無介面模式預設**保留**。
     MessageBox MB_YESNO|MB_ICONQUESTION \
-      "是否一併刪除使用者資料（銀行帳號、簽名、歷史記錄）？$\r$\n$\r$\n選「否」會保留資料，下次重新安裝可沿用。" \
+      "$(UN_ASK_PURGE)" \
       /SD IDNO IDYES un_purge_yes IDNO un_purge_done
     un_purge_yes:
       StrCpy $UN_PURGE "1"
@@ -283,6 +344,13 @@ Function .onInit
   ${EndIf}
 
   !insertmacro MUI_LANGDLL_DISPLAY
+
+  ; 語言確定之後才填元件名稱（使用者在對話框改過語言也算數）
+  SectionSetText ${SecCore}   "$(SEC_CORE)"
+  SectionSetText ${SecOcr}    "$(SEC_OCR)"
+  SectionSetText ${SecOffice} "$(SEC_OFFICE)"
+  SectionSetText ${SecSvc}    "$(SEC_SVC)"
+  SectionSetText ${SecFw}     "$(SEC_FW)"
 FunctionEnd
 
 ; =====================================================================
@@ -322,12 +390,12 @@ Section "-DoUninstall"
   ; **拿一個半截的路徑去 RMDir /r 是災難**（`C:\Program Files\x` 被空白截斷成
   ; `C:\Program`）。動手刪之前先確認那真的是我們的安裝目錄。
   ${If} $UN_DIR == ""
-    MessageBox MB_ICONSTOP "找不到安裝目錄，已中止解除安裝。"
+    MessageBox MB_ICONSTOP "$(UN_NO_DIR)"
     Abort
   ${EndIf}
   IfFileExists "$UN_DIR\packaging\windows\uninstall_core.ps1" un_dir_ok 0
   IfFileExists "$UN_DIR\${SHORTNAME}-setup.exe" un_dir_ok 0
-    MessageBox MB_ICONSTOP "$UN_DIR 看起來不是 ${SHORTNAME} 的安裝目錄，已中止解除安裝。"
+    MessageBox MB_ICONSTOP "$(UN_NOT_OURS)"
     Abort
   un_dir_ok:
   SetDetailsPrint both
@@ -367,9 +435,26 @@ Section "-DoUninstall"
   ; 移除程式檔。/REBOOTOK：鎖住的檔案排到下次開機刪（例如 .venv 裡還被短暫持有的）
   RMDir /r /REBOOTOK "$UN_DIR"
 
-  Delete "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk"
-  Delete "$SMPROGRAMS\${APPNAME}\解除安裝 Uninstall.lnk"
-  RMDir  "$SMPROGRAMS\${APPNAME}"
+  ; 開始功能表：**用安裝當時記下的路徑**，不要用現在的語系重算。
+  ;
+  ; **動手 `RMDir /r` 之前要確認那真的是我們建的東西**：登錄檔的值被人改過、
+  ; 或讀出來是空字串時，`RMDir /r` 對著錯誤的路徑跑會刪掉不該刪的
+  ; （`/instdir=` 被空白截斷成 `C:\Program` 那次就是這樣）。
+  ; 判準：必須以 `$SMPROGRAMS\` 開頭。
+  ReadRegStr $SM_DIR HKLM "${ARP_KEY}" "${SM_FOLDER_VALUE}"
+  ${If} $SM_DIR != ""
+    StrLen $R8 "$SMPROGRAMS"
+    StrCpy $R9 "$SM_DIR" $R8
+    ${If} $R9 == "$SMPROGRAMS"
+      RMDir /r "$SM_DIR"
+    ${Else}
+      ; 這裡已經 `FileClose $4` 了，不要寫那個記錄檔（會無聲失敗）。
+      DetailPrint "refusing to delete suspicious start menu path: $SM_DIR"
+    ${EndIf}
+  ${EndIf}
+  ; 退路：v1.15.30 以前的安裝沒有記這個值，資料夾名是寫死的中文。
+  ; **這條不可以省** —— 不然從舊版升級上來的人會留下一個刪不掉的資料夾。
+  RMDir /r "$SMPROGRAMS\${LEGACY_SM_FOLDER}"
   DeleteRegKey HKLM "${ARP_KEY}"
 
   ; 我們是從 %TEMP% 的副本跑的，所以 $UN_DIR 可以整個刪掉；萬一還有殘留

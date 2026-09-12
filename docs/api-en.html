@@ -220,6 +220,7 @@
             <a class="nav-ep" href="#企業-logo-狀態">Company logo status</a>
             <a class="nav-ep" href="#設定匯出清單">Settings export list</a>
             <a class="nav-ep" href="#token-管理">Token management</a>
+            <a class="nav-ep" href="#管理介面自己用的-xhr-端點">XHR endpoints used by the admin UI itself</a>
           </div>
         </div>
         <div class="nav-group">
@@ -242,6 +243,9 @@
         </div>
         <div class="nav-group nav-group-flat">
           <a class="nav-ch" href="#14b-使用者工作區session-認證非-bearer-api">14b. User workspace (session authentication, not a Bearer API)</a>
+        </div>
+        <div class="nav-group nav-group-flat">
+          <a class="nav-ch" href="#14c-使用者通知與收件匣session-認證非-bearer-api">14c. User notifications and inbox (session auth, not the Bearer API)</a>
         </div>
         <div class="nav-group nav-group-flat">
           <a class="nav-ch" href="#15-變更歷史">15. Change history</a>
@@ -1130,7 +1134,8 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">DELETE</span> <span
       <section class="doc-section" data-sec="下載-job-結果" data-title="Download a job result" hidden>
 <div class="doc-crumb">10. Job-mode API</div>
 <h4 id="下載-job-結果">Download a job result</h4>
-<pre><code class="lang-text"><span class="hl-method">GET</span> /api/jobs/{job_id}/download</code></pre>
+<pre><code class="lang-text"><span class="hl-method">GET</span> /api/jobs/{job_id}/download
+<span class="hl-method">GET</span> /api/jobs/{job_id}/download/{filename}    <span class="hl-cmt"># 同一份結果，只是讓瀏覽器存成這個檔名</span></code></pre>
 <pre><code class="lang-bash">curl <span class="hl-url">http://localhost:8765/api/jobs/abc123/download</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
   <span class="hl-flag">--output</span> result.pdf</code></pre>
@@ -1222,6 +1227,13 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer ADMIN_TOKEN&quot;</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Content-Type: application/json&quot;</span> \
   <span class="hl-flag">-d</span> <span class="hl-str">&#x27;{&quot;enforce&quot;:true}&#x27;</span></code></pre>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="管理介面自己用的-xhr-端點" data-title="XHR endpoints used by the admin UI itself" hidden>
+<div class="doc-crumb">11. Administration API</div>
+<h4 id="管理介面自己用的-xhr-端點">XHR endpoints used by the admin UI itself</h4>
+<p>These are <strong>endpoints the admin pages call themselves</strong>, not a stable public interface: their parameters and responses change along with the pages, so <strong>no compatibility is promised</strong>. They are listed so that this document covers every endpoint; for automation, prefer the APIs above, which have a defined contract.</p>
+<div class="table-wrap"><table><thead><tr><th>Endpoint</th><th>Method</th><th>Admin page</th></tr></thead><tbody><tr><td><code>/admin/api/check-latest-version</code></td><td>POST</td><td>System status: check for a newer release</td></tr><tr><td><code>/admin/api/upload-limit/probe</code></td><td>POST</td><td>System status: measure the reverse proxy's upload limit</td></tr><tr><td><code>/admin/api/ocr-langs/set-engine</code></td><td>POST</td><td>OCR language packs: switch the default engine</td></tr><tr><td><code>/admin/api/ocr-langs/set-quality</code></td><td>POST</td><td>OCR language packs: switch recognition quality</td></tr><tr><td><code>/admin/api/ocr-langs/switch-active</code></td><td>POST</td><td>OCR language packs: switch the active language</td></tr><tr><td><code>/admin/jobs/api/list</code></td><td>GET</td><td>Job queue: current jobs</td></tr><tr><td><code>/admin/jobs/api/history</code></td><td>GET</td><td>Job queue: history</td></tr><tr><td><code>/admin/jobs/api/cancel/{job_id}</code></td><td>POST</td><td>Job queue: cancel one job</td></tr><tr><td><code>/admin/jobs/api/pause</code></td><td>POST</td><td>Job queue: pause or resume dispatching</td></tr><tr><td><code>/admin/jobs/api/concurrency</code></td><td>POST</td><td>Job queue: maximum concurrent jobs</td></tr><tr><td><code>/admin/jobs/api/priority-users</code></td><td>GET / POST</td><td>Job queue: priority dispatch list (<strong>the order is the priority</strong>)</td></tr><tr><td><code>/admin/jobs/api/user-search</code></td><td>GET</td><td>Job queue: user search box for picking priority users</td></tr></tbody></table></div>
 <hr>
       </section>
       <section class="doc-section" data-sec="gitlab-ci--github-actions把-word-文件自動轉-pdf" data-title="GitLab CI / GitHub Actions: convert Word documents to PDF automatically" hidden>
@@ -1346,6 +1358,13 @@ sudo systemctl start jt-doc-tools
 <p>"My workspace" is a web feature tied to the signed-in session (cookie authentication) and is <strong>not part of the public Bearer API</strong>, because each file is isolated by account. An administrator must enable it in "workspace settings"; while it is disabled every endpoint below returns 404.</p>
 <div class="table-wrap"><table><thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead><tbody><tr><td><code>/workspace</code></td><td>GET</td><td>The “My workspace” page</td></tr><tr><td><code>/workspace/api/list</code></td><td>GET</td><td>List your own files (filter with <code>?accept=pdf,png</code>) plus the quota and retention period</td></tr><tr><td><code>/workspace/api/count</code></td><td>GET</td><td>File count (for the sidebar badge)</td></tr><tr><td><code>/workspace/save</code></td><td>POST</td><td>Save a file: <code>job_id</code> (the server copies the job result) or <code>file</code> (upload the bytes directly); PDF / PNG only</td></tr><tr><td><code>/workspace/file/{file_id}</code></td><td>GET</td><td>Fetch a file (<code>?dl=1</code> to download)</td></tr><tr><td><code>/workspace/thumb/{file_id}</code></td><td>GET</td><td>Thumbnail (first PDF page rendered / the PNG itself)</td></tr><tr><td><code>/workspace/delete</code></td><td>POST</td><td>Delete (<code>file_id</code>)</td></tr><tr><td><code>/workspace/rename</code></td><td>POST</td><td>Rename (<code>file_id</code>, <code>name</code>)</td></tr></tbody></table></div>
 <p>The quota, per-file limit, retention period and the on/off switch are set by an administrator at <code>/admin/workspace</code> (site-wide, with no individual exceptions).</p>
+<hr>
+      </section>
+      <section class="doc-section" data-sec="14c-使用者通知與收件匣session-認證非-bearer-api" data-title="14c. User notifications and inbox (session auth, not the Bearer API)" hidden>
+<h3 id="14c-使用者通知與收件匣session-認證非-bearer-api">14c. User notifications and inbox (session auth, not the Bearer API)</h3>
+<p>Same nature as the workspace in §14b: bound to the login session (cookie), <strong>not part of the public Bearer API</strong>, because the contents are isolated per signed-in user. Requests without a session get 401 / 302.</p>
+<div class="table-wrap"><table><thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead><tbody><tr><td><code>/api/my/notify</code></td><td>GET</td><td>Read your own notification settings (whether to notify on job completion, and through which channels)</td></tr><tr><td><code>/api/my/notify</code></td><td>POST</td><td>Save your own notification settings</td></tr><tr><td><code>/api/my/inbox</code></td><td>GET</td><td>In-app notification list (unread first)</td></tr><tr><td><code>/api/my/inbox/seen</code></td><td>POST</td><td>Mark as read ( <code>id</code> or <code>all=1</code> )</td></tr></tbody></table></div>
+<blockquote><p>These four <strong>are deliberately left out of the Bearer API</strong>: they return data belonging to the signed-in user, so calling them with a token makes little sense (a token is bound to a user, but these endpoints are designed for the browser).</p></blockquote>
 <hr>
       </section>
       <section class="doc-section" data-sec="15-變更歷史" data-title="15. Change history" hidden>

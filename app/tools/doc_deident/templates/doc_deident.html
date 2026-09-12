@@ -184,6 +184,18 @@
 
 <div class="panel">
   <h2 data-s="s53896af7">{{ tr('2. 選擇要偵測的類型') }}</h2>
+  {# **文件語言**不是介面語言：介面開中文、手上是英文合約很常見。
+     台灣的市話 / 地址 / 統編式子套在英文文件上是**抓錯**不是抓不到
+     （會把護照號、IBAN 片段、信用卡片段都當成電話），所以要分開。 #}
+  <div class="af-field" id="ddLangRow">
+    <label for="ddDocLang">{{ tr('文件語言') }}</label>
+    <select id="ddDocLang" class="jt-select">
+      {% for code, name in doc_langs %}
+      <option value="{{ code }}" {% if code == default_doc_lang %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+    <small class="af-note">{{ tr('決定套用哪一組偵測規則（台灣專屬的身分證 / 統編 / 市話，或英美的 SSN / IBAN / 郵遞區號）。換語言後請重新偵測。') }}</small>
+  </div>
   <div class="dd-pattern-cats" id="ddTypes">
     {% set cat_icons = {
       '個人身分': 'id-card', '聯絡方式': 'mail', '金融資訊': 'credit-card',
@@ -340,6 +352,10 @@
 <div class="dd-result" id="doneBox" hidden>
   <h3 data-s="s8b6172c3">{{ tr('處理完成') }}</h3>
   <div id="doneSummary" data-s="s5d5fcd83"></div>
+  {# 掃描件（圖片型 PDF）的個資在「圖片像素」裡，真刪除必須重新編碼那張圖，
+     檔案因此會變大（實測約 2.4 倍）。我們刻意不在這裡做重壓 —— 那要多花
+     4 秒/頁只換到 20~30%，而且是第二次有損壓縮。要縮小請走 pdf-compress。 #}
+  <p class="muted" id="ddSizeNote" hidden data-s="sdd51ze01">{{ tr('掃描件（圖片型 PDF）的圖片需要重新編碼才能真正刪掉像素，因此檔案可能變大。需要縮小請接著用「PDF 壓縮」工具。') }}</p>
   <a class="btn btn-primary" id="dlLink" href="#">{{ icon('download') }} {{ tr('下載處理後的 PDF') }}</a>
   {% if workspace_enabled(request) %}<button class="btn" id="wsSaveBtn" type="button" hidden data-s="sc3f83707">{{ icon('archive') }} {{ tr('存至工作區') }}</button>{% endif %}
   <h4 data-s="s4fd43b62">{{ tr('處理後預覽') }}</h4>
@@ -390,6 +406,9 @@ $('btnDetect').addEventListener('click', async () => {
   const fd = new FormData();
   fd.append('file', currentFile);
   fd.append('types', types);
+  // 文件語言 —— 伺服器據此決定「沒指定 types 時」要用哪一組預設式子
+  const ddLang = document.getElementById('ddDocLang');
+  if (ddLang) fd.append('doc_lang', ddLang.value);
   fd.append('custom', custom);
   const llmAug = $('ddLlmAugment');
   if (llmAug && llmAug.checked) fd.append('llm_augment', '1');
@@ -627,6 +646,8 @@ $('btnProcess').addEventListener('click', async () => {
         <img src="${p.thumb_url}" data-full="${p.large_url}" alt="page ${p.page}" loading="lazy" />
         <div class="num">第 ${p.page} 頁</div>
       </div>`).join('');
+    // 只有真的動到圖片（掃描件）才提醒檔案會變大 —— 純文字 PDF 不顯示
+    $('ddSizeNote').hidden = !(d.image_pages > 0);
     $('doneBox').hidden = false;
     $('doneBox').scrollIntoView({behavior:'smooth', block:'end'});
   } catch (e) {

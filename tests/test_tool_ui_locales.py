@@ -16,9 +16,15 @@ from app.core.ui_locale import CHINESE, DEFAULT_LOCALE, TAIWAN_ONLY, tool_visibl
 from app.tool_registry import discover_tools
 
 #: 靠台灣特有的資料或格式才成立 —— 簡體中文環境也不成立。
+#:
+#: **v1.15.32 移出兩支**：`doc-deident` / `text-deident` 加了英美的樣式
+#: （SSN / NI / IBAN / 電話 / 郵遞區號 / 美式地址 / 英文月份生日），
+#: 而且樣式**依文件語言分組** —— 英文模式下台灣專屬的式子會關掉。
+#: 反灰的判準一直是「丟進去會不會無聲失敗」：以前英文文件丟進去會**抓錯**
+#: （台灣市話式子把護照號、IBAN 片段當成電話），現在不會了。
 _TAIWAN_ONLY = {
     "vat-lookup", "einvoice-scan", "transit-proof", "submission-check",
-    "pdf-fill", "doc-deident", "text-deident",
+    "pdf-fill",
 }
 #: 靠華人文書慣例（印章）—— 曾經限成中文，2026-09-05 使用者指示**解除**：
 #: 蓋章 / 簽名 / 跨頁防抽換不是華人專有，英文環境一樣會蓋公司章、貼簽名圖。

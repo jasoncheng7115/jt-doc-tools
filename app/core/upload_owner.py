@@ -84,9 +84,66 @@ def record(upload_id: str, request: Request) -> None:
         pass
 
 
+#: **管理員可不可以讀別人的檔案？** 這是產品的權限契約，不是實作細節。
+#:
+#: 現況（外部稽核 F10 指出的不一致）：
+#:   * 上傳檔 / 預覽（`upload_owner.check`）—— 管理員**直接放行**
+#:   * 背景作業的產出（`main._job_access`）—— 有主的作業**嚴格比對擁有者，
+#:     管理員也不行**
+#:
+#: 同一份文件，走哪條路決定管理員看不看得到 —— 「管理員看不到使用者的隱私
+#: 資料」這句話因此只在部分範圍成立。**政策由一個常數決定、兩條路共用**，
+#: 要改政策就是改這裡（並且對應的測試會告訴你哪些行為跟著變）。
+#:
+#: 目前選 True（維持既有行為）：客戶的支援情境需要管理員撈得到檔案。
+#: 代價是管理員讀得到使用者的文件 —— 所以**每一次都要寫稽核**（見下），
+#: 而且權限矩陣與產品說明要如實寫出來。
+ADMIN_MAY_READ_USER_FILES = True
+
+#: 同一個管理員對同一個資源，多久內只記一筆越權稽核。
+_OVERRIDE_LOG_WINDOW = 300.0
+_OVERRIDE_LOGGED: dict[tuple[int, str], float] = {}
+
+
+def admin_override_allowed(cur_uid: int, resource: str, owner_id=None,
+                           request: Request = None) -> bool:
+    """管理員的越權讀取要不要放行 —— **兩條路都走這裡**。
+
+    放行時寫一筆稽核（`admin_file_override`）：管理員讀得到別人的文件是
+    產品決定，但「誰在什麼時候讀了誰的東西」必須查得到。
+    """
+    if not ADMIN_MAY_READ_USER_FILES:
+        return False
+    # **去重**：一頁縮圖會打幾十個請求，逐個寫稽核會把稽核洗掉
+    # （「什麼都記」等於「什麼都查不到」）。同一個管理員對同一個資源在
+    # 視窗內只記一筆。
+    now = time.time()
+    key = (int(cur_uid), str(resource))
+    last = _OVERRIDE_LOGGED.get(key, 0.0)
+    if now - last >= _OVERRIDE_LOG_WINDOW:
+        _OVERRIDE_LOGGED[key] = now
+        if len(_OVERRIDE_LOGGED) > 2000:      # 不讓它無限長大
+            for k, ts in sorted(_OVERRIDE_LOGGED.items(), key=lambda kv: kv[1])[:1000]:
+                _OVERRIDE_LOGGED.pop(k, None)
+        try:
+            from . import audit_db
+            audit_db.log_event(
+                "admin_file_override",
+                target=str(resource),
+                details={"owner_id": owner_id, "admin_user_id": cur_uid},
+            )
+        except Exception:  # noqa: BLE001
+            pass
+    return True
+
+
 def check(upload_id: str, request: Request) -> bool:
     """Return True if the request's user is allowed to access this upload's
-    files. Allow-all when auth is off. Admin override always wins."""
+    files. Allow-all when auth is off.
+
+    管理員的越權讀取走 `admin_override_allowed()` —— 見上方
+    `ADMIN_MAY_READ_USER_FILES` 對這個政策的說明。
+    """
     if not _auth_enabled():
         return True
     if not is_uuid_hex(upload_id):
@@ -94,9 +151,19 @@ def check(upload_id: str, request: Request) -> bool:
     cur_uid = _user_id(request)
     if cur_uid is None:
         return False
-    if _is_admin(cur_uid):
-        return True
     f = _owners_dir() / f"{upload_id}.json"
+    if _is_admin(cur_uid):
+        owner = None
+        try:
+            if f.exists():
+                owner = int(json.loads(f.read_text(encoding="utf-8"))
+                            .get("user_id") or 0) or None
+        except Exception:  # noqa: BLE001
+            owner = None
+        if owner is not None and owner == cur_uid:
+            return True            # 自己的東西，不算越權、不寫稽核
+        return admin_override_allowed(cur_uid, f"upload:{upload_id}",
+                                      owner_id=owner, request=request)
     if not f.exists():
         # No record — be safe and deny non-admins. Could be: legacy upload
         # from before this fix, sweeper cleaned it, or someone guessed an id.

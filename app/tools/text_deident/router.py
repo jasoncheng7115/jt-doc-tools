@@ -67,6 +67,27 @@ def _extract_text_from_file(filename: str, data: bytes) -> str:
 
 # ---------- detection (re-uses doc-deident patterns) -----------------------
 
+def _doc_lang(body: dict | None = None, request=None) -> str:
+    """這次要用哪一組式子（文件語言，不是介面語言）。
+
+    台灣的市話 / 地址 / 統編式子套在英文文字上是**抓錯**不是抓不到，
+    所以「支援英文」必須連「在英文模式下關掉台灣專屬那幾條」一起做
+    —— 詳見 `patterns.catalog_for`。
+    """
+    if body:
+        val = str(body.get("doc_lang") or "").strip()
+        if val:
+            return val
+    if request is not None:
+        try:
+            from ...core.ui_locale import resolve
+            return "en" if str(resolve(request)).lower().startswith("en") \
+                else "zh-Hant"
+        except Exception:  # noqa: BLE001
+            pass
+    return "zh-Hant"
+
+
 def _parse_custom_regexes(custom_text: str) -> list[tuple[str, re.Pattern]]:
     """Each line: ``label | regex``. Empty / malformed lines silently skipped."""
     out: list[tuple[str, re.Pattern]] = []
@@ -394,6 +415,9 @@ async def index(request: Request):
         "text_deident.html",
         {
             "request": request,
+            # 文件語言 ≠ 介面語言（見 _doc_lang 的說明）
+            "doc_langs": P.DOC_LANGS,
+            "default_doc_lang": _doc_lang(request=request),
             "grouped": grouped,
             "office_engine": detect_engine(),
             "llm_enabled": llm_settings.is_enabled(),
@@ -528,7 +552,8 @@ async def detect(request: Request):
         raise HTTPException(400, "text is empty")
     if len(text) > 1_000_000:
         raise HTTPException(400, "text too large (limit 1,000,000 chars)")
-    selected_ids = set(body.get("types") or [p.id for p in P.CATALOG if p.default_on])
+    selected_ids = set(body.get("types")
+                       or P.default_ids_for(_doc_lang(body, request)))
     custom_text = str(body.get("custom_regex") or "")
     custom_regexes = _parse_custom_regexes(custom_text)
     findings = _detect_findings(text, selected_ids, custom_regexes)
@@ -609,7 +634,8 @@ async def api_text_deident(request: Request):
     if len(text) > 1_000_000:
         raise HTTPException(400, "text too large (limit 1,000,000 chars)")
     mode = (body.get("mode") or "mask").strip()
-    selected_ids = set(body.get("types") or [p.id for p in P.CATALOG if p.default_on])
+    selected_ids = set(body.get("types")
+                       or P.default_ids_for(_doc_lang(body, request)))
     custom_text = str(body.get("custom_regex") or "")
     custom_regexes = _parse_custom_regexes(custom_text)
     findings = _detect_findings(text, selected_ids, custom_regexes)

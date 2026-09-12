@@ -19,6 +19,7 @@ from ...config import settings
 from ...core import office_convert, pdf_preview
 from ...core.job_manager import job_manager
 from . import patterns as P
+from . import redact_core as _redact
 
 logger = logging.getLogger("app.doc_deident")
 router = APIRouter()
@@ -285,12 +286,32 @@ def _build_findings_for_page(page, selected_ids: set[str],
     return out
 
 
+def _default_doc_lang(request: Request) -> str:
+    """預設的**文件語言**（不是介面語言）。
+
+    這兩件事會不一樣：介面開中文、手上是一份英文合約，是很常見的情況。
+    所以只拿介面語言當**預設值**，畫面上可以改。
+
+    為什麼要有「文件語言」這個概念：台灣的市話 / 地址 / 統編式子套在英文
+    文件上不是「抓不到」而是**抓錯**（實測把護照號、IBAN 片段、信用卡片段
+    都當成電話）。**誤判比漏抓更危險** —— 畫面會顯示「已處理」。
+    """
+    try:
+        from ...core.ui_locale import resolve
+        return "en" if str(resolve(request)).lower().startswith("en") \
+            else "zh-Hant"
+    except Exception:  # noqa: BLE001
+        return "zh-Hant"
+
+
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     templates = request.app.state.templates
+    doc_lang = _default_doc_lang(request)
     # Group patterns for UI rendering; preserve CATALOG order inside each group.
+    # **依文件語言過濾** —— 不然英文文件的畫面上會列一整排台灣專屬項目。
     grouped: dict[str, list[dict]] = {}
-    for p in P.CATALOG:
+    for p in P.catalog_for(doc_lang):
         grouped.setdefault(p.group, []).append(
             {"id": p.id, "label": p.label, "default_on": p.default_on, "icon": p.icon}
         )
@@ -305,6 +326,7 @@ async def index(request: Request):
     return templates.TemplateResponse(request, 
         "doc_deident.html",
         {"request": request, "pattern_groups": pattern_groups,
+         "doc_langs": P.DOC_LANGS, "default_doc_lang": doc_lang,
          "llm_enabled": llm_settings.is_enabled(),
          "llm_model": llm_settings.get_model_for("doc-deident") if llm_settings.is_enabled() else ""},
     )
@@ -315,6 +337,7 @@ async def detect(
     request: Request,
     file: UploadFile = File(...),
     types: str = Form(""),    # comma-separated pattern ids
+    doc_lang: str = Form(""),  # 文件語言（決定用哪一組式子；空 = 依介面語言）
     custom: str = Form(""),   # optional: "label|regex\nlabel2|regex2"
     llm_augment: str = Form(""),  # "1" → 啟用 LLM 補偵測（regex 抓不到的人名 / 職稱 / 客戶代號等）
 ):
@@ -359,7 +382,9 @@ async def detect(
 
     selected_ids = set(t for t in (types or "").split(",") if t.strip())
     if not selected_ids:
-        selected_ids = {p.id for p in P.CATALOG if p.default_on}
+        # 沒指定就用**這個文件語言**的預設集合（不是整份目錄）——
+        # 整份目錄會把台灣專屬的式子套到英文文件上，那是抓錯不是抓不到。
+        selected_ids = P.default_ids_for(doc_lang or _default_doc_lang(request))
 
     # Parse custom regex spec: one rule per line, "label|regex"
     custom_regexes: list[tuple[str, re.Pattern]] = []
@@ -676,8 +701,12 @@ async def process(request: Request):
     # 「最大同時作業數」完全沒用）。同一支工具的公開 API
     # （`/api/doc-deident`）本來就是包在 `to_thread` 裡的，只有網頁用的
     # 這條漏掉 —— 同一件事兩份實作，只有一份修過。
-    def _work() -> tuple[int, list[dict]]:
+    def _work() -> tuple[int, list[dict], int]:
         count_done = 0
+        # 有幾頁的選取範圍落在圖片上 —— 那些頁的圖必須重新編碼才能真的把
+        # 像素刪掉，檔案會變大。只有真的發生時才提醒使用者（純文字 PDF
+        # 顯示「檔案可能變大」是雜訊）。
+        image_pages = 0
         doc = fitz.open(str(pdf_path))
         try:
             for pno, items in by_page.items():
@@ -686,20 +715,19 @@ async def process(request: Request):
                 page = doc[pno]
                 # Pass 1: redact (destroy) every selected region so the
                 # original sensitive text is truly removed.
+                rects = []
                 for s in items:
                     bb = s.get("bbox") or []
                     if len(bb) != 4:
                         continue
-                    rect = fitz.Rect(*bb)
-                    if mode_fill is None:
-                        page.add_redact_annot(rect)            # no fill → transparent
-                    else:
-                        page.add_redact_annot(rect, fill=mode_fill)
+                    rects.append(fitz.Rect(*bb))
                     count_done += 1
-                try:
-                    page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
-                except Exception:
-                    page.apply_redactions()
+                # 文字**與圖片像素**都要清掉 —— 判準與理由都在 redact_core，
+                # 不要在這裡重新寫一份（原本網頁與 API 各一份，兩邊都把
+                # 安全的預設關掉了）。
+                if rects and page.get_images():
+                    image_pages += 1
+                _redact.apply_page_redactions(page, rects, fill=mode_fill)
 
                 # Pass 2（遮罩 / 替換）：把字貼回原位，字級與顏色照原本的。
                 # 兩種模式的差別只在貼什麼字串 —— 遮罩貼 `0912****678`，
@@ -765,15 +793,17 @@ async def process(request: Request):
                     "large_url": f"/tools/doc-deident/preview/{thumb.name}",
                 })
 
-        return count_done, pages_info
+        return count_done, pages_info, image_pages
 
-    count_done, pages_info = await _asyncio.to_thread(_work)
+    count_done, pages_info, image_pages = await _asyncio.to_thread(_work)
 
     return {
         "ok": True,
         "processed": count_done,
         "download_url": f"/tools/doc-deident/download/{upload_id}",
         "pages": pages_info,
+        # > 0 表示有圖片被重新編碼（掃描件）→ 前端才顯示「檔案可能變大」
+        "image_pages": image_pages,
     }
 
 
@@ -819,7 +849,8 @@ async def download(upload_id: str, request: Request):
 async def api_doc_deident(
     request: Request,
     file: UploadFile = File(...),
-    types: str = Form(""),       # comma-separated pattern ids（空 = 全部 default-on）
+    types: str = Form(""),       # comma-separated pattern ids（空 = 該語言的 default-on）
+    doc_lang: str = Form(""),    # 文件語言：zh-Hant（預設）/ en
     mode: str = Form("mask"),    # mask（同字數的 *）/ redact（黑條真遮蔽）/ replace（換成假值）
     replacements: str = Form(""),      # replace 模式：JSON 物件 {"原值": "指定的新值"}
     valid_checksum: str = Form(""),    # replace 模式："1" → 產生可通過檢查碼的假值
@@ -868,7 +899,7 @@ async def api_doc_deident(
         raise HTTPException(400, f"不支援的檔案格式：{ext}")
     selected_ids = {t for t in (types or "").split(",") if t.strip()}
     if not selected_ids:
-        selected_ids = {p.id for p in P.CATALOG if p.default_on}
+        selected_ids = P.default_ids_for(doc_lang)
 
     out_path = _out_path(upload_id)
     mode_fill = (0, 0, 0) if mode == "redact" else None
@@ -888,19 +919,13 @@ async def api_doc_deident(
             # 2. 依 mode redact / mask
             for pno, items in by_page.items():
                 page = doc[pno]
+                rects = []
                 for it in items:
                     bb = it.get("bbox") or []
                     if len(bb) != 4:
                         continue
-                    rect = fitz.Rect(*bb)
-                    if mode_fill is None:
-                        page.add_redact_annot(rect)
-                    else:
-                        page.add_redact_annot(rect, fill=mode_fill)
-                try:
-                    page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
-                except Exception:
-                    page.apply_redactions()
+                    rects.append(fitz.Rect(*bb))
+                _redact.apply_page_redactions(page, rects, fill=mode_fill)
                 if mode in ("mask", "replace"):
                     for it in items:
                         bb = it.get("bbox") or []

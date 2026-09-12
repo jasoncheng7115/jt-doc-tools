@@ -947,6 +947,27 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
+# 安全強化 —— 與 packaging/jt-doc-tools.service 同一組設定。
+# 原本這份產生出來的 unit **只有 User=**，而附帶的範本有這五項：
+# 「附了一份硬化範本」不等於「一行安裝裝出來的服務有受到保護」（外部稽核 F02）。
+# 守門 tests/test_service_unit_hardening.py 比對兩邊的指令集合。
+#
+# 解析器（PDF / Office / 圖片）萬一被攻破時，這幾項限制它能做什麼：
+#   NoNewPrivileges — 不能再取得更高權限
+#   PrivateTmp      — 看不到別人的 /tmp，也不會被別人看到
+#   ProtectSystem=strict — 整個檔案系統唯讀，只有下面列出的路徑可寫
+#   ProtectHome     — 看不到 /home 與 /root（本服務的家目錄是資料目錄，不受影響）
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# **可寫路徑只有資料目錄。** 若管理員在「設定備份」或「排程匯出」指定了
+# 資料目錄**以外**的路徑（例如 /mnt/backup、NAS 掛載點），要自己加一行：
+#   ReadWritePaths=/mnt/backup
+# 然後 systemctl daemon-reload && systemctl restart jt-doc-tools。
+# 不加的話寫入會被 systemd 擋掉（錯誤訊息是 Read-only file system）。
+ReadWritePaths=$DATA_DIR
+
 [Install]
 WantedBy=multi-user.target
 EOF

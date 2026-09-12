@@ -647,6 +647,52 @@ def _backup_data_dir() -> None:
         shutil.rmtree(stale, ignore_errors=True)
 
 
+def _rollback_code(root, git_exe, git_env, pre_sha: str,
+                   uv: Optional[str] = None, uv_env: Optional[dict] = None) -> str:
+    """升級中途失敗 → 把**程式碼**放回升級前那個 commit，並盡量把相依環境也帶回去。
+
+    **為什麼要有這支**（外部稽核 F03）：原本 `uv sync` 失敗時印的是
+    `uv sync failed, restoring previous state`，實際只做了「把檔案擁有者改回
+    去」＋「啟動服務」—— 工作樹還停在 `origin/main` 的**新程式**，配著**沒有
+    同步完的相依**，然後服務就這樣起來了。**訊息承諾了一個不存在的保證**
+    （跟串流逾時那次「設定說明寫單次呼叫上限、其實只管每個 chunk」同一個病）。
+
+    回傳一句**描述實際結果**的話，給呼叫端印出來 —— 不可以再用一句籠統的
+    「已回復」蓋掉三種不同的結局：
+
+    * 程式碼與相依都回去了
+    * 程式碼回去了，但相依沒辦法重新同步（離線 / 磁碟滿）→ **要講出來**
+    * 連程式碼都回不去（不該發生，`pre_sha` 是幾秒前從這個 repo 取的）
+    """
+    if not pre_sha:
+        return ("無法回復：升級前沒有取到 commit 編號。"
+                "程式碼目前是新版，相依環境可能不完整。")
+    try:
+        rc = subprocess.call([git_exe, "-C", str(root), "reset", "--hard", pre_sha],
+                             env=git_env)
+    except OSError as exc:
+        # git 不見了 / 不能執行 —— 這裡是「升級已經失敗」的收尾路徑，
+        # **絕對不可以再丟例外**，否則使用者看到的是堆疊而不是下一步。
+        return f"回復失敗：無法執行 git（{exc}）。程式碼目前是新版。"
+    if rc != 0:
+        return (f"回復失敗：`git reset --hard {pre_sha[:12]}` 回傳 {rc}。"
+                "程式碼目前是新版，相依環境可能不完整。")
+    if uv is None:
+        return f"程式碼已回到升級前的版本（{pre_sha[:12]}）。"
+    # 樹回到舊 commit 之後，`uv.lock` 也是舊的 → 再同步一次就會把相依帶回舊版。
+    print("Re-syncing deps back to the previous lockfile ...")
+    try:
+        rc2 = subprocess.call([uv, "sync"], cwd=str(root),
+                              env=uv_env or os.environ.copy())
+    except OSError:
+        rc2 = 1        # uv 檔案不見 / 不能執行 → 當成同步失敗（不可以往外丟）
+    if rc2 != 0:
+        return (f"程式碼已回到升級前的版本（{pre_sha[:12]}），"
+                "但**相依環境沒有同步回去**（可能離線或磁碟不足）。"
+                "網路恢復後請再跑一次 `jtdt update`。")
+    return f"已完整回復到升級前的版本（{pre_sha[:12]}，含相依環境）。"
+
+
 def svc_update() -> int:
     """Pull latest release and re-sync deps. Backups data dir first."""
     if not _is_admin():
@@ -789,23 +835,20 @@ def svc_update() -> int:
             f"  Almost certainly a git remote misconfig (e.g. stale local file:// mirror).\n"
             f"  Check with:  git -C {root} remote -v\n"
             f"  Official repo should be:  https://github.com/jasoncheng7115/jt-doc-tools.git\n"
-            f"  Aborted upgrade and restored previous state.",
+            f"  Aborted upgrade.",
             file=sys.stderr,
         )
-        # Restore previous code by SHA (tag `v{cur}` may not exist locally —
-        # e.g. when user has been bumping VERSION without git-tagging releases).
-        restored = False
-        if pre_sha:
-            restore_rc = subprocess.call(
-                [git_exe, "-C", str(root), "reset", "--hard", pre_sha],
-                env=git_env)
-            restored = (restore_rc == 0)
-        if not restored:
-            # SHA-based restore failed too (shouldn't happen — pre_sha was
-            # captured from THIS repo seconds ago). Last-ditch try the tag.
+        # 這裡還沒動過相依（uv sync 在後面），所以只要把程式碼放回去。
+        # 走同一支 `_rollback_code` —— 原本這一段自己寫了一份 reset 邏輯，
+        # 而另外兩條失敗路徑**根本沒有回復**（外部稽核 F03）。
+        msg = _rollback_code(root, git_exe, git_env, pre_sha)
+        if "無法回復" in msg or "回復失敗" in msg:
+            # SHA 回不去（不該發生）→ 最後試標籤。VERSION 有 bump 但沒打 tag
+            # 的安裝上 `v{cur}` 可能不存在，所以這只是保險不是主路徑。
             subprocess.call(
                 [git_exe, "-C", str(root), "reset", "--hard", f"v{cur}"],
                 env=git_env)
+        print("  " + msg, file=sys.stderr)
         _restore_ownership(root, owner)
         svc_start()
         return 1
@@ -839,7 +882,9 @@ def svc_update() -> int:
                           "objects.githubusercontent.com astral.sh")
     rc = subprocess.call([uv, "sync"], cwd=str(root), env=uv_env)
     if rc != 0:
-        print("uv sync failed, restoring previous state", file=sys.stderr)
+        print("uv sync failed.", file=sys.stderr)
+        print("  " + _rollback_code(root, git_exe, git_env, pre_sha, uv, uv_env),
+              file=sys.stderr)
         _restore_ownership(root, owner)
         svc_start()
         return rc
@@ -854,7 +899,9 @@ def svc_update() -> int:
         rc = subprocess.call([str(venv_py), "-c",
             "import fastapi, fitz, ldap3, PIL, pillow_heif, pdfplumber, docx, odf, openpyxl, pyzipper, httpx, psutil, pyotp, qrcode, pdf2docx, rapidfuzz, fontTools, numpy, lxml, pymupdf4llm, markdown_it, jwt, onelogin.saml2.auth, xmlsec, truststore, dns.resolver, defusedxml.ElementTree"])
         if rc != 0:
-            print("Dep import failed — upgrade may be incomplete, restoring", file=sys.stderr)
+            print("Dep import failed — the upgrade is incomplete.", file=sys.stderr)
+            print("  " + _rollback_code(root, git_exe, git_env, pre_sha, uv, uv_env),
+                  file=sys.stderr)
             _restore_ownership(root, owner)
             svc_start()
             return rc

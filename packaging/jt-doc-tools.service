@@ -10,6 +10,12 @@ WorkingDirectory=/opt/jt-doc-tools
 Environment=JTDT_DATA_DIR=/var/lib/jt-doc-tools/data
 Environment=JTDT_HOST=127.0.0.1
 Environment=JTDT_PORT=8765
+# 強制 UTF-8 —— host 沒裝 zh_TW.UTF-8 或用 LANG=C 跑時，中文檔名會踩
+# ascii encoding 的雷。C.UTF-8 是 glibc 內建，不需另裝中文 locale。
+Environment=LANG=C.UTF-8
+Environment=LC_ALL=C.UTF-8
+Environment=PYTHONIOENCODING=utf-8
+Environment=PYTHONUTF8=1
 ExecStart=/opt/jt-doc-tools/.venv/bin/python -m app.main
 Restart=on-failure
 RestartSec=5
@@ -21,6 +27,9 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+# **可寫路徑只有資料目錄。** 管理員若把設定備份 / 排程匯出指到別的地方
+# （/mnt/backup、NAS 掛載點…），要自己多加一行 ReadWritePaths=那個路徑，
+# 否則寫入會被擋（錯誤訊息是 Read-only file system）。
 ReadWritePaths=/var/lib/jt-doc-tools
 
 [Install]

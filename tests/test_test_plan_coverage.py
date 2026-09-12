@@ -46,21 +46,63 @@ def test_every_tool_appears_in_the_plan():
     assert not missing, f"這些工具在測試計畫裡完全沒提到：{missing}"
 
 
+#: 刻意不寫進測試計畫的 API，**每一條都要有理由**。
+#:
+#: 這些是管理介面自己用的 XHR 端點：它們的行為由對應管理頁的驗收項涵蓋
+#: （`test_admin_pages_appear_in_the_plan` 守頁面本身），逐支再寫一條
+#: 「呼叫它會怎樣」只是把同一件事寫兩遍。**不是因為懶得寫。**
+_API_EXEMPT: dict[str, str] = {
+    "/admin/api/check-latest-version": "管理頁的版本檢查按鈕",
+    "/admin/api/ocr-langs/set-engine": "OCR 語言包頁的切換動作",
+    "/admin/api/ocr-langs/set-quality": "OCR 語言包頁的切換動作",
+    "/admin/api/ocr-langs/switch-active": "OCR 語言包頁的切換動作",
+    "/admin/api/upload-limit/probe": "系統狀態頁的「量一下反向代理上限」按鈕",
+    "/admin/api/assets": "資產管理頁的清單 XHR",
+    "/admin/api/branding": "品牌設定頁的讀取 XHR",
+    "/admin/jobs/api/list": "作業管理頁的清單 XHR",
+    "/admin/jobs/api/history": "作業管理頁的歷史 XHR",
+    "/admin/jobs/api/cancel/{job_id}": "作業管理頁的取消按鈕",
+    "/admin/jobs/api/pause": "作業管理頁的暫停派送開關",
+    "/admin/jobs/api/concurrency": "作業管理頁的併行數設定",
+    "/admin/jobs/api/priority-users": "作業管理頁的優先名單",
+    "/admin/jobs/api/user-search": "作業管理頁的使用者搜尋框",
+}
+
+
+def _api_paths() -> set[str]:
+    return {r.path for r in _routes() if "/api/" in getattr(r, "path", "")}
+
+
 def test_every_api_endpoint_appears_in_the_plan():
     """新增 API 卻忘了寫驗收 —— 這條會擋下來。
 
-    比對用路徑尾段（`/api/` 之後那一截），避免因為前綴寫法不同而誤判。
+    **判準是完整路徑**。原本比對的是「`/api/` 之後那一截」，理由寫著
+    「避免因為前綴寫法不同而誤判」—— 但那讓 `list` / `count` / `assets` /
+    `history` 這種尾段**必然**在四千行的文件裡找得到：實測 84 支 `/api/`
+    端點裡有 8 支是這樣「假通過」的，其中 7 支在兩份測試計畫裡完整路徑
+    **出現 0 次**（外部稽核之後的實算，v1.15.28）。
     """
     text = _plan_text()
-    missing = sorted({
-        r.path for r in _routes()
-        if "/api/" in getattr(r, "path", "")
-        and r.path.split("/api/")[-1] not in text
-    })
+    missing = sorted(p for p in _api_paths()
+                     if p not in text and p not in _API_EXEMPT)
     assert not missing, (
         "這些 API 端點在測試計畫裡沒有任何驗收項：\n  "
         + "\n  ".join(missing)
-        + "\n請補進 TEST_PLAN.md §4（工具 API）或 §4.6（非工具 API）。")
+        + "\n請補進 TEST_PLAN.md §4（工具 API）或 §4.6（非工具 API）；"
+        "真的不需要逐支驗收的，寫進 `_API_EXEMPT` **並寫下理由**。")
+
+
+def test_the_exemption_list_has_no_dead_entries():
+    """例外清單裡的路徑必須真的存在 —— 端點改名後留下的死條目會讓新端點
+    悄悄被豁免（名字剛好撞到的話）。"""
+    real = _api_paths()
+    dead = sorted(p for p in _API_EXEMPT if p not in real)
+    assert not dead, f"例外清單有這些不存在的端點（改名或已移除）：{dead}"
+
+
+def test_every_exemption_has_a_reason():
+    blank = sorted(k for k, v in _API_EXEMPT.items() if not v.strip())
+    assert not blank, f"這些例外沒寫理由：{blank}"
 
 
 def test_admin_pages_appear_in_the_plan():
@@ -175,6 +217,39 @@ def test_every_non_api_endpoint_appears_in_the_plan():
 # 被守住，只能自己去翻程式。一覽表由 `tools/build_test_plan_index.py`
 # 從每支檔案自己的開頭說明產生（說明跟程式同檔，不會漂）。
 # ---------------------------------------------------------------------------
+
+def _admin_write_paths() -> set[str]:
+    """管理區「會改狀態」的端點（GET 以外的方法）。"""
+    out = set()
+    for r in _routes():
+        p = getattr(r, "path", "") or ""
+        if not p.startswith("/admin") or "/api/" in p or "{rest:path}" in p:
+            continue
+        methods = (getattr(r, "methods", None) or set()) - {"HEAD", "OPTIONS", "GET"}
+        if methods:
+            out.add(p)
+    return out
+
+
+def test_every_admin_write_endpoint_appears_in_the_plan():
+    """**按下去會改到別人資料**的那些端點要有驗收項。
+
+    涵蓋守門原本把整個 `/admin` 前綴跳過（見 `_SKIP_PREFIXES`，那是為了不讓
+    一百多個管理頁子路由淹掉清單）。代價是：實算之後 **103 支會改狀態的管理
+    端點裡有 79 支一條驗收都沒有** —— 而那些正是刪使用者、清工作區、匯入設定、
+    改權限矩陣這一類（v1.15.30 補進 §4.8）。
+
+    唯讀的管理端點仍然只由對應頁面的驗收涵蓋 —— 那是刻意的取捨：
+    「讀」的風險是洩漏，已由 RBAC 與資安計畫守；「寫」的風險是改壞資料。
+    """
+    text = _plan_text()
+    missing = sorted(p for p in _admin_write_paths() if p not in text)
+    assert not missing, (
+        f"這 {len(missing)} 支管理端點會改狀態，但測試計畫沒有驗收項：\n  "
+        + "\n  ".join(missing)
+        + "\n請補進 TEST_PLAN.md §4.8（共用判準已經寫在那一節，"
+          "只要把端點列進對應的組即可）。")
+
 
 def test_every_test_file_appears_in_the_plan():
     text = _plan_text()

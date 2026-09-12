@@ -179,6 +179,17 @@
 
 <div class="panel">
   <h2 data-s="s53896af7">{{ tr('2. 設定要偵測的資料類型') }}</h2>
+  {# 文件語言 ≠ 介面語言：中文介面貼進英文文字是最容易踩到的組合 ——
+     台灣的市話 / 地址 / 統編式子套在英文上是**抓錯**不是抓不到。 #}
+  <div class="af-field" id="tdLangRow">
+    <label for="tdDocLang">{{ tr('文件語言') }}</label>
+    <select id="tdDocLang" class="jt-select">
+      {% for code, name in doc_langs %}
+      <option value="{{ code }}" {% if code == default_doc_lang %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+    <small class="af-note">{{ tr('決定套用哪一組偵測規則（台灣專屬的身分證 / 統編 / 市話，或英美的 SSN / IBAN / 郵遞區號）。換語言後請重新偵測。') }}</small>
+  </div>
   <div class="td-pattern-cats">
     {% set cat_icons = {
       '個人身分': 'id-card',
@@ -445,6 +456,8 @@ $('btnDetect').addEventListener('click', async () => {
       body: JSON.stringify({
         text: srcEl.value,
         types: selectedTypes(),
+        // 文件語言 —— 沒選型別時，伺服器據此決定預設的那一組式子
+        doc_lang: (document.getElementById('tdDocLang') || {}).value || '',
         custom_regex: $('customRx').value,
         llm_augment: llmAug,
       }),
@@ -526,6 +539,7 @@ $('btnApply').addEventListener('click', async () => {
         text: srcEl.value,
         selections: selections,
         mode: lastMode,
+        doc_lang: (document.getElementById('tdDocLang') || {}).value || '',
       }),
     });
     if (!r.ok) {

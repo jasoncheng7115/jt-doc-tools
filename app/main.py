@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio as _asyncio
+import threading
 import time
 from pathlib import Path
 
 import jinja2
+from starlette.background import BackgroundTask
 from fastapi import Depends, FastAPI, File, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -19,7 +21,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.15.26"
+VERSION = "1.15.32"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -1487,7 +1489,16 @@ def _job_access(job, request) -> bool:
             return False
         if job.owner_id is None:
             return bool(_perm.is_admin(int(uid)))
-        return int(job.owner_id) == int(uid)
+        if int(job.owner_id) == int(uid):
+            return True
+        # 別人的作業 —— 管理員能不能看，由**同一份政策**決定（外部稽核 F10：
+        # 原本這裡嚴格比對擁有者，而上傳檔那條路管理員直接放行，同一份文件
+        # 走哪條路決定看不看得到）。
+        if _perm.is_admin(int(uid)):
+            from .core import upload_owner as _uo
+            return _uo.admin_override_allowed(
+                int(uid), f"job:{job.id}", owner_id=job.owner_id, request=request)
+        return False
     except Exception:
         return False
 
@@ -1941,7 +1952,12 @@ async def api_job_download_png(job_id: str, request: Request):
             return JSONResponse({"error": "no result"}, status_code=404)
         src = job.result_path
         base_name = (job.result_filename or src.name)
-        tmp = Path(tempfile.mkdtemp(prefix="job_png_"))
+        # **要落在 settings.temp_dir 底下**：系統暫存目錄沒有人替我們清，
+        # 而我們自己的清理迴圈只掃 `settings.temp_dir`（而且只刪檔案、跳過
+        # 目錄）→ 原本 `mkdtemp(prefix="job_png_")` 建在 /tmp 的那些資料夾
+        # 永遠留著（外部稽核 F09）。
+        settings.temp_dir.mkdir(parents=True, exist_ok=True)
+        tmp = Path(tempfile.mkdtemp(prefix="job_png_", dir=str(settings.temp_dir)))
 
         pdfs: list[tuple[str, Path]] = []  # (label_stem, pdf_path)
         if src.suffix.lower() == ".zip":
@@ -1954,39 +1970,89 @@ async def api_job_download_png(job_id: str, request: Request):
         else:
             pdfs.append((Path(base_name).stem, src))
 
-        pngs: list[tuple[str, bytes]] = []
+        # **逐頁算、逐頁寫進磁碟上的 zip**。原本是把每頁的 PNG bytes 收成一個
+        # list，再做一份 BytesIO 的 zip，再寫一份到磁碟 —— 一份大文件同時持有
+        # 三份資料（外部稽核 F09）。
+        #
+        # 先數一次頁數（**開檔不算圖**，很便宜）決定要出單張還是 zip；
+        # 真正算圖時**每份 PDF 只開一次**，不要為了省記憶體改成每頁開一次
+        # （那會把 200 頁的文件變成開 200 次檔）。
+        page_counts: list[tuple[str, Path, int]] = []
+        total = 0
         for stem, pdf in pdfs:
             with fitz.open(str(pdf)) as doc:
-                for i in range(doc.page_count):
-                    pix = doc[i].get_pixmap(dpi=150, alpha=False)
-                    name = f"{stem}_p{i + 1:03d}.png" if doc.page_count > 1 or len(pdfs) > 1 else f"{stem}.png"
-                    pngs.append((name, pix.tobytes("png")))
+                page_counts.append((stem, pdf, doc.page_count))
+                total += doc.page_count
+        if total == 0:
+            shutil.rmtree(tmp, ignore_errors=True)
+            return JSONResponse({"error": "no pages"}, status_code=400)
 
         try:
-            if len(pngs) == 1:
-                name, data = pngs[0]
-                out = tmp / name
-                out.write_bytes(data)
+            if total == 1:
+                stem, pdf, _ = page_counts[0]
+                out = _served_tmp_path(".png")
+                with fitz.open(str(pdf)) as doc:
+                    out.write_bytes(
+                        doc[0].get_pixmap(dpi=150, alpha=False).tobytes("png"))
                 return FileResponse(
-                    path=str(out), filename=name,
+                    path=str(out), filename=f"{stem}.png",
                     media_type="image/png",
-                    background=None,
+                    background=BackgroundTask(_unlink_quietly, out),
                 )
-            zip_buf = io.BytesIO()
-            with _zip.ZipFile(zip_buf, "w", _zip.ZIP_DEFLATED) as zf:
-                for name, data in pngs:
-                    zf.writestr(name, data)
-            zip_path = tmp / (Path(base_name).stem + ".png.zip")
-            zip_path.write_bytes(zip_buf.getvalue())
+            zip_path = _served_tmp_path(".zip")
+            with _zip.ZipFile(zip_path, "w", _zip.ZIP_DEFLATED) as zf:
+                for stem, pdf, count in page_counts:
+                    with fitz.open(str(pdf)) as doc:
+                        for i in range(count):
+                            pix = doc[i].get_pixmap(dpi=150, alpha=False)
+                            zf.writestr(f"{stem}_p{i + 1:03d}.png",
+                                        pix.tobytes("png"))
+                            del pix          # 不要讓上一頁的緩衝撐到下一頁
             return FileResponse(
-                path=str(zip_path), filename=zip_path.name,
+                path=str(zip_path),
+                filename=Path(base_name).stem + ".png.zip",
                 media_type="application/zip",
+                background=BackgroundTask(_unlink_quietly, zip_path),
             )
         finally:
-            # Clean tmp later — FileResponse needs the file alive while streamed.
-            pass
+            # 解出來的中間 PDF 這時已經用不到了 —— 立刻收掉。
+            # （產出本身放在受管理的暫存目錄，串流結束後由 background task 刪，
+            #   萬一行程中途死掉還有 2 小時的暫存清理當補救。）
+            shutil.rmtree(tmp, ignore_errors=True)
 
-    return await _asyncio.to_thread(_work)
+    def _work_limited():
+        # 幾十頁的算圖不可以無限併行（見 `_PNG_EXPORT_LIMIT`）。
+        with _png_export_sem:
+            return _work()
+
+    return await _asyncio.to_thread(_work_limited)
+
+
+#: PNG 匯出是「一次算幾十頁圖」的重活，而這條路**不經過作業佇列的准入判斷**
+#: （它是下載端點，不是背景作業）。不設上限的話，幾個人同時按下載就能把
+#: 記憶體與 CPU 吃光（外部稽核 F09）。
+#: 這不是完整的准入控制，是一道便宜且有效的閘門。
+_PNG_EXPORT_LIMIT = 2
+_png_export_sem = threading.Semaphore(_PNG_EXPORT_LIMIT)
+
+
+def _served_tmp_path(suffix: str) -> Path:
+    """要回傳給使用者的暫存檔路徑 —— **平鋪在 `settings.temp_dir` 裡**。
+
+    清理迴圈只掃這個目錄、而且**只刪檔案不刪目錄**，所以產出不可以藏在
+    子資料夾裡（不然沒有人會清它）。檔名用 UUID，與既有上傳檔的慣例一致。
+    """
+    import uuid as _uuid
+    settings.temp_dir.mkdir(parents=True, exist_ok=True)
+    return settings.temp_dir / f"job_png_{_uuid.uuid4().hex}{suffix}"
+
+
+def _unlink_quietly(path: Path) -> None:
+    """串流結束後刪掉暫存產出（刪不掉也不要吵 —— 還有清理迴圈當補救）。"""
+    try:
+        Path(path).unlink(missing_ok=True)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 async def _sweep_temp_files_loop():

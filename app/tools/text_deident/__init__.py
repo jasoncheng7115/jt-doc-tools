@@ -7,7 +7,6 @@ from pathlib import Path
 
 from ..base import ToolMetadata, ToolModule
 from .router import router
-from app.core.ui_locale import TAIWAN_ONLY
 
 metadata = ToolMetadata(
     id="text-deident",
@@ -16,8 +15,6 @@ metadata = ToolMetadata(
     # 文件版（doc-deident）用 `shield`；純文字版改 `text`，同一組裡才分得出來。
     icon="text",
     category="資安處理",
-    # 同上，共用同一份台灣個資式子
-    locales=TAIWAN_ONLY,
 )
 
 tool = ToolModule(
