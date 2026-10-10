@@ -160,8 +160,9 @@ def build_router(templates) -> APIRouter:
 
     @router.get("/official-doc/search-orgs")
     async def official_doc_search_orgs(q: str = "", limit: int = 20):
-        # 第一次查詢要讀整份地址簿（約 5 MB）——丟出事件迴圈
-        res = await asyncio.to_thread(ods.search_orgs, q[:200], limit)
-        return {"results": res}
+        # 第一次查詢要讀整份地址簿（約 5 MB）——丟出事件迴圈。
+        # `total` 是符合的總筆數：只列前 20 筆時，畫面要講出還有幾筆沒列（不然看起來像查不到）。
+        res = await asyncio.to_thread(ods.search_orgs_page, q[:200], limit)
+        return {"results": res["results"], "total": res["total"], "max": ods.ORG_SEARCH_MAX}
 
     return router

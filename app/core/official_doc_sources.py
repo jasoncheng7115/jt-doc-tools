@@ -1098,25 +1098,39 @@ def match_marks(text: str, terms: list[str]) -> list[list[int]]:
     return merged
 
 
+#: 「全部顯示」一次最多列幾筆。正式的地址簿約 4 萬筆，查一兩個字（「股份」「協會」）就是好幾千筆 ——
+#: 全部畫出來沒有人看得完，所以有上限，超過時畫面講出總共幾筆、請使用者多打幾個字。
+ORG_SEARCH_MAX = 2000
+
+
 def search_orgs(q: str, limit: int = 20) -> list[dict]:
-    """查機關（逐字比對；啟用中的地址簿才查）：`[{"orgId","orgName"}]`。
+    """查機關（逐字比對；啟用中的地址簿才查）：`[{"orgId","orgName"}]`。總筆數見 `search_orgs_page`。"""
+    return search_orgs_page(q, limit)["results"]
+
+
+def search_orgs_page(q: str, limit: int = 20) -> dict:
+    """查機關：`{"results": [{"orgId","orgName","nameMarks","idMarks"}], "total": 符合的總筆數}`。
 
     * 空白分開的幾個詞要**全部**出現（AND）。
     * 「台」「臺」、全形半形視為相同（`cjk_fts.normalize`）。
     * 只打一個詞時也比對機關代碼的開頭（`A15` → `A15000000E`）。
     * 每一筆另附 `nameMarks` / `idMarks`：符合處的字元位置（畫面標亮用，見 `match_marks`）。
-    * 排序（全銜優先）：名稱**完全相同** → 以查詢開頭 → 其餘；同一級裡名稱短
-      的在前（「嘉禾市政府」排在「嘉禾市政府秘書處」前面）、再依代碼長度
-      （上級機關的代碼比所屬單位短）。
+    * 排序：名稱**完全相同** → **主機關**（代碼 10 碼）→ 內部單位（主機關代碼後面再接 7 碼的
+      人事室、會計室…）；同一級裡以查詢開頭的在前、名稱短的在前、再依代碼長度。
+      主機關排在內部單位前面是 2026-10-10 加的：原本「以查詢開頭」優先，查「財政」時
+      財政部底下的人事處、會計處…把前 20 筆占滿，臺北市政府財政局排到第 305 筆（正式地址簿實測），
+      查「數位」時臺中市政府數位發展局排在第 68 筆；改了之後各是第 57、37 筆 ——
+      還是在 20 筆之外，所以畫面另外講出總筆數、可以「全部顯示」。
+      把公司排到機關後面也試過，查「中華電信」時公司本身被一堆托育中心擠下去，沒有採用。
     """
     if not isinstance(q, str):
-        return []
+        return {"results": [], "total": 0}
     terms = [cjk_fts.normalize(t) for t in q.split() if t.strip()]
     terms = [t for t in terms if t]
     if not terms:
-        return []
+        return {"results": [], "total": 0}
     try:
-        limit = max(1, min(int(limit), 100))
+        limit = max(1, min(int(limit), ORG_SEARCH_MAX))
     except (TypeError, ValueError):
         limit = 20
     joined = "".join(terms)
@@ -1142,17 +1156,20 @@ def search_orgs(q: str, limit: int = 20) -> list[dict]:
                 continue
             seen.add(key)
             n = norms[i]
-            rank = 0 if (n == joined or nids[i] == first) else (1 if n.startswith(first) else 2)
-            found.append((rank, len(n), len(ids[i]), n, ids[i], names[i]))
+            exact = 0 if (n == joined or nids[i] == first) else 1
+            sub = 1 if len(ids[i] or "") > 10 else 0
+            prefix = 0 if n.startswith(first) else 1
+            found.append((exact, sub, prefix, len(n), len(ids[i]), n, ids[i], names[i]))
     found.sort()
     out = []
     for r in found[:limit]:
-        item = {"orgId": r[4], "orgName": r[5], "nameMarks": match_marks(r[5], terms)}
+        oid, name = r[6], r[7]
+        item = {"orgId": oid, "orgName": name, "nameMarks": match_marks(name, terms)}
         # 只打一個詞、比對到代碼開頭時，代碼前面那一段也標出來
-        item["idMarks"] = (match_marks(r[4], [first])[:1]
-                           if single and cjk_fts.normalize(r[4] or "").startswith(first) else [])
+        item["idMarks"] = (match_marks(oid, [first])[:1]
+                           if single and cjk_fts.normalize(oid or "").startswith(first) else [])
         out.append(item)
-    return out
+    return {"results": out, "total": len(found)}
 
 
 def _org_maps(sid: str) -> Optional[tuple[dict, dict]]:

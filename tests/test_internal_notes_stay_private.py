@@ -201,7 +201,10 @@ def test_every_real_letter_heading_still_matches():
     alt = "|".join(re.escape(x) for x in tokens)
     pair = re.compile(rf"(?i)\b(?:JTDT|{alt})\b\s*(?:→|->|↔)\s*\b(?:JTDT|{alt})\b")
     headings = []
-    for p in PRIVATE_DIR.rglob("*.md"):
+    # 素材只取往來文件（`<對象>-integration/`）：`claude-notes/` 是開發筆記，
+    # 裡面講介紹站流程圖的標題（「JTDT ↔ 對象 流程圖」）是在描述產品，不是書信
+    letters = [p for d in PRIVATE_DIR.glob("*-integration") if d.is_dir() for p in d.rglob("*.md")]
+    for p in letters:
         for line in _text(p).splitlines():
             if line.startswith("#") and pair.search(line):
                 headings.append(line)

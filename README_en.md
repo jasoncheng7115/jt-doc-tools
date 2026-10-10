@@ -1,6 +1,6 @@
 [繁體中文](README.md) ｜ **English** ｜ [日本語](README_ja.md)
 
-# Jason Tools Document Toolbox v1.16.73
+# Jason Tools Document Toolbox v1.16.77
 
 > ### ⚠ Installed with git before 2026-09-13? Run one command before this upgrade
 >
@@ -286,7 +286,7 @@ Leave it unset and nothing changes: **the other 50 tools are entirely unaffected
 | **[API.md](API.md)** ([web version](https://jasoncheng7115.github.io/jt-doc-tools/api-en.html)) | REST API: bearer tokens, the endpoint list, upload and response formats, error codes, curl / Python examples, the job flow |
 | **[LLM.md](LLM.md)** | Optional LLM features (off by default): how 14 tools use an LLM, examples, supported LLM servers and gateways (Ollama / LiteLLM / vLLM…), turning thinking off and concurrency |
 | **[SECURITY.md](SECURITY.md)** | Security policy, OWASP Top 10 (2025) mapping, vulnerability reporting, GitHub native scan integration |
-| **[COMPLIANCE.md](COMPLIANCE.md)** ([web version](https://jasoncheng7115.github.io/jt-doc-tools/compliance-en.html)) | Compliance support for ISO/IEC 27001:2022 and ISO/IEC 42001:2023 the controls the tool provides, how an organization uses them and where the records are kept |
+| **[COMPLIANCE.md](COMPLIANCE.md)** ([web version](https://jasoncheng7115.github.io/jt-doc-tools/compliance-en.html)) | Data protection and compliance: where documents stay, when the tool connects to the outside, the controls it provides and what your organization does, plus mappings to Taiwan's Personal Data Protection Act, GDPR, ISO/IEC 27001:2022 and ISO/IEC 42001:2023 |
 | **[CHANGELOG.md](CHANGELOG.md)** | Full change log |
 | **[TEST_PLAN.md](TEST_PLAN.md)** | Test checklist and pre-release checks |
 | **[OFFLINE.md](OFFLINE.md)** | Air-gapped / offline installation (moving a Docker image, using a company PyPI proxy) |

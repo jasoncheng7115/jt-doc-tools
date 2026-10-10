@@ -58,18 +58,25 @@ _INLINE_ONLY = re.compile(
 _HAS_TAG = re.compile(r"<[^>]+>")
 
 
-def _block_segments(html: str, inside) -> list:
-    """含行內標籤的整塊 —— 標籤留在字串裡，讓譯者自己擺到英文該在的位置。"""
+def _block_segments(html: str, inside, base: int = 0) -> list:
+    """含行內標籤的整塊 —— 標籤留在字串裡，讓譯者自己擺到英文該在的位置。
+
+    外層區塊裡還有區塊時（表格格子裡放 `<p>`），往裡面找：只看最外層的話，
+    格子裡那一句會被 `<code>` 切成「資料目錄（」「），2 小時後」這種碎片逐段翻。"""
     out = []
     for m in _BLOCK.finditer(html):
         inner = m.group(3)
-        a, b = m.start(3), m.end(3)
+        a, b = base + m.start(3), base + m.end(3)
         if inside(a) or not CJK.search(inner) or not _HAS_WORD.search(inner):
             continue
         if not _HAS_TAG.search(inner):
             continue                      # 純文字的走原本的逐段路徑就好
         if _INLINE_ONLY.sub("", inner).find("<") >= 0:
-            continue                      # 裡面還有別的區塊，整塊收會太大
+            # 裡面還有別的區塊，整塊收會太大。**只有表格格子裡放 `<p>` 這一種**往內層找
+            # （合規頁的寫法）；其他頁的巢狀清單照舊逐段，鍵不變、既有譯文才對得上。
+            if m.group(1).lower() in ("td", "th") and re.search(r"<p[\s>]", inner, re.I):
+                out += _block_segments(inner, inside, a)
+            continue
         out.append((False, a, b, inner))
     return out
 

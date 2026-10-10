@@ -5,7 +5,9 @@
 也沒有地方看得到自己寫過哪些。現在照「送件前檢核」的做法，每個案件一個目錄：
 
     data/official_doc_cases/<案件編號 32 碼>/
-        meta.json        案件資料：擁有者、文別、名稱、標題、版本數、建立 / 更新時間、刪除記錄
+        meta.json        案件資料：擁有者、文別、名稱、標題、版本數、建立 / 更新時間、刪除記錄、
+                         來源（`origin`：`di`＝從 DI 檔匯入；沒有這一欄＝在公文撰擬產生的）
+                         `title` 是檔名用的（主旨前 20 字）；`subject` 是主旨整句（清單顯示、滑鼠移過去看全文）
         case.json        建立案件時的輸入（重新產生時換成那一次的）
         result.json      最新的草稿、檢查結果、參考資料
         revisions.json   版本清單
@@ -101,11 +103,13 @@ def create(case_id: str, *, owner_uid: Optional[int], mode: str) -> dict:
         return meta
 
 
-def update(case_id: str, **fields: Any) -> Optional[dict]:
+def update(case_id: str, *, touch: bool = True, **fields: Any) -> Optional[dict]:
     """改案件資料（標題、版本數、文別…）並更新「最後修改」。沒有 `meta.json`（舊的暫存案件）
-    回 None —— 那種案件沒有擁有者紀錄，不在這裡憑空建一份（建了就等於重新指定擁有者）。"""
-    allowed = {"title", "revisions", "latest_rev", "issues", "mode", "name", "job_id",
-               "created_at", "deleted_at", "deleted_by"}
+    回 None —— 那種案件沒有擁有者紀錄，不在這裡憑空建一份（建了就等於重新指定擁有者）。
+
+    `touch=False`：不動「最後修改」（補舊案件缺的欄位時用 —— 補一個欄位不是使用者改了案件）。"""
+    allowed = {"title", "subject", "revisions", "latest_rev", "issues", "mode", "name", "job_id",
+               "created_at", "deleted_at", "deleted_by", "origin"}
     with _LOCK:
         p = file(case_id, "meta.json")
         meta = _read(p)
@@ -114,7 +118,8 @@ def update(case_id: str, **fields: Any) -> Optional[dict]:
         for k, v in fields.items():
             if k in allowed:
                 meta[k] = v
-        meta["updated_at"] = time.time()
+        if touch:
+            meta["updated_at"] = time.time()
         atomic_json.write_json(p, meta, mode=0o600)
         return meta
 
@@ -265,6 +270,11 @@ def _case_query_text(inputs: dict) -> str:
     if inputs.get("mode") == "endorse":
         return f"{inputs.get('direction') or ''}\n{str(inputs.get('source') or '')[:300]}"
     return str(inputs.get("narrative") or "")
+
+
+def latest_text(case_id: str) -> tuple[str, int]:
+    """最新那一版的全文與版號（下載 DI 檔、參考歷史案件都用這一份）。"""
+    return _latest_text(case_id)
 
 
 def _latest_text(case_id: str) -> tuple[str, int]:

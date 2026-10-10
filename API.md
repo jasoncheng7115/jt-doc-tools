@@ -2033,12 +2033,15 @@ curl -X POST http://localhost:8765/tools/official-doc/api/official-doc \
 | `POST /tools/official-doc/check` | 送 `{"case_id": "...", "text": "改過的草稿"}`，回 `{"issues": [...]}`：拿目前的文字重新檢查，**不呼叫模型**；依據是建立案件時你送進來的內容 |
 | `POST /tools/official-doc/export` | 送 `{"case_id": "...", "text": "...", "fmt": "odt", "title": "...", "draft_mark": true, "extras": {...}}`，回檔案。格式（`fmt`）有 `txt` / `odt` / `docx` / `pdf` / `png` / `svg` / `json` / `di`；照**送來的文字**匯出，也就是你改過的版本 |
 | `POST /tools/official-doc/di-preview` | 送 `{"case_id": "...", "text": "...", "title": "..."}`，回 `{filename, mode, root, dtd, xml, notes, valid, errors}`：跟匯出 `di` 同一支產生器，`xml` 就是下載拿到的那一份；`valid` 是有沒有通過 DTD 檢查，`notes` 是注意事項（`{code, args}`，例如沒對到機關代碼的機關） |
-| `GET /tools/official-doc/orgs` | 查機關名稱（公文電子交換系統地址簿，管理員下載過才有）：參數 `q`（名稱或代碼開頭）與 `limit`（1 到 20，預設 10），回 `{"orgs": [{"name": "...", "id": "..."}], "exact": "..."}`；`exact` 是名稱完全相同而且只有一筆時的機關代碼，同名好幾個就是空的 |
+| `GET /tools/official-doc/orgs` | 查機關名稱（公文電子交換系統地址簿，管理員下載過才有）：參數 `q`（名稱或代碼開頭）與 `limit`（1 到 2000，預設 10），回 `{"orgs": [{"name": "...", "id": "..."}], "exact": "...", "total": 23, "max": 2000}`；`exact` 是名稱完全相同而且只有一筆時的機關代碼，同名好幾個就是空的；`total` 是符合的總筆數（清單只列前幾筆時用來講出還有幾筆沒列），`max` 是一次最多列幾筆。排序：名稱完全相同的在前，接著是主機關，內部單位排在後面 |
 | `POST /tools/official-doc/extract-text` | multipart `file` → `{"text": "...", "chars": 11, "filename": "..."}`：從 PDF、Word（`.docx` / `.doc`）、ODT、RTF、純文字（`.txt` / `.md`）抽出文字給你貼進欄位，**檔案不留**；上限 20 MB |
-| `GET /tools/official-doc/api/cases` | 歷史案件清單：`{"cases": [...], "show_owner": false, "limit": 500}`，新的在前。查詢參數 `q`（比對名稱、標題、案件編號）與 `mode`（`sign` / `letter` / `endorse`）都選填。每一筆有 `case_id`、`name`、`title`、`mode`、`latest_rev`、`issues`、`created_at`、`updated_at`、`deleted`；管理員拿到的是每個人的（含已刪除），多一個 `owner` |
+| `GET /tools/official-doc/api/cases` | 歷史案件清單：`{"cases": [...], "show_owner": false, "limit": 500}`，新的在前。查詢參數 `q`（比對名稱、標題、案件編號）與 `mode`（`sign` / `letter` / `endorse`）都選填。每一筆有 `case_id`、`name`、`title`（檔名用，主旨前 20 字）、`subject`（主旨整句）、`mode`、`latest_rev`、`issues`、`created_at`、`updated_at`、`deleted`、`imported`（從 DI 檔匯入的）、`di_ok`（下載得到 DI 檔嗎）；管理員拿到的是每個人的（含已刪除），多一個 `owner` |
 | `GET /tools/official-doc/case/{case_id}` | 一個案件的清單資料，加上 `has_result` 與 `job`（最近一件作業的 `{id, status}`，還在跑時可以接著查進度） |
 | `POST /tools/official-doc/case/{case_id}/rename` | 送 `{"name": "..."}` 改名（最多 80 字，超過回 **400**，不截斷）；空字串＝用草稿的標題 |
 | `DELETE /tools/official-doc/case/{case_id}` | 刪除案件：之後本人查不到、打不開；真的從磁碟移除照「檔案保留 / 清理」的公文撰擬案件保留期（預設 365 天，從刪除那天起算） |
+| `GET /tools/official-doc/case/{case_id}/di` | 下載案件**最新那一版**的 DI 檔（檔名是案件名稱或標題）；簽辦意見沒有 DI 檔，回 **400**。標頭 `X-Jtdt-Di-Valid` 是有沒有通過 DTD 檢查，`X-Jtdt-Di-Notes` 是注意事項有幾條 |
+| `POST /tools/official-doc/cases/di` | 送 `{"case_ids": ["...", "..."]}`（最多 100 件），回 zip，一件一個 DI 檔。簽辦意見與還沒有草稿的略過：打包了幾件在標頭 `X-Jtdt-Di-Count`，略過幾件在 `X-Jtdt-Di-Skipped`；全部都略過回 **400**。**任何一件不是你的就整批回 404** |
+| `POST /tools/official-doc/cases/import` | multipart `files`（可以好幾個，DI 檔或整包 zip，一次最多 50 份），每一份 DI 檔變成一件歷史案件，擁有者是上傳的人。回 `{"imported": [{filename, case_id, title, mode, mode_name, notes, issues}], "failed": [{filename, code, args, error}], "skipped": 2}`：讀不進來的一份不影響其他份；`skipped` 是壓縮檔裡不是 DI 檔的檔案數。只收函與簽；讀檔時不展開實體、不連網路，每份上限 1 MB |
 
 案件（輸入、草稿、版本）存在伺服器上，照「檔案保留 / 清理」的保留期留著，不跟著暫存檔的保留期走。
 別人的、不存在的、已刪除的案件一律回同一個 **404**（分得出來的話，就能拿任意編號問「這個案件存不存在」）。

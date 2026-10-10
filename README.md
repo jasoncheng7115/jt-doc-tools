@@ -1,6 +1,6 @@
 **繁體中文** ｜ [English](README_en.md) ｜ [日本語](README_ja.md)
 
-# Jason Tools 文件工具箱 v1.16.73
+# Jason Tools 文件工具箱 v1.16.77
 
 > ### ⚠ 2026-09-13 之前用 git 安裝的，這一版升級前要先跑一行
 >
@@ -286,7 +286,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 | **[API.md](API.md)**（[線上網頁版](https://jasoncheng7115.github.io/jt-doc-tools/api.html)）| REST API:Bearer token、endpoint 一覽、上傳格式、回傳格式、錯誤碼、curl / Python 範例、Job 流程 |
 | **[LLM.md](LLM.md)** | LLM AI 加值功能（預設關閉）：14 個工具如何用 LLM、效果範例、支援的 LLM 伺服器與閘道（Ollama / LiteLLM / vLLM…）、關閉思考與並行設定 |
 | **[SECURITY.md](SECURITY.md)** | 資安政策、OWASP Top 10 (2025) 對照、漏洞回報管道、GitHub native scan 整合 |
-| **[COMPLIANCE.md](COMPLIANCE.md)**（[線上網頁版](https://jasoncheng7115.github.io/jt-doc-tools/compliance.html)）| 合規支援：ISO/IEC 27001:2022 與 ISO/IEC 42001:2023，本工具提供的控制功能、導入單位怎麼使用、在哪裡留下紀錄 |
+| **[COMPLIANCE.md](COMPLIANCE.md)**（[線上網頁版](https://jasoncheng7115.github.io/jt-doc-tools/compliance.html)）| 資料保護與合規：文件留在哪裡、哪些情況會連到外部、工具做到的控制與組織要做的事，以及個資法、GDPR、ISO/IEC 27001:2022、ISO/IEC 42001:2023 的對照 |
 | **[CHANGELOG.md](CHANGELOG.md)** | 完整更新記錄 |
 | **[TEST_PLAN.md](TEST_PLAN.md)** | 測試清單、發版前檢查 |
 | **[OFFLINE.md](OFFLINE.md)** | 封閉網路 / 離線安裝（用 Docker 映像檔帶進內網、走公司 PyPI 代理） |

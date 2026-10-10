@@ -39,9 +39,11 @@ def org_data(monkeypatch):
     monkeypatch.setattr(ods, "has_address_book", lambda: state["orgs"])
     monkeypatch.setattr(ods, "attribution",
                         lambda kind=None: [f"國家發展委員會檔案管理局「{kind}」（示範出處）。"])
-    monkeypatch.setattr(ods, "search_orgs",
-                        lambda q, limit=20: [{"orgId": "A15000000E", "orgName": "嘉禾市政府",
-                                              "nameMarks": [[0, 2]], "idMarks": []}])
+    # 端點走 `search_orgs_page`（v1.16.74 起多回總筆數 `total`）
+    monkeypatch.setattr(ods, "search_orgs_page",
+                        lambda q, limit=20: {"results": [{"orgId": "A15000000E", "orgName": "嘉禾市政府",
+                                                          "nameMarks": [[0, 2]], "idMarks": []}],
+                                             "total": 1})
     return state
 
 
@@ -162,21 +164,23 @@ def test_orgs_suggestions(client, auth_off, org_data):
     assert r.status_code == 200
     # `exact`：名稱完全相同而且只有一筆時的代碼（v1.16.68）；這裡查的是名稱的一部分，所以是空的
     # `marks`：符合處的字元位置（畫面標亮用），照伺服器比對的結果原樣帶過去
+    # `total`：符合的總筆數、`max`：一次最多列幾筆（v1.16.74：清單列不完時畫面講出「12 / N 筆」）
     assert r.json() == {"orgs": [{"name": "嘉禾市政府", "id": "A15000000E", "marks": [[0, 2]]}],
-                        "exact": ""}
+                        "exact": "", "total": 1, "max": ods.ORG_SEARCH_MAX}
 
 
 def test_orgs_empty_query_and_too_long(client, auth_off, org_data):
-    assert client.get(f"{BASE}/orgs", params={"q": "  "}).json() == {"orgs": [], "exact": ""}
+    assert client.get(f"{BASE}/orgs", params={"q": "  "}).json() == {"orgs": [], "exact": "", "total": 0}
     assert client.get(f"{BASE}/orgs", params={"q": "字" * 60}).status_code == 400
 
 
 def test_orgs_failure_is_just_no_suggestion(client, auth_off, monkeypatch):
     def boom(q, limit=20):
         raise OSError("地址簿壞掉")
-    monkeypatch.setattr(ods, "search_orgs", boom)
+    monkeypatch.setattr(ods, "search_orgs_page", boom)
     r = client.get(f"{BASE}/orgs", params={"q": "嘉禾"})
-    assert r.status_code == 200 and r.json() == {"orgs": [], "exact": ""}
+    assert r.status_code == 200 and r.json() == {"orgs": [], "exact": "", "total": 0,
+                                                 "max": ods.ORG_SEARCH_MAX}
 
 
 def test_real_attribution_text_names_the_licence():

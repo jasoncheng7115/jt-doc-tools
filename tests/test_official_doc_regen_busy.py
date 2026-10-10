@@ -1109,3 +1109,96 @@ def test_preview_pane_shows_a_spinner_then_the_pages(live):
     send("Emulation.setDeviceMetricsOverride",
          {"width": 1366, "height": 900, "deviceScaleFactor": 1, "mobile": False})
     assert not errs, "主控台有 JS 例外：\n  " + "\n  ".join(errs)
+
+
+# ------------------------------------------------------------------ 改寫一段：固定標示
+
+_PIN = """(function(){
+  var p = document.getElementById('odDraftPin'), w = document.getElementById('odDraftWrap'),
+      t = document.getElementById('odDraft'), m = p.querySelector('mark');
+  return {shown: !p.hidden && w.classList.contains('has-pin'), mark: m ? m.textContent : null,
+          mark_bg: m ? getComputedStyle(m).backgroundColor : null,
+          ta_bg: getComputedStyle(t).backgroundColor,
+          pin_h: p.scrollHeight, ta_h: t.scrollHeight, pin_top: p.scrollTop, ta_top: t.scrollTop,
+          same_text: p.textContent === t.value + '\\n',
+          target: document.getElementById('odRwTarget').textContent};})()"""
+
+
+def test_the_rewritten_passage_stays_marked_until_accepted_or_discarded(live):
+    """選取一段按「改寫」之後，焦點跑到按鈕上，瀏覽器就不畫草稿裡的選取範圍了 ——
+    結果還沒採用之前，看不出改的是哪一段；上方的說明還會跟著游標換成別段
+    （畫面上寫的是主旨那句，下面的原本卻是說明一那段）。
+
+    判準：結果出來、游標移到別處之後，草稿裡那一段仍然有底色，上方說明仍然是那一段；
+    鏡像跟草稿框每一行在同一個地方換行（兩邊內容高度相同）、一起捲動；
+    按「不用」或「採用」之後標示收掉。"""
+    port, send, errs, fake, ctl = live
+    _open(port, send)
+    _generate_first(send, fake, ctl)
+    sel = "常卡紙，維修廠商表示零件停產"
+    _eval(send, "(function(){var t=document.getElementById('odDraft'), i=t.value.indexOf(%s);"
+                "t.focus(); t.setSelectionRange(i, i + %d); t.dispatchEvent(new Event('select')); return i;})()"
+          % (_js(sel), len(sel)))
+    assert _until(send, "document.getElementById('odRwTarget').textContent.indexOf(%s) >= 0" % _js(sel), 5)
+    ctl["delay"] = 1.5
+    _eval(send, "document.getElementById('odRwGo').click(), 1")
+    # 改寫中就標著（焦點已經在按鈕上）
+    assert _until(send, "!document.getElementById('odDraftPin').hidden", 3), "按下改寫之後草稿裡沒有標出那一段"
+    assert _eval(send, _PIN)["mark"] == sel
+    assert _until(send, "!document.getElementById('odRwOut').hidden && "
+                        "document.getElementById('odDraftBusy').hidden", 30)
+
+    # 結果還沒採用：游標移到主旨那一行，標示與上方說明都不可以跟著換
+    _eval(send, "(function(){var t=document.getElementById('odDraft'), i=t.value.indexOf('主旨：')+4;"
+                "t.focus(); t.setSelectionRange(i,i); t.dispatchEvent(new Event('keyup')); "
+                "document.getElementById('odRwAccept').focus(); return 1;})()")
+    time.sleep(0.3)
+    g = _eval(send, _PIN)
+    assert g["shown"] and g["mark"] == sel, g
+    assert g["mark_bg"] not in ("rgba(0, 0, 0, 0)", "transparent"), g
+    assert g["ta_bg"] in ("rgba(0, 0, 0, 0)", "transparent"), ("草稿框要透明，底下的標示才看得到", g)
+    assert sel[:6] in g["target"] and "汰換資訊室" not in g["target"], ("上方說明跟著游標換了", g)
+    assert abs(g["pin_h"] - g["ta_h"]) <= 2, ("鏡像跟草稿框換行的地方不一樣", g)
+    assert g["same_text"], g
+
+    # 結果還沒採用時在前面打字：標示跟著那幾個字走，鏡像的內容跟草稿一致
+    _eval(send, "(function(){var t=document.getElementById('odDraft'); t.focus();"
+                "t.setSelectionRange(0,0); return 1;})()")
+    send("Input.insertText", {"text": "（前面加一行）\n"})
+    time.sleep(0.3)
+    g = _eval(send, _PIN)
+    assert g["shown"] and g["mark"] == sel and g["same_text"], ("打字之後鏡像沒有跟著更新", g)
+
+    # 一起捲動（草稿框改矮一點才捲得動）
+    _eval(send, "(function(){var t=document.getElementById('odDraft'); t.style.minHeight='0';"
+                "t.style.height='120px'; t.style.flex='none'; return 1;})()")
+    time.sleep(0.3)
+    _eval(send, "(function(){var t=document.getElementById('odDraft'); t.scrollTop=60;"
+                "t.dispatchEvent(new Event('scroll')); return 1;})()")
+    time.sleep(0.2)
+    g = _eval(send, _PIN)
+    assert g["ta_top"] > 0 and abs(g["pin_top"] - g["ta_top"]) <= 1, g
+    assert abs(g["pin_h"] - g["ta_h"]) <= 2, ("草稿框改了高度之後鏡像沒有跟著", g)
+    _eval(send, "(function(){var t=document.getElementById('odDraft'); t.style.minHeight='';"
+                "t.style.height=''; t.style.flex=''; return 1;})()")
+
+    # 「不用」：標示收掉，上方說明回到看游標
+    _eval(send, "document.getElementById('odRwReject').click(), 1")
+    time.sleep(0.2)
+    g = _eval(send, _PIN)
+    assert not g["shown"] and g["mark"] is None and "正在改寫" not in g["target"], g
+
+    # 再改一次、按「採用」：換上去之後標示也收掉
+    _eval(send, "(function(){var t=document.getElementById('odDraft'), i=t.value.indexOf(%s);"
+                "t.focus(); t.setSelectionRange(i, i + %d); t.dispatchEvent(new Event('select')); return 1;})()"
+          % (_js(sel), len(sel)))
+    ctl["delay"] = 0.3
+    _eval(send, "document.getElementById('odRwGo').click(), 1")
+    assert _until(send, "!document.getElementById('odRwOut').hidden && "
+                        "document.getElementById('odDraftBusy').hidden", 30)
+    assert _eval(send, _PIN)["shown"]
+    _eval(send, "document.getElementById('odRwAccept').click(), 1")
+    assert _until(send, "document.getElementById('odDraftPin').hidden && "
+                        "!document.getElementById('odDraftWrap').classList.contains('has-pin')", 5), \
+        "採用之後標示沒有收掉"
+    assert not errs, "主控台有 JS 例外：\n  " + "\n  ".join(errs)

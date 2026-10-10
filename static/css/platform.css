@@ -1445,5 +1445,13 @@ mark.op-hl { background: #fde68a; color: inherit; border-radius: 2px; padding: 0
 .op-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .op-code { flex: none; font-size: 11.5px; color: #94a3b8; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .op-empty { padding: 8px 10px; font-size: 12.5px; color: var(--muted); }
+/* 清單最下面那一列：「12 / 165 筆」＋「全部顯示」；捲動時固定在底部 */
+.op-more { position: sticky; bottom: -4px; display: flex; align-items: center; justify-content: space-between;
+           gap: 10px; margin: 4px -4px -4px; padding: 6px 12px; background: #f8fafc;
+           border-top: 1px solid #e2e8f0; font-size: 12px; color: var(--muted); }
+.op-all { border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; border-radius: 999px;
+          padding: 2px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.op-all:hover { border-color: #6366f1; }
+.op-narrow { text-align: right; }
 .op-codeline { margin: 4px 0 0; font-size: 12px; color: #64748b; line-height: 1.4; }
 .op-codeline[hidden] { display: none; }

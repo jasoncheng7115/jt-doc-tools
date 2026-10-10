@@ -5,11 +5,39 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (902 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (906 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.16.77] - 2026-10-10
+
+- **Data protection and compliance page: Taiwan PDPA and GDPR mappings.** New article-by-article mapping for Taiwan's Personal Data Protection Act (rights of the data subject, specific purpose, special categories, deletion, incident notice, security), including the 11 security measures in Article 12 of the Enforcement Rules (7 with what the tool provides, 4 left to your organization), with a note that the amendment promulgated on 11 November 2025 takes effect on a date set by the Executive Yuan. New GDPR mapping (principles, special categories, access, erasure, automated decisions, data protection by design and by default, processors, records of processing, security, breach notification, impact assessment, international transfers) with the official article titles.
+- Each card under "What the tool does" now has **Maps to** (article and control numbers that jump to the matching row) and **How to verify** (automated tests you can run yourself, linked to the source repository).
+- New **Suggested acceptance tests**: 19 scenarios with pass criteria and the matching tests, plus suggested assessment worksheet columns.
+- **Search on the page**: type a control number (for example A.8.15), an article number or a keyword to keep only the matching table rows, list items and cards; sections without matches fold away and matches are highlighted. Full-width characters and spaces do not affect matching; Esc clears the search and keeps your place; `?q=` in the address starts a search.
+
+## [1.16.76] - 2026-10-10
+
+- **Official document drafting: the case history table.** Case names now show the whole subject, cut off with "…" when too long; hover to see the full text. The list used to show the 20-character title used for file names, which looked like the whole subject. Older cases get the full subject the first time they are listed, without changing "Last modified".
+- Click a column heading to sort (case, document type, version, check results, last modified, owner); click again to reverse. "Columns shown" hides the columns you do not need. More than 20 cases are split into pages of 20, 50 or 100. The sort order, hidden columns and page size are remembered in your browser.
+- "Select all" ticks only the current page; ticks on other pages still count for "Download selected DI files". Search also matches the whole subject.
+- The upload button now reads "Upload DI files or a ZIP": a zip of DI files was already accepted, and the button now says so.
+
+## [1.16.75] - 2026-10-10
+
+- **Official document drafting: DI files on the case history page.** Each letter and approval memo has a DI button that downloads the latest version as a DI file (the body file of a Taiwan government electronic document). Tick several cases to download them as one zip (up to 100 at a time); handling notes and cases without a draft are skipped, and the page says how many.
+- **Upload DI files**: DI files exported from a document system (.di or .xml, or a whole .zip; up to 50 at a time) each become a case you can open, keep editing and export again. Only official letters and approval memos are accepted. Other letter types are shown in letter format; attachment files and fields with no place in the draft are not imported, and the page says so.
+- Imported cases are marked "DI import" in the list and their first version says "Imported from DI"; the checks use the document itself as the source. Agency codes in the file are kept only when they match the agency address book.
+- DI files are read without expanding entities, without network access and without loading external DTDs, up to 1 MB per file. Older DI files declared as Big5 are read too.
+
+## [1.16.74] - 2026-10-10
+
+- **The data protection and compliance page has been redesigned**: a one-line summary at the top (your documents stay on your own server) with a note that certifications assess the organization and that the page is not legal advice, and a sticky in-page navigation. New "Where data lives" section with a data-flow diagram, where each kind of data is kept and for how long, and when the tool connects to the outside and what it sends. Card rows for what the tool does and what your organization does, a table mapping Taiwan's Personal Data Protection Act, GDPR, ISO/IEC 27001:2022 and ISO/IEC 42001:2023, and the two ISO mapping tables now say what your organization does for each clause and control. The page is now called "Data protection and compliance".
+- Official document drafting: after you click Rewrite, the passage being rewritten stays marked in the draft until you accept or discard the result, and the description above it no longer follows the cursor.
+- Official document drafting and the address book test search: agency lists now show how many matched (for example "12 of 165") with a "Show all" button, and main agencies come before internal units such as personnel and accounting offices.
+- LLM settings: the embedding model list and the recommendation box now use the full width of the section.
 
 ## [1.16.73] - 2026-10-10
 

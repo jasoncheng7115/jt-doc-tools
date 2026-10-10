@@ -122,6 +122,6 @@
  "<b>另一種</b>　從 v1.15.11 ~ v1.16.10 更新時，最後印\n      <code>Health check failed</code>，<code>Service state</code> 是\n      <code>RUNNING</code> / <code>active</code>，Windows 還會說找不到日誌。": "<b>別のケース</b>　v1.15.11 ～ v1.16.10 から更新すると、最後に <code>Health check failed</code> と表示され、<code>Service state</code> は <code>RUNNING</code> / <code>active</code>。Windows ではログが見つからないとも表示されます。",
  "<b>原因</b>　那幾版的健康檢查本身有錯（少了一行 import），\n      不管服務好壞都判成失敗；Windows 與 macOS 也去錯的地方找日誌。": "<b>原因</b>　これらのバージョンのヘルスチェック自体に不具合があり（import が 1 行抜けていた）、サービスの状態に関係なく失敗と判定していました。Windows と macOS はログの場所も間違えていました。",
  "<b>怎麼辦</b>　用瀏覽器打得開就代表更新成功，不需要處理。\n      v1.16.11 已修，但<b>更新到 v1.16.11 的那一次仍會看到這段訊息</b>\n      （跑檢查的是更新前那一版的程式），下一次起就正常。\n      日誌實際的位置：Windows 在 <code>C:\\ProgramData\\jt-doc-tools\\Logs\\</code>\n      （<code>jtdt-svc.err.log</code> 與 <code>jtdt-svc.out.log</code>）、\n      macOS 在 <code>~/Library/Logs/</code>（<code>jt-doc-tools.err</code> 與\n      <code>jt-doc-tools.log</code>）、Linux 用 <code>journalctl -u jt-doc-tools</code>。": "<b>対処</b>　ブラウザで開ければ更新は成功しています。対応は不要です。v1.16.11 で修正済みですが、<b>v1.16.11 への更新そのものではまだ一度このメッセージが出ます</b>（チェックを実行するのは更新前のバージョンのため）。次回の更新からは出ません。ログの実際の場所：Windows は <code>C:\\ProgramData\\jt-doc-tools\\Logs\\</code>（<code>jtdt-svc.err.log</code> と <code>jtdt-svc.out.log</code>）、macOS は <code>~/Library/Logs/</code>（<code>jt-doc-tools.err</code> と <code>jt-doc-tools.log</code>）、Linux は <code>journalctl -u jt-doc-tools</code>。",
- "合規支援（ISO 27001:2022 / 42001:2023）": "コンプライアンス対応（ISO 27001:2022 / 42001:2023）",
+ "資料保護與合規": "データ保護とコンプライアンス",
  "合規": "ISO 対応"
 }

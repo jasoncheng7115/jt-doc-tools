@@ -1,6 +1,6 @@
 [繁體中文](README.md) ｜ [English](README_en.md) ｜ **日本語**
 
-# Jason Tools ドキュメントツールボックス v1.16.73
+# Jason Tools ドキュメントツールボックス v1.16.77
 
 > ### ⚠ 2026-09-13 より前に git でインストールした場合、このバージョンにアップグレードする前に 1 行実行してください
 >
@@ -286,7 +286,7 @@ OpenAI 互換のバックエンド（ローカルの Ollama、LiteLLM などの 
 | **[API.md](API.md)**（[オンライン版](https://jasoncheng7115.github.io/jt-doc-tools/api.html)）| REST API:Bearer token、エンドポイント一覧、アップロード形式、レスポンス形式、エラーコード、curl / Python の例、Job の流れ |
 | **[LLM.md](LLM.md)** | LLM による AI 機能（既定でオフ）：14 個のツールでの LLM の使い方、効果の例、対応する LLM サーバーとゲートウェイ（Ollama / LiteLLM / vLLM…）、思考のオフと並列設定 |
 | **[SECURITY.md](SECURITY.md)** | セキュリティポリシー、OWASP Top 10 (2025) との対応、脆弱性の報告窓口、GitHub native scan の統合 |
-| **[COMPLIANCE.md](COMPLIANCE.md)**（[オンライン版](https://jasoncheng7115.github.io/jt-doc-tools/compliance-ja.html)）| ISO/IEC 27001:2022 と ISO/IEC 42001:2023 への対応：本ツールが提供する管理機能、導入組織での使い方、記録の残る場所 |
+| **[COMPLIANCE.md](COMPLIANCE.md)**（[オンライン版](https://jasoncheng7115.github.io/jt-doc-tools/compliance-ja.html)）| データ保護とコンプライアンス：文書がどこに残るか、どんな場合に外部へ接続するか、ツールが備える管理策と組織が行うこと、台湾の個人資料保護法・GDPR・ISO/IEC 27001:2022・ISO/IEC 42001:2023 との対応 |
 | **[CHANGELOG.md](CHANGELOG.md)** | 完全な変更履歴 |
 | **[TEST_PLAN.md](TEST_PLAN.md)** | テスト一覧、リリース前のチェック |
 | **[OFFLINE.md](OFFLINE.md)** | 閉域ネットワーク / オフラインでのインストール（Docker イメージの持ち込み、社内 PyPI プロキシの利用） |

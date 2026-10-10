@@ -392,6 +392,14 @@ def _official_doc_di_texts() -> list[str]:
     return list(di.MESSAGES.values())
 
 
+def _official_doc_di_import_texts() -> list[str]:
+    """歷史案件「上傳 DI 檔」讀不進來的原因（檔案本身的＋檔案層級的；樣板＋參數）。"""
+    import importlib
+    from app.core import official_doc_di as di
+    r = importlib.import_module("app.tools.official_doc.router")
+    return list(di.READ_ERRORS.values()) + list(r.IMPORT_ERRORS.values())
+
+
 def _official_doc_example_texts() -> list[str]:
     """公文撰擬「載入範例」下拉：分組名稱、分類、標題（`tr(變數)`，靜態掃描看不到）。
     範例的需求文字本身**不翻**（那是要送去產生中文公文的輸入）。"""
@@ -448,6 +456,7 @@ def _usage_category_labels() -> list[str]:
     ("公文撰擬的資料來源", _official_doc_source_texts),
     ("公文撰擬的範例下拉", _official_doc_example_texts),
     ("公文撰擬的 DI 檔注意事項", _official_doc_di_texts),
+    ("公文撰擬上傳 DI 檔的失敗原因", _official_doc_di_import_texts),
     ("會議摘要送回轉逐字稿的理由", _meeting_resend_messages),
 ])
 @pytest.mark.parametrize("locale", _locales())
@@ -480,6 +489,7 @@ _OPTION_RAW_OK = {
     ("llm_settings.html", "settings.model"): "模型名稱",
     ("llm_settings.html", "_v"): "模型名稱",
     ("llm_settings.html", "srv.name"): "管理員自己取的 LLM 伺服器名稱",
+    ("official_doc_cases.html", "n"): "歷史案件每頁幾件（20 / 50 / 100，純數字）",
     # 語言選項的**自稱**：「日本語」在英文介面下也要是「日本語」
     ("login.html", "name"): "語言的自稱，翻掉就選不到自己的語言",
     # 語音服務的「處理設定」代號（`meeting.balanced` 之類）：那是**對方的資料**，

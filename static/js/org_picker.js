@@ -216,6 +216,32 @@
       if (at < chars.length) node.appendChild(document.createTextNode(chars.slice(at).join('')));
     }
 
+    // 清單只列前幾筆時，最下面一列講出「12 / 165 筆」並給「全部顯示」——
+    // 不講的話，排在後面的機關看起來像是地址簿裡沒有（查「數位」時臺中市政府數位發展局
+    // 排在第 37 筆，清單卻只列 12 筆）。
+    function footer(shown, total, max, all) {
+      if (!(total > shown) && !all) return;
+      var f = document.createElement('div');
+      f.className = 'op-more';
+      var say = document.createElement('span');
+      say.textContent = tr('{0} / {1} 筆').replace('{0}', shown).replace('{1}', total);
+      f.appendChild(say);
+      if (total > shown && shown < max) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'op-all';
+        b.textContent = tr('全部顯示');
+        b.addEventListener('click', function () { lookup(true, true); });
+        f.appendChild(b);
+      } else if (total > shown) {
+        var n = document.createElement('span');
+        n.className = 'op-narrow';
+        n.textContent = tr('只列前 {0} 筆；多打幾個字可以縮小範圍').replace('{0}', shown);
+        f.appendChild(n);
+      }
+      panel.appendChild(f);
+    }
+
     function render(rows) {
       panel.replaceChildren();
       items = [];
@@ -251,7 +277,7 @@
       cur.scrollIntoView({ block: 'nearest' });
     }
 
-    async function lookup(force) {
+    async function lookup(force, all) {
       var seg = segmentAt(input);
       lastSeg = seg;
       if (!cfg || !cfg.installed || !cfg.endpoint) return;
@@ -261,7 +287,8 @@
       }
       var my = ++seq;
       try {
-        var r = await fetch(cfg.endpoint + '?limit=' + LIMIT + '&q=' + encodeURIComponent(seg.text));
+        var lim = all ? (cfg.max || 2000) : LIMIT;
+        var r = await fetch(cfg.endpoint + '?limit=' + lim + '&q=' + encodeURIComponent(seg.text));
         if (!r.ok || my !== seq) return;
         var d = await r.json();
         if (my !== seq) return;
@@ -269,8 +296,11 @@
         var rows = (d.orgs || []).filter(function (o) { return o && o.name; });
         // 已經是完整名稱、清單只剩它自己：不用再跳出來
         if (!force && rows.length === 1 && rows[0].name === seg.text) { close(); return; }
-        if (rows.length) render(rows);
-        else note(tr('地址簿裡找不到「{0}」').replace('{0}', seg.text));
+        if (d.max) cfg.max = d.max;
+        if (rows.length) {
+          render(rows);
+          footer(rows.length, d.total || rows.length, cfg.max || 2000, !!all);
+        } else note(tr('地址簿裡找不到「{0}」').replace('{0}', seg.text));
       } catch (e) { /* 只是建議：查不到就不顯示 */ }
     }
 

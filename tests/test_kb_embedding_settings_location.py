@@ -586,3 +586,32 @@ def test_picking_nemotron_says_what_is_added_automatically(live):
             assert not t.errs, "主控台有錯誤：\n  " + "\n  ".join(t.errs)
         finally:
             t.close()
+
+
+@_needs_browser
+def test_the_model_row_and_the_advice_fill_the_section(live):
+    """「嵌入模型」下拉與建議說明框原本限 560px，右邊空了一大塊（2026-10-10 使用者截圖）。
+    判準：「重新整理清單」與說明框的右緣貼齊「嵌入服務」那一框的內緣（瀏覽器量）。"""
+    port, cdp, _, _ = live
+    t = _Tab(cdp)
+    try:
+        t.send("Emulation.setDeviceMetricsOverride",
+               {"width": 1440, "height": 900, "deviceScaleFactor": 1, "mobile": False})
+        # 帶 `#embedding`：同一個瀏覽器裡前面的測試可能把這一區收起來了（收折狀態記在瀏覽器裡），
+        # 從錨點進來會自動展開（`test_the_knowledge_page_link_opens_the_section_even_if_it_was_collapsed`）
+        t.go(f"http://127.0.0.1:{port}/admin/llm-settings#embedding")
+        assert t.wait_for("document.getElementById('kbEmbModels').getBoundingClientRect().width > 0"), \
+            "嵌入服務那一區沒有展開"
+        g = t.js("""(function () {
+          const f = document.getElementById('kbEmbModel').closest('fieldset'), cs = getComputedStyle(f);
+          const inner = f.getBoundingClientRect().right - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingRight);
+          const btn = document.getElementById('kbEmbModels').getBoundingClientRect();
+          const adv = document.querySelector('#embedding .emb-advice').getBoundingClientRect();
+          const sel = document.getElementById('kbEmbModel').closest('.emb-model-row').getBoundingClientRect();
+          return {inner: inner, btn: btn.right, adv: adv.right, row: sel.right, width: inner - sel.left};
+        })()""")
+        assert g["width"] > 700, ("這個寬度下這一框應該夠寬，量不到東西", g)
+        assert abs(g["btn"] - g["inner"]) <= 2 and abs(g["row"] - g["inner"]) <= 2, ("下拉那一列右邊還有留白", g)
+        assert abs(g["adv"] - g["inner"]) <= 2, ("建議說明框右邊還有留白", g)
+    finally:
+        t.close()

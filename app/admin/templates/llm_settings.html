@@ -487,7 +487,8 @@
   .emb-panel .emb-src.emb-src-bad { background: #fef2f2; color: #991b1b; }
   .emb-panel .emb-src code { font-size: 12.5px; background: transparent; padding: 0; }
   .emb-panel #kbEmbOwn[hidden] { display: none; }
-  .emb-panel .emb-model { max-width: 560px; }
+  /* 模型下拉與建議說明撐滿這一框（原本限 560px，右邊空了一大塊） */
+  .emb-panel .emb-model { max-width: none; }
   .emb-panel .emb-model-row { display: flex; gap: 8px; align-items: center; }
   .emb-panel .emb-model-row select { flex: 1 1 auto; min-width: 0; }
   /* 嵌入的兩個下拉用本站樣式（2026-10-09 使用者：「嵌入模型下拉清單 要用本站樣式」），跟同一區的輸入框一樣寬、一樣高 */

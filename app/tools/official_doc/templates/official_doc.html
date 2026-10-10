@@ -84,6 +84,14 @@
 .od-draft { width:100%; max-width:100%; box-sizing:border-box; min-height:380px; resize:vertical;
             font-family:"標楷體", "DFKai-SB", "TW-Kai", "AR PL UKai TW", "BiauKai", serif;
             font-size:16px; line-height:1.9; }
+/* 改寫中、改寫結果還沒採用之前：草稿裡一直標出那一段。textarea 失去焦點後瀏覽器不畫選取範圍，
+   所以在草稿框後面墊一層同樣排版的鏡像（字是透明的），只把那一段畫上底色（`paintPin()`）。 */
+.od-draft-pin { position:absolute; z-index:0; pointer-events:none; overflow:hidden; color:transparent;
+                white-space:pre-wrap; overflow-wrap:break-word; word-break:normal; background:#fff;
+                box-sizing:border-box; border-style:solid; border-color:transparent; margin:0; }
+.od-draft-pin mark { background:#c7d2fe; color:transparent; border-radius:2px; box-shadow:0 0 0 1px #a5b4fc; }
+.od-draft-wrap.has-pin > textarea.od-draft { position:relative; z-index:1; background:transparent; }
+.od-draft-wrap.is-busy > .od-draft-pin { background:#f1f5f9; }
 .od-dirty { margin:6px 0 0; font-size:12.5px; color:#b45309; }
 .od-iss { list-style:none; margin:8px 0 0; padding:0; display:flex; flex-direction:column; gap:6px; }
 .od-iss li { border:1px solid; border-left-width:4px; border-radius:6px; }
@@ -351,6 +359,7 @@ a.od-ref-title:hover { text-decoration:underline; }
 .od-draft-busy .spinner, .od-pv-spin .spinner { width:20px; height:20px; border-width:3px;
                                                  margin-right:0; color:#2563eb; }
 .od-src-regen { color:#b45309; background:#fffbeb; }
+.od-src-import { color:#475569; background:#f1f5f9; }
 
 /* 草稿＋預覽圖：內容區夠寬（≥ 1100px）並排，不夠寬疊起來（預覽在下面） */
 .od-draft-cq { container-type:inline-size; }
@@ -940,6 +949,8 @@ a.od-ref-title:hover { text-decoration:underline; }
     <span>{{ tr('正在重新產生草稿…完成後會換成新的一份；停止或失敗時，這一份會原樣保留。') }}</span>
   </p>
   <div class="od-result-body" id="odResultBody">
+    {# 從 DI 檔匯入的案件（歷史案件的「上傳 DI 檔」）：講出來源與匯入時的注意事項 #}
+    <p class="info-box" id="odImported" hidden>{{ icon('upload', size=16) }}<span id="odImportedText"></span></p>
     <section class="od-sec">
       <h3>{{ icon('list', size=16) }} {{ tr('整理出來的資料') }}</h3>
       <p class="od-hint">{{ tr('「原文有」是在你提供的內容裡找得到的；「推論」是模型自己判斷的，請確認；改過的值會用在重新產生的草稿上。') }}</p>
@@ -966,6 +977,7 @@ a.od-ref-title:hover { text-decoration:underline; }
             {# 產生、重新產生、逐段改寫進行中：草稿上蓋一層轉圈（`draftBusy()`，三條路共用一支），
                草稿暫時唯讀 —— 結束後還原成原本的狀態。 #}
             <div class="od-draft-wrap" id="odDraftWrap">
+              <div class="od-draft-pin" id="odDraftPin" hidden aria-hidden="true"></div>
               <textarea id="odDraft" class="field od-draft" spellcheck="false"
                         aria-label="{{ tr('草稿') }}" data-max="{{ max_edit }}"></textarea>
               <div class="od-draft-busy" id="odDraftBusy" hidden>
@@ -2076,6 +2088,17 @@ a.od-ref-title:hover { text-decoration:underline; }
     el('odTplNote').hidden = !list.length;
   }
 
+  // 從 DI 檔匯入的：哪一份檔案、匯入時沒放進來的東西（檔名是使用者的資料，不翻譯）
+  function paintImported(imp) {
+    var box = el('odImported');
+    box.hidden = !imp;
+    if (!imp) return;
+    var t = tr('這一份是從 DI 檔「{0}」匯入的，不是模型寫的；檢查的依據就是這份公文本身。')
+      .replace('{0}', imp.filename || '');
+    (imp.notes || []).forEach(function (n) { t += ' ' + diNoteText(n); });
+    el('odImportedText').textContent = t;
+  }
+
   function render() {
     var d = (result && result.draft) || {};
     paintTemplates();
@@ -2086,6 +2109,7 @@ a.od-ref-title:hover { text-decoration:underline; }
     el('odDirty').hidden = true;
     renderIssues(d.issues || []);
     renderRefs(d.references || [], result.kb_note || '', result.history_note || '');
+    paintImported(result.imported);
     closeRewrite();
     resetRevisions(d.text || '');
     el('odResult').hidden = false;
@@ -2739,6 +2763,65 @@ a.od-ref-title:hover { text-decoration:underline; }
   var TAILS = Array.isArray(SEG.tails) ? SEG.tails : [];
   var MAX_RW = Number(rwBox.dataset.max) || 2000;
   var pendingRw = null;
+  // 改寫中、改寫結果還沒採用之前，要改的那一段固定住：草稿裡一直標著（`paintPin`），
+  // 上方的說明也停在那一段，不跟著游標換（不然結果還沒採用，上面寫的卻是另一段）。
+  var rwPin = null;   // {start, end, original, where}
+
+  // 那一段現在在草稿的哪裡：草稿改過就照原文找回來（跟「採用」同一個規則）；找不到回 null
+  function pinRange() {
+    if (!rwPin) return null;
+    var v = el('odDraft').value;
+    if (v.slice(rwPin.start, rwPin.end) === rwPin.original) return rwPin;
+    var i = v.indexOf(rwPin.original);
+    if (i < 0 || v.indexOf(rwPin.original, i + 1) >= 0) return null;
+    rwPin.start = i;
+    rwPin.end = i + rwPin.original.length;
+    return rwPin;
+  }
+  var PIN_PROPS = ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing',
+                   'wordSpacing', 'textIndent', 'tabSize', 'paddingTop', 'paddingRight', 'paddingBottom',
+                   'paddingLeft', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth',
+                   'borderLeftWidth', 'borderRadius'];
+  function paintPin() {
+    var ta = el('odDraft'), pin = el('odDraftPin'), wrap = el('odDraftWrap');
+    if (!ta || !pin || !wrap) return;
+    var r = pinRange();
+    if (!r || !ta.getClientRects().length) {
+      pin.hidden = true;
+      pin.replaceChildren();
+      wrap.classList.remove('has-pin');
+      return;
+    }
+    // 排版照抄草稿框（走 CSSOM：CSP 擋行內 style 屬性，不擋 CSSOM）。捲軸佔掉的寬度加到右邊內距，
+    // 兩邊每一行才在同一個地方換行。
+    var cs = getComputedStyle(ta);
+    PIN_PROPS.forEach(function (k) { pin.style[k] = cs[k]; });
+    var bar = ta.offsetWidth - ta.clientWidth - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
+    pin.style.paddingRight = (parseFloat(cs.paddingRight) + Math.max(0, bar)) + 'px';
+    pin.style.left = ta.offsetLeft + 'px';
+    pin.style.top = ta.offsetTop + 'px';
+    pin.style.width = ta.offsetWidth + 'px';
+    pin.style.height = ta.offsetHeight + 'px';
+    var v = ta.value, mk = document.createElement('mark');
+    mk.textContent = v.slice(r.start, r.end);
+    pin.replaceChildren(document.createTextNode(v.slice(0, r.start)), mk,
+                        document.createTextNode(v.slice(r.end) + '\n'));
+    pin.hidden = false;
+    wrap.classList.add('has-pin');
+    pin.scrollTop = ta.scrollTop;
+  }
+  function setPin(t) {
+    rwPin = t ? { start: t.start, end: t.end, original: t.text, where: t.where } : null;
+    paintPin();
+    paintTarget();
+  }
+  el('odDraft').addEventListener('scroll', function () {
+    if (rwPin) el('odDraftPin').scrollTop = el('odDraft').scrollTop;
+  });
+  el('odDraft').addEventListener('input', function () { if (rwPin) paintPin(); });
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () { if (rwPin) paintPin(); }).observe(el('odDraft'));
+  }
 
   // 一行屬於哪一種（state 跨行：「敬陳」之後、正副本之後都是結尾）。
   // 回 {kind, body}：body 是可以改寫的那一截在這一行（去掉頭尾空白之後）裡的起點。
@@ -2881,7 +2964,14 @@ a.od-ref-title:hover { text-decoration:underline; }
   function paintTarget() {
     cancelAnimationFrame(targetFrame);
     targetFrame = requestAnimationFrame(function () {
-      var t = rewriteTarget(), box = el('odRwTarget');
+      var box = el('odRwTarget'), pinned = pinRange();
+      if (pinned) {
+        box.textContent = tr('正在改寫：「{0}」。要換一段，先按「採用」或「不用」。')
+          .replace('{0}', shortText(pinned.original, 28));
+        box.classList.remove('is-warn');
+        return;
+      }
+      var t = rewriteTarget();
       box.textContent = targetMessage(t);
       box.classList.toggle('is-warn', !!t.error);
     });
@@ -2976,6 +3066,7 @@ a.od-ref-title:hover { text-decoration:underline; }
 
   function closeRewrite() {
     pendingRw = null;
+    if (rwPin) setPin(null);
     el('odRwOut').hidden = true;
     el('odRwBefore').replaceChildren();
     el('odRwAfter').replaceChildren();
@@ -2985,7 +3076,11 @@ a.od-ref-title:hover { text-decoration:underline; }
   var RW_LABEL = tr('改寫中…');
   el('odRwGo').addEventListener('click', async function () {
     if (!caseId) return;
-    var t = rewriteTarget();
+    // 改寫結果還沒採用之前，改的一律是固定住的那一段（畫面上標著、上方也寫著那一段）
+    var pinned = pinRange();
+    var t = pinned ? { start: pinned.start, end: pinned.end, text: pinned.original,
+                       where: pinned.where, tail: pendingRw ? pendingRw.tail : false }
+                   : rewriteTarget();
     if (t.error) { showAlert(targetMessage(t)); return; }
     var kind = rwKind(), instr = el('odRwInstr').value.trim();
     if (kind === 'custom' && !instr) {
@@ -2994,7 +3089,8 @@ a.od-ref-title:hover { text-decoration:underline; }
       return;
     }
     paintRwGo(false);
-    var btn = this, done = busy(btn, tr('改寫中…'));
+    setPin(t);
+    var btn = this, done = busy(btn, tr('改寫中…')), gotResult = false;
     draftBusy(true, RW_LABEL);
     try {
       var r = await postJson('/rewrite', {
@@ -3005,6 +3101,7 @@ a.od-ref-title:hover { text-decoration:underline; }
       var d = await r.json();
       pendingRw = { start: t.start, end: t.end, original: t.text, text: String(d.text || ''),
                     kind: kind, instruction: kind === 'custom' ? instr : '', tail: t.tail };
+      gotResult = true;
       paintDiff(t.text, pendingRw.text);
       el('odRwStat').textContent = tr('原本 {0} 字 → 改寫後 {1} 字')
         .replace('{0}', Array.from(t.text).length.toLocaleString())
@@ -3019,7 +3116,13 @@ a.od-ref-title:hover { text-decoration:underline; }
       el('odRwOut').scrollIntoView({ block: 'nearest' });
     } catch (e) {
       showAlert(tr('改寫失敗'));
-    } finally { done(); draftBusy(false, RW_LABEL); }
+    } finally {
+      done();
+      draftBusy(false, RW_LABEL);
+      // 沒有拿到結果（失敗、被擋）：上一次的結果還在就照舊標著，否則不再固定
+      if (!gotResult && !pendingRw) setPin(null);
+      else paintPin();
+    }
   });
 
   el('odRwReject').addEventListener('click', function () { closeRewrite(); });
@@ -3057,7 +3160,8 @@ a.od-ref-title:hover { text-decoration:underline; }
   // 清單存在伺服器上。`REV.cur`：畫面上這份草稿是從第幾版開始改的（存新版時帶給伺服器，
   // 不是最新版就會被 409 擋下 —— 兩個分頁同時改的時候不會安靜地蓋掉另一邊）。
   var REV = { cur: 0, latest: 0, list: [], baseText: '', conflict: null, conflictOpts: null };
-  var SRC = { ai: tr('模型產生'), regen: tr('重新產生'), edit: tr('手動修改'), rewrite: tr('逐段改寫') };
+  var SRC = { ai: tr('模型產生'), regen: tr('重新產生'), edit: tr('手動修改'), rewrite: tr('逐段改寫'),
+              'import': tr('從 DI 檔匯入') };
   var KIND_NAME = {};
   Array.prototype.forEach.call(document.querySelectorAll('input[name="odRwKind"]'), function (o) {
     KIND_NAME[o.value] = o.closest('.option-card').querySelector('.opt-label').textContent.trim();

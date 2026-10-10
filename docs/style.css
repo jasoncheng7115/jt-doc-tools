@@ -1848,60 +1848,219 @@ code {
   background: #fef3c7; color: #92400e; font-size: 10px; font-weight: 700;
   line-height: 15px; letter-spacing: .02em; white-space: nowrap; }
 
-/* ---- 合規支援頁（compliance.html，由 build-compliance-page.py 從 COMPLIANCE.md 產生） ---- */
-.cp-main { max-width: 980px; }
-.cp-main [id] { scroll-margin-top: 84px; }
-/* 各節的「對應條文 / 對應控制項」：一排小標籤，點了跳到對照表那一列 */
-.cp-map { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 13px; }
-.cp-map-k { color: var(--muted); font-weight: 600; margin-right: 2px; }
-.cp-ctl { display: inline-block; padding: 1px 9px; border-radius: 999px; border: 1px solid #c7d2fe;
-          background: #eef2ff; color: #3730a3; font-size: 12.5px; line-height: 1.6; text-decoration: none;
-          font-variant-numeric: tabular-nums; }
-.cp-ctl:hover { background: #e0e7ff; border-color: #6366f1; text-decoration: none; }
-.cp-maptab .cp-table td:first-child { width: 27%; }
-.cp-maptab .cp-table td:last-child { width: 22%; color: #475569; }
-.cp-maptab tr:target td { background: #fef9c3; }
-.cp-p { color: #334155; line-height: 1.85; margin: 0 0 12px; }
-.cp-h2 { font-size: 22px; margin: 34px 0 6px; padding-top: 18px; border-top: 1px solid #e2e8f0;
-         scroll-margin-top: 80px; color: #0f172a; }
-.cp-h3 { font-size: 16.5px; margin: 22px 0 8px; color: #312e81; }
-.cp-table-wrap { overflow-x: auto; margin: 0 0 8px; }
-.cp-table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.7; background: #fff;
-            border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
-.cp-table th { text-align: left; background: #f8fafc; color: #475569; font-weight: 600; font-size: 13px;
-               padding: 8px 12px; border-bottom: 1px solid #e2e8f0; }
-.cp-table td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; color: #1e293b;
-              overflow-wrap: anywhere; }
-.cp-table tr:last-child td { border-bottom: 0; }
-.cp-table td:first-child { width: 55%; }
-.cp-table code, .cp-list code, .cp-p code { background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 3px;
-            font-size: 12.5px; }
-.cp-list { line-height: 1.9; color: #1e293b; padding-left: 22px; margin: 0 0 12px; }
+/* ---- 首頁「稽核」那一節連到合規頁的說明框 ---- */
 .cp-cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px;
           margin: 28px 0 0; padding: 18px 22px; border: 1px solid #c7d2fe; border-left: 4px solid #4f46e5;
           border-radius: 12px; background: #eef2ff; }
 .cp-cta h3 { margin: 0 0 4px; font-size: 17px; color: #312e81; }
 .cp-cta p { margin: 0; color: #3730a3; font-size: 14px; line-height: 1.7; }
-@media (max-width: 640px) {
-  .cp-table td:first-child,
-  .cp-maptab .cp-table td:first-child, .cp-maptab .cp-table td:last-child { width: auto; }
-  .cp-cta .btn { width: 100%; justify-content: center; }
+@media (max-width: 640px) { .cp-cta .btn { width: 100%; justify-content: center; } }
+
+/* ---- 資料保護與合規頁（compliance.html，由 build-compliance-page.py 從 COMPLIANCE.md 產生） ---- */
+.cp-main [id] { scroll-margin-top: 118px; }       /* 導覽列 64px ＋ 頁內導覽 */
+.cp-main code { background: rgba(15,23,42,.06); padding: 1px 5px; border-radius: 4px; font-size: 12.5px;
+                color: #0f172a; }
+/* 頁首 */
+.cp-hero { padding: 64px 0 44px; text-align: center; border-bottom: 1px solid var(--border);
+           background: radial-gradient(circle at 15% 10%, #e0e7ff 0%, transparent 45%),
+                       radial-gradient(circle at 85% 90%, #dbeafe 0%, transparent 50%), #f8fafc; }
+.cp-eyebrow { display: inline-block; font-size: 12.5px; font-weight: 700; letter-spacing: .12em;
+              color: var(--indigo); background: #fff; border: 1px solid #c7d2fe; border-radius: 999px;
+              padding: 5px 14px; }
+.cp-title { font-size: clamp(32px, 5vw, 50px); font-weight: 800; line-height: 1.2; letter-spacing: -.01em;
+            margin: 16px auto 14px; color: var(--text); }
+.cp-lead { font-size: 17px; line-height: 1.8; color: #475569; max-width: 760px; margin: 0 auto; }
+.cp-disclaimer { max-width: 860px; margin: 26px auto 0; text-align: left; font-size: 14px; line-height: 1.8;
+                 color: #334155; background: #fff; border: 1px solid #c7d2fe; border-left: 4px solid #4f46e5;
+                 border-radius: 10px; padding: 14px 18px; }
+.cp-disclaimer b { color: #312e81; }
+/* 頁內導覽：固定在導覽列下方 */
+.cp-pagenav { position: sticky; top: 64px; z-index: 90; background: rgba(255,255,255,.94);
+              backdrop-filter: saturate(180%) blur(10px); -webkit-backdrop-filter: saturate(180%) blur(10px);
+              border-bottom: 1px solid var(--border); }
+.cp-pagenav-in { display: flex; align-items: center; gap: 16px; height: 50px; }
+.cp-pagenav-links { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 16px; height: 100%;
+                    overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+.cp-pagenav-links::-webkit-scrollbar { display: none; }
+/* 放不下時可以橫向捲動；右緣淡出，看得出後面還有 */
+.cp-pagenav-links { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+                    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); padding-right: 24px; }
+.cp-pagenav-k { flex: 0 0 auto; font-size: 12px; font-weight: 700; color: var(--muted); }
+/* 搜尋框（行為在 compliance-search.js） */
+.cp-search { flex: 0 0 auto; position: relative; display: flex; align-items: center; width: 200px; }
+.cp-search-ic { position: absolute; left: 10px; color: #94a3b8; pointer-events: none; }
+.cp-search-in { width: 100%; height: 34px; padding: 0 64px 0 32px; font: inherit; font-size: 13.5px; color: var(--text);
+                background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 999px; outline: none;
+                -webkit-appearance: none; appearance: none; }
+.cp-search-in::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
+.cp-search-in::placeholder { color: #94a3b8; }
+.cp-search-in:focus { background: #fff; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
+.cp-search-n { position: absolute; right: 12px; font-size: 12px; font-weight: 700; color: var(--indigo);
+               pointer-events: none; font-variant-numeric: tabular-nums; }
+.cp-search-n.cp-search-zero { color: var(--warn); }
+.cp-search-empty { padding: 56px 16px; text-align: center; color: var(--muted); font-size: 15px; }
+/* 搜尋時頁首收起來，結果直接接在頁內導覽下面；區塊間距收小 */
+.cp-searching .cp-sec { padding: 36px 0; }
+.cp-searching .cp-sub { margin-top: 24px; }
+.cp-searching .cp-hero { display: none; }
+::highlight(cp-hit) { background-color: #fde047; color: #0f172a; }
+.cp-pagenav a { font-size: 14px; color: #334155; text-decoration: none; }
+.cp-pagenav a:hover { color: var(--indigo); }
+/* 區塊 */
+.cp-sec { padding: 72px 0; background: var(--bg); }
+.cp-sec-alt { background: var(--bg-soft); border-top: 1px solid var(--border-soft);
+              border-bottom: 1px solid var(--border-soft); }
+.cp-sec > .container { max-width: 1080px; }
+.cp-sec-title { font-size: clamp(26px, 3.2vw, 34px); font-weight: 800; text-align: center; margin: 0 0 12px;
+                color: var(--text); }
+.cp-sec-lead { font-size: 16px; line-height: 1.8; color: var(--muted); text-align: center; max-width: 760px;
+               margin: 0 auto 36px; }
+.cp-sub { font-size: 20px; font-weight: 700; margin: 44px 0 6px; color: var(--text); }
+.cp-sub-lead { font-size: 14px; color: var(--muted); margin: 0 0 14px; }
+.cp-note { font-size: 13px; color: var(--muted); margin: 0 0 4px; }
+.cp-p { font-size: 15px; line-height: 1.85; color: #334155; margin: 16px 0 0; }
+.cp-bullets { list-style: none; padding: 0; margin: 16px 0 0; font-size: 15px; line-height: 1.8; color: #1e293b; }
+.cp-bullets li { position: relative; padding-left: 18px; margin: 6px 0; }
+.cp-bullets li::before { content: ""; position: absolute; left: 2px; top: .72em; width: 6px; height: 6px;
+                         border-radius: 50%; background: #6366f1; }
+/* 卡片 */
+.cp-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.cp-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px 18px;
+           box-shadow: var(--shadow); }
+.cp-card-head { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }
+.cp-card-head h3 { margin: 0; font-size: 18px; font-weight: 700; color: var(--text); }
+.cp-card-ic { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 10px; display: inline-flex;
+              align-items: center; justify-content: center; }
+.cp-ic-1 { background: #e0e7ff; color: #4338ca; } .cp-ic-2 { background: #dcfce7; color: #15803d; }
+.cp-ic-3 { background: #ffedd5; color: #c2410c; } .cp-ic-4 { background: #fce7f3; color: #be185d; }
+.cp-ic-5 { background: #dbeafe; color: #1d4ed8; } .cp-ic-6 { background: #f3e8ff; color: #7e22ce; }
+.cp-card .cp-bullets { margin: 0; font-size: 14.5px; line-height: 1.75; }
+.cp-card .cp-bullets b { color: var(--text); }
+/* 畫面 */
+.cp-gallery { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin: 36px 0 0; }
+.cp-shot { margin: 0; }
+.cp-shot img { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 10px;
+               box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 8px 20px rgba(15,23,42,.08); }
+.cp-shot figcaption { margin-top: 8px; font-size: 12.5px; line-height: 1.6; color: var(--muted); text-align: center; }
+/* 法規對照之後的兩顆跳轉 */
+.cp-jump { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 0; }
+.cp-jump a { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;
+             border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; font-size: 13.5px;
+             font-weight: 600; text-decoration: none; }
+.cp-jump a:hover { border-color: #6366f1; }
+/* 表格 */
+.cp-table-wrap { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+                 margin: 12px 0 0; }
+.cp-table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.7; }
+.cp-table th { text-align: left; background: #f8fafc; color: #334155; font-weight: 700; font-size: 13.5px;
+               padding: 11px 16px; border-bottom: 1px solid var(--border); }
+.cp-table td { padding: 11px 16px; border-top: 1px solid var(--border-soft); vertical-align: top; color: #1e293b;
+               overflow-wrap: anywhere; }
+.cp-table tbody tr:first-child td { border-top: 0; }
+.cp-table p { margin: 0; }
+.cp-td-k { display: none; }
+.cp-cols2 td:first-child { width: 34%; }
+.cp-cols3 td:first-child { width: 28%; } .cp-cols3 td:nth-child(2) { width: 40%; }
+.cp-cols4 td:first-child { width: 18%; } .cp-cols4 td:nth-child(2) { width: 22%; }
+.cp-cols4 td:nth-child(3) { width: 30%; }
+/* 驗收案例：第三欄是測試檔名，一行一支（檔名很長，窄了會從中間斷開） */
+.cp-tab-acceptance td:first-child { width: 26%; } .cp-tab-acceptance td:nth-child(2) { width: 36%; }
+.cp-tab-acceptance td:last-child a { display: block; width: max-content; max-width: 100%; margin: 0 0 4px; }
+.cp-tab-acceptance td:last-child code { font-size: 12px; overflow-wrap: anywhere; }
+.cp-cn b { font-variant-numeric: tabular-nums; }
+.cp-en { font-size: 12px; line-height: 1.5; color: var(--muted); margin-top: 2px !important; }
+html[lang="en"] .cp-en { display: none; }        /* 英文頁的中文譯名欄本來就是英文名稱 */
+.cp-maptab tr:target td { background: #fef9c3; }
+/* 卡片：對應的條號（點下去跳到對照表那一列）與如何驗證 */
+.cp-refs { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; gap: 6px 12px;
+           margin: 14px 0 0; padding: 12px 0 0; border-top: 1px dashed var(--border); font-size: 12.5px; }
+.cp-refs-k { grid-column: 1 / -1; font-weight: 700; color: var(--muted); }
+.cp-ref-g { display: contents; }
+.cp-ref-std { color: #475569; white-space: nowrap; }
+.cp-ref-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.cp-chip { display: inline-block; padding: 0 8px; border-radius: 6px; background: #eef2ff; color: #3730a3;
+           border: 1px solid #c7d2fe; text-decoration: none; font-size: 12.5px; line-height: 1.75;
+           white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cp-chip:hover { background: #e0e7ff; border-color: #818cf8; }
+.cp-verify { margin: 10px 0 0; font-size: 13px; }
+.cp-verify > summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; list-style: none;
+                       padding: 3px 10px; border-radius: 999px; background: #ecfdf5; color: #047857;
+                       border: 1px solid #a7f3d0; font-weight: 600; user-select: none; }
+.cp-verify > summary::-webkit-details-marker { display: none; }
+.cp-verify > summary:hover { border-color: #34d399; }
+.cp-verify-n { min-width: 18px; padding: 0 5px; border-radius: 999px; background: #047857; color: #fff;
+               font-size: 11px; line-height: 18px; text-align: center; }
+.cp-verify-list { list-style: none; margin: 10px 0 0; padding: 0; }
+.cp-verify-list li { margin: 0 0 8px; line-height: 1.65; color: #334155; }
+.cp-verify-list li > a:first-child { display: block; width: max-content; max-width: 100%; text-decoration: none; }
+.cp-verify-list li > a:first-child code { color: #047857; background: #ecfdf5; overflow-wrap: anywhere; }
+.cp-table a code, .cp-p a code { color: #3730a3; }
+/* 資料流向圖 */
+.cp-flow { display: grid; grid-template-columns: minmax(0, 1fr) 236px; gap: 72px; align-items: center;
+           background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; }
+.cp-zone { background: #f0f7ff; border: 1.5px solid #93c5fd; border-radius: 12px; padding: 14px 16px 18px; }
+.cp-zone-title { font-size: 13px; font-weight: 700; color: #1e3a8a; margin: 0 0 14px; }
+.cp-zone-out { background: none; border: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.cp-zone-out .cp-zone-title { text-align: center; margin: 0; color: #475569; }
+.cp-flow-row { display: grid; grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1.25fr) 40px minmax(0, 1.1fr);
+               align-items: center; }
+.cp-node-col { display: flex; flex-direction: column; gap: 10px; }
+.cp-node { background: #fff; border: 1.5px solid #60a5fa; border-radius: 10px; padding: 10px 12px; text-align: center; }
+.cp-node b { display: block; font-size: 14px; color: var(--text); }
+.cp-node span { display: block; font-size: 12px; line-height: 1.5; color: var(--muted); margin-top: 2px; }
+.cp-node-main { border-color: #4f46e5; box-shadow: 0 4px 14px rgba(79,70,229,.15); padding: 16px 12px; }
+.cp-node-opt { border-style: dashed; }
+.cp-arrow { width: 40px; height: 16px; color: #64748b; }
+.cp-out { position: relative; border-color: #cbd5e1; }
+.cp-out em { display: block; font-style: normal; font-size: 12px; font-weight: 700; margin-top: 4px; }
+.cp-out-no em { color: #dc2626; } .cp-out-no em::before { content: "✕ "; }
+.cp-out-opt em { color: #b45309; }
+.cp-out-ok em { color: #15803d; }
+.cp-out::before { content: ""; position: absolute; right: calc(100% + 6px); top: 50%; width: 56px;
+                  border-top: 2px dashed #ef4444; }
+.cp-out-opt::before { border-top-color: #f59e0b; }
+.cp-out-ok::before { border-top-style: solid; border-top-color: #22c55e; }
+.cp-out::after { content: ""; position: absolute; top: 50%; transform: translateY(-50%); right: calc(100% + 1px);
+                 border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+                 border-left: 7px solid #ef4444; margin-top: 1px; }
+.cp-out-opt::after { border-left-color: #f59e0b; }
+.cp-out-ok::after { right: calc(100% + 56px); border-left: 0; border-right: 7px solid #22c55e; }
+@media (max-width: 900px) {
+  .cp-flow { grid-template-columns: 1fr; gap: 18px; }
+  .cp-flow-row { grid-template-columns: 1fr; justify-items: stretch; gap: 4px; }
+  .cp-arrow { transform: rotate(90deg); margin: 6px auto; }
+  .cp-out::before, .cp-out::after { display: none; }
+  .cp-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-.cp-hero { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px 32px; align-items: center;
-           margin: 0 0 6px; }
-.cp-hero-art { width: 220px; height: auto; display: block; }
-.cp-h-ic { display: inline-flex; align-items: center; justify-content: center; vertical-align: -4px;
-           margin-right: 10px; color: #4f46e5; }
-.cp-h2 .cp-h-ic { width: 38px; height: 38px; border-radius: 10px; background: #eef2ff; vertical-align: -9px; }
-.cp-h3 .cp-h-ic { width: 30px; height: 30px; border-radius: 8px; background: #f1f5f9; color: #4338ca;
-                  vertical-align: -8px; }
-.cp-toc a { display: inline-flex; align-items: center; gap: 6px; }
-.cp-toc a .cp-ic { color: #6366f1; }
-.cp-fig { margin: 14px 0 6px; }
-.cp-fig img { display: block; width: 100%; height: auto; border: 1px solid #e2e8f0; border-radius: 10px;
-              box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 8px 24px rgba(15,23,42,.08); }
-.cp-fig figcaption { margin-top: 8px; font-size: 13px; color: #64748b; text-align: center; }
+@media (max-width: 1200px) {
+  .cp-pagenav-k { display: none; }
+}
+@media (max-width: 860px) {
+  .cp-search { width: 180px; }
+}
+@media (max-width: 700px) {                       /* 導覽列在這個寬度以下是 56px */
+  .cp-pagenav { top: 56px; }
+  .cp-main [id] { scroll-margin-top: 110px; }
+  .cp-pagenav-k { display: none; }
+  .cp-search { width: 140px; }
+  .cp-search-in { padding-right: 40px; }
+  .cp-refs { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .cp-ref-chips { margin-bottom: 6px; }
+}
 @media (max-width: 760px) {
-  .cp-hero { grid-template-columns: 1fr; }
-  .cp-hero-art { width: 160px; margin: 0 auto; order: -1; }
+  .cp-cards { grid-template-columns: 1fr; }
+  .cp-sec { padding: 48px 0; }
+  .cp-hero { padding: 44px 0 32px; }
+}
+/* 手機：表格一列一張卡，欄位名稱寫在每一格上面 */
+@media (max-width: 640px) {
+  .cp-table thead { display: none; }
+  .cp-table, .cp-table tbody, .cp-table tr, .cp-table td { display: block; width: auto !important; }
+  .cp-table tr { padding: 12px 14px; border-top: 1px solid var(--border); }
+  .cp-table tbody tr:first-child { border-top: 0; }
+  .cp-table td { padding: 0; border: 0; }
+  .cp-table td + td { margin-top: 8px; }
+  .cp-td-k { display: block; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .cp-table td:first-child { font-weight: 700; font-size: 15px; }
+  .cp-table td:first-child .cp-en { font-weight: 400; }
 }

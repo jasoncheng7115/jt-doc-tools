@@ -81,6 +81,17 @@ _ORG_CODE_RE = re.compile(r"^[0-9A-Za-z]{2,32}$")
 #: 正本、副本一格好幾個機關時的分隔（跟頁面上的元件同一組）
 _ORG_SEP_RE = re.compile(r"[、，,；;]")
 EXPORT_VERSION = 1
+#: 歷史案件的 DI 檔（2026-10-10 使用者：「歷史案件功能 裡面要提供下載 di 檔功能 還要可以批次下載 或上傳」）。
+#: 批次下載一次最多幾件、上傳一次最多幾份 DI 檔（壓縮檔裡的一份也算一份）。
+DI_BATCH_MAX = 100
+DI_IMPORT_MAX_FILES = 50
+#: 上傳收的檔案：DI 檔本身（公文系統匯出的是 `.di`，有些系統存成 `.xml`）或整包 `.zip`
+DI_IMPORT_EXTS = (".di", ".xml", ".zip")
+DI_ENTRY_EXTS = (".di", ".xml")
+#: 歷史案件表格：可以藏的欄（代號, 標題）與每頁幾件（第一個是預設）
+CASE_COLUMNS = (("mode", "文別"), ("rev", "版本"), ("issues", "檢查結果"),
+                ("updated", "最後修改"), ("owner", "擁有者"))
+CASE_PAGE_SIZES = (20, 50, 100)
 
 #: 模型呼叫失敗（連不上、逾時、對方回錯誤）時給使用者的話。**原因只進記錄** ——
 #: 例外字串常帶著 LLM 伺服器的內部位址，不可以原樣回給使用者。
@@ -840,6 +851,12 @@ def _di_messages() -> dict:
     return dict(di.MESSAGES)
 
 
+def _di_errors() -> dict:
+    """上傳 DI 檔時讀不進來的原因（檔案本身的＋檔案層級的）。"""
+    from ...core import official_doc_di as di
+    return {**di.READ_ERRORS, **IMPORT_ERRORS}
+
+
 def _ref_purpose_labels() -> dict:
     """參考資料的用途標籤：**跟知識庫管理頁同一份**（`kb.store.PURPOSES`）——
     管理員在那裡選的是哪個字，使用者在這裡看到的就是哪個字。讀不到才用核心那一份。"""
@@ -850,23 +867,24 @@ def _ref_purpose_labels() -> dict:
         return dict(od.REF_PURPOSES)
 
 
-def _search_orgs(q: str, limit: int = 10) -> list[dict]:
+def _search_orgs(q: str, limit: int = 10) -> dict:
+    """`{"results": [...], "total": 符合的總筆數}`。"""
     try:
         from ...core import official_doc_sources as ods
-        return ods.search_orgs(q, limit=limit)
+        return ods.search_orgs_page(q, limit=limit)
     except Exception as e:  # noqa: BLE001 — 查不到就是沒有建議，不是錯誤
         logger.warning("official-doc：查機關名稱失敗（%s）：%s", type(e).__name__, e)
-        return []
+        return {"results": [], "total": 0}
 
 
-def _search_orgs_exact(q: str, limit: int) -> tuple[list[dict], str]:
-    rows = _search_orgs(q, limit)
+def _search_orgs_exact(q: str, limit: int) -> tuple[dict, str]:
+    page = _search_orgs(q, limit)
     try:
         from ...core import official_doc_sources as ods
-        return rows, ods.exact_org_code(q)
+        return page, ods.exact_org_code(q)
     except Exception as e:  # noqa: BLE001
         logger.warning("official-doc：比對機關全銜失敗（%s）：%s", type(e).__name__, e)
-        return rows, ""
+        return page, ""
 
 
 def _abolished_law_names() -> tuple[list[str], list[str]]:
@@ -933,12 +951,24 @@ def _subject_tails(mode: str) -> list[str]:
     return sorted(tails, key=len, reverse=True)
 
 
+#: 清單上的主旨整句最多存幾個字（畫面會截斷加「…」，滑鼠移過去看全文）
+SUBJECT_MAX_CHARS = 200
+
+
 def _title_for(mode: str, draft: od.Draft) -> str:
-    """簽與函取主旨前 20 字（去掉結語 / 期望語）；簽辦意見、或主旨還沒有內容時用模式名稱。"""
+    """簽與函取主旨前 20 字（去掉結語 / 期望語）；簽辦意見、或主旨還沒有內容時用模式名稱。
+    這是**檔名**用的；清單上顯示的是整句（`_subject_for`）。"""
     fallback = od.MODE_NAMES.get(mode, "公文")
+    subj = _subject_for(mode, draft.text)
+    return (_clean_title(subj) or fallback) if subj else fallback
+
+
+def _subject_for(mode: str, text: str) -> str:
+    """主旨整句（去掉結語 / 期望語與起頭語，同 `_title_for` 的規則）；簽辦意見、
+    主旨還沒有內容（〔待補〕）時是空字串。"""
     if mode not in ("sign", "letter"):
-        return fallback
-    for b in od.parse_text(draft.text):
+        return ""
+    for b in od.parse_text(text):
         if b["kind"] == "label" and b["label"] == "主旨":
             subj = b["text"]
             for tail in _subject_tails(mode):
@@ -952,9 +982,11 @@ def _title_for(mode: str, draft: od.Draft) -> str:
             subj = re.sub(r"^請[\s　]*(?:(?:貴|鈞)(?:機關|公司|[^\s　，,]{1,3}?(?=[針於就依提儘配協辦轉查回補派檢])|[^\s　，,])|台端)[\s　]*",
                           "", subj)
             if subj and not subj.startswith("〔"):
-                return _clean_title(subj) or fallback
+                subj = re.sub(r"[\x00-\x1f\x7f]", "", subj)
+                # 全形空白是挪抬（「請　貴局」），留著；其他空白收成一個
+                return re.sub(r"[^\S\u3000]+", " ", subj).strip()[:SUBJECT_MAX_CHARS]
             break
-    return fallback
+    return ""
 
 
 #: 叫模型時的進度文字（`job.message`）。使用者要看得出**資料送到 LLM 伺服器了、AI 正在回覆**
@@ -1111,7 +1143,8 @@ def _run_job(job, case_id: str, inputs: dict, facts: Optional[list],
     job.result_filename = f"{title}-草稿.odt"
     job.meta["case_id"] = case_id
     job.meta["issues"] = _issue_counts(pub["issues"])
-    _touch_case(case_id, title=title, mode=inputs["mode"], issues=job.meta["issues"])
+    _touch_case(case_id, title=title, subject=_subject_for(inputs["mode"], pub["text"]),
+                mode=inputs["mode"], issues=job.meta["issues"])
     job.progress = 1.0
     job.message = "完成"
 
@@ -1299,12 +1332,15 @@ async def orgs(q: str = "", limit: int = 10):
     if len(q) > MAX_ORG_QUERY:
         raise HTTPException(400, f"查詢字串超過 {MAX_ORG_QUERY} 字的上限。")
     if not q:
-        return {"orgs": [], "exact": ""}
-    limit = max(1, min(int(limit), 20))
-    rows, exact = await asyncio.to_thread(_search_orgs_exact, q, limit)
+        return {"orgs": [], "exact": "", "total": 0}
+    from ...core.official_doc_sources import ORG_SEARCH_MAX
+    limit = max(1, min(int(limit), ORG_SEARCH_MAX))
+    page, exact = await asyncio.to_thread(_search_orgs_exact, q, limit)
+    # `total`：符合的總筆數。清單只列前幾筆時畫面講出「12 / 165 筆」並給「全部顯示」——
+    # 不講的話，排在後面的機關看起來像是地址簿裡沒有。
     return {"orgs": [{"name": r.get("orgName") or "", "id": r.get("orgId") or "",
-                      "marks": r.get("nameMarks") or []} for r in rows],
-            "exact": exact}
+                      "marks": r.get("nameMarks") or []} for r in page["results"]],
+            "exact": exact, "total": page["total"], "max": ORG_SEARCH_MAX}
 
 
 @router.post("/extract-text")
@@ -1416,7 +1452,7 @@ def _case_row(meta: dict, *, me: Optional[int], show_owner: bool) -> dict:
     issues = meta.get("issues") if isinstance(meta.get("issues"), dict) else {}
     row = {
         "case_id": str(meta.get("case_id") or ""),
-        "name": name, "title": title,
+        "name": name, "title": title, "subject": str(meta.get("subject") or ""),
         "mode": mode, "mode_name": od.MODE_NAMES.get(mode, mode),
         "latest_rev": int(meta.get("latest_rev") or 0),
         "issues": {k: int(issues.get(k) or 0) for k in ("error", "todo", "hint")},
@@ -1426,10 +1462,34 @@ def _case_row(meta: dict, *, me: Optional[int], show_owner: bool) -> dict:
         "deleted_at": float(meta.get("deleted_at") or 0) or None,
         "deleted_by": str(meta.get("deleted_by") or ""),
         "mine": me is not None and meta.get("owner_uid") == me,
+        "imported": meta.get("origin") == "di",
     }
+    # 下載得到 DI 檔嗎：簽與函、已經有草稿、沒刪除（簽辦意見沒有 DI 檔）
+    row["di_ok"] = mode in ("sign", "letter") and row["latest_rev"] > 0 and not row["deleted"]
     if show_owner:
         row["owner"] = _owner_label(meta.get("owner_uid"))
     return row
+
+
+def _with_subject(meta: dict) -> dict:
+    """v1.16.76 以前的案件沒有存主旨整句：第一次列出來時從草稿算一次存回去
+    （**不動「最後修改」** —— 補一個欄位不是使用者改了案件）。算不出來存空字串，下次不再算。"""
+    if "subject" in meta:
+        return meta
+    cid = str(meta.get("case_id") or "")
+    subj = ""
+    try:
+        out = json.loads(_result_path(cid).read_text(encoding="utf-8"))
+        if isinstance(out, dict):
+            subj = _subject_for(str(out.get("mode") or meta.get("mode") or ""),
+                                str((out.get("draft") or {}).get("text") or ""))
+    except (OSError, ValueError, TypeError, AttributeError):
+        subj = ""
+    try:
+        _cs.update(cid, touch=False, subject=subj)
+    except (OSError, ValueError) as e:
+        logger.warning("official-doc：補主旨失敗（%s）", type(e).__name__)
+    return {**meta, "subject": subj}
 
 
 def _list_rows(request: Request, q: str, mode: str) -> tuple[list[dict], bool]:
@@ -1442,8 +1502,9 @@ def _list_rows(request: Request, q: str, mode: str) -> tuple[list[dict], bool]:
     for m in metas:
         if mode and str(m.get("mode") or "") != mode:
             continue
+        m = _with_subject(m)
         if q:
-            blob = " ".join(str(m.get(k) or "") for k in ("name", "title", "case_id")).lower()
+            blob = " ".join(str(m.get(k) or "") for k in ("name", "title", "subject", "case_id")).lower()
             if q not in blob:
                 continue
         rows.append(_case_row(m, me=uid, show_owner=see_all and auth_on))
@@ -1460,6 +1521,13 @@ async def cases_page(request: Request, q: str = "", mode: str = ""):
         "request": request, "cases": rows, "q": q, "mode_filter": mode,
         "modes": list(od.MODE_NAMES.items()), "show_owner": show_owner,
         "max_name": _cs.MAX_NAME_CHARS, "limit": _cs.LIST_LIMIT,
+        # DI 檔的注意事項與讀不進來的原因：樣板（前端 `tr(樣板)` 再填參數）
+        "di_notes": _di_messages(), "di_errors": _di_errors(),
+        "batch_max": DI_BATCH_MAX, "import_max": DI_IMPORT_MAX_FILES,
+        "import_exts": list(DI_IMPORT_EXTS),
+        # 「顯示欄位」可以藏的欄（案件名稱與動作一定在）；擁有者只有管理員看得到
+        "col_options": [(k, v) for k, v in CASE_COLUMNS if k != "owner" or show_owner],
+        "page_sizes": CASE_PAGE_SIZES,
     })
 
 
@@ -1519,6 +1587,280 @@ async def case_delete(case_id: str, request: Request):
     except Exception:  # noqa: BLE001 —— 稽核寫不進去不可以讓刪除失敗（已經刪了）
         logger.warning("official-doc：刪除案件的稽核寫不進去")
     return {"ok": True, "case_id": case_id}
+
+
+# ------------------------------------------------------------------ 歷史案件的 DI 檔
+#
+# 下載：照**最新那一版**（承辦人改過、存過的那一份）產生，跟匯出同一支產生器（`_di_build`）。
+# 批次下載：勾好幾件打包成 zip；**任何一件不是你的就整批 404**（跟單件同一句話 —— 部分成功的話，
+# 回來的件數就問得出哪些編號是別人的）。簽辦意見、還沒有草稿的略過並講出幾件。
+# 上傳：DI 檔（或整包 zip）→ 一件一件的歷史案件，擁有者是上傳的人。
+
+def _case_label(meta: Optional[dict]) -> str:
+    meta = meta or {}
+    return str(meta.get("name") or meta.get("title") or
+               od.MODE_NAMES.get(str(meta.get("mode") or ""), "公文"))
+
+
+def _case_di(case_id: str) -> tuple[bytes, list, bool]:
+    """案件最新那一版 → DI 檔（位元組, 注意事項, 驗得過 DTD 嗎）。阻塞呼叫。"""
+    text, _rev = _cs.latest_text(case_id)
+    if not text.strip():
+        raise HTTPException(410, "這份草稿已經過期或被清掉了，請重新產生一次。")
+    data, notes, ok, _errs, _mode = _di_build(case_id, text)
+    return data, notes, ok
+
+
+@router.get("/case/{case_id}/di")
+async def case_di(case_id: str, request: Request):
+    from ...core import official_doc_di as di
+    meta = await asyncio.to_thread(_require_case, case_id, request)
+    if meta is None:
+        raise HTTPException(404, _NOT_FOUND)
+    try:
+        data, notes, ok = await asyncio.to_thread(_case_di, case_id)
+    except di.DiNotApplicable as e:
+        raise HTTPException(400, str(e))
+    name = f"{_clean_title(_case_label(meta), 40) or '公文'}.di"
+    return Response(content=data, media_type=di.MEDIA_TYPE + "; charset=utf-8", headers={
+        "Content-Disposition": content_disposition(name),
+        "X-Jtdt-Di-Notes": str(len(notes)), "X-Jtdt-Di-Valid": "1" if ok else "0"})
+
+
+@router.post("/cases/di")
+async def cases_di_zip(request: Request):
+    """勾選的案件打包成 zip（一件一個 DI 檔）。`{"case_ids": [...]}`。"""
+    from ...core import official_doc_di as di
+    body = await _json_body(request)
+    raw = body.get("case_ids")
+    if not isinstance(raw, list) or not raw or not all(isinstance(x, str) for x in raw):
+        raise HTTPException(400, "請先勾選要下載的案件。")
+    ids = list(dict.fromkeys(x.strip() for x in raw))
+    if len(ids) > DI_BATCH_MAX:
+        raise HTTPException(400, f"一次最多下載 {DI_BATCH_MAX} 件。")
+    metas = []
+    for cid in ids:
+        meta = await asyncio.to_thread(_require_case, cid, request)
+        if meta is None:
+            raise HTTPException(404, _NOT_FOUND)
+        metas.append((cid, meta))
+
+    def _work() -> tuple[bytes, int, int]:
+        buf, used, done, skipped = io.BytesIO(), set(), 0, 0
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for cid, meta in metas:
+                try:
+                    data, _notes, _ok = _case_di(cid)
+                except (di.DiNotApplicable, HTTPException):
+                    skipped += 1
+                    continue
+                base = _clean_title(_case_label(meta), 40) or "公文"
+                name = f"{base}.di"
+                if name in used:
+                    name = f"{base}-{cid[:8]}.di"
+                used.add(name)
+                z.writestr(name, data)
+                done += 1
+        return buf.getvalue(), done, skipped
+
+    data, done, skipped = await asyncio.to_thread(_work)
+    if not done:
+        raise HTTPException(400, "選取的案件都沒有 DI 檔（簽辦意見沒有 DI 檔，還沒有草稿的也沒有）。")
+    stamp = time.strftime("%Y%m%d-%H%M")
+    return Response(content=data, media_type="application/zip", headers={
+        "Content-Disposition": content_disposition(f"公文DI檔-{stamp}.zip"),
+        "X-Jtdt-Di-Count": str(done), "X-Jtdt-Di-Skipped": str(skipped)})
+
+
+def _zip_entry_name(info: zipfile.ZipInfo) -> str:
+    """壓縮檔裡的檔名：沒有標 UTF-8 的多半是 Big5（Windows 的壓縮工具、官方的實作範例都是）。"""
+    name = info.filename
+    if not info.flag_bits & 0x800:
+        try:
+            name = name.encode("cp437").decode("cp950")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
+    return name.replace("\\", "/").rsplit("/", 1)[-1]
+
+
+def _di_items(uploads: list[tuple[str, bytes]]) -> tuple[list[tuple[str, bytes]], list[dict], int]:
+    """上傳的檔案 → (要匯入的 DI 檔, 一開始就收不了的, 壓縮檔裡略過的其他檔案數)。阻塞呼叫。"""
+    from ...core import official_doc_di as di
+    from ...core import zip_guard
+    items: list[tuple[str, bytes]] = []
+    failed: list[dict] = []
+    skipped = 0
+    for name, data in uploads:
+        if name.lower().endswith(DI_ENTRY_EXTS):
+            items.append((name, data))
+            continue
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(data))
+            zip_guard.check(zf)
+        except (zipfile.BadZipFile, zip_guard.ZipBombError, ValueError):
+            failed.append(_import_failure(name, "bad_zip"))
+            continue
+        with zf:
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                entry = _zip_entry_name(info)
+                if info.filename.startswith("__MACOSX/") or entry.startswith("._"):
+                    continue
+                if not entry.lower().endswith(DI_ENTRY_EXTS):
+                    skipped += 1
+                    continue
+                if len(items) > DI_IMPORT_MAX_FILES:
+                    break          # 已經超過上限（呼叫端會回 400）—— 不必再解開更多
+                if info.file_size > di.READ_MAX_BYTES:
+                    failed.append(_import_failure(entry, "too_big", di.READ_MAX_BYTES // 1024))
+                    continue
+                try:
+                    with zf.open(info) as f:
+                        items.append((entry, f.read(di.READ_MAX_BYTES + 1)))
+                except (zipfile.BadZipFile, OSError, RuntimeError, NotImplementedError):
+                    # 加密的、壓縮方式不支援的、內容對不上的
+                    failed.append(_import_failure(entry, "not_xml"))
+    return items, failed, skipped
+
+
+#: 上傳失敗的原因：DI 檔本身讀不進來的在 `official_doc_di.READ_ERRORS`，這裡是檔案層級的
+IMPORT_ERRORS = {
+    "ext": "只收 DI 檔（.di / .xml）或整包 .zip。",
+    "bad_zip": "壓縮檔讀不開（毀損、加密，或解開後大得不合理）。",
+    "save_failed": "存不進去，請稍後再試一次。",
+}
+
+
+def _import_failure(name: str, code: str, *params) -> dict:
+    from ...core import official_doc_di as di
+    tpl = IMPORT_ERRORS.get(code) or di.READ_ERRORS.get(code) or code
+    args = [str(p) for p in params]
+    return {"filename": name, "code": code, "args": args, "error": tpl.format(*args)}
+
+
+def _relation_from_subject(subject: str) -> tuple[str, str]:
+    """匯入的函：主旨結尾的期望語**只屬於一種行文關係**時，照它填行文關係與期望語
+    （「請　鑒核」只有上行用；「請　查照」上下平行都用 → 不猜，留「不確定」）。"""
+    s = re.sub(r"[\s　]", "", subject or "").rstrip("。.")
+    hits: dict[str, str] = {}
+    for rel, closings in od.LETTER_CLOSINGS.items():
+        if rel in ("unknown", od.COMPANY_RELATION):
+            continue
+        for c in closings:
+            if s.endswith(c.replace("　", "")):
+                hits.setdefault(rel, c)
+    return next(iter(hits.items())) if len(hits) == 1 else ("unknown", "")
+
+
+def _import_di_case(filename: str, data: bytes, uid: Optional[int]) -> dict:
+    """一份 DI 檔 → 一件歷史案件。讀不進來丟 `DiReadError`。阻塞呼叫。
+
+    * **擁有者是上傳的人**（認證關閉時沒有擁有者，同新建的案件）。
+    * 輸入（`inputs`）照畫面送的格式組、走同一支 `_parse_mode_inputs`，重新打開時表單填得回去：
+      需求敘述放主旨（「參考我的歷史案件」比對的就是它 —— 放全文的話每一份都像）；
+      **全文放在 `source`**，重新檢查（`recheck`）時當依據 —— 不然公文裡的每個數字都是「找不到依據」。
+    * 檔案裡寫的機關代碼要**地址簿驗得過**才留（`_org_codes`，同畫面送來的那一條）。
+    * 第一版的來源是 `import`（不是 `ai`：這份不是模型寫的）。"""
+    from ...core import official_doc_di as di
+    got = di.read(data, max_chars=MAX_EDIT_CHARS)
+    mode, text, f = got["mode"], got["text"], got["fields"]
+
+    def cut(v, n: int = od.MAX_FIELD_CHARS) -> str:
+        return str(v or "").strip()[:n].strip()
+
+    first = next((b.get("text") for b in od.parse_text(text)
+                  if b.get("kind") in ("label", "item", "para") and b.get("text")), "")
+    subject = got["subject"]
+    for tail in _subject_tails(mode):     # 結語 / 期望語不是需求（`_title_for` 同一份清單）
+        if tail and subject.endswith(tail):
+            subject = subject[:-len(tail)]
+            break
+    narrative = (cut(subject, od.MAX_NARRATIVE_CHARS) or cut(first, od.MAX_NARRATIVE_CHARS)
+                 or cut(f"從 DI 檔匯入（{filename}）", od.MAX_NARRATIVE_CHARS))
+    body: dict = {"mode": mode, "narrative": narrative, "length": "normal"}
+    if mode == "letter":
+        relation, closing = _relation_from_subject(got["subject"])
+        body.update(issuer="agency", relation=relation, closing=closing, org=cut(f["org"]),
+                    receiver=cut(f["receiver"]), copies=cut(f["copies"]), cc=cut(f["cc"]),
+                    signature=cut(f["signature"]), attachments=cut(f["attachments"]),
+                    doc_no=cut(f["doc_no"]), contact=cut(f["contact"], MAX_CONTACT_CHARS),
+                    org_codes={k: v for k, v in got["org_codes"].items()
+                               if _ORG_CODE_RE.match(v) and 0 < len(k) <= od.MAX_FIELD_CHARS})
+        if f["speed"] in od.LETTER_SPEEDS:
+            body["speed"] = f["speed"]
+    else:
+        body.update(unit=cut(f["unit"]), addressee=cut(f["addressee"]),
+                    with_date=bool(f["date_line"]))
+    inputs = _parse_mode_inputs(body)
+    if mode == "sign":
+        inputs["date_line"] = cut(f["date_line"])
+    inputs.update(use_kb=False, use_history=False, source=text[:od.MAX_SOURCE_CHARS], origin="di")
+    issues = _with_abolished(text, od.recheck(mode, text, [], inputs, []))
+    draft = od.Draft(mode=mode, text=text, facts=[], issues=issues)
+    title = _title_for(mode, draft)
+    pub = draft.to_public()
+    now = time.time()
+    case_id = uuid.uuid4().hex
+    _cs.create(case_id, owner_uid=uid if _uo.auth_enabled() else None, mode=mode)
+    _write_case_file(case_id, "case.json", {"case_id": case_id, "mode": mode, "inputs": inputs,
+                                            "created_at": now})
+    _write_case_file(case_id, "result.json", {
+        "case_id": case_id, "mode": mode, "inputs": inputs, "title": title, "draft": pub,
+        "kb_note": "", "history_note": "", "created_at": now,
+        "imported": {"filename": filename, "notes": got["notes"], "at": now}})
+    with _REV_LOCK:
+        _write_revisions(case_id, [_rev_record(1, None, "import", text, created_at=now,
+                                               note=cut(filename, MAX_NOTE_CHARS))])
+    counts = _issue_counts(pub["issues"])
+    _touch_case(case_id, title=title, subject=_subject_for(mode, text), mode=mode,
+                issues=counts, origin="di")
+    return {"filename": filename, "case_id": case_id, "title": title, "mode": mode,
+            "mode_name": od.MODE_NAMES.get(mode, mode), "notes": got["notes"], "issues": counts}
+
+
+@router.post("/cases/import")
+async def cases_import(request: Request, files: list[UploadFile] = File(...)):
+    """上傳 DI 檔（可以一次好幾份，或整包 zip）→ 每一份一件歷史案件。
+
+    回 `{imported: [...], failed: [{filename, code, args, error}], skipped}`：讀不進來的一份不影響
+    其他份；壓縮檔裡不是 DI 檔的（附件、簽核檔…）略過並講出幾個。"""
+    from ...core import official_doc_di as di
+    if len(files) > DI_IMPORT_MAX_FILES:
+        raise HTTPException(400, f"一次最多上傳 {DI_IMPORT_MAX_FILES} 份 DI 檔。")
+    uploads: list[tuple[str, bytes]] = []
+    failed: list[dict] = []
+    total = 0
+    for up in files:
+        name = (up.filename or "").replace("\\", "/").rsplit("/", 1)[-1][:200] or "?"
+        data = await up.read(MAX_UPLOAD_BYTES + 1)
+        total += len(data)
+        if total > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, f"上傳的檔案加起來超過這項功能的 {MAX_UPLOAD_BYTES // (1024 * 1024)} MB 上限。")
+        if not name.lower().endswith(DI_IMPORT_EXTS):
+            failed.append(_import_failure(name, "ext"))
+            continue
+        if not data:
+            failed.append(_import_failure(name, "not_xml"))
+            continue
+        uploads.append((name, data))
+    items, bad, skipped = await asyncio.to_thread(_di_items, uploads)
+    failed += bad
+    if len(items) > DI_IMPORT_MAX_FILES:
+        raise HTTPException(400, f"一次最多上傳 {DI_IMPORT_MAX_FILES} 份 DI 檔。")
+    if not items and not failed:
+        raise HTTPException(400, "沒有找到 DI 檔（.di / .xml）。")
+    uid = _uo.current_user_id(request)
+    imported: list[dict] = []
+    for name, data in items:
+        try:
+            imported.append(await asyncio.to_thread(_import_di_case, name, data, uid))
+        except di.DiReadError as e:
+            failed.append(_import_failure(name, e.code, *e.params))
+        except (OSError, ValueError, HTTPException) as e:
+            logger.warning("official-doc：匯入 DI 檔失敗（%s）", type(e).__name__)
+            failed.append(_import_failure(name, "save_failed"))
+    return {"imported": imported, "failed": failed, "skipped": skipped}
 
 
 @router.post("/check")

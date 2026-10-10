@@ -132,6 +132,7 @@
   .od-skip { font-size: 12px; color: #92400e; margin-top: 6px; }
   .od-empty { margin: 8px 0 0; }
   .od-orgs { list-style: none; margin: 8px 0 0; padding: 0; font-size: 13px; }
+  #odOrgSay { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
   .od-orgs li { padding: 4px 0; border-bottom: 1px dashed #e2e8f0; display: flex; gap: 12px; }
   mark.od-hl { background: #fde68a; color: inherit; border-radius: 2px; padding: 0 1px;
                box-shadow: 0 0 0 1px #fcd34d inset; }
@@ -225,7 +226,7 @@
     <div class="auth-field">
       <label class="af-label" for="odOrgQ">{{ tr('機關名稱或代碼') }}</label>
       <input class="field" id="odOrgQ" type="text" maxlength="200" autocomplete="off">
-      <div class="af-hint">{{ tr('逐字比對，「台」「臺」通用，空白分開的幾個詞要全部出現；名稱完全相同的排最前面（全銜優先）。只查已下載而且啟用中的地址簿。') }}</div>
+      <div class="af-hint">{{ tr('逐字比對，「台」「臺」通用，空白分開的幾個詞要全部出現；名稱完全相同的排最前面，接著是主機關，人事室、會計室這類內部單位排在後面。只查已下載而且啟用中的地址簿。') }}</div>
     </div>
     <p class="muted" id="odOrgSay"></p>
     <ul class="od-orgs" id="odOrgs"></ul>
@@ -792,7 +793,10 @@
     if (at < chars.length) box.appendChild(document.createTextNode(chars.slice(at).join('')));
     return box;
   }
-  async function searchOrgs() {
+  // 只列前 20 筆時講出總筆數並給「全部顯示」—— 不講的話，排在後面的機關看起來像是地址簿裡沒有
+  // （查「數位」時臺中市政府數位發展局排在第 37 筆，畫面只寫「前 20 筆」）。
+  async function searchOrgs(all) {
+    all = all === true;
     const q = qEl.value.trim();
     const seq = ++qSeq;
     orgsEl.textContent = '';
@@ -800,13 +804,31 @@
     const hasBook = state.sources.some(s => s.kind === 'address_book' && s.installed && s.enabled);
     if (!hasBook) { orgSayEl.textContent = tr('還沒有已下載而且啟用中的地址簿。'); return; }
     try {
-      const r = await fetch(BASE + '/search-orgs?limit=20&q=' + encodeURIComponent(q));
+      const lim = all ? (state.orgMax || 2000) : 20;
+      const r = await fetch(BASE + '/search-orgs?limit=' + lim + '&q=' + encodeURIComponent(q));
       if (seq !== qSeq) return;
       if (!r.ok) { orgSayEl.textContent = await window.friendlyServerError(r, tr('查詢失敗')); return; }
       const j = await r.json();
       if (seq !== qSeq) return;
       const res = j.results || [];
-      orgSayEl.textContent = res.length ? tr('前 {0} 筆').replace('{0}', res.length) : tr('查無符合的機關');
+      const total = j.total || res.length;
+      if (j.max) state.orgMax = j.max;
+      orgSayEl.replaceChildren();
+      if (!res.length) {
+        orgSayEl.textContent = tr('查無符合的機關');
+      } else {
+        orgSayEl.appendChild(el('span', '',
+          tr('{0} / {1} 筆').replace('{0}', res.length).replace('{1}', total)));
+        if (total > res.length && res.length < (state.orgMax || 2000)) {
+          const b = el('button', 'btn btn-small', tr('全部顯示'));
+          b.type = 'button';
+          b.addEventListener('click', () => searchOrgs(true));
+          orgSayEl.appendChild(b);
+        } else if (total > res.length) {
+          orgSayEl.appendChild(el('span', '',
+            tr('只列前 {0} 筆；多打幾個字可以縮小範圍').replace('{0}', res.length)));
+        }
+      }
       res.forEach(o => {
         const li = el('li');
         li.appendChild(marked('od-org-id', o.orgId || '—', o.orgId ? o.idMarks : []));

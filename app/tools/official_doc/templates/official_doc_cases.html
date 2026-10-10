@@ -31,6 +31,48 @@
 .odc-del:hover { background:#fee2e2; border-color:#fecaca; }
 .odc-tbl tr.odc-deleted { opacity:.6; }
 .odc-gone { display:inline-block; padding:1px 8px; border-radius:999px; background:#fee2e2; color:#991b1b; font-size:12px; }
+.odc-bar-right { display:flex; flex-wrap:wrap; gap:8px; }
+.odc-import-hint { font-size:12.5px; color:var(--muted); margin:-4px 0 14px; }
+.odc-tools { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; justify-content:space-between; margin:0 0 8px; }
+.odc-tools .odc-count { margin:0; }
+.odc-batch { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.odc-batch-sel { font-size:13px; color:var(--muted); }
+.odc-tbl th.odc-ck, .odc-tbl td.odc-ck { width:30px; padding-right:2px; }
+.odc-ck input { width:16px; height:16px; margin:2px 0 0; cursor:pointer; }
+.odc-ck input:disabled { cursor:not-allowed; }
+.odc-imp { display:inline-block; margin-left:6px; padding:0 7px; border-radius:999px; background:#f1f5f9;
+           color:#475569; font-size:11.5px; font-weight:600; vertical-align:1px; white-space:nowrap; }
+/* 案件欄吃掉剩下的寬度，名稱太長就截斷加「…」（滑鼠移過去看全文）；其他欄不折行 */
+.odc-tbl td.odc-name { width:100%; max-width:0; }
+.odc-tbl td:not(.odc-name) { white-space:nowrap; }
+.odc-name-line { display:flex; align-items:baseline; gap:6px; min-width:0; }
+.odc-name-text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.odc-name-line .odc-imp { flex:0 0 auto; }
+.odc-trunc { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.odc-sort { display:inline-flex; align-items:center; gap:4px; padding:0; border:0; background:none;
+            color:inherit; font:inherit; cursor:pointer; white-space:nowrap; }
+.odc-sort:hover { color:var(--primary-dark); }
+.odc-sort-ic { display:inline-block; width:1em; font-size:10px; color:#94a3b8; text-align:center; }
+.odc-sort-ic::after { content:"\2195"; }
+th[aria-sort="ascending"] .odc-sort-ic::after { content:"\25B2"; color:var(--primary-dark); }
+th[aria-sort="descending"] .odc-sort-ic::after { content:"\25BC"; color:var(--primary-dark); }
+th[aria-sort="ascending"] .odc-sort-ic, th[aria-sort="descending"] .odc-sort-ic { color:var(--primary-dark); }
+.odc-tools-right { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.odc-cols { position:relative; }
+.odc-cols > summary { list-style:none; }
+.odc-cols > summary::-webkit-details-marker { display:none; }
+.odc-cols-menu { position:absolute; right:0; top:calc(100% + 4px); z-index:30; display:grid; gap:8px;
+                 min-width:11em; padding:10px 14px; background:var(--bg, #fff); border:1px solid var(--border);
+                 border-radius:10px; box-shadow:0 8px 24px rgba(15, 23, 42, .14); }
+.odc-cols-menu label { display:flex; align-items:center; gap:8px; white-space:nowrap; cursor:pointer; font-size:13.5px; }
+.odc-tbl.odc-hide-mode [data-col="mode"], .odc-tbl.odc-hide-rev [data-col="rev"],
+.odc-tbl.odc-hide-issues [data-col="issues"], .odc-tbl.odc-hide-updated [data-col="updated"],
+.odc-tbl.odc-hide-owner [data-col="owner"] { display:none !important; }
+.odc-pager { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; justify-content:flex-end;
+             margin:12px 0 0; font-size:13px; color:var(--muted); }
+.odc-pager .jt-select-wrap, .odc-pager select { width:6em; }
+.odc-psize { display:inline-flex; align-items:center; gap:6px; }
+.odc-pageno { min-width:5em; text-align:center; color:#334155; }
 .odc-empty { text-align:center; padding:44px 16px; color:var(--muted); }
 .odc-empty .btn { margin-top:12px; }
 @media (max-width: 760px) {
@@ -41,6 +83,7 @@
   .odc-tbl td[data-label]::before { content:attr(data-label); display:inline-block; min-width:5.5em;
                                      color:var(--muted); font-size:12px; }
   .odc-act { justify-content:flex-start; }
+  .odc-tbl td.odc-name { max-width:none; }
 }
 </style>
 {% endblock %}
@@ -62,47 +105,81 @@
     <button type="submit" class="btn">{{ icon('search', size=14) }} {{ tr('搜尋') }}</button>
     {% if q or mode_filter %}<a class="btn" href="cases">{{ icon('close', size=14) }} {{ tr('清除') }}</a>{% endif %}
   </form>
-  <a class="btn btn-primary" href="/tools/official-doc/">{{ icon('plus', size=14) }} {{ tr('撰擬新公文') }}</a>
+  <div class="odc-bar-right">
+    <button type="button" class="btn" id="odcUpBtn">{{ icon('upload', size=14) }} {{ tr('上傳 DI 檔或 ZIP') }}</button>
+    <input type="file" id="odcFile" multiple accept="{{ import_exts|join(',') }}" hidden>
+    <a class="btn btn-primary" href="/tools/official-doc/">{{ icon('plus', size=14) }} {{ tr('撰擬新公文') }}</a>
+  </div>
 </div>
+<p class="odc-import-hint">{{ tr('上傳公文系統匯出的 DI 檔（.di、.xml，或整包 .zip，一次最多 {0} 份），每一份會變成一件歷史案件，可以打開來接著改、再匯出；目前收函與簽。').replace('{0}', import_max|string) }}</p>
 
-<div class="panel" id="odcPanel">
+<div class="panel" id="odcPanel" data-di-notes='{{ di_notes|tojson }}' data-di-errors='{{ di_errors|tojson }}'
+     data-batch-max="{{ batch_max }}">
   {% if cases %}
-  <p class="odc-count">{{ tr('共 {0} 件').replace('{0}', cases|length|string) }}{% if cases|length >= limit %} · {{ tr('只列出最近 {0} 件，較舊的請用搜尋').replace('{0}', limit|string) }}{% endif %}</p>
+  <div class="odc-tools">
+    <p class="odc-count">{{ tr('共 {0} 件').replace('{0}', cases|length|string) }}{% if cases|length >= limit %} · {{ tr('只列出最近 {0} 件，較舊的請用搜尋').replace('{0}', limit|string) }}{% endif %}</p>
+    <div class="odc-tools-right">
+      <details class="odc-cols" id="odcCols">
+        <summary class="btn">{{ icon('columns', size=14) }} {{ tr('顯示欄位') }}</summary>
+        <div class="odc-cols-menu">
+          {% for key, label in col_options %}
+          <label><input type="checkbox" data-odc-col="{{ key }}" checked> {{ tr(label) }}</label>
+          {% endfor %}
+        </div>
+      </details>
+      <div class="odc-batch">
+        <span class="odc-batch-sel" id="odcSel">{{ tr('已勾選 {0} 件').replace('{0}', '0') }}</span>
+        <button type="button" class="btn" id="odcBatch" disabled>{{ icon('archive', size=14) }} {{ tr('下載勾選的 DI 檔') }}</button>
+      </div>
+    </div>
+  </div>
   <table class="odc-tbl">
     <thead><tr>
-      <th>{{ tr('案件') }}</th>
-      <th>{{ tr('文別') }}</th>
-      <th>{{ tr('版本') }}</th>
-      <th>{{ tr('檢查結果') }}</th>
-      <th>{{ tr('最後修改') }}</th>
-      {% if show_owner %}<th>{{ tr('擁有者') }}</th>{% endif %}
+      <th class="odc-ck"><input type="checkbox" id="odcAll" aria-label="{{ tr('全選這一頁（可以下載 DI 檔的案件）') }}" title="{{ tr('全選這一頁（可以下載 DI 檔的案件）') }}"></th>
+      <th aria-sort="none"><button type="button" class="odc-sort" data-sort="name">{{ tr('案件') }}<span class="odc-sort-ic" aria-hidden="true"></span></button></th>
+      <th data-col="mode" aria-sort="none"><button type="button" class="odc-sort" data-sort="mode">{{ tr('文別') }}<span class="odc-sort-ic" aria-hidden="true"></span></button></th>
+      <th data-col="rev" aria-sort="none"><button type="button" class="odc-sort" data-sort="rev">{{ tr('版本') }}<span class="odc-sort-ic" aria-hidden="true"></span></button></th>
+      <th data-col="issues" aria-sort="none"><button type="button" class="odc-sort" data-sort="issues">{{ tr('檢查結果') }}<span class="odc-sort-ic" aria-hidden="true"></span></button></th>
+      <th data-col="updated" aria-sort="none"><button type="button" class="odc-sort" data-sort="updated">{{ tr('最後修改') }}<span class="odc-sort-ic" aria-hidden="true"></span></button></th>
+      {% if show_owner %}<th data-col="owner" aria-sort="none"><button type="button" class="odc-sort" data-sort="owner">{{ tr('擁有者') }}<span class="odc-sort-ic" aria-hidden="true"></span></button></th>{% endif %}
       <th aria-label="{{ tr('動作') }}"></th>
     </tr></thead>
     <tbody>
     {% for c in cases %}
-      <tr data-case-id="{{ c.case_id }}" data-name="{{ c.name }}" {% if c.deleted %}class="odc-deleted"{% endif %}>
+      {% set label = c.name or c.subject or c.title or tr(c.mode_name) %}
+      <tr data-case-id="{{ c.case_id }}" data-name="{{ c.name }}" {% if c.deleted %}class="odc-deleted"{% endif %}
+          data-k-name="{{ label }}" data-k-mode="{{ tr(c.mode_name) }}" data-k-rev="{{ c.latest_rev }}"
+          data-k-issues="{{ (c.issues.error * 1000 + c.issues.todo) if c.latest_rev else -1 }}"
+          data-k-updated="{{ c.updated_at }}" data-k-owner="{{ c.owner or '' }}">
+        <td class="odc-ck">{% if not c.deleted %}<input type="checkbox" data-odc-pick aria-label="{{ tr('勾選') }}"
+          {% if not c.di_ok %}disabled title="{% if c.mode == 'endorse' %}{{ tr('簽辦意見沒有 DI 檔') }}{% else %}{{ tr('還沒有草稿') }}{% endif %}"{% endif %}>{% endif %}</td>
         <td class="odc-name">
-          {% if c.deleted %}<span>{{ c.name or c.title or tr(c.mode_name) }}</span>
-          {% else %}<a href="/tools/official-doc/?case={{ c.case_id }}" data-odc-title>{{ c.name or c.title or tr(c.mode_name) }}</a>{% endif %}
-          {% if c.name and c.title %}<div class="odc-sub" data-odc-sub>{{ c.title }}</div>{% endif %}
-          {% if c.deleted %}<div class="odc-sub"><span class="odc-gone">{{ tr('已刪除') }}</span>
+          {# 名稱與主旨太長就截斷加「…」，滑鼠移過去看全文（使用者的資料，不翻譯） #}
+          <div class="odc-name-line">
+            {% if c.deleted %}<span class="odc-name-text" title="{{ label }}" data-i18n="skip">{{ label }}</span>
+            {% else %}<a class="odc-name-text" href="/tools/official-doc/?case={{ c.case_id }}" data-odc-title title="{{ label }}" data-i18n="skip">{{ label }}</a>{% endif %}
+            {% if c.imported %}<span class="odc-imp" title="{{ tr('從 DI 檔匯入的案件') }}">{{ tr('DI 匯入') }}</span>{% endif %}
+          </div>
+          {% if c.name and c.subject %}<div class="odc-sub odc-trunc" data-odc-sub title="{{ c.subject }}" data-i18n="skip">{{ c.subject }}</div>{% endif %}
+          {% if c.deleted %}<div class="odc-sub odc-trunc"><span class="odc-gone">{{ tr('已刪除') }}</span>
             {{ tr('{0} 由 {1} 刪除').replace('{0}', c.deleted_at|localdt).replace('{1}', c.deleted_by or '?') }}</div>{% endif %}
         </td>
-        <td data-label="{{ tr('文別') }}"><span class="odc-mode">{{ tr(c.mode_name) }}</span></td>
-        <td data-label="{{ tr('版本') }}">{% if c.latest_rev %}{{ c.latest_rev }}{% else %}—{% endif %}</td>
-        <td data-label="{{ tr('檢查結果') }}">
+        <td data-col="mode" data-label="{{ tr('文別') }}"><span class="odc-mode">{{ tr(c.mode_name) }}</span></td>
+        <td data-col="rev" data-label="{{ tr('版本') }}">{% if c.latest_rev %}{{ c.latest_rev }}{% else %}—{% endif %}</td>
+        <td data-col="issues" data-label="{{ tr('檢查結果') }}">
           <div class="odc-iss">
             {% if c.issues.error %}<span class="odc-chip error">{{ tr('需要確認 {0}').replace('{0}', c.issues.error|string) }}</span>{% endif %}
             {% if c.issues.todo %}<span class="odc-chip todo">{{ tr('待補 {0}').replace('{0}', c.issues.todo|string) }}</span>{% endif %}
             {% if not c.issues.error and not c.issues.todo %}{% if c.latest_rev %}<span class="odc-chip ok">{{ tr('沒有需要確認的事實') }}</span>{% else %}—{% endif %}{% endif %}
           </div>
         </td>
-        <td data-label="{{ tr('最後修改') }}" class="odc-time"><time datetime="{{ c.updated_at|localiso }}">{{ c.updated_at|localdt }}</time></td>
-        {% if show_owner %}<td data-label="{{ tr('擁有者') }}">{{ c.owner or '—' }}</td>{% endif %}
+        <td data-col="updated" data-label="{{ tr('最後修改') }}" class="odc-time"><time datetime="{{ c.updated_at|localiso }}">{{ c.updated_at|localdt }}</time></td>
+        {% if show_owner %}<td data-col="owner" data-label="{{ tr('擁有者') }}">{{ c.owner or '—' }}</td>{% endif %}
         <td>
           <div class="odc-act">
             {% if not c.deleted %}
             <a class="btn" href="/tools/official-doc/?case={{ c.case_id }}" title="{{ tr('打開') }}">{{ icon('eye', size=14) }} {{ tr('打開') }}</a>
+            {% if c.di_ok %}<button type="button" class="btn" data-odc-di title="{{ tr('下載 DI 檔（最新一版）') }}" aria-label="{{ tr('下載 DI 檔（最新一版）') }}">{{ icon('download', size=14) }} DI</button>{% endif %}
             <button type="button" class="btn" data-odc-rename title="{{ tr('改名') }}" aria-label="{{ tr('改名') }}">{{ icon('edit', size=14) }}</button>
             <button type="button" class="btn odc-del" data-odc-delete title="{{ tr('刪除') }}" aria-label="{{ tr('刪除') }}">{{ icon('trash', size=14) }}</button>
             {% endif %}
@@ -112,6 +189,18 @@
     {% endfor %}
     </tbody>
   </table>
+  {# 分頁（排序與分頁都在瀏覽器做：清單最多 {{ limit }} 件，一次送來） #}
+  <div class="odc-pager" id="odcPager" hidden>
+    <span id="odcRange"></span>
+    <label class="odc-psize">{{ tr('每頁') }}
+      <select id="odcPageSize" class="field jt-select" aria-label="{{ tr('每頁幾件') }}">
+        {% for n in page_sizes %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="button" class="btn" id="odcPrev">{{ icon('back', size=14) }} {{ tr('上一頁') }}</button>
+    <span class="odc-pageno" id="odcPageNo"></span>
+    <button type="button" class="btn" id="odcNext">{{ tr('下一頁') }} {{ icon('next', size=14) }}</button>
+  </div>
   {% else %}
   <div class="odc-empty">
     {% if q or mode_filter %}{{ tr('沒有符合的案件。') }}{% else %}{{ tr('還沒有案件。撰擬的公文會自動留在這裡。') }}{% endif %}
@@ -144,18 +233,23 @@
       if (!r.ok) { window.showAlert(await window.friendlyServerError(r, tr('改名失敗'))); return; }
       var got = await r.json();
       row.dataset.name = got.name || '';
+      var label = got.name || got.subject || got.title || tr(got.mode_name);
       var a = row.querySelector('[data-odc-title]');
-      if (a) a.textContent = got.name || got.title || tr(got.mode_name);
+      if (a) { a.textContent = label; a.title = label; }
+      row.dataset.kName = label;
       var sub = row.querySelector('[data-odc-sub]');
-      if (got.name && got.title) {
+      if (got.name && got.subject) {
         if (!sub) {
           sub = document.createElement('div');
-          sub.className = 'odc-sub';
+          sub.className = 'odc-sub odc-trunc';
           sub.setAttribute('data-odc-sub', '');
-          a.parentNode.insertBefore(sub, a.nextSibling);
+          sub.setAttribute('data-i18n', 'skip');
+          row.querySelector('.odc-name-line').after(sub);
         }
-        sub.textContent = got.title;
+        sub.textContent = got.subject;
+        sub.title = got.subject;
       } else if (sub) { sub.remove(); }
+      if (tableView) tableView.render();
       window.showToast(tr('已改名'), 'ok');
     } catch (e) { window.showAlert(tr('改名失敗')); }
   }
@@ -169,16 +263,284 @@
       var r = await fetch('case/' + encodeURIComponent(row.dataset.caseId), { method: 'DELETE' });
       if (!r.ok) { window.showAlert(await window.friendlyServerError(r, tr('刪除失敗'))); return; }
       row.remove();
+      if (tableView) tableView.drop(row);
       window.showToast(tr('已刪除'), 'ok');
     } catch (e) { window.showAlert(tr('刪除失敗')); }
   }
 
+  // ---------------------------------------------------------------- DI 檔：下載、批次下載、上傳
+  var DI_NOTES = {}, DI_ERRORS = {};
+  try { DI_NOTES = JSON.parse(panel.dataset.diNotes || '{}') || {}; } catch (e) { DI_NOTES = {}; }
+  try { DI_ERRORS = JSON.parse(panel.dataset.diErrors || '{}') || {}; } catch (e) { DI_ERRORS = {}; }
+  var BATCH_MAX = parseInt(panel.dataset.batchMax, 10) || 100;
+
+  function fill(tpl, args) {
+    var s = tr(tpl || '');
+    (args || []).forEach(function (a, i) { s = s.replace('{' + i + '}', a); });
+    return s;
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function nameFrom(r, fallback) {
+    var cd = r.headers.get('Content-Disposition') || '';
+    var m = /filename\*=utf-8''([^;]+)/i.exec(cd);
+    return m ? decodeURIComponent(m[1]) : ((/filename="?([^";]+)"?/i.exec(cd) || [])[1] || fallback);
+  }
+  async function save(r, fallback) {
+    var blob = await r.blob();
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = nameFrom(r, fallback);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // 不要馬上 revoke —— 有些瀏覽器還沒寫完檔案就會拿不到內容
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  }
+  function busy(btn, label) {
+    var kids = Array.prototype.slice.call(btn.childNodes), was = btn.disabled;
+    var sp = document.createElement('span');
+    sp.className = 'spinner';
+    btn.disabled = true;
+    btn.replaceChildren(sp, document.createTextNode(label));
+    return function () { btn.replaceChildren.apply(btn, kids); btn.disabled = was; };
+  }
+
+  async function downloadOne(row, btn) {
+    var done = busy(btn, tr('產生中…'));
+    try {
+      var r = await fetch('case/' + encodeURIComponent(row.dataset.caseId) + '/di');
+      if (!r.ok) { window.showAlert(await window.friendlyServerError(r, tr('下載失敗'))); return; }
+      await save(r, 'official-doc.di');
+    } catch (e) { window.showAlert(tr('下載失敗')); } finally { done(); }
+  }
+
+  var allBox = document.getElementById('odcAll');
+  var batchBtn = document.getElementById('odcBatch');
+  var selSay = document.getElementById('odcSel');
+  // 勾得到的（簽與函、有草稿）；`onPage`：只算這一頁看得到的（全選只全選這一頁）
+  function picks(onPage) {
+    return Array.prototype.slice.call(panel.querySelectorAll('input[data-odc-pick]:not(:disabled)'))
+      .filter(function (c) { return !onPage || !c.closest('tr').hidden; });
+  }
+  // 勾了的：**每一頁都算**（翻頁之後原本勾的照樣留著、照樣下載）
+  function picked() { return picks(false).filter(function (c) { return c.checked; }); }
+  function refreshSel() {
+    if (!batchBtn) return;
+    var page = picks(true), n = picked().length;
+    var np = page.filter(function (c) { return c.checked; }).length;
+    selSay.textContent = tr('已勾選 {0} 件').replace('{0}', n);
+    batchBtn.disabled = !n;
+    allBox.checked = np > 0 && np === page.length;
+    allBox.indeterminate = np > 0 && np < page.length;
+    allBox.disabled = !page.length;
+  }
+  if (allBox) {
+    allBox.addEventListener('change', function () {
+      picks(true).forEach(function (c) { c.checked = allBox.checked; });
+      refreshSel();
+    });
+    panel.addEventListener('change', function (ev) {
+      if (ev.target.matches && ev.target.matches('input[data-odc-pick]')) refreshSel();
+    });
+    refreshSel();
+  }
+  if (batchBtn) {
+    batchBtn.addEventListener('click', async function () {
+      var ids = picked().map(function (c) { return c.closest('tr[data-case-id]').dataset.caseId; });
+      if (!ids.length) return;
+      if (ids.length > BATCH_MAX) {
+        window.showAlert(tr('一次最多下載 {0} 件。').replace('{0}', BATCH_MAX));
+        return;
+      }
+      var done = busy(batchBtn, tr('打包中…'));
+      try {
+        var r = await fetch('cases/di', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ case_ids: ids })
+        });
+        if (!r.ok) { window.showAlert(await window.friendlyServerError(r, tr('下載失敗'))); return; }
+        var n = r.headers.get('X-Jtdt-Di-Count') || '0', skip = parseInt(r.headers.get('X-Jtdt-Di-Skipped') || '0', 10);
+        await save(r, 'official-doc-di.zip');
+        window.showToast(skip ? tr('已下載 {0} 份 DI 檔；{1} 件沒有 DI 檔，已略過。').replace('{0}', n).replace('{1}', skip)
+                              : tr('已下載 {0} 份 DI 檔。').replace('{0}', n), skip ? '' : 'ok');
+      } catch (e) { window.showAlert(tr('下載失敗')); } finally { done(); }
+    });
+  }
+
+  var upBtn = document.getElementById('odcUpBtn');
+  var upFile = document.getElementById('odcFile');
+  if (upBtn && upFile) {
+    upBtn.addEventListener('click', function () { upFile.click(); });
+    upFile.addEventListener('change', async function () {
+      var files = Array.prototype.slice.call(upFile.files || []);
+      upFile.value = '';
+      if (!files.length) return;
+      var fd = new FormData();
+      files.forEach(function (f) { fd.append('files', f, f.name); });
+      var done = busy(upBtn, tr('上傳中…'));
+      var got;
+      try {
+        var r = await fetch('cases/import', { method: 'POST', body: fd });
+        if (!r.ok) { window.showAlert(await window.friendlyServerError(r, tr('上傳失敗'))); return; }
+        got = await r.json();
+      } catch (e) { window.showAlert(tr('上傳失敗')); return; } finally { done(); }
+      await showImportResult(got);
+      if ((got.imported || []).length) location.reload();
+    });
+  }
+
+  // 匯入結果：哪幾份成了新的案件（附注意事項）、哪幾份沒有匯入（附原因）。
+  // 標題與檔名是使用者的資料：一律跳脫、不翻譯。
+  function showImportResult(got) {
+    var ok = got.imported || [], bad = got.failed || [], skipped = got.skipped || 0;
+    var h = '';
+    if (ok.length) {
+      h += '<p>' + esc(tr('已匯入 {0} 份，成為新的歷史案件：').replace('{0}', ok.length)) + '</p><ul>';
+      ok.forEach(function (x) {
+        h += '<li><span data-i18n="skip">' + esc(x.title || x.filename) + '</span>（' + esc(tr(x.mode_name)) + '）';
+        (x.notes || []).forEach(function (n) { h += '<br><small>' + esc(fill(DI_NOTES[n.code] || n.code, n.args)) + '</small>'; });
+        h += '</li>';
+      });
+      h += '</ul>';
+    }
+    if (bad.length) {
+      h += '<p>' + esc(tr('{0} 份沒有匯入：').replace('{0}', bad.length)) + '</p><ul>';
+      bad.forEach(function (x) {
+        h += '<li><span data-i18n="skip">' + esc(x.filename) + '</span>：' +
+             esc(DI_ERRORS[x.code] ? fill(DI_ERRORS[x.code], x.args) : (x.error || '')) + '</li>';
+      });
+      h += '</ul>';
+    }
+    if (skipped) {
+      h += '<p><small>' + esc(tr('壓縮檔裡有 {0} 個不是 DI 檔的檔案（附件、簽核檔…），已略過。').replace('{0}', skipped)) + '</small></p>';
+    }
+    return window.showAlert(h, { html: true, title: tr('上傳 DI 檔'), kind: bad.length ? 'warn' : 'info' });
+  }
+
+  // ---------------------------------------------------------------- 排序、顯示欄位、分頁
+  //
+  // 清單最多 LIST_LIMIT 件一次送來，排序與分頁都在瀏覽器做。排法、藏哪幾欄、每頁幾件記在這個瀏覽器
+  // （localStorage 讀寫都包 try：私密視窗、封鎖網站資料時照樣能用，只是不記）。
+  var tableView = null;
+  (function () {
+    var tbl = panel.querySelector('.odc-tbl');
+    if (!tbl) return;
+    var tbody = tbl.tBodies[0];
+    var rows = Array.prototype.slice.call(tbody.rows);
+    var KEY = 'jtdt.odc.view';
+    var SORTS = { name: 'str', mode: 'str', rev: 'num', issues: 'num', updated: 'num', owner: 'str' };
+    var COLS = Array.prototype.map.call(panel.querySelectorAll('[data-odc-col]'), function (c) { return c.dataset.odcCol; });
+    var sizeSel = document.getElementById('odcPageSize');
+    var SIZES = Array.prototype.map.call(sizeSel.options, function (o) { return parseInt(o.value, 10); });
+    var view = { sort: 'updated', dir: 'desc', hide: [], size: SIZES[0] };
+    try {
+      var saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {};
+      if (SORTS[saved.sort] && tbl.querySelector('[data-sort="' + saved.sort + '"]')) view.sort = saved.sort;
+      if (saved.dir === 'asc' || saved.dir === 'desc') view.dir = saved.dir;
+      if (Array.isArray(saved.hide)) view.hide = saved.hide.filter(function (k) { return COLS.indexOf(k) >= 0; });
+      if (SIZES.indexOf(saved.size) >= 0) view.size = saved.size;
+    } catch (e) { /* 讀不到就用預設 */ }
+    var page = 1;
+    var coll = new Intl.Collator(document.documentElement.lang || 'zh-Hant', { numeric: true, sensitivity: 'base' });
+
+    function val(row, k) {
+      var v = row.dataset['k' + k.charAt(0).toUpperCase() + k.slice(1)] || '';
+      return SORTS[k] === 'num' ? (parseFloat(v) || 0) : v;
+    }
+    function cmp(a, b) {
+      var k = view.sort, x = val(a, k), y = val(b, k);
+      var c = SORTS[k] === 'num' ? (x - y) : coll.compare(x, y);
+      if (view.dir === 'desc') c = -c;
+      return c || (val(b, 'updated') - val(a, 'updated'));     // 一樣的話新的在前
+    }
+    function save() {
+      try { localStorage.setItem(KEY, JSON.stringify(view)); } catch (e) { /* 不記也能用 */ }
+    }
+    function render() {
+      rows.sort(cmp);
+      rows.forEach(function (r) { tbody.appendChild(r); });
+      var n = rows.length, pages = Math.max(1, Math.ceil(n / view.size));
+      if (page > pages) page = pages;
+      var start = (page - 1) * view.size, end = Math.min(n, start + view.size);
+      rows.forEach(function (r, i) { r.hidden = i < start || i >= end; });
+      tbl.querySelectorAll('th[aria-sort]').forEach(function (th) {
+        var b = th.querySelector('[data-sort]');
+        th.setAttribute('aria-sort', b && b.dataset.sort === view.sort
+          ? (view.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+      });
+      COLS.forEach(function (k) {
+        var off = view.hide.indexOf(k) >= 0;
+        tbl.classList.toggle('odc-hide-' + k, off);
+        var cb = panel.querySelector('[data-odc-col="' + k + '"]');
+        if (cb) cb.checked = !off;
+      });
+      document.getElementById('odcPager').hidden = n <= SIZES[0];
+      document.getElementById('odcRange').textContent = n
+        ? tr('第 {0}–{1} 筆，共 {2} 件').replace('{0}', start + 1).replace('{1}', end).replace('{2}', n) : '';
+      document.getElementById('odcPageNo').textContent = tr('{0} / {1} 頁').replace('{0}', page).replace('{1}', pages);
+      document.getElementById('odcPrev').disabled = page <= 1;
+      document.getElementById('odcNext').disabled = page >= pages;
+      if (String(sizeSel.value) !== String(view.size)) {
+        sizeSel.value = String(view.size);
+        if (sizeSel._jtSelect) sizeSel._jtSelect.refresh();
+      }
+      refreshSel();
+    }
+
+    tbl.querySelector('thead').addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-sort]');
+      if (!b) return;
+      var k = b.dataset.sort;
+      if (view.sort === k) view.dir = view.dir === 'asc' ? 'desc' : 'asc';
+      else { view.sort = k; view.dir = (k === 'updated' || k === 'issues' || k === 'rev') ? 'desc' : 'asc'; }
+      page = 1;
+      save();
+      render();
+    });
+    panel.querySelectorAll('[data-odc-col]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var k = cb.dataset.odcCol;
+        view.hide = view.hide.filter(function (x) { return x !== k; });
+        if (!cb.checked) view.hide.push(k);
+        save();
+        render();
+      });
+    });
+    var cols = document.getElementById('odcCols');
+    document.addEventListener('click', function (ev) {      // 點選單外面就收起來
+      if (cols.open && !cols.contains(ev.target)) cols.open = false;
+    });
+    sizeSel.addEventListener('change', function () {
+      var n = parseInt(sizeSel.value, 10);
+      if (SIZES.indexOf(n) < 0 || n === view.size) return;
+      view.size = n;
+      page = 1;
+      save();
+      render();
+    });
+    document.getElementById('odcPrev').addEventListener('click', function () { page -= 1; render(); });
+    document.getElementById('odcNext').addEventListener('click', function () { page += 1; render(); });
+
+    tableView = {
+      render: render,
+      drop: function (row) { rows = rows.filter(function (r) { return r !== row; }); render(); },
+    };
+    render();
+  })();
+
   panel.addEventListener('click', function (ev) {
-    var b = ev.target.closest('[data-odc-rename], [data-odc-delete]');
+    var b = ev.target.closest('[data-odc-rename], [data-odc-delete], [data-odc-di]');
     if (!b) return;
     var row = b.closest('tr[data-case-id]');
     if (!row) return;
-    if (b.hasAttribute('data-odc-rename')) rename(row); else del(row);
+    if (b.hasAttribute('data-odc-rename')) rename(row);
+    else if (b.hasAttribute('data-odc-di')) downloadOne(row, b);
+    else del(row);
   });
 })();
 </script>

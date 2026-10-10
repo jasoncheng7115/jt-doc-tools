@@ -353,3 +353,308 @@ def validate(data: bytes, mode: str) -> tuple[bool, list[str]]:
         return False, [str(e)[:200]]
     ok = dtd.validate(doc)
     return bool(ok), [str(e)[:200] for e in dtd.error_log.filter_from_errors()[:5]]
+
+
+# ------------------------------------------------------------------ 讀回 DI 檔（歷史案件的「上傳 DI 檔」）
+#
+# 使用者從公文系統匯出的 DI 檔（或以前從這裡下載、在公文系統裡改過的）傳回來，變成一件歷史案件：
+# 可以打開來接著改、再匯出，「參考我的歷史案件」也查得到它。
+#
+# **讀別人的檔案，解析器一律保守**：不載外部 DTD、不連網路、**不展開任何實體**（真實的 DI 檔
+# 會在內部子集宣告附件的 `<!ENTITY … NDATA …>`，所以不能一律拒收實體宣告 —— 只是不展開）、
+# 拿掉註解與處理指令、不開 huge_tree、檔案有大小上限。實體參照留在樹上，取文字時跳過。
+#
+# 讀出來的是**跟 `assemble_*` 同一套寫法的純文字**，所以 `build()` 讀得回去：
+# 讀 → 產生 → 讀，主旨、段落、條列、正副本、署名都不變（測試釘住）。
+# 公文撰擬沒有位置放的欄位（簽的速別、密等…）不硬塞，**講出來沒有匯入哪些**。
+
+#: 一份 DI 檔的上限。真的 DI 檔只有幾 KB（附件是另外的檔案）。
+READ_MAX_BYTES = 1024 * 1024
+#: 讀出來的文字上限（跟編輯區同一個數字，router 的 `MAX_EDIT_CHARS`）。
+READ_MAX_CHARS = 30_000
+#: 條列最多讀幾層（DTD 允許無限巢狀；真的公文最多四層）。
+_READ_MAX_DEPTH = 8
+
+ROOT_MODES = {v: k for k, v in ROOTS.items()}
+
+#: 讀不進來的原因：樣板＋參數（同 `MESSAGES`）
+READ_ERRORS = {
+    "too_big": "檔案超過 {0} KB，不像是 DI 檔（DI 檔只有本文，附件是另外的檔案）。",
+    "not_xml": "讀不出內容：不是 XML，或檔案已經毀損。",
+    "root": "這是「{0}」的 DI 檔；公文撰擬只收「函」與「簽」。",
+    "no_subject": "找不到主旨，匯入不了（主旨是必填欄位）。",
+    "too_long": "內容超過 {0} 字的上限。",
+}
+
+MESSAGES.update({
+    "letter_kind": "原本是「{0}」；公文撰擬只有「函」，匯入後以函的格式顯示，再匯出 DI 檔時會是「函」。",
+    "attachment_files": "這份 DI 檔附了 {0} 個附件檔，只匯入本文；附件請另外處理。",
+    "unmapped": "這些欄位公文撰擬沒有對應的位置，沒有匯入：{0}。",
+})
+
+
+class DiReadError(ValueError):
+    """DI 檔讀不進來。`code` 對到 `READ_ERRORS`，`params` 是填進樣板的參數。"""
+
+    def __init__(self, code: str, *params):
+        self.code = code
+        self.params = [str(p) for p in params]
+        super().__init__(READ_ERRORS[code].format(*self.params))
+
+
+_CJK_EDGE = re.compile(r"[　-鿿＀-￯]")
+
+
+def _read_text(el) -> str:
+    """元素自己的文字（DI 的文字欄位都只有 #PCDATA）。實體參照跳過、只接它後面的文字；
+    排版用的換行與縮排收掉（兩邊都是中文就直接接上，否則留一個空白）。"""
+    if el is None:
+        return ""
+    raw = (el.text or "") + "".join((c.tail or "") for c in el)
+    raw = _BAD_XML_CHARS.sub("", raw).replace("\r", "\n")
+    out = ""
+    for part in raw.split("\n"):
+        part = part.strip()
+        if not part:
+            continue
+        if out and not (_CJK_EDGE.match(out[-1]) or _CJK_EDGE.match(part[0])):
+            out += " "
+        out += part
+    return out
+
+
+def _who(el) -> list[str]:
+    """正本 / 副本 / 受文者裡的名字：全銜、單位名、總稱、姓名（＋職稱）；「含附件」接在前一個後面。"""
+    out: list[str] = []
+    if el is None:
+        return out
+    for c in el:
+        if not isinstance(c.tag, str):
+            continue
+        v = _read_text(c)
+        if c.tag in ("全銜", "單位名", "總稱", "姓名"):
+            out.append(v)
+        elif c.tag == "職稱" and out:
+            out[-1] += v
+        elif c.tag == "含附件" and out and out[-1]:
+            out[-1] += f"（{v or '含附件'}）"
+        elif c.tag == "交換表":
+            out.append(v)
+    return [x for x in out if x]
+
+
+def _code_of(el) -> str:
+    return _read_text(el.find("機關代碼")) if el is not None else ""
+
+
+def _full_paren(marker: str) -> str:
+    """DI 的項次括號是半形（「(一)」），草稿用全形（「（一）」）。"""
+    return (marker or "").strip().replace("(", "（").replace(")", "）")
+
+
+def _para_lines(root, notes: list) -> list[str]:
+    lines: list[str] = []
+
+    def items(parent, depth: int) -> None:
+        if depth > _READ_MAX_DEPTH:
+            return
+        for it in parent.findall("條列"):
+            line = _full_paren(it.get("序號") or "") + _read_text(it.find("文字"))
+            if line:
+                lines.append(line)
+            items(it, depth + 1)
+
+    for p in root.findall("段落"):
+        name = re.sub(r"[：:\s]+$", "", (p.get("段名") or "").strip())
+        text = _read_text(p.find("文字"))
+        if name:
+            lines.append(f"{name}：{text}")
+        elif text:
+            lines.append(text)
+        items(p, 1)
+    return lines
+
+
+def _attachment_files(el) -> int:
+    if el is None:
+        return 0
+    n = 0
+    for f in el.findall("附件檔名"):
+        n += max(1, len((f.get("附件名") or "").split()))
+    return n
+
+
+def _read_letter(root, notes: list) -> tuple[list[str], dict, dict]:
+    sender = root.find("發文機關")
+    org = (_read_text(sender.find("全銜")) or _read_text(sender.find("單位名"))) if sender is not None else ""
+    codes = {}
+    if org and _code_of(sender):
+        codes[org] = _code_of(sender)
+    kind_el = root.find("函類別")
+    kind = (kind_el.get("代碼") or "函").strip() if kind_el is not None else "函"
+    if kind != "函":
+        notes.append({"code": "letter_kind", "args": [kind]})
+    address = _read_text(root.find("地址"))
+    contacts = [v for v in (_read_text(e) for e in root.findall("聯絡方式")) if v]
+    recv_el = root.find("受文者")
+    receiver = "、".join(_who(recv_el))
+    if receiver and _code_of(recv_el) and "、" not in receiver:
+        codes[receiver] = _code_of(recv_el)
+    date = _read_text(root.find("發文日期/年月日"))
+    no_el = root.find("發文字號")
+    doc_no = ""
+    if no_el is not None:
+        doc_no = _read_text(no_el.find("文字"))
+        if not doc_no:
+            word = _read_text(no_el.find("字"))
+            num = no_el.find("文號")
+            year = _read_text(num.find("年度")) if num is not None else ""
+            serial = _read_text(num.find("流水號")) if num is not None else ""
+            branch = _read_text(num.find("支號")) if num is not None else ""
+            if year or serial:
+                doc_no = f"{word}第{year}{serial}{('-' + branch) if branch else ''}號"
+            else:
+                doc_no = word
+    speed_el = root.find("速別")
+    speed = (speed_el.get("代碼") or "").strip() if speed_el is not None else ""
+    sec_el = root.find("密等及解密條件或保密期限")
+    secrecy = None
+    if sec_el is not None:
+        lvl = sec_el.find("密等")
+        lvl = (lvl.get("代碼") or "").strip() if lvl is not None else ""
+        cond = _read_text(sec_el.find("解密條件或保密期限"))
+        secrecy = "　".join(x for x in (lvl, cond) if x)
+    att_el = root.find("附件")
+    attachments = _read_text(att_el.find("文字")) if att_el is not None else None
+    n_files = _attachment_files(att_el)
+    if n_files:
+        notes.append({"code": "attachment_files", "args": [str(n_files)]})
+    subject = _read_text(root.find("主旨/文字"))
+    if root.find("主旨") is None:
+        raise DiReadError("no_subject")
+    copies = _who(root.find("正本"))
+    cc_el = root.find("副本")
+    cc = _who(cc_el)
+    signatures = [v for v in (_read_text(e) for e in root.findall("署名")) if v]
+
+    lines = ["檔　　號：", "保存年限：", f"{org}　函" if org else "〔待補：機關全銜〕　函"]
+    if address:
+        lines.append(f"地址：{address}")
+    lines += contacts
+    lines.append(f"受文者：{receiver}")
+    lines.append(f"發文日期：{date}")
+    lines.append(f"發文字號：{doc_no}")
+    if speed:
+        lines.append(f"速別：{speed}")
+    if secrecy is not None:
+        lines.append(f"密等及解密條件或保密期限：{secrecy}")
+    if attachments is not None:
+        lines.append(f"附件：{attachments}")
+    lines.append(f"主旨：{subject}")
+    lines += _para_lines(root, notes)
+    lines.append(f"正本：{'、'.join(copies)}")
+    if cc_el is not None:
+        lines.append(f"副本：{'、'.join(cc)}")
+    lines += signatures
+    contact = "\n".join(([f"地址：{address}"] if address else []) + contacts)
+    fields = {"org": org, "receiver": receiver, "copies": "、".join(copies), "cc": "、".join(cc),
+              "signature": "\n".join(signatures), "attachments": attachments or "",
+              "speed": speed, "doc_no": doc_no, "contact": contact, "subject": subject}
+    return lines, fields, codes
+
+
+#: 簽的 DTD 有、草稿的簽沒有位置的欄位（有內容才講）
+_SIGN_UNMAPPED = (("受文者", "受文者"), ("速別", "速別"), ("密等及解密條件或保密期限", "密等"),
+                  ("擬辦方式", "擬辦方式"), ("附件", "附件"), ("署名", "署名"))
+
+
+def _has_content(el) -> bool:
+    if el is None:
+        return False
+    if any(v for k, v in el.attrib.items()):
+        return True
+    return any(_read_text(e) for e in el.iter() if isinstance(e.tag, str)) \
+        or any(len(e.attrib) for e in el.iter() if isinstance(e.tag, str))
+
+
+def _read_sign(root, notes: list) -> tuple[list[str], dict, dict]:
+    sender = root.find("發文機關")
+    if sender is None:
+        sender = root.find("單位")
+    unit = (_read_text(sender.find("全銜")) or _read_text(sender.find("單位名"))) if sender is not None else ""
+    date = _read_text(root.find("年月日"))
+    if root.find("主旨") is None:
+        raise DiReadError("no_subject")
+    subject = _read_text(root.find("主旨/文字"))
+    titles: list[str] = []
+    jc = root.find("敬陳")
+    if jc is not None:
+        for c in jc:
+            if not isinstance(c.tag, str):
+                continue
+            v = _read_text(c)
+            if c.tag == "職稱" and v:
+                titles.append(v)
+            elif c.tag == "姓名" and v and titles:
+                titles[-1] += f"　{v}"
+    dropped = [label for tag, label in _SIGN_UNMAPPED if _has_content(root.find(tag))]
+    if dropped:
+        notes.append({"code": "unmapped", "args": ["、".join(dropped)]})
+    lines = [f"簽　　於{unit}" if unit else "簽　　於〔待補：承辦單位〕"]
+    if date:
+        lines.append(date)
+    lines.append(f"主旨：{subject}")
+    lines += _para_lines(root, notes)
+    if titles:
+        lines.append("敬陳")
+        lines += titles
+    fields = {"unit": unit, "addressee": "、".join(titles), "date_line": date, "subject": subject}
+    return lines, fields, {}
+
+
+#: 舊版（Big5 時代）的 DI 檔宣告 `encoding="big5"`；這裡的 libxml2 不一定帶 Big5 轉碼，自己轉成 UTF-8
+_DECL_ENC_RE = re.compile(rb"^(\xef\xbb\xbf)?\s*<\?xml[^>]*?encoding\s*=\s*[\"']([A-Za-z0-9_.-]+)[\"']")
+_BIG5_NAMES = {"big5": "cp950", "cp950": "cp950", "ms950": "cp950", "x-big5": "cp950",
+               "big5-hkscs": "big5hkscs", "big5hkscs": "big5hkscs"}
+
+
+def _as_utf8(data: bytes) -> bytes:
+    m = _DECL_ENC_RE.match(data[:300])
+    codec = _BIG5_NAMES.get(m.group(2).decode("ascii").lower()) if m else None
+    if not codec:
+        return data
+    try:
+        text = data[len(m.group(1) or b""):].decode(codec)
+    except UnicodeDecodeError:
+        raise DiReadError("not_xml") from None
+    text = re.sub(r"encoding\s*=\s*[\"'][^\"']+[\"']", 'encoding="UTF-8"', text, count=1)
+    return text.encode("utf-8")
+
+
+def read(data: bytes, *, max_chars: int = READ_MAX_CHARS) -> dict:
+    """DI 檔 → `{mode, text, subject, fields, org_codes, notes}`。讀不進來丟 `DiReadError`。
+
+    `text` 是草稿的寫法（`parse_text` / `build` 讀得懂）；`org_codes` 是檔案裡寫的「名稱 → 代碼」
+    （**還沒驗過**，呼叫端要拿地址簿驗）；`notes` 是 `[{code, args}]`（`MESSAGES` 的樣板）。"""
+    if len(data) > READ_MAX_BYTES:
+        raise DiReadError("too_big", READ_MAX_BYTES // 1024)
+    from lxml import etree
+    parser = etree.XMLParser(load_dtd=False, no_network=True, resolve_entities=False,
+                             dtd_validation=False, huge_tree=False,
+                             remove_comments=True, remove_pis=True)
+    try:
+        root = etree.fromstring(_as_utf8(data), parser)
+    except (etree.XMLSyntaxError, ValueError):
+        raise DiReadError("not_xml") from None
+    if root is None or not isinstance(root.tag, str):
+        raise DiReadError("not_xml")
+    mode = ROOT_MODES.get(root.tag)
+    if mode is None:
+        raise DiReadError("root", _clean(root.tag)[:20] or "?")
+    notes: list[dict] = []
+    lines, fields, codes = (_read_letter if mode == "letter" else _read_sign)(root, notes)
+    text = "\n".join(lines)
+    if len(text) > max_chars:
+        raise DiReadError("too_long", max_chars)
+    return {"mode": mode, "text": text, "subject": fields.get("subject", ""), "fields": fields,
+            "org_codes": codes, "notes": notes}
