@@ -663,13 +663,13 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
       <section class="doc-section" data-sec="掃描拼合" data-title="スキャンの合成" hidden>
 <div class="doc-crumb">4. PDF 編集 API</div>
 <h4 id="掃描拼合">スキャンの合成</h4>
-<p>複数のスキャン（証明書類の表裏など）から「内容のあるブロック」を自動で検出し、元の色を保ったまま、元のスキャン内での相対位置どおりに 1 枚の A4 白地 PDF へ合成します。重なった場合は元の位置を保ち、自動では並べ替えません（ドラッグで微調整したい場合は web インターフェースをお使いください）。</p>
+<p>複数のスキャン（身分証の表裏など）から「内容のある領域」を自動で検出し、元の色のまま 1 枚の A4 白地 PDF に合成します。配置は <code>layout</code> で決まります。既定では各ブロックを元のスキャン内の相対位置に置き（重なっても並べ替えません）、自動配置を選ぶと重ならないように並べます（ドラッグで微調整したい場合は Web 画面を使ってください）。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/scan-merge/api/scan-merge</code></pre>
-<div class="table-wrap"><table><thead><tr><th>パラメータ</th><th>種類</th><th>必須</th><th>説明</th></tr></thead><tbody><tr><td><code>files</code></td><td>file（複数可）</td><td>✓</td><td>スキャン文書。PDF / PNG / JPG / TIFF / WebP。それぞれ 1 ブロックの内容を含みます</td></tr><tr><td><code>whiten</code></td><td>bool</td><td></td><td>薄い灰色 / 黄色のスキャンの下地を純白に明るくするか（カラーの内容には影響しません）。既定は <code>true</code></td></tr><tr><td><code>filename</code></td><td>str</td><td></td><td>出力ファイル名。既定は <code>scan-merge.pdf</code></td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>パラメータ</th><th>種類</th><th>必須</th><th>説明</th></tr></thead><tbody><tr><td><code>files</code></td><td>file（複数可）</td><td>✓</td><td>スキャン文書。PDF / PNG / JPG / TIFF / WebP。それぞれ 1 ブロックの内容を含みます</td></tr><tr><td><code>whiten</code></td><td>bool</td><td></td><td>薄い灰色 / 黄色のスキャンの下地を純白に明るくするか（カラーの内容には影響しません）。既定は <code>true</code></td></tr><tr><td><code>filename</code></td><td>str</td><td></td><td>出力ファイル名。既定は <code>scan-merge.pdf</code></td></tr><tr><td><code>layout</code></td><td>str</td><td></td><td>配置方法：<code>original</code>（既定。元の位置どおり、重なることがあります）または <code>auto</code>（アップロード順に上から下、左から右へ重ならないように並べ、収まらない場合は同じ比率で縮小）。それ以外の値は <code>400</code> を返します</td></tr></tbody></table></div>
 <pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/scan-merge/api/scan-merge</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@id-front.jpg&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@id-back.jpg&quot;</span> \
-  <span class="hl-flag">-F</span> <span class="hl-str">&quot;whiten=true&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;whiten=true&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;layout=auto&quot;</span> \
   <span class="hl-flag">--output</span> id-merged.pdf</code></pre>
 <p>レスポンス：1 枚の A4 白地 PDF のバイナリ。</p>
 <p><strong>どのファイルからも内容のブロックを検出できない場合は <code>422</code> を返します</strong>（全面が白い場合や、スキャン時にカバーを閉め忘れた真っ黒な画像など）。 これはリクエスト形式の問題ではなく「送られてきた画像に合成できるものがない」という意味です —— メッセージにどちらであるかを明示します。</p>

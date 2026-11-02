@@ -659,7 +659,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **523 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **525 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -1090,6 +1090,8 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_save_queue.py` | Tests for app.core.save_queue (v1.7.17). |
 | `test_scan_merge_api.py` | 掃描拼合 (scan-merge) — 端點 / ACL / 公開 API 測試 |
 | `test_scan_merge_detector.py` | 掃描拼合 — 內容偵測 + 背景淨白 單元測試 |
+| `test_scan_merge_layout.py` | 掃描拼合「自動排列」：互不重疊、照上傳順序、放不下等比例縮小 |
+| `test_scan_merge_layout_mode_e2e.py` | 掃描拼合「排列方式」：在真的瀏覽器裡切換，畫面上的位置真的變 |
 | `test_scan_merge_upload_threaded.py` | 掃描拼合上傳：處理丟到執行緒、各頁同時處理，結果不變 |
 | `test_scanner_regexes_are_linear.py` | 檢查的正規式不可以有**重疊的分支** —— 那是指數級回溯 |
 | `test_scheduled_export.py` | Scheduled settings export (v1.12.54). |
@@ -3169,7 +3171,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 目前沒有自動化測試碰過，跑 `python tools/report_endpoint_test_coverage.py`，
 那份是**提示不是判決**。
 
-共 **318 支**（工具首頁不列，§2 已逐支驗收）。
+共 **319 支**（工具首頁不列，§2 已逐支驗收）。
 
 **全站（認證 / 帳號 / 工作區 / 介面語言）**
 
@@ -3731,6 +3733,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `GET /tools/scan-merge/crop/{cid}/{variant}`
 - [ ] `POST /tools/scan-merge/delete/{cid}`
 - [ ] `POST /tools/scan-merge/generate`
+- [ ] `POST /tools/scan-merge/layout` — 自動排列：給各塊大小回不重疊的位置；`id` 非 32 碼十六進位、`w` / `h` 非正數回 400
 - [ ] `GET /tools/scan-merge/source/{sid}`
 - [ ] `POST /tools/scan-merge/upload`
 
@@ -6263,6 +6266,18 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > **最高原則：加 i18n 不可以改壞現有功能。** 所以每一個階段的第一條驗收都是
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
+
+### 6.133 v1.17.23 — 掃描拼合排列方式：依原始位置 / 自動排列（**每次發版必過**）
+
+- [ ] 上傳兩份內容落在同一位置的掃描：預設「依原始位置」兩塊疊在一起、出現紅色重疊警告。
+- [ ] 選「自動排列」：互不重疊、警告消失；選取的選項有藍底與藍色圖示；之後仍可拖曳、縮放。
+- [ ] 切回「依原始位置」：回到原本位置。重新整理頁面後，上次的選擇還在。
+- [ ] 自動排列時再上傳檔案：新舊內容一起重排。上傳 30 塊以上：全部等比例縮小、都在紙張內。
+- [ ] 產生合併結果的 PDF 與畫面位置一致。
+- [ ] API：`layout=auto` 的輸出不重疊；不帶時照原始位置；`layout=random` 回 400。
+- [ ] 拉進一份多頁 PDF：處理中只有上傳區顯示進度與秒數，「預覽與微調」卡片不出現；處理完、上傳區預覽圖都出來後卡片才出現。之後再加檔案，卡片不消失、上面蓋處理中提示。全部檔案都偵測不到內容時不打開空卡片。
+- [ ] 手機寬度：排列方式標題自己一行、兩個選項各一行；縮放列按鈕文字不直排。
+- 自動化：`tests/test_scan_merge_layout.py`、`tests/test_scan_merge_layout_mode_e2e.py`
 
 ### 6.132a v1.17.22 — 掃描修正：自動沒抓到時「自己拉四個角」有點可拉（**每次發版必過**）
 

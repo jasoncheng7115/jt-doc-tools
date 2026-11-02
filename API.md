@@ -746,7 +746,7 @@ curl -X POST http://localhost:8765/tools/pdf-compress/api/pdf-compress \
 
 ### 掃描拼合
 
-把多張掃描（如證件正、反面）中「有內容的區塊」自動偵測出來、保留原彩色，依其在原掃描中的相對位置合成到同一張 A4 白底 PDF。重疊時保留原位置不自動重排（需拖曳微調請改用網頁介面）。
+把多張掃描（如證件正、反面）中「有內容的區塊」自動偵測出來、保留原彩色，合成到同一張 A4 白底 PDF。排列方式由 `layout` 決定：預設依各塊在原掃描中的相對位置（重疊時不重排），或改成自動排列成互不重疊（需拖曳微調請改用網頁介面）。
 
 ```text
 POST /tools/scan-merge/api/scan-merge
@@ -757,12 +757,13 @@ POST /tools/scan-merge/api/scan-merge
 | `files` | file（可多個） | ✓ | 掃描檔，PDF / PNG / JPG / TIFF / WebP，各含一塊內容 |
 | `whiten` | bool | | 是否把淡灰 / 微黃的掃描底色提亮成純白（不影響彩色內容），預設 `true` |
 | `filename` | str | | 輸出檔名，預設 `scan-merge.pdf` |
+| `layout` | str | | 排列方式：`original`（預設，依原始位置，可能重疊）或 `auto`（依上傳順序由上而下、由左而右排好，互不重疊；放不下時等比例縮小）。其他值回 `400` |
 
 ```bash
 curl -X POST http://localhost:8765/tools/scan-merge/api/scan-merge \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -F "files=@id-front.jpg" -F "files=@id-back.jpg" \
-  -F "whiten=true" \
+  -F "whiten=true" -F "layout=auto" \
   --output id-merged.pdf
 ```
 

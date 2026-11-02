@@ -8,8 +8,9 @@
                              → 存彩色 crop（原版 + 淨白版）→ 回每塊建議位置
   2. GET  /crop/{cid}/{v}  → 取 crop PNG（v = raw | white），ACL 保護
   3. POST /delete/{cid}    → 清掉某 crop
-  4. POST /generate        → 收最終位置清單 → 合成單張 A4 白底 PDF → job_id
-  5. POST /api/scan-merge  → 對外一次性：上傳多檔，自動依偵測位置合成，直接回 PDF
+  4. POST /layout          → 「自動排列」：給各塊大小，回不重疊的位置（不碰檔案）
+  5. POST /generate        → 收最終位置清單 → 合成單張 A4 白底 PDF → job_id
+  6. POST /api/scan-merge  → 對外一次性：上傳多檔，依原始位置或自動排列合成，直接回 PDF
 
 身分證等高敏感 PII：本地處理、暫存自動清除、預設不留歷史。
 """
@@ -35,12 +36,16 @@ from ...core.http_utils import content_disposition
 from ...core.job_manager import job_manager
 from ...core.safe_paths import require_uuid_hex
 from .detector import crop_card, detect_regions, to_rgb
+from .layout import LayoutError, auto_layout
 
 router = APIRouter()
 
 # A4 直式（points，1pt = 1/72 in）
 A4_W_PT = 595.276
 A4_H_PT = 841.890
+
+#: 排列方式：依原始位置（預設）/ 自動排列（不重疊）
+LAYOUT_MODES = ("original", "auto")
 
 _ALLOWED_EXT = {".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp"}
 _MAX_BYTES = 50 * 1024 * 1024          # 單檔 50 MB
@@ -279,6 +284,26 @@ def _bake_a4(items: list[dict], whiten: bool, out_path: Path) -> int:
         doc.close()
 
 
+@router.post("/layout")
+async def layout(request: Request):
+    """「自動排列」：Body `{"items": [{"id", "w", "h"}]}`（A4 比例），回 `{"items": [{"id","x","y","w","h"}]}`。
+
+    只做幾何計算、不讀任何檔案，所以不需要歸屬檢查；`id` 只是原樣帶回，仍限制成 32 碼十六進位，
+    不讓任意字串流回畫面。
+    """
+    body = await request.json()
+    items = body.get("items") if isinstance(body, dict) else None
+    if not isinstance(items, list):
+        raise HTTPException(400, "items 必須是清單")
+    for it in items:
+        if isinstance(it, dict):
+            require_uuid_hex(str(it.get("id") or ""), "id")
+    try:
+        return {"items": auto_layout(items)}
+    except LayoutError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/generate")
 async def generate(request: Request):
     """合成單張 A4 白底 PDF。
@@ -334,7 +359,8 @@ async def generate(request: Request):
 
 # ----- 對外一次性 API ---------------------------------------------------------
 
-def _api_bake(raws: list[tuple[str, str, bytes]], whiten: bool) -> Path:
+def _api_bake(raws: list[tuple[str, str, bytes]], whiten: bool,
+              layout: str = "original") -> Path:
     placed: list[dict] = []
     tmp_dir = _work_dir() / f"api_{uuid.uuid4().hex}"
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -353,6 +379,11 @@ def _api_bake(raws: list[tuple[str, str, bytes]], whiten: bool) -> Path:
                                    "w": r.fw, "h": r.fh})
         if not placed:
             raise HTTPException(422, "所有檔都找不到內容區塊")
+        if layout == "auto":
+            moved = auto_layout([{"id": it["crop_id"], "w": it["w"], "h": it["h"]}
+                                 for it in placed])
+            placed = [{"crop_id": m["id"], "x": m["x"], "y": m["y"], "w": m["w"], "h": m["h"]}
+                      for m in moved]
         out_path = tmp_dir / "scan-merge.pdf"  # 固定安全 on-disk 名
         _bake_a4(placed, whiten, out_path)
         return out_path
@@ -371,12 +402,16 @@ async def api_scan_merge(
     files: List[UploadFile] = File(..., description="掃描檔（PDF / PNG / JPG），各含一塊內容"),
     whiten: bool = Form(True, description="是否把淡灰掃描背景淨白（不影響彩色內容）"),
     filename: str = Form("scan-merge.pdf"),
+    layout: str = Form("original", description="排列方式：original＝依原始位置（可能重疊）；auto＝自動排列（不重疊）"),
 ):
-    """一次性：上傳多個掃描檔 → 自動依偵測位置合成單張 A4 白底 → 直接回 PDF。
+    """一次性：上傳多個掃描檔 → 合成單張 A4 白底 → 直接回 PDF。
 
-    每個檔偵測到的內容區塊會擺到它在原掃描中的相對位置；若重疊不自動重排
-    （與互動版一致，保留原位置）。需要拖曳微調請改用網頁介面。
+    `layout=original`（預設）：每塊擺到它在原掃描中的相對位置，重疊時不重排。
+    `layout=auto`：依上傳順序由上而下、由左而右排好，互不重疊（放不下時等比例縮小）。
+    需要拖曳微調請改用網頁介面。
     """
+    if layout not in LAYOUT_MODES:
+        raise HTTPException(400, f"layout 只能是 {' / '.join(LAYOUT_MODES)}")
     if not files:
         raise HTTPException(400, "沒有檔案")
     # 顯示用檔名去路徑成分（防穿越）、保留 unicode；on-disk 用固定安全名。
@@ -396,7 +431,7 @@ async def api_scan_merge(
             raise HTTPException(413, f"檔案過大：{f.filename}")
         raws.append((f.filename or "", ext, raw))
     # 吃 CPU 的部分丟到執行緒（同 /upload）
-    out_path = await asyncio.to_thread(_api_bake, raws, whiten)
+    out_path = await asyncio.to_thread(_api_bake, raws, whiten, layout)
     return FileResponse(
         str(out_path), media_type="application/pdf",
         headers={"Content-Disposition": content_disposition(display_name)},

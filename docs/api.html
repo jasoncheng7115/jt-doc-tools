@@ -663,13 +663,13 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
       <section class="doc-section" data-sec="掃描拼合" data-title="掃描拼合" hidden>
 <div class="doc-crumb">4. PDF 編修 API</div>
 <h4 id="掃描拼合">掃描拼合</h4>
-<p>把多張掃描（如證件正、反面）中「有內容的區塊」自動偵測出來、保留原彩色，依其在原掃描中的相對位置合成到同一張 A4 白底 PDF。重疊時保留原位置不自動重排（需拖曳微調請改用網頁介面）。</p>
+<p>把多張掃描（如證件正、反面）中「有內容的區塊」自動偵測出來、保留原彩色，合成到同一張 A4 白底 PDF。排列方式由 <code>layout</code> 決定：預設依各塊在原掃描中的相對位置（重疊時不重排），或改成自動排列成互不重疊（需拖曳微調請改用網頁介面）。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/scan-merge/api/scan-merge</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>files</code></td><td>file（可多個）</td><td>✓</td><td>掃描檔，PDF / PNG / JPG / TIFF / WebP，各含一塊內容</td></tr><tr><td><code>whiten</code></td><td>bool</td><td></td><td>是否把淡灰 / 微黃的掃描底色提亮成純白（不影響彩色內容），預設 <code>true</code></td></tr><tr><td><code>filename</code></td><td>str</td><td></td><td>輸出檔名，預設 <code>scan-merge.pdf</code></td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>files</code></td><td>file（可多個）</td><td>✓</td><td>掃描檔，PDF / PNG / JPG / TIFF / WebP，各含一塊內容</td></tr><tr><td><code>whiten</code></td><td>bool</td><td></td><td>是否把淡灰 / 微黃的掃描底色提亮成純白（不影響彩色內容），預設 <code>true</code></td></tr><tr><td><code>filename</code></td><td>str</td><td></td><td>輸出檔名，預設 <code>scan-merge.pdf</code></td></tr><tr><td><code>layout</code></td><td>str</td><td></td><td>排列方式：<code>original</code>（預設，依原始位置，可能重疊）或 <code>auto</code>（依上傳順序由上而下、由左而右排好，互不重疊；放不下時等比例縮小）。其他值回 <code>400</code></td></tr></tbody></table></div>
 <pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/scan-merge/api/scan-merge</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@id-front.jpg&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@id-back.jpg&quot;</span> \
-  <span class="hl-flag">-F</span> <span class="hl-str">&quot;whiten=true&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;whiten=true&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;layout=auto&quot;</span> \
   <span class="hl-flag">--output</span> id-merged.pdf</code></pre>
 <p>回應：單張 A4 白底 PDF 二進位。</p>
 <p><strong>每一份都偵測不到內容區塊時回 <code>422</code></strong>（例如整張全白、或掃描時蓋子沒關的純黑）。 那不是請求格式的問題，而是「送進來的圖裡沒有東西可以拼」—— 訊息會說清楚是哪一種。</p>

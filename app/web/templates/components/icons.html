@@ -9,6 +9,12 @@
 <path d="M9 14l3-3 3 3" /><path d="M12 11v10" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /><path d="M16 7l-4-4-4 4" /><path d="M12 3v8" />
 {%- elif name == 'save' -%}
 <path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7z" /><path d="M7 3v6h9V3" /><path d="M7 13h10v8H7z" />
+{%- elif name == 'layout-original' -%}
+{# 掃描拼合「依原始位置」：一張紙上兩塊內容疊在一起 #}
+<rect x="4" y="2" width="16" height="20" rx="1.5" /><rect x="6.5" y="5" width="8" height="5" rx="0.8" /><rect x="9.5" y="8" width="8" height="5" rx="0.8" />
+{%- elif name == 'layout-auto' -%}
+{# 掃描拼合「自動排列」：同一張紙，兩塊上下排整齊、不重疊 #}
+<rect x="4" y="2" width="16" height="20" rx="1.5" /><rect x="8" y="5" width="8" height="5" rx="0.8" /><rect x="8" y="13" width="8" height="5" rx="0.8" />
 {%- elif name == 'back' -%}
 <path d="M10 6l-6 6 6 6" /><path d="M4 12h16" />
 {%- elif name == 'next' -%}

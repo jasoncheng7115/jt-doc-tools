@@ -3,7 +3,7 @@
 {% block title %}{{ tr('掃描拼合') }} · {{ app_name }}{% endblock %}
 {% block content %}
 <h1>{{ icon('credit-card', size=22) }} {{ tr('掃描拼合') }}</h1>
-<p class="muted">{{ tr('事務機分次掃描證件正、反面會產生多個檔，內容各落在 A4 不同位置。拉入這些掃描，系統自動抓出每張「有內容的區塊」、保留原彩色，依原位置疊到同一張 A4 白底；可拖曳微調再產生 PDF。') }}</p>
+<p class="muted">{{ tr('事務機分次掃描證件正、反面會產生多個檔，內容各落在 A4 不同位置。拉入這些掃描，系統自動抓出每張「有內容的區塊」、保留原彩色，依原位置或自動排列放到同一張 A4 白底；可拖曳微調再產生 PDF。') }}</p>
 
 <details class="panel" id="upload-panel" open>
   <summary>{{ tr('上傳掃描檔') }} <span class="muted" id="upload-count" data-s="s5a8ca7b2"></span></summary>
@@ -17,6 +17,9 @@
       <input type="file" id="fileInput" accept=".pdf,image/*,.tif,.tiff" multiple />
     </label>
     {% if workspace_enabled(request) %}<div class="fu-ws-row"><button type="button" class="ws-load-btn" id="wsLoadBtn" data-ws-exts="{{ workspace_extensions() }}">{{ icon('archive', size=16) }}<span>{{ tr('從工作區載入') }}</span></button></div>{% endif %}
+    <div id="upload-busy" class="sm-upbusy" role="status" hidden>
+      <span class="sm-spinner"></span><span id="upload-busy-msg">{{ tr('處理中…') }}</span>
+    </div>
     <div id="upload-list" class="sm-uploadList" hidden></div>
     <div class="sm-uploadActions" id="upload-actions" hidden>
       <button type="button" class="btn btn-small" id="btn-clear-all">{{ icon('trash', size=14) }} {{ tr('全部清除') }}</button>
@@ -33,6 +36,21 @@
     </label>
   </div>
 
+  <!-- 排列方式：依原始位置（預設）/ 自動排列。選了就重排，之後仍可拖曳微調 -->
+  <div class="sm-mode" role="radiogroup" aria-labelledby="smModeLabel">
+    <span class="sm-mode-label" id="smModeLabel">{{ tr('排列方式') }}</span>
+    <label class="sm-mode-opt">
+      <input type="radio" name="smLayout" value="original" checked>
+      <span class="sm-mode-ic">{{ icon('layout-original', size=30) }}</span>
+      <span class="sm-mode-tx"><b>{{ tr('依原始位置') }}</b><small>{{ tr('照掃描時的位置擺放，可能互相重疊') }}</small></span>
+    </label>
+    <label class="sm-mode-opt">
+      <input type="radio" name="smLayout" value="auto">
+      <span class="sm-mode-ic">{{ icon('layout-auto', size=30) }}</span>
+      <span class="sm-mode-tx"><b>{{ tr('自動排列') }}</b><small>{{ tr('依上傳順序找空位排好，不會重疊') }}</small></span>
+    </label>
+  </div>
+
   <!-- 橫式動作列：輸出檔名 + 產生 + 下載，放預覽上方，不佔右側空間 -->
   <div class="sm-actionbar">
     <div class="sm-field">
@@ -46,10 +64,10 @@
   </div>
 
   <div id="overlap-warn" class="sm-warn" hidden>
-    {{ icon('info', size=14) }} {{ tr('有內容區塊互相重疊（紅框標示）。已保留原掃描位置；若不想重疊，請拖曳錯開。') }}
+    {{ icon('info', size=14) }} {{ tr('有內容區塊互相重疊（紅框標示）。已保留原掃描位置；若不想重疊，請改選「自動排列」或拖曳錯開。') }}
   </div>
 
-  <p class="sm-help">{{ icon('info', size=14) }} {{ tr('系統已依原掃描位置自動擺放各張內容。') }}<b>{{ tr('點選任一張') }}</b>{{ tr('即可拖曳移動、用右下角控點調整大小；重疊時(紅框)拖曳錯開即可。完成後按「產生合併結果」下載。') }}</p>
+  <p class="sm-help">{{ icon('info', size=14) }} {{ tr('系統已依選擇的排列方式擺放各張內容。') }}<b>{{ tr('點選任一張') }}</b>{{ tr('即可拖曳移動、用右下角控點調整大小；重疊時(紅框)拖曳錯開即可。完成後按「產生合併結果」下載。') }}</p>
 
   <div class="sm-zoombar">
     <button type="button" class="btn btn-small sm-zbtn" id="zoom-out" title="{{ tr('縮小') }}">−</button>
@@ -70,6 +88,25 @@
 </details>
 
 <style nonce="{{ request.state.csp_nonce }}">
+/* 排列方式：兩個大選項，圖示＋名稱＋一行說明 */
+.sm-mode { display:flex; align-items:stretch; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+.sm-mode-label { align-self:center; font-size:13px; color:#334155; font-weight:600; margin-right:2px; }
+.sm-mode-opt { position:relative; flex:1 1 240px; max-width:360px; display:flex; align-items:center; gap:10px; cursor:pointer;
+  border:1.5px solid var(--border); border-radius:10px; padding:10px 12px; background:#fff;
+  transition:border-color .12s, background .12s, box-shadow .12s; }
+.sm-mode-opt:hover { border-color:#93c5fd; }
+.sm-mode-opt input { position:absolute; opacity:0; pointer-events:none; }
+.sm-mode-ic { flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:44px; height:44px;
+  border-radius:8px; background:#f1f5f9; color:#475569; }
+.sm-mode-tx { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.sm-mode-tx b { font-size:14px; color:#1e293b; }
+.sm-mode-tx small { font-size:12px; color:#64748b; line-height:1.4; }
+.sm-mode-opt:has(input:checked) { border-color:var(--primary); background:#eff6ff; box-shadow:0 0 0 2px rgba(59,130,246,.18); }
+.sm-mode-opt:has(input:checked) .sm-mode-ic { background:var(--primary); color:#fff; }
+.sm-mode-opt:has(input:focus-visible) { outline:2px solid var(--primary); outline-offset:2px; }
+/* 窄螢幕：標題自己一行，兩個選項各佔一行 */
+@media (max-width: 640px) { .sm-mode-label { flex-basis:100%; } .sm-mode-opt { max-width:none; } }
+
 .sm-toolbar { display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
 .sm-check { font-size:13px; color:#334155; display:inline-flex; align-items:center; gap:6px; cursor:pointer; user-select:none; }
 .sm-warn { background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; border-radius:8px;
@@ -95,7 +132,8 @@
 .sm-zbtn { font-size:16px; font-weight:600; line-height:1; min-width:30px; padding:3px 8px; }
 
 /* 縮放工具列 */
-.sm-zoombar { display:flex; align-items:center; gap:6px; margin-bottom:8px; }
+.sm-zoombar { display:flex; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
+.sm-zoombar .btn { white-space:nowrap; }
 .sm-zoombar .btn { min-width:30px; padding:4px 8px; }
 .sm-zoom-label { font-size:12px; color:#475569; min-width:46px; text-align:center; font-variant-numeric:tabular-nums; }
 
@@ -104,6 +142,10 @@
   border:1px solid var(--border); border-radius:8px; padding:16px; text-align:center; min-height:160px; }
 
 /* 處理中 spinner 覆蓋層 */
+/* 上傳區的處理中提示（「預覽與微調」卡片在全部處理完、預覽圖載入之前不顯示） */
+.sm-upbusy { display:flex; align-items:center; gap:10px; margin-top:12px; padding:10px 12px;
+  background:#f8fafc; border:1px solid var(--border); border-radius:8px; font-size:14px; color:#475569; }
+.sm-upbusy[hidden] { display:none; }
 .sm-busy { position:absolute; inset:0; z-index:10; display:flex; align-items:center; justify-content:center;
   gap:10px; background:rgba(241,245,249,0.88); font-size:14px; color:#475569; }
 .sm-spinner { width:22px; height:22px; border:3px solid #cbd5e1; border-right-color:var(--primary);
@@ -224,21 +266,42 @@ function escapeHtml(s) {
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// 等上傳區與預覽裡的圖都載入（或失敗）；最多等 timeoutMs，不讓一張載不到的圖卡住畫面。
+function waitForPreviews(timeoutMs) {
+  const imgs = Array.from(document.querySelectorAll('#upload-list img, #stage .sm-item img'));
+  const one = (img) => (img.complete && img.naturalWidth) ? Promise.resolve()
+    : new Promise((res) => {
+        img.addEventListener('load', res, { once: true });
+        img.addEventListener('error', res, { once: true });
+      });
+  return Promise.race([Promise.all(imgs.map(one)),
+                       new Promise((res) => setTimeout(res, timeoutMs || 15000))]);
+}
+
 async function uploadFiles(fileList) {
   if (!fileList || !fileList.length) return;
-  document.getElementById('stage-panel').hidden = false;
+  // 「預覽與微調」卡片**要等拉進來的檔案都處理完、上傳區的預覽圖都出來才顯示**
+  // （使用者 2026-11-02）。之前一拉檔就先打開一張空白卡片、裡面轉圈，看起來像當住。
+  // 已經顯示的（之後再加檔案）就維持顯示，只在上面蓋處理中的提示，不讓卡片忽隱忽現。
+  const panel = document.getElementById('stage-panel');
+  const panelShown = !panel.hidden;
   const busy = document.getElementById('stage-busy');
   const busyMsg = document.getElementById('stage-busy-msg');
-  busy.hidden = false;
+  const upBusy = document.getElementById('upload-busy');
+  const upBusyMsg = document.getElementById('upload-busy-msg');
+  upBusy.hidden = false;
+  if (panelShown) busy.hidden = false;
   // 多頁的 PDF 每頁都要偵測，要等一陣子 —— 畫面一直不動，使用者會以為當機
   // （2026-10-28 客戶回報），所以幾秒後開始顯示已經過的秒數。
   const t0 = Date.now();
   let base = '';
   const show = () => {
     const sec = Math.floor((Date.now() - t0) / 1000);
-    busyMsg.textContent = sec >= 3
+    const txt = sec >= 3
       ? base + ' ' + tr('已經過 {0} 秒，多頁的 PDF 需要較久，請稍候').replace('{0}', sec)
       : base;
+    busyMsg.textContent = txt;
+    upBusyMsg.textContent = txt;
   };
   const timer = setInterval(show, 1000);
   try {
@@ -250,10 +313,18 @@ async function uploadFiles(fileList) {
       show();
       await uploadOne(arr[i]);
     }
+    // 自動排列時，新加入的內容一起重排（拖曳過的位置也會重排）
+    if (layoutMode === 'auto') await applyLayout();
+    base = tr('載入預覽…');
+    show();
+    await waitForPreviews(15000);
   } finally {
     clearInterval(timer);
     busy.hidden = true;
+    upBusy.hidden = true;
     fi.value = '';
+    // 有內容才打開；全部失敗（或整頁空白）就不打開空的卡片
+    if (crops.length) panel.hidden = false;
   }
 }
 
@@ -271,18 +342,60 @@ async function uploadOne(file) {
       const w = Math.min(0.98, c.fw);
       const aspect = c.natural_h / Math.max(1, c.natural_w);  // h/w of the crop
       const h = w * A4_RATIO * aspect;  // 換成 A4 高度比例
+      const ox = Math.max(0, Math.min(1 - w, c.fx));
+      const oy = Math.max(0, Math.min(1 - Math.min(h, 1), c.fy));
       crops.push({
         crop_id: c.crop_id, filename: c.filename, page: c.page,
         natural_w: c.natural_w, natural_h: c.natural_h,
         url_raw: c.url_raw, url_white: c.url_white,
-        x: Math.max(0, Math.min(1 - w, c.fx)),
-        y: Math.max(0, Math.min(1 - Math.min(h, 1), c.fy)),
-        w: w, h: Math.min(h, 1),
+        x: ox, y: oy, w: w, h: Math.min(h, 1),
+        // 原始位置與大小：切回「依原始位置」時還原、自動排列也用原始大小算（不受拖曳縮放影響）
+        orig: { x: ox, y: oy, w: w, h: Math.min(h, 1) },
       });
     }
     render();
   } catch (e) {
     alert(tr('上傳錯誤：') + file.name + ' — ' + e.message);
+  }
+}
+
+// ---- 排列方式 ----
+// 預設「依原始位置」；選過的方式記在這台瀏覽器（只是方便，讀不到就用預設）。
+let layoutMode = 'original';
+try { if (localStorage.getItem('scanMergeLayout') === 'auto') layoutMode = 'auto'; } catch (_e) {}
+document.querySelectorAll('input[name="smLayout"]').forEach(r => {
+  r.checked = (r.value === layoutMode);
+  r.addEventListener('change', async () => {
+    if (!r.checked) return;
+    layoutMode = r.value;
+    try { localStorage.setItem('scanMergeLayout', layoutMode); } catch (_e) {}
+    await applyLayout();
+  });
+});
+
+async function applyLayout() {
+  if (!crops.length) return;
+  if (layoutMode === 'original') {
+    crops.forEach(c => Object.assign(c, c.orig));
+    render();
+    return;
+  }
+  // 自動排列的位置由伺服器端算（對外 API 的 layout=auto 用同一支），畫面不另寫一份
+  try {
+    const r = await fetch('/tools/scan-merge/layout', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ items: crops.map(c => ({ id: c.crop_id, w: c.orig.w, h: c.orig.h })) }),
+    });
+    if (!r.ok) { alert(await window.friendlyServerError(r, tr('自動排列失敗'))); return; }
+    const j = await r.json();
+    const byId = new Map((j.items || []).map(it => [it.id, it]));
+    crops.forEach(c => {
+      const it = byId.get(c.crop_id);
+      if (it) Object.assign(c, { x: it.x, y: it.y, w: it.w, h: it.h });
+    });
+    render();
+  } catch (e) {
+    alert(tr('自動排列失敗') + '：' + (e.message || ''));
   }
 }
 
@@ -324,7 +437,7 @@ function render() {
   ul.innerHTML = sources.map(s => {
     const title = `${s.filename} · 第 ${s.page} 頁`;
     return `<div class="sm-upcard" title="${escapeHtml(title)}">
-      <div class="sm-upthumb"><img src="${s.url}" alt="" loading="lazy"></div>
+      <div class="sm-upthumb"><img src="${s.url}" alt=""></div>
       <div class="sm-upcaption">${escapeHtml(s.filename)}</div>
       <div class="sm-upmeta">第 ${s.page} 頁 · ${s.natural_w}×${s.natural_h} px</div>
     </div>`;

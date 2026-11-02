@@ -5,11 +5,18 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (951 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (952 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.23] - 2026-11-01
+
+- Scan merge: a new "Layout" choice with icons for each option. **Original positions** (default) places each block where it was on the scan, so blocks may overlap. **Arrange automatically** lays them out in upload order, top to bottom and left to right, without overlapping; blocks keep their size when they fit and are all scaled down by the same factor when they do not, and the group is centred. Choosing an option re-arranges immediately and you can still drag afterwards; switching back restores the original positions. The browser remembers the last choice.
+- The public API `/tools/scan-merge/api/scan-merge` takes a new `layout` parameter (`original` / `auto`) that uses the same arrangement as the web page.
+- After dropping files in, the "Preview and fine-tune" card only appears once every file has been processed and the page previews in the upload area have loaded; progress is shown in the upload area meanwhile. Previously an empty card with a spinner opened as soon as a file was dropped. When more files are added later the card stays visible with a processing overlay.
+- On narrow screens the zoom bar buttons no longer squeeze their labels into a vertical column.
 
 ## [1.17.22] - 2026-10-28
 
