@@ -738,6 +738,9 @@ async def preview(request: Request, file: UploadFile = File(...)):
     _uo.record(upload_id, request)
     src = settings.temp_dir / f"{upload_id}.pdf"
     src.write_bytes(data)
+    # 打不開（有開啟密碼 / 毀損）要當場回 400 說清楚，不是讓畫預覽的例外冒成 500
+    from ...core.pdf_guard import ensure_readable_pdf
+    await asyncio.to_thread(ensure_readable_pdf, src)
     png = settings.temp_dir / f"{upload_id}_p1.png"
     await asyncio.to_thread(pdf_preview.render_page_png, src, png, 0, 110)
 

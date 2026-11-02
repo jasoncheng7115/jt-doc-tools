@@ -659,7 +659,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **525 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **527 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -1041,6 +1041,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_pdf_ocr_preview_acl.py` | End-to-end ACL test for pdf-ocr `/preview/{uid}.pdf` endpoint (v1.7.6). |
 | `test_pdf_page_size.py` | 頁面尺寸統一 |
 | `test_pdf_pageno_cjk.py` | pdf-pageno 中文頁碼字型回歸 |
+| `test_pdf_password_upload.py` | 上傳有開啟密碼的 PDF：檢查、解開、權限、稽核 |
 | `test_pdf_seam_stamp.py` | 騎縫章 |
 | `test_pdf_stamp_api_history.py` | 用印 API 補齊跟網頁版一樣的紀錄與用法（2026-10-05） |
 | `test_pdf_stamp_blend.py` | Regression tests for the Multiply blend mode applied to pdf-stamp output. |
@@ -1062,6 +1063,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_pdf_to_office_progress.py` | `pdf2docx` 那條路要回報**逐頁**進度 |
 | `test_pdf_to_slides.py` | pdf-to-slides（PDF 轉簡報）測試 |
 | `test_pdf_tools.py` | End-to-end tests for the simple PDF tools (merge / split / rotate / pages / |
+| `test_pdf_unlock_e2e.py` | 有開啟密碼的 PDF：在真的瀏覽器裡拉進去，跳出密碼視窗、解開後照常往下走 |
 | `test_pdf_watermark.py` | Tests for the watermark service — focused on CJK font fallback. |
 | `test_pdf_watermark_batch.py` | pdf-watermark 逐檔順序上傳（issue #27） |
 | `test_pdf_wordcount.py` | Tests for the pdf-wordcount tool. |
@@ -3171,7 +3173,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 目前沒有自動化測試碰過，跑 `python tools/report_endpoint_test_coverage.py`，
 那份是**提示不是判決**。
 
-共 **319 支**（工具首頁不列，§2 已逐支驗收）。
+共 **321 支**（工具首頁不列，§2 已逐支驗收）。
 
 **全站（認證 / 帳號 / 工作區 / 介面語言）**
 
@@ -3230,6 +3232,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `GET /workspace/file/{file_id}`
 - [ ] `POST /workspace/rename`
 - [ ] `POST /workspace/save`
+- [ ] `POST /pdf-password/check` — 上傳的 PDF 要不要開啟密碼（只有擁有者密碼的回 false）＋能不能在這裡解；檢查完不留暫存檔；未登入擋
 - [ ] `GET /workspace/thumb/{file_id}`
 
 **doc-deident（文件去識別化）**
@@ -3540,6 +3543,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 **pdf-decrypt（PDF 密碼解除）**
 
 - [ ] `POST /tools/pdf-decrypt/submit`
+- [ ] `POST /tools/pdf-decrypt/unlock` — 別的工具上傳框用：密碼對回解開的 PDF（no-store）、錯回 400；沒有這支工具權限回 403；稽核 `pdf_unlock` 不記密碼
 
 **pdf-editor（PDF 編輯器）**
 
@@ -6266,6 +6270,18 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > **最高原則：加 i18n 不可以改壞現有功能。** 所以每一個階段的第一條驗收都是
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
+
+### 6.134 v1.17.24 — 有開啟密碼的 PDF：上傳時問密碼或指去「PDF 密碼解除」（**每次發版必過**）
+
+- [ ] 用印（共用上傳元件）拉進有開啟密碼的 PDF：跳出視窗，輸入框是密碼型、有檔名、有「PDF 密碼解除」連結（開新分頁）；打錯說「密碼不正確」再問一次；打對後照常產生預覽。
+- [ ] 掃描拼合、文件翻譯、電子發票、清單處理、去識別化、轉帳證明（自己寫上傳框的工具）：同上。
+- [ ] 只限制列印 / 編輯的 PDF：不跳視窗，照常處理。
+- [ ] 按取消：那份不送出、上傳框清空。
+- [ ] 啟用認證、角色沒有「PDF 密碼解除」（例如文管）：只看到請先解除密碼的說明，沒有輸入框；直接打 `/tools/pdf-decrypt/unlock` 回 403。
+- [ ] 稽核紀錄有 `pdf_unlock`（成功與密碼錯各一筆、記來源工具與檔名），沒有密碼。
+- [ ] 用印預覽送有密碼的檔回 400 並顯示原因（不是 500、不是沒反應）。
+- [ ] pyasn1 0.6.5：`uv.lock` 第 2 行仍是 `revision = 3`、`uvx --from uv==0.11.21 uv lock --check` 通過；啟用 AD / LDAP 的站台登入正常。
+- 自動化：`tests/test_pdf_password_upload.py`、`tests/test_pdf_unlock_e2e.py`、`tests/test_dependency_declarations_agree.py`
 
 ### 6.133 v1.17.23 — 掃描拼合排列方式：依原始位置 / 自動排列（**每次發版必過**）
 

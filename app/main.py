@@ -28,7 +28,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.17.23"
+VERSION = "1.17.24"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -932,6 +932,10 @@ app.include_router(_build_web_router(templates, tools, settings.app_name, VERSIO
 from .web.workspace_routes import build_router as _build_workspace_router  # noqa: E402
 
 app.include_router(_build_workspace_router(templates))
+
+# 上傳的 PDF 有沒有開啟密碼（共用上傳元件用；解密本身在 PDF 密碼解除工具底下）
+from .web.pdf_password_routes import router as _pdf_password_router  # noqa: E402
+app.include_router(_pdf_password_router)
 
 # Shared asset images (logo / stamp / signature / watermark) — login-gated,
 # read-only. Lets non-admin users see asset thumbnails / previews in the

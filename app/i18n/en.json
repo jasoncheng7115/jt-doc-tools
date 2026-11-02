@@ -7668,5 +7668,19 @@
   "自動排列": "Arrange automatically",
   "依上傳順序找空位排好，不會重疊": "Laid out in upload order in free space, without overlapping",
   "自動排列失敗": "Automatic arrangement failed",
-  "載入預覽…": "Loading previews…"
+  "載入預覽…": "Loading previews…",
+  "「{0}」有開啟密碼，這裡打不開。請先到「{1}」解除密碼，再上傳解除後的檔案。": "\"{0}\" has an open password and cannot be opened here. Remove the password in \"{1}\" first, then upload the unlocked file.",
+  "這份 PDF 有密碼保護": "This PDF is password-protected",
+  "「{0}」有開啟密碼。輸入密碼後會先解開再繼續處理；也可以先到「{1}」解除密碼。": "\"{0}\" has an open password. Enter it to unlock the file and continue, or remove the password in \"{1}\" first.",
+  "PDF 開啟密碼": "PDF open password",
+  "解開": "Unlock",
+  "解開失敗：": "Unlock failed: ",
+  "密碼不正確，請再試一次。": "Wrong password, please try again.",
+  "解開失敗": "Unlock failed",
+  "密碼錯誤太多次，請確認密碼後重新上傳。": "Too many wrong passwords. Check the password and upload the file again.",
+  "產生預覽失敗": "Could not create the preview",
+  "密碼不正確": "Wrong password",
+  "這份 PDF 有密碼保護，請先解除密碼": "This PDF is password-protected; remove the password first",
+  "不是有效的 PDF": "Not a valid PDF",
+  "只支援 PDF": "Only PDF is supported"
 }

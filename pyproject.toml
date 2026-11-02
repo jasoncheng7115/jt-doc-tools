@@ -1,6 +1,6 @@
 [project]
 name = "jt-doc-tools"
-version = "1.17.23"
+version = "1.17.24"
 description = "Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台"
 authors = [{ name = "Jason Cheng (Jason Tools)", email = "jason@jason.tools" }]
 requires-python = ">=3.11"
@@ -58,7 +58,7 @@ dependencies = [
     # 地方宣稱支援 HEIC —— 只有真的要解碼時才爆（GitHub issue #49）。
     # 全平台都有 wheel（含 win_arm64），不需要客戶自己編。
     "pillow-heif>=1.5,<2",
-    "pyasn1>=0.6.4",  # 安全: 修 DoS (uncontrolled resource / quadratic OID)
+    "pyasn1>=0.6.5",  # 安全: 修 DoS (uncontrolled resource / quadratic OID；0.6.5 修 BER/REAL/BIT STRING 解碼的二次方耗時)
     # torch 釘 2.14.x：EasyOCR 主 OCR 引擎依賴，鎖 minor 是防其他 dep re-lock
     # 時意外升大版（換版要重驗 OCR）。
     #

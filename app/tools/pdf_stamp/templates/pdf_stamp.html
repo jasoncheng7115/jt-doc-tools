@@ -912,7 +912,11 @@ async function loadPreview() {
   const fd = new FormData();
   fd.append('file', f);
   const r = await fu.upload('/tools/pdf-stamp/preview', fd, {processingLabel: tr('產生預覽中…')});
-  if (!r.ok) return null;
+  if (!r.ok) {
+    // 原本直接 `return null`：檔案打不開時畫面完全沒反應（2026-11-02 使用者回報）
+    (window.showAlert || window.alert)(await window.friendlyServerError(r, tr('產生預覽失敗')));
+    return null;
+  }
   previewInfo = await r.json();
   _previewFileKey = key;
   editPageIdx = 0;

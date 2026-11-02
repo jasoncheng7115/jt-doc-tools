@@ -280,6 +280,8 @@ function waitForPreviews(timeoutMs) {
 
 async function uploadFiles(fileList) {
   if (!fileList || !fileList.length) return;
+  // 有開啟密碼的 PDF 先問密碼或指去「PDF 密碼解除」（static/js/pdf_unlock.js）；取消的那份不送
+  if (window.unlockPdfFiles) { fileList = await window.unlockPdfFiles(Array.from(fileList), 'scan-merge'); if (!fileList.length) { fi.value = ''; return; } }
   // 「預覽與微調」卡片**要等拉進來的檔案都處理完、上傳區的預覽圖都出來才顯示**
   // （使用者 2026-11-02）。之前一拉檔就先打開一張空白卡片、裡面轉圈，看起來像當住。
   // 已經顯示的（之後再加檔案）就維持顯示，只在上面蓋處理中的提示，不讓卡片忽隱忽現。

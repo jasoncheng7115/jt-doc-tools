@@ -207,8 +207,30 @@
         this._pick(files);
       });
     }
-    _pick(files) {
-      const arr = Array.isArray(files) ? files : [files];
+    // 有開啟密碼的 PDF：先問密碼（或指去「PDF 密碼解除」），解開後換成解開的那份再往下走。
+    // 使用者 2026-11-02：拉進有密碼的 PDF，用印頁什麼反應都沒有 —— 每一支吃 PDF 的工具都是
+    // 同一個形狀，所以收在共用元件這裡做一次。取消或解不開的那份就不往下送。
+    async _pick(files) {
+      let arr = Array.isArray(files) ? files : [files];
+      if (window.unlockPdfFiles) {
+        const before = arr;
+        arr = await window.unlockPdfFiles(arr, this.toolId());
+        if (!arr.length) { this.reset(); return; }
+        if (arr.some((f, i) => f !== before[i]) || arr.length !== before.length) {
+          try {
+            const dt = new DataTransfer();
+            arr.forEach(f => dt.items.add(f));
+            this.input.files = dt.files;     // 之後讀 input.files 的工具拿到的是解開的那份
+          } catch (_e) { /* 不支援 DataTransfer：onFile 仍拿到解開的檔 */ }
+        }
+      }
+      this._pickResolved(arr);
+    }
+    toolId() {
+      const m = /^\/tools\/([a-z0-9-]+)/.exec(window.location.pathname || '');
+      return m ? m[1] : '';
+    }
+    _pickResolved(arr) {
       if (this.nameEl) {
         if (arr.length > 1) {
           this.nameEl.textContent = tr('{0} 個檔案：{1}').replace('{0}', arr.length).replace('{1}', arr.map(f => f.name).join('、'));

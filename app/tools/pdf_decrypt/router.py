@@ -189,6 +189,54 @@ async def submit(
 from fastapi.responses import FileResponse as _FileResponse  # noqa: E402
 
 
+@router.post("/unlock")
+async def unlock(
+    request: Request,
+    file: UploadFile = File(...),
+    password: str = Form(""),
+    from_tool: str = Form(""),
+):
+    """別的工具的上傳框遇到有開啟密碼的 PDF 時，在這裡用使用者輸入的密碼解開、回傳解開後的檔。
+
+    放在這支工具底下是刻意的：路徑在 `/tools/pdf-decrypt/` 之下，**沒有這支工具權限的人
+    由既有的權限中介層擋掉**，不必在這裡另寫一份判斷。解開的檔不留在伺服器上；
+    每一次（成功或密碼錯）都記稽核，不記密碼。
+    """
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "只支援 PDF")
+    data = await file.read()
+    if not data or data[:4] != b"%PDF":
+        raise HTTPException(400, "不是有效的 PDF")
+    import re as _re
+    tool = from_tool if _re.fullmatch(r"[a-z0-9-]{1,40}", from_tool or "") else ""
+
+    def _do() -> bytes | None:
+        with fitz.open(stream=data, filetype="pdf") as doc:
+            if doc.needs_pass and not doc.authenticate(password or ""):
+                return None
+            return doc.tobytes(encryption=fitz.PDF_ENCRYPT_NONE, garbage=3, deflate=True)
+
+    import asyncio as _asyncio
+    out = await _asyncio.to_thread(_do)
+    from ...core import audit_db
+    from ...core.client_ip import real_client_ip
+    from ...core.sessions import user_label
+    audit_db.log_event(
+        "pdf_unlock",
+        username=user_label(getattr(request.state, "user", None)),
+        ip=real_client_ip(request),
+        target=tool or "pdf-decrypt",
+        details={"filename": (file.filename or "")[:200], "ok": out is not None},
+    )
+    if out is None:
+        raise HTTPException(400, "密碼不正確")
+    from fastapi.responses import Response as _Response
+    from ...core.http_utils import content_disposition
+    return _Response(content=out, media_type="application/pdf",
+                     headers={"Content-Disposition": content_disposition(file.filename or "document.pdf"),
+                              "Cache-Control": "no-store"})
+
+
 @router.post("/api/pdf-decrypt", include_in_schema=True)
 async def api_pdf_decrypt(
     request: Request,

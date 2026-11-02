@@ -77,7 +77,7 @@
     btn.appendChild(document.createTextNode(text));
   }
 
-  function _show({ title, body, kind, okText, cancelText, showCancel, prompt, defaultValue, placeholder, html, okIcon, cancelIcon }) {
+  function _show({ title, body, kind, okText, cancelText, showCancel, prompt, defaultValue, placeholder, html, okIcon, cancelIcon, inputType }) {
     return new Promise((resolve) => {
       const host = ensureHost();
       const overlay = document.createElement('div');
@@ -118,7 +118,9 @@
         // CodeQL 認得的 sanitizer（js/xss-through-dom、js/html-constructed-from-input
         // 都認 barrier）。萬一未載入 → 退成純文字（安全）。
         if (window.DOMPurify) {
-          bodyEl.innerHTML = window.DOMPurify.sanitize(String(body));
+          // 允許 target：說明裡的連結（例如「PDF 密碼解除」）要開新分頁，不然一點就離開目前的工具、
+          // 剛設定好的東西全沒了。新分頁一律帶 rel=noopener（呼叫端寫），瀏覽器預設也是 noopener。
+          bodyEl.innerHTML = window.DOMPurify.sanitize(String(body), { ADD_ATTR: ['target'] });
         } else {
           bodyEl.textContent = String(body);
         }
@@ -133,7 +135,8 @@
       card.appendChild(bodyEl);
       if (prompt) {
         const inputEl = document.createElement('input');
-        inputEl.type = 'text';
+        inputEl.type = inputType === 'password' ? 'password' : 'text';
+        if (inputType === 'password') inputEl.autocomplete = 'off';
         inputEl.className = 'modal-input';
         inputEl.value = defaultValue || '';
         inputEl.placeholder = placeholder || '';
@@ -235,6 +238,7 @@
       okText: opts.okText || tr('確定'), cancelText: opts.cancelText || tr('取消'),
       showCancel: true, prompt: true,
       defaultValue: opts.defaultValue || '', placeholder: opts.placeholder || '',
+      inputType: opts.inputType,   // 'password'：輸入時不顯示
     });
   };
 

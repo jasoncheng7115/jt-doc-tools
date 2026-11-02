@@ -463,6 +463,8 @@ $('btnClearInput').addEventListener('click', () => {
 // 上傳檔案 — 走 /upload 直接萃取後填回 input area（不套 ops，給 user 看到原文）
 async function _uploadFile(f) {
   if (!f) return;
+  // 有開啟密碼的 PDF 先問密碼或指去「PDF 密碼解除」（static/js/pdf_unlock.js）；取消的那份不送
+  if (window.unlockPdfFiles) { const r = await window.unlockPdfFiles([f], 'text-list'); if (!r.length) return; f = r[0]; }
   $('status').textContent = tr('讀取 {0}…').replace('{0}', f.name);
   const fd = new FormData();
   fd.append("file", f);

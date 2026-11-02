@@ -410,6 +410,11 @@
   }
 
   async function uploadFiles(fileList) {
+    // 有開啟密碼的 PDF 先問密碼或指去「PDF 密碼解除」（static/js/pdf_unlock.js）；取消的那份不送
+    if (window.unlockPdfFiles && fileList && fileList.length) {
+      fileList = await window.unlockPdfFiles(Array.from(fileList), 'transit-proof');
+      if (!fileList.length) return;
+    }
     const files = Array.from(fileList || []).filter(f => /\.pdf$/i.test(f.name));
     if (!files.length) { toast(tr('請選 PDF 檔'), 'err'); return; }
     const fd = new FormData();

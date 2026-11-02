@@ -77,4 +77,4 @@ opencv-python-headless>=4.10,<5   # 文件拉正（headless：無 GUI 相依）
 numpy>=1.26,<3
 lxml>=4.9,<7
 truststore>=0.9
-pyasn1>=0.6.4
+pyasn1>=0.6.5

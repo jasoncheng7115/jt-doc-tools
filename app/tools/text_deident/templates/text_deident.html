@@ -366,6 +366,8 @@ const fileInput = $('fileInput');
 const dropZone = $('dropZone');
 async function handleUploadedFile(f) {
   if (!f) return;
+  // 有開啟密碼的 PDF 先問密碼或指去「PDF 密碼解除」（static/js/pdf_unlock.js）；取消的那份不送
+  if (window.unlockPdfFiles) { const r = await window.unlockPdfFiles([f], 'text-deident'); if (!r.length) return; f = r[0]; }
   const ext = (f.name || '').toLowerCase().split('.').pop();
   const officeExts = ['docx', 'doc', 'odt', 'ods', 'odp', 'rtf'];
   let parseLabel = tr('解析中…');

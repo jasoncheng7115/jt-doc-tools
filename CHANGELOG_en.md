@@ -5,11 +5,19 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (952 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (953 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.24] - 2026-11-02
+
+- PDFs with an open password: some tools used to do nothing when you dropped one in ("Stamp and sign a PDF", for example: the preview could not open the file and nothing was shown). Every tool that takes PDFs now asks first: enter the password and the file is unlocked before processing continues (the upload box then holds the unlocked file), or follow the link to the "Remove PDF password" tool in a new tab. A wrong password is reported and asked again.
+- PDFs that only restrict printing or editing (owner password only) already open, so no prompt is shown for them.
+- Unlocking with a password needs permission for the "Remove PDF password" tool; users without it see a note asking them to remove the password first. Every unlock attempt, successful or not, is written to the audit log without the password.
+- The "Stamp and sign a PDF" preview now explains why a file cannot be opened instead of doing nothing.
+- Security: pyasn1 0.6.5 (GHSA-fm9c-5rcf-2q5p, GHSA-9m75-vc3g-4x39, GHSA-mm57-4v3p-rchx, GHSA-2qm8-x737-gmw5, all high: excessive CPU use when decoding crafted ASN.1 data). It is used by the LDAP / AD sign-in library to parse directory server responses; the declared minimum is raised to 0.6.5.
 
 ## [1.17.23] - 2026-11-01
 

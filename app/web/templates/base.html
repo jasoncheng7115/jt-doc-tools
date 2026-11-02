@@ -762,6 +762,8 @@
   <script src="/static/js/modal.js"></script>
   <script src="/static/js/error_format.js"></script>
   <script src="/static/js/friendly_error.js"></script>
+  <!-- 有開啟密碼的 PDF：上傳前問密碼或指去「PDF 密碼解除」（共用上傳元件會自動呼叫）-->
+  <script src="/static/js/pdf_unlock.js"></script>
   {% if workspace_enabled(request) %}<script src="/static/js/workspace_picker.js"></script>{% endif %}
   <script nonce="{{ request.state.csp_nonce }}">
     (function(){
