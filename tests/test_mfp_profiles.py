@@ -139,6 +139,10 @@ def test_every_status_has_a_message():
     # Konica Minolta、Kyocera、Sharp、Toshiba、Xerox
     ("bizhub C300i", [], "Konica Minolta", "bizhub C300i"),
     ("KONICA MINOLTA bizhub 4752", [], "Konica Minolta", "bizhub 4752"),
+    # DEVELOP（ineo / ineo+）＝Konica Minolta 集團品牌：歸到 Konica Minolta（沿用公用信箱 SMB），型號帶上 DEVELOP
+    ("DEVELOP ineo+ 450i", [], "Konica Minolta", "DEVELOP ineo+ 450i"),
+    ("ineo 4020i", [], "Konica Minolta", "DEVELOP ineo 4020i"),
+    ("DEVELOP ineo+ 3350 Web Connection", [], "Konica Minolta", "DEVELOP ineo+ 3350"),
     ("Command Center RX - TASKalfa 3253ci", [], "Kyocera", "TASKalfa 3253ci"),
     ("KYOCERA ECOSYS MA4000cifx", [], "Kyocera", "ECOSYS MA4000cifx"),
     ("SHARP MX-3071", [], "Sharp", "MX-3071"),
@@ -228,3 +232,20 @@ def test_kyocera_is_recognised_from_the_command_center_server_header():
     # 反例：別家的伺服器名稱不可以被當成 KYOCERA
     for other in ("KM-httpd/1.0", "Web-Server/3.0", "KMMFP"):
         assert mp.detect([_page(headers=[("Server", other)])])["vendor"] != "Kyocera", other
+
+
+@pytest.mark.parametrize("title,text", [
+    ("Welcome", "Please develop your documents before scanning"),   # 英文單字 develop
+    ("Gemineo", ""),                                                 # 字裡剛好有 ineo
+    ("Status", "Developer options"),
+])
+def test_the_word_develop_is_not_the_develop_brand(title, text):
+    """DEVELOP 只認全大寫的品牌寫法與 ineo 系列；一般英文單字不可以讓設備被當成 Konica Minolta。"""
+    assert mp.detect([_page(title=title, text=text)])["vendor"] != "Konica Minolta"
+
+
+def test_develop_from_escl_gets_the_konica_share_route():
+    from app.core import mfp_share
+    r = mp.detect([_page(title="Web Connection")], escl_model="DEVELOP ineo+ 450i")
+    assert r["vendor"] == "Konica Minolta" and r["status"] == "experimental_vendor"
+    assert mfp_share.VENDOR_ROUTES.get(r["vendor"]), "DEVELOP 要沿用 Konica Minolta 的取件路線"

@@ -126,7 +126,8 @@ def test_original_keeps_tiff_and_other_formats_are_kept_as_is(env, ws_on):
     assert names == ["合約.tif", "note.bin"]
     assert s["files"][0]["workspace_file_id"], "TIFF 進工作區"
     assert not s["files"][1]["workspace_file_id"] and s["files"][1]["has_file"], "工作區收不下的留給本人下載"
-    assert s["workspace_note"] == "WS_FAILED"
+    # 格式不收要說是格式，不是「可能超過大小上限或額度」（2026-11-02）
+    assert s["workspace_note"] == "WS_UNSUPPORTED"
 
 
 def test_konica_box_over_smb(env, ws_on):

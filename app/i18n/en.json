@@ -7682,5 +7682,6 @@
   "密碼不正確": "Wrong password",
   "這份 PDF 有密碼保護，請先解除密碼": "This PDF is password-protected; remove the password first",
   "不是有效的 PDF": "Not a valid PDF",
-  "只支援 PDF": "Only PDF is supported"
+  "只支援 PDF": "Only PDF is supported",
+  "有檔案的格式工作區不收（例如 DocuWorks 的 .xdw），沒有轉成 PDF，原樣留在暫存區 24 小時，請下載": "Some files are in a format the workspace does not accept (for example DocuWorks .xdw). They were not converted to PDF and are kept as-is in temporary storage for 24 hours; please download them."
 }

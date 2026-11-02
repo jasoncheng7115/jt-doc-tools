@@ -41,6 +41,9 @@ MESSAGES: dict[str, str] = {
     "SCAN_NO_FILE": "這次作業沒有可以下載的檔案（已存進工作區，或已超過保留時間）",
     "WS_DISABLED": "工作區功能未啟用，檔案留在暫存區 24 小時，請下載",
     "WS_FAILED": "有檔案存不進工作區（可能超過大小上限或額度），留在暫存區 24 小時，請下載",
+    # 工作區不收的格式（例如檔案分享裡的 DocuWorks .xdw）：原本混在 WS_FAILED 裡，畫面說「可能超過大小上限」，
+    # 讓人以為是檔案太大（2026-11-02 文章查證時發現）
+    "WS_UNSUPPORTED": "有檔案的格式工作區不收（例如 DocuWorks 的 .xdw），沒有轉成 PDF，原樣留在暫存區 24 小時，請下載",
     "BOX_PARTIAL": "部分文件沒有取到（每份文件的原因列在下面）",
     "BOX_ALL_FAILED": "選的文件都沒有取到",
     "BOX_OUTPUT_INVALID": "存檔格式只能是 PDF 或原始格式",
@@ -719,6 +722,9 @@ def _save_files(files: list[dict], user_id: Optional[int], user_label: str, job_
                 p.unlink(missing_ok=True)
             except ws.WorkspaceDisabled:
                 note = "WS_DISABLED"
+            except ws.UnsupportedType as e:
+                logger.info("mfp 作業 %s 有檔案的格式工作區不收：%s", job_id[:8], e)
+                note = note or "WS_UNSUPPORTED"
             except ws.WorkspaceError as e:
                 logger.info("mfp 作業 %s 有檔案存不進工作區：%s", job_id[:8], e)
                 note = note or "WS_FAILED"

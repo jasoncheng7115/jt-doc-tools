@@ -6271,6 +6271,14 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
 
+### 6.135 v1.17.25 — DEVELOP / ineo 歸 Konica Minolta、工作區不收的格式另外說明、使用說明更正（**每次發版必過**）
+
+- [ ] 連線測試頁面標題或 eSCL 型號是「DEVELOP ineo+ 450i」「ineo 4020i」：廠牌 Konica Minolta、型號帶 DEVELOP、相容性「實驗功能」、出現公用信箱取件。
+- [ ] 頁面上只有英文單字 develop / Developer、或「Gemineo」這類字：不會被當成 Konica Minolta。
+- [ ] 檔案分享取件選「原始格式」、裡面有工作區不收的檔（例如 .xdw）：提示說格式不支援、原樣留在暫存區 24 小時，可以下載（不是「可能超過大小上限」）。
+- [ ] 介紹站「事務機掃描取件」中英日三版：支援表 FUJIFILM 寫明同系列以 C5571 驗證、eSCL 寫實機只測過 M141w、Konica Minolta 列寫 DEVELOP ineo 未實測；安全與隱私 9 張卡片排滿三列（不儲存密碼、未加密先問、未啟用登入只准本機、診斷資料不含帳密、排隊上限數字）。
+- 自動化：`tests/test_mfp_profiles.py`、`tests/test_mfp_share_jobs.py::test_original_keeps_tiff_and_other_formats_are_kept_as_is`
+
 ### 6.134 v1.17.24 — 有開啟密碼的 PDF：上傳時問密碼或指去「PDF 密碼解除」（**每次發版必過**）
 
 - [ ] 用印（共用上傳元件）拉進有開啟密碼的 PDF：跳出視窗，輸入框是密碼型、有檔名、有「PDF 密碼解除」連結（開新分頁）；打錯說「密碼不正確」再問一次；打對後照常產生預覽。

@@ -136,7 +136,10 @@ _OTHER_VENDORS: tuple[tuple[str, re.Pattern], ...] = (
     ("Xerox", re.compile(r"\bXerox\b|AltaLink|VersaLink|WorkCentre|PrimeLink|CentreWare", re.I)),
     ("Canon", re.compile(r"\bCanon\b|imageRUNNER|imageCLASS|i-SENSYS|Remote\s*UI|\biR-ADV\b|PIXMA|MAXIFY", re.I)),
     ("Ricoh", re.compile(r"\bRICOH\b|Web\s*Image\s*Monitor|\bSavin\b|\bLanier\b", re.I)),
-    ("Konica Minolta", re.compile(r"KONICA|MINOLTA|bizhub|PageScope|OpenAPI\s*Web", re.I)),
+    # DEVELOP（ineo / ineo+）是 Konica Minolta 集團的品牌，軟體大多共用（使用者 2026-10-15 實測、2026-11-02 決定歸到這一家）：
+    # 取件沿用 Konica Minolta 的公用信箱（SMB，實驗功能），型號顯示時帶上 DEVELOP。
+    # **DEVELOP 只認全大寫**（品牌寫法）—— 網頁上的英文單字 develop / Developer 不可以算。
+    ("Konica Minolta", re.compile(r"KONICA|MINOLTA|bizhub|PageScope|OpenAPI\s*Web|(?-i:\bDEVELOP\b)|\bineo\+?(?=[\s\d]|$)", re.I)),
     # `KM-MFP-http`：KYOCERA Command Center RX 的網頁伺服器（Server 標頭）。客戶實機 ECOSYS M6535cidn 的首頁沒有任何廠牌字樣、
     # 型號是 JavaScript 之後才填，只認得出這個標頭 —— 原本「未辨識」，直接取件也不出現
     ("Kyocera", re.compile(r"KYOCERA|TASKalfa|ECOSYS|Command\s*Center|Triumph-Adler|\bUTAX\b|\bKM-MFP-http\b", re.I)),
@@ -166,7 +169,8 @@ _OTHER_MODELS: dict[str, re.Pattern] = {
     "Canon": re.compile(r"\b((?:imageRUNNER(?:\s+ADVANCE)?(?:\s+DX)?|iR-ADV|imageCLASS|imagePRESS|i-SENSYS|MAXIFY|PIXMA|"
                         r"Satera|imagePROGRAF)\s?[A-Z]{0,3}\s?\d{3,5}[A-Za-z]{0,4}(?:\s+(?:II|III|IV))?|MF\d{3,4}[A-Za-z]{0,4})\b"),
     "Ricoh": re.compile(r"\b((?:RICOH\s+)?(?:IM|MP|SP|M|P)\s?C?\s?\d{3,5}[A-Za-z]{0,5})\b"),
-    "Konica Minolta": re.compile(r"\b(bizhub\s+(?:PRESS\s+|PRO\s+)?C?\d{3,5}[A-Za-z]{0,4})\b", re.I),
+    "Konica Minolta": re.compile(r"\b(bizhub\s+(?:PRESS\s+|PRO\s+)?C?\d{3,5}[A-Za-z]{0,4}"
+                                 r"|(?:DEVELOP\s+)?ineo\+?\s?C?\d{3,5}[A-Za-z]{0,4})(?![\w+])", re.I),
     "Kyocera": re.compile(r"\b((?:TASKalfa|ECOSYS)\s+(?:MA|PA|M|P)?\d{3,5}[a-z]{0,6})\b", re.I),
     # MX-3071、MX-C507F、BP-50C26（新款是「兩位數＋字母＋數字」）
     "Sharp": re.compile(r"\b((?:MX|BP|AR|DX)-[A-Z]?\d{2,5}[A-Z]{0,2}\d{0,3}[A-Z]{0,3})\b", re.I),
@@ -313,6 +317,9 @@ def detect(pages: list[dict], escl_model: str = "") -> dict[str, Any]:
                     got = _other_model(name, srcs)
                     if got:
                         res["model"] = got[0]
+                        # DEVELOP 的 ineo 系列：型號前面補上品牌，畫面看得出不是 bizhub
+                        if name == "Konica Minolta" and re.match(r"ineo", got[0], re.I):
+                            res["model"] = "DEVELOP " + got[0]
                         ev.append({"what": "model", **got[1], "excerpt": _excerpt(got[2], got[3])})
                 break
         else:

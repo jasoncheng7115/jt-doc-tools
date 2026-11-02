@@ -5,11 +5,17 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (953 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (954 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.25] - 2026-11-02
+
+- MFP Scan & Fetch: DEVELOP devices (ineo and ineo+, a Konica Minolta group brand) are now recognised. They are grouped under Konica Minolta, use the same public box (SMB) retrieval, and the model is shown as e.g. "DEVELOP ineo+ 450i". Like Konica Minolta this is experimental and not yet verified on a real device. The ordinary English word "develop" on a web page does not count as the brand.
+- When a file share contains a format the workspace does not accept (for example DocuWorks .xdw), the message now says the format is not supported and the file is kept as-is in temporary storage for 24 hours for download; previously it suggested the file might be too large.
+- Guide page corrections and additions: "Supported" now states that the six same-series FUJIFILM models are covered by the Apeos C5571 test and were not each tested; eSCL scanning has only been tested on an HP LaserJet MFP M141w; "Credentials never stored" became "Passwords never stored" (the device account name is remembered); added the queue limits (10 per device including the running job, 2 per person per device, dropped after 30 minutes), the consent required before unencrypted transfer, local-only use without sign-in, and that diagnostic data contains no credentials.
 
 ## [1.17.24] - 2026-11-02
 
