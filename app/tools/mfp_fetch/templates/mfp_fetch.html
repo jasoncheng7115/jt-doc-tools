@@ -172,6 +172,21 @@
   font-size:11.5px; font-weight:700; color:#0f172a; text-shadow:0 0 3px #fff; }
 .mf-scan-state.error { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
 .mf-scan-state .mf-actions { margin:8px 0 0; }
+/* 這次掃描（先暫存的頁面） */
+.mf-tray { margin-top:12px; padding:12px; border:1px dashed #a5b4fc; border-radius:10px; background:#f8fafc; }
+.mf-tray-head { display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline; margin-bottom:10px; }
+.mf-tray-head b { font-size:14.5px; color:#1e293b; }
+.mf-tray-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:12px; margin-bottom:10px; }
+.mf-tray-page { background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:6px; display:flex; flex-direction:column; gap:6px; }
+.mf-tray-page img { width:100%; aspect-ratio:210/297; object-fit:contain; background:#f1f5f9; border-radius:4px; cursor:zoom-in; display:block; }
+.mf-tray-bar { display:flex; align-items:center; gap:4px; }
+.mf-tray-bar .mf-tray-no { flex:1 1 auto; font-size:12.5px; color:#475569; font-weight:600; }
+.mf-tray-bar .btn { padding:3px 6px; }
+.mf-zoom { position:fixed; inset:0; z-index:2000; background:rgba(15,23,42,.75); display:flex; align-items:center;
+  justify-content:center; padding:24px; }
+.mf-zoom[hidden] { display:none; }
+.mf-zoom img { max-width:100%; max-height:100%; background:#fff; box-shadow:0 10px 40px rgba(0,0,0,.4); }
+.mf-zoom-close { position:absolute; top:16px; right:16px; }
 /* 機內信箱取件：一次只問需要的東西（使用者 2026-10-14：「越簡單越易懂越好」） */
 /* 一列排完：連線方式（有兩組才出現）、信箱編號（窄）、信箱密碼、列出文件（客戶實機截圖 2026-10-19：按鈕被擠到下一列、編號欄太寬） */
 .mf-box-form { display:grid; grid-template-columns:auto minmax(100px,150px) minmax(180px,320px) auto; gap:10px; align-items:end; justify-content:start; }
@@ -437,6 +452,8 @@
   {# 清單每一列的按鈕是 JS 畫的：圖示從這裡複製，不在 JS 裡手刻 SVG #}
   <template id="mfIcons">
     <span data-ic="refresh">{{ icon('refresh', size=14) }}</span>
+    <span data-ic="back">{{ icon('back', size=14) }}</span>
+    <span data-ic="next">{{ icon('next', size=14) }}</span>
     <span data-ic="copy">{{ icon('copy', size=14) }}</span>
     <span data-ic="eye">{{ icon('eye', size=14) }}</span>
     <span data-ic="close">{{ icon('close', size=14) }}</span>
@@ -458,7 +475,7 @@
     <h2 id="mfScanTitle" class="mf-scan-title"></h2>
     <button type="button" class="btn btn-secondary btn-small" id="mfScanClose">{{ icon('close', size=14) }} <span>{{ tr('收合') }}</span></button>
   </div>
-  <div class="mf-scan-note">{{ icon('info', size=16) }}<span>{{ tr('請先把文件放在事務機的平台玻璃上（或自動送紙器裡），再按「開始掃描」。掃好的檔案會存進你的工作區。同一台事務機一次只服務一個人，其他人會自動排隊。') }}</span></div>
+  <div class="mf-scan-note">{{ icon('info', size=16) }}<span>{{ tr('請先把文件放在事務機的平台玻璃上（或自動送紙器裡），再按「開始掃描」。存成 PDF 時，掃好的頁面先暫存在下方預覽，可以換一張接著掃，最後按「存成一份 PDF」才存進你的工作區；存成 JPEG 時每頁直接存進工作區。同一台事務機一次只服務一個人，其他人會自動排隊。') }}</span></div>
   <div class="mf-scan-opts">
     <div><label for="mfScanSource">{{ tr('來源') }}</label><select id="mfScanSource" class="jt-select"></select></div>
     <div><label for="mfScanColor">{{ tr('色彩') }}</label><select id="mfScanColor" class="jt-select"></select></div>
@@ -472,6 +489,21 @@
   </div>
   <div id="mfScanError" class="mf-err" hidden></div>
   <div id="mfScanState" class="mf-scan-state" hidden></div>
+  <!-- 先暫存、最後合併（使用者 2026-11-03）：掃好的頁面先排在這裡，可以接著掃、調整順序、刪頁，最後存成一份 PDF -->
+  <div id="mfTray" class="mf-tray" hidden>
+    <div class="mf-tray-head"><b id="mfTrayTitle"></b>
+      <span class="mf-hint">{{ tr('還沒存進工作區。可以接著掃；點頁面放大看，用箭頭調整順序。暫存 24 小時。') }}</span></div>
+    <div id="mfTrayGrid" class="mf-tray-grid"></div>
+    <div class="mf-actions">
+      <button type="button" class="btn btn-primary" id="mfTraySave">{{ icon('save', size=14) }} <span id="mfTraySaveText">{{ tr('存成一份 PDF') }}</span></button>
+      <button type="button" class="btn btn-secondary" id="mfTrayClear">{{ icon('trash', size=14) }} <span>{{ tr('全部清除') }}</span></button>
+    </div>
+  </div>
+  <div id="mfTrayState" class="mf-scan-state" hidden></div>
+</div>
+<div id="mfTrayZoom" class="mf-zoom" role="dialog" aria-modal="true" aria-label="{{ tr('放大預覽') }}" hidden>
+  <img id="mfTrayZoomImg" alt="">
+  <button type="button" class="btn btn-secondary btn-small mf-zoom-close" id="mfTrayZoomClose">{{ icon('close', size=14) }} <span>{{ tr('關閉') }}</span></button>
 </div>
 
 <div class="panel" id="mfBoxPanel" hidden>
@@ -1286,6 +1318,8 @@
     fillSelect('mfScanSource', srcKeys, SOURCE_NAMES, srcKeys[0]);
     fillSelect('mfScanPaper', ['a4', 'letter', 'max'], PAPER_NAMES, 'a4');
     syncScanOptions();
+    document.getElementById('mfTrayState').hidden = true;
+    loadTray(c);
     panel.hidden = false;
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -1308,12 +1342,126 @@
         resolution: Number(document.getElementById('mfScanRes').value),
         paper: document.getElementById('mfScanPaper').value,
         format: document.getElementById('mfScanFormat').value || 'pdf',
+        // 存成 PDF：先暫存在下方預覽，最後再合併（使用者 2026-11-03）
+        hold: (document.getElementById('mfScanFormat').value || 'pdf') === 'pdf',
         // 沒填檔名就用**瀏覽器這邊**的時間（伺服器可能是 UTC：正式機上實際差了 8 小時）
         file_name: document.getElementById('mfScanName').value.trim() || defaultScanName(),
       });
       busy(btn, false);
       if (!res.ok) { showError(errBox, res); return; }
       watchScan(res.scan.id, 'mfScanState');
+      loadScans();
+    });
+  }
+  // ---- 這次掃描：先暫存、最後合併 ----
+  let tray = [];                 // [{scan, page}]：畫面上的頁序
+  let trayScans = new Set();     // 這次掃描裡的暫存掃描（存檔或清除時一起處理）
+  let trayConnId = null;
+  async function loadTray(c) {
+    trayConnId = c.id;
+    tray = []; trayScans = new Set();
+    const res = await api('GET', '/scans/held?conn_id=' + encodeURIComponent(c.id));
+    if (res.ok && trayConnId === c.id) (res.scans || []).forEach(addPages);
+    renderTray();
+  }
+  function addPages(s) {
+    if (trayScans.has(s.id)) return;
+    trayScans.add(s.id);
+    for (let n = 0; n < (s.pages || 0); n++) tray.push({ scan: s.id, page: n });
+  }
+  function addToTray(s) {
+    if (scanConn && s.conn_id !== scanConn.id) return;
+    addPages(s);
+    renderTray();
+  }
+  function previewUrl(t, w) {
+    return API + '/scans/' + encodeURIComponent(t.scan) + '/preview/' + t.page + '?w=' + w;
+  }
+  function renderTray() {
+    const box = document.getElementById('mfTray');
+    if (!box) return;
+    box.hidden = !tray.length;
+    document.getElementById('mfTrayTitle').textContent = tr('這次掃描：{0} 頁').replace('{0}', tray.length);
+    document.getElementById('mfTraySaveText').textContent = tr('存成一份 PDF（共 {0} 頁）').replace('{0}', tray.length);
+    const grid = document.getElementById('mfTrayGrid');
+    grid.replaceChildren(...tray.map((t, i) => {
+      const card = el('div', 'mf-tray-page');
+      const img = el('img');
+      img.src = previewUrl(t, 240);
+      img.alt = tr('第 {0} 頁').replace('{0}', i + 1);
+      img.loading = 'lazy';
+      img.addEventListener('click', () => zoomTray(t));
+      const bar = el('div', 'mf-tray-bar');
+      bar.append(el('span', 'mf-tray-no', tr('第 {0} 頁').replace('{0}', i + 1)));
+      const left = rowBtn('back', tr('往前移'), () => moveTray(i, -1), true);
+      const right = rowBtn('next', tr('往後移'), () => moveTray(i, 1), true);
+      left.disabled = i === 0;
+      right.disabled = i === tray.length - 1;
+      bar.append(left, right, rowBtn('trash', tr('刪除這一頁'), () => removeTray(i), true));
+      card.append(img, bar);
+      return card;
+    }));
+  }
+  function moveTray(i, d) {
+    const j = i + d;
+    if (j < 0 || j >= tray.length) return;
+    [tray[i], tray[j]] = [tray[j], tray[i]];
+    renderTray();
+  }
+  async function removeTray(i) {
+    const [gone] = tray.splice(i, 1);
+    renderTray();
+    // 那一次掃描的頁面都刪光了：伺服器上的暫存檔也一起清掉（重新整理後不會又跑回來）
+    if (gone && !tray.some(t => t.scan === gone.scan)) {
+      trayScans.delete(gone.scan);
+      await api('POST', '/scans/discard', { scans: [gone.scan] });
+      loadScans();
+    }
+  }
+  function zoomTray(t) {
+    const z = document.getElementById('mfTrayZoom');
+    document.getElementById('mfTrayZoomImg').src = previewUrl(t, 1200);
+    z.hidden = false;
+    document.getElementById('mfTrayZoomClose').focus();
+  }
+  function closeZoom() { document.getElementById('mfTrayZoom').hidden = true; }
+  if (document.getElementById('mfTray')) {
+    document.getElementById('mfTrayZoomClose').addEventListener('click', closeZoom);
+    document.getElementById('mfTrayZoom').addEventListener('click', (e) => { if (e.target.id === 'mfTrayZoom') closeZoom(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeZoom(); });
+    document.getElementById('mfTraySave').addEventListener('click', async () => {
+      if (!tray.length) return;
+      const btn = document.getElementById('mfTraySave');
+      const state = document.getElementById('mfTrayState');
+      busy(btn, true, tr('合併中…'));
+      const res = await api('POST', '/scans/merge', {
+        pages: tray.map(t => [t.scan, t.page]),
+        file_name: document.getElementById('mfScanName').value.trim() || defaultScanName(),
+        release: Array.from(trayScans),
+      });
+      busy(btn, false);
+      if (!res.ok) {
+        state.className = 'mf-scan-state error';
+        state.replaceChildren(el('div', null, tr(res.message || '合併成 PDF 時失敗')));
+        state.hidden = false;
+        if (res.code === 'MERGE_SOURCE_GONE' && scanConn) loadTray(scanConn);
+        return;
+      }
+      tray = []; trayScans = new Set();
+      renderTray();
+      renderScanState(res.scan, 'mfTrayState');
+      document.getElementById('mfScanState').hidden = true;
+      loadScans();
+    });
+    document.getElementById('mfTrayClear').addEventListener('click', async () => {
+      if (!tray.length) return;
+      const ok = await window.showConfirm(tr('確定要清除這次掃描的 {0} 頁嗎？清除之後不能復原。').replace('{0}', tray.length),
+        { title: tr('全部清除'), okText: tr('清除'), cancelText: tr('取消'), kind: 'warn' });
+      if (!ok) return;
+      await api('POST', '/scans/discard', { scans: Array.from(trayScans) });
+      tray = []; trayScans = new Set();
+      renderTray();
+      document.getElementById('mfScanState').hidden = true;
       loadScans();
     });
   }
@@ -1471,7 +1619,10 @@
     const prog = scanProgress(s);
     if (prog) box.append(progressBar(prog));
     if (viaText(s)) box.append(el('div', 'mf-hint', tr('協定') + P.colon + viaText(s)));
-    if (s.workspace_message) box.append(el('div', 'mf-hint', tr(s.workspace_message)));
+    // 先暫存的掃描：頁面已經排在下方「這次掃描」，這裡不再給下載（下載的是還沒合併的那一份，容易拿錯）
+    const held = s.workspace_note === 'HELD' && (targetId || 'mfScanState') === 'mfScanState';
+    if (held) box.append(el('div', 'mf-hint', tr('已加入下方的「這次掃描」，還沒存進工作區')));
+    else if (s.workspace_message) box.append(el('div', 'mf-hint', tr(s.workspace_message)));
     else if (s.status === 'done' && (s.kind === 'box' || s.kind === 'share') && (s.files || []).some(f => f.workspace_file_id)) {
       box.append(el('div', 'mf-hint', tr('已存進你的工作區：{0} 個檔案').replace('{0}', s.files.filter(f => f.workspace_file_id).length)));
     } else if (s.status === 'done' && (s.files || []).length <= 1 && s.workspace_file_id) {
@@ -1480,7 +1631,7 @@
       box.append(el('div', 'mf-hint', tr('已存進你的工作區：{0} 個檔案').replace('{0}', s.files.length)));
     }
     resultDetails(s, box);
-    box.append(scanActions(s));
+    if (!held) box.append(scanActions(s));
     box.hidden = false;
     if (s.kind === 'box') showTrace((s.error_detail || {}).trace, 'mfBox');
     if (s.kind === 'share') showTrace((s.error_detail || {}).trace, 'mfShare');
@@ -1495,6 +1646,7 @@
         scanTimer = setTimeout(tick, 1500);
       } else {
         scanTimer = null;
+        if (res.scan.workspace_note === 'HELD') addToTray(res.scan);
         loadScans();
         loadList();
       }

@@ -5,11 +5,18 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (954 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (955 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.26] - 2026-11-03
+
+- MFP Scan & Fetch: when scanning to PDF from this site, each scan is no longer saved as a separate file right away. Pages are held in "This scan session" below the scan panel, so you can put the next sheet on the glass and keep scanning (especially useful for one-page-at-a-time flatbed scans) while seeing thumbnails of every page. Click to enlarge, use the arrows to reorder, and delete unwanted pages; finally choose "Save as one PDF (N pages)" to merge them in the order shown into one multi-page PDF in your workspace. Saving as JPEG still saves each page directly.
+- Held pages are kept for 24 hours and come back if you reload the page or reopen the scan panel. "Clear all" deletes the held scan files too; up to 40 held scans per person and 300 pages per merge. Held scans are not pushed out by the "latest 50 records per person" limit.
+- Previews are visible only to their owner, and merging or clearing only accepts the caller's own held scans. Every merge and clear is written to the audit log.
+- API: the start-scan call takes a new `hold` parameter, plus four new endpoints for the held list, previews, merging and clearing (see the API manual). The guide page's scan steps and screenshots were updated.
 
 ## [1.17.25] - 2026-11-02
 

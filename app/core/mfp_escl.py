@@ -79,6 +79,7 @@ MESSAGES: dict[str, str] = {
     "SCAN_PROTOCOL_ERROR": "事務機的回應不符合 eSCL 的格式",
     "SCAN_CANCELLED": "已取消",
     "SCAN_MERGE_FAILED": "掃描檔合成 PDF 時失敗",
+    "HOLD_TOO_MANY": "暫存的掃描太多了（最多 40 次），請先存成 PDF 或清除",
 }
 
 #: 介面上的選項 → eSCL 的值。只收這幾個鍵。

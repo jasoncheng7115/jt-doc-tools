@@ -2435,6 +2435,7 @@ GET  /tools/mfp-fetch/api/scans/{scan_id}/download    # 沒存進工作區時下
 | `paper` | string | `a4`（預設）/ `letter` / `max` |
 | `format` | string | 存成 `pdf`（預設，多頁合成一份）或 `jpeg`（每頁一個檔，設備要能出 JPEG）；可選的值在 `scan.sources.<來源>.outputs` |
 | `file_name` | string | 檔名（選填，最多 100 字，自動補副檔名；路徑與特殊字元會去掉） |
+| `hold` | bool | `true`：掃完先暫存、不存進工作區（紀錄標 `HELD`），之後用下面的「先暫存、最後合併」存成一份 PDF。只在存成 PDF 時有效；預設 `false` |
 
 ```bash
 curl -X POST http://localhost:8765/tools/mfp-fetch/api/connections/3/scan \
@@ -2451,6 +2452,32 @@ curl -X POST http://localhost:8765/tools/mfp-fetch/api/connections/3/scan \
 隊伍滿了回 `429`。掃描中的錯誤寫在紀錄的 `error_code`：`SCAN_DEVICE_BUSY`（有人在機器上操作）、
 `SCAN_ADF_EMPTY`、`SCAN_AUTH_REQUIRED`（設備要求登入才能掃描，目前不支援）、`SCAN_NO_DOCUMENT`、
 `SCAN_BAD_DOCUMENT`、`SCAN_TOO_LARGE`、`SCAN_TIMEOUT` 等。**不送任何帳密**。
+
+#### 先暫存、最後合併成一份 PDF
+
+平台玻璃一次只能掃一頁：每次掃描帶 `"hold": true`，掃完先暫存（不進工作區），看過預覽、接著掃，
+最後照想要的頁序合併成一份多頁 PDF 存進工作區。暫存 24 小時；每人最多暫存 40 次（超過回 `400`
+`HOLD_TOO_MANY`），一次最多合併 300 頁。
+
+```text
+GET  /tools/mfp-fetch/api/scans/held?conn_id={id}            # 還沒合併的暫存掃描（conn_id 選填）
+GET  /tools/mfp-fetch/api/scans/{scan_id}/preview/{page}?w=240  # 第 page 頁（從 0 起算）的預覽 PNG；w 是 240 或 1200
+POST /tools/mfp-fetch/api/scans/merge                        # 合併成一份 PDF 存進工作區（回新的掃描紀錄）
+POST /tools/mfp-fetch/api/scans/discard                      # 清除暫存的掃描
+```
+
+合併的 body：`pages` 是 `[["掃描 id", 第幾頁], …]`，順序就是合併後的頁序，可以跳過不要的頁；
+`file_name` 選填；`release` 選填，列出也要一起清掉的暫存掃描（例如頁面全部不要的那幾次）。合併後用到的暫存掃描
+一併清掉（紀錄的 `workspace_note` 變成 `MERGED_SOURCE`）。來源不是呼叫者的、已過期或已清除回 `404`
+（`MERGE_SOURCE_GONE`）。工作區停用時，合併結果跟一般掃描一樣留在暫存區 24 小時給本人下載。
+
+```bash
+curl -X POST http://localhost:8765/tools/mfp-fetch/api/scans/merge \
+  -H "Authorization: Bearer YOUR_TOKEN" -H "Content-Type: application/json" \
+  -d '{"pages": [["9f2c…", 0], ["a71b…", 0], ["9f2c…", 1]], "file_name": "合約"}' | jq
+```
+
+清除的 body：`{"scans": ["掃描 id", …]}`，回 `{"discarded": 清掉幾次}`（不是呼叫者的不算）。
 
 ### 機內信箱取件（FUJIFILM，實驗性）
 

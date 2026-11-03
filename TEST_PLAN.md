@@ -659,7 +659,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **527 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **528 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -929,6 +929,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_mfp_queue.py` | 事務機排隊：同一台實體設備一次只做一件事（使用者 2026-10-14：「要避免同時多人存取事務機 |
 | `test_mfp_redact.py` | 事務機取件：診斷資訊的遮蔽規則（畫面、下載報告、服務紀錄檔共用這一份） |
 | `test_mfp_report.py` | 事務機診斷報告的多種格式（txt / md / json / html / pdf） |
+| `test_mfp_scan_hold_merge.py` | 從事務機掃描：先暫存、預覽，接著掃多次，最後合成一份多頁 PDF |
 | `test_mfp_scan_page_browser.py` | 從事務機掃描、共用事務機的管理頁 —— 在真的瀏覽器裡跑一次（對本機一台假的 eSCL 設備） |
 | `test_mfp_settings.py` | 管理員設定：允許使用者自行新增事務機（使用者 2026-10-14：「管理員可以設定是否允許使用者自行新增事務機，預設允許」） |
 | `test_mfp_share.py` | 檔案分享取件（實驗功能）：Canon Advanced Box（WebDAV / SMB）、Konica 公用信箱（SMB）、SHARP NAS（SMB） |
@@ -2631,6 +2632,11 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
       `/tools/mfp-fetch/api/scans/{scan_id}/cancel`、`/tools/mfp-fetch/api/scans/{scan_id}/download`：**別人的掃描 id 一律 404**；
       結果存進呼叫者自己的工作區（`workspace_file_id`），工作區停用時才能下載。
       自動化：`tests/test_mfp_shared_and_scan.py`、`tests/test_mfp_escl.py`、`tests/test_mfp_queue.py`
+- [ ] 先暫存、最後合併（v1.17.26）：掃描 body 帶 `hold: true`（只在存成 PDF）→ `workspace_note` `HELD`、不進工作區；
+      `/tools/mfp-fetch/api/scans/held`（`conn_id` 選填）列出還沒合併的；`/tools/mfp-fetch/api/scans/{scan_id}/preview/{page}`（`w` 240 / 1200，PNG、no-store）；
+      `/tools/mfp-fetch/api/scans/merge`（`pages` 照順序、可跳頁；成功回新紀錄、來源標 `MERGED_SOURCE`；別人的 / 過期 404 `MERGE_SOURCE_GONE`；空 400、超過 300 頁 400）；
+      `/tools/mfp-fetch/api/scans/discard`（別人的不算）。暫存超過 40 次 400 `HOLD_TOO_MANY`；暫存中的不被 50 筆上限擠掉。
+      自動化：`tests/test_mfp_scan_hold_merge.py`
 - [ ] `/tools/mfp-fetch/api/shared`（GET 清單、POST `{token}` 建立）、`/tools/mfp-fetch/api/shared/{conn_id}`（PATCH / DELETE）、
       `/tools/mfp-fetch/api/shared/{conn_id}/test`、`/tools/mfp-fetch/api/shared/{conn_id}/members`（GET / PUT）、
       `/tools/mfp-fetch/api/shared-subjects`（Beta，v1.16.87）：**非管理員一律 403**（`ADMIN_ONLY`）；成員只收存在的使用者與群組（400 `MEMBERS_INVALID`）。
@@ -6270,6 +6276,19 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > **最高原則：加 i18n 不可以改壞現有功能。** 所以每一個階段的第一條驗收都是
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
+
+### 6.136 v1.17.26 — 從本站掃描：先暫存預覽、接著掃、最後存成一份 PDF（**每次發版必過**）
+
+- [ ] 支援 eSCL 的事務機、存成 PDF：按「開始掃描」後頁面出現在「這次掃描」（縮圖真的載得出來），上方狀態寫「已加入下方的這次掃描、還沒存進工作區」，沒有下載鈕；工作區裡沒有新檔。
+- [ ] 平台玻璃換一張再按「開始掃描」：新的頁面接在後面；標題頁數正確。
+- [ ] 點縮圖放大、按 Esc 或點外面關閉；箭頭調整順序；刪除一頁；某一次掃描的頁面全刪光時，重新整理後不會跑回來。
+- [ ] 「存成一份 PDF（共 N 頁）」：工作區多一份 PDF，頁序跟畫面一樣；「這次掃描」清空；可以開啟、下載、前往工作區；「最近的掃描與取件」列出合併的檔案，原本暫存的那幾次標「已合併到另一份 PDF」。
+- [ ] 重新整理頁面、重開掃描面板：還沒存的頁面接回來（24 小時內）。
+- [ ] 「全部清除」要先確認，清除後重新整理不會跑回來。
+- [ ] 存成 JPEG：照舊每頁直接存進工作區，不出現「這次掃描」。
+- [ ] 啟用認證時，別人拿暫存掃描的 id 看預覽、合併、清除都不行（404 / 0）。
+- [ ] 介紹站使用說明（中英日）的掃描步驟與 04-scan-tray / 04-scan-done 截圖是新流程。
+- 自動化：`tests/test_mfp_scan_hold_merge.py`、`tests/test_mfp_scan_page_browser.py::test_scan_from_the_tool_page`
 
 ### 6.135 v1.17.25 — DEVELOP / ineo 歸 Konica Minolta、工作區不收的格式另外說明、使用說明更正（**每次發版必過**）
 

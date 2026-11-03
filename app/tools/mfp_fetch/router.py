@@ -569,6 +569,8 @@ async def api_scan(request: Request, conn_id: int):
         return _err("USER_DEVICES_DISABLED", 403)
     body = await _json(request)
     opts = {k: body.get(k) for k in ("source", "color", "resolution", "paper", "file_name", "format")}
+    # 先暫存、最後合併（使用者 2026-11-03）：掃完不存進工作區，畫面預覽、接著掃，最後 `/api/scans/merge`
+    opts["hold"] = body.get("hold") is True
     try:
         caps, scheme, port = _scan_target(c)
         device = await asyncio.to_thread(mfp_client.device_key, c["host"])
@@ -610,6 +612,72 @@ async def api_scans(request: Request):
                 d["conn_name"] = cur.get("display_name") or cur.get("host") or d.get("conn_name")
         out.append(d)
     return {"ok": True, "scans": out}
+
+
+@router.get("/api/scans/held")
+async def api_scans_held(request: Request, conn_id: Optional[int] = None):
+    """暫存著還沒合併的掃描（畫面重新整理後接回來）。`conn_id` 只列這一台的。"""
+    try:
+        who = _Who(request)
+    except _OwnerError as e:
+        return _err(e.code, e.status)
+    mfp_scan.prune()
+    return {"ok": True, "scans": await asyncio.to_thread(mfp_scan.list_held, who.owner, conn_id)}
+
+
+@router.get("/api/scans/{scan_id}/preview/{page}")
+async def api_scan_preview(request: Request, scan_id: str, page: int, w: int = 240):
+    """暫存掃描第 `page` 頁（從 0 起算）的預覽圖（PNG）。`w`：240（縮圖）或 1200（放大看）。只有本人看得到。"""
+    try:
+        who = _Who(request)
+    except _OwnerError as e:
+        return _err(e.code, e.status)
+    if not re.fullmatch(r"[0-9a-f]{32}", scan_id or ""):
+        return _err("SCAN_NOT_FOUND", 404)
+    got = await asyncio.to_thread(mfp_scan.preview, who.owner, scan_id, page, w)
+    if not got:
+        return _err("SCAN_NO_FILE", 404)
+    return FileResponse(got, media_type="image/png", headers={"Cache-Control": "private, no-store"})
+
+
+@router.post("/api/scans/merge")
+async def api_scans_merge(request: Request):
+    """暫存的掃描照畫面上的順序合成一份多頁 PDF，存進工作區。
+
+    Body：`{"pages": [["作業 id", 第幾頁], …], "file_name": "…", "release": ["作業 id", …]}`
+    （`release`：合併後一起清掉的暫存掃描，例如整次都刪掉頁面的那幾次）。回傳新的作業紀錄。"""
+    try:
+        who = _Who(request)
+    except _OwnerError as e:
+        return _err(e.code, e.status)
+    body = await _json(request)
+    release = [str(x) for x in (body.get("release") or []) if isinstance(x, str)][:mfp_scan.MAX_HELD]
+    try:
+        rec = await asyncio.to_thread(
+            mfp_scan.merge, owner=who.owner, user_id=who.uid, user_label=_user_label(request),
+            pages=body.get("pages"), file_name=str(body.get("file_name") or ""), release=release)
+    except mfp_scan.MergeError as e:
+        return JSONResponse({"ok": False, "code": e.code, "message": e.message},
+                            status_code=404 if e.code == "MERGE_SOURCE_GONE" else 400)
+    _audit(request, "mfp_scan_merge", rec.get("conn_name") or "",
+           {"scan": rec.get("id"), "pages": rec.get("pages"),
+            "sources": len({str(x[0]) for x in body.get("pages") or [] if isinstance(x, list) and x})})
+    return {"ok": True, "scan": mfp_scan.public(rec)}
+
+
+@router.post("/api/scans/discard")
+async def api_scans_discard(request: Request):
+    """清除暫存著還沒合併的掃描：`{"scans": ["作業 id", …]}`。"""
+    try:
+        who = _Who(request)
+    except _OwnerError as e:
+        return _err(e.code, e.status)
+    body = await _json(request)
+    ids = [str(x) for x in (body.get("scans") or []) if isinstance(x, str)][:mfp_scan.MAX_HELD]
+    n = await asyncio.to_thread(mfp_scan.discard, who.owner, ids)
+    if n:
+        _audit(request, "mfp_scan_discard", "", {"scans": n})
+    return {"ok": True, "discarded": n}
 
 
 @router.get("/api/scans/{scan_id}")

@@ -30,7 +30,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 from tests.test_mfp_box import FakeBox, tiff_bytes  # noqa: E402
-from tests.test_mfp_escl import Fake as FakeEscl, pdf_bytes  # noqa: E402
+from tests.test_mfp_escl import Fake as FakeEscl  # noqa: E402
 from tests.test_mfp_fetch_page_browser import _Tab, _browser, _free_port, _open, _profile_arg  # noqa: E402
 from tests.test_mfp_soap import FakeRicoh, _CUSTOMER_CLASSES  # noqa: E402
 from tools.repo_paths import public_root  # noqa: E402
@@ -156,6 +156,24 @@ def _shoot(t: _Tab, path: Path, rewrite: str, focus: str | None = None, block: s
     print("  ", path.relative_to(public_root(REPO)))
 
 
+def _doc_pdf(title: str, pages: int) -> bytes:
+    """看得出是文件的掃描頁（標題、表格線、印章框）：預覽縮圖才不會是一片空白。內容全部虛構。"""
+    import fitz
+    doc = fitz.open()
+    for n in range(1, pages + 1):
+        pg = doc.new_page(width=595, height=842)
+        pg.insert_text((60, 90), f"{title}  {n}/{pages}", fontsize=22)
+        pg.draw_line((60, 105), (535, 105), color=(0.2, 0.3, 0.6), width=1.5)
+        for i in range(14):
+            y = 140 + i * 34
+            pg.draw_rect(fitz.Rect(60, y, 535, y + 26), color=(0.75, 0.78, 0.85), width=0.6)
+            pg.draw_line((60 + 120 * (i % 3 + 1), y + 13), (60 + 120 * (i % 3 + 1) + 160, y + 13), color=(0.45, 0.45, 0.5), width=2)
+        pg.draw_circle((470, 740), 38, color=(0.8, 0.15, 0.15), width=2.5)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
 def _select(t: _Tab, sid: str, value_js: str) -> None:
     t.js(f"""(() => {{ const s = document.getElementById({sid!r}); s.value = {value_js};
                      s.dispatchEvent(new Event('change')); return true; }})()""")
@@ -199,12 +217,20 @@ def capture(locale: str, port: int, cdp: int, ids: dict, rewrite: str, escl: Fak
         assert t.wait_for("!document.getElementById('mfScanPanel').hidden")
         _shoot(t, out / "03-scan.png", rewrite, "#mfScanPanel")
 
-        # 4. 掃描完成
-        escl.docs = [pdf_bytes(2)]
+        # 4. 先暫存、接著掃（平台玻璃一次一張），最後存成一份 PDF（2026-11-03）
+        escl.docs = [_doc_pdf("Receipt-0421", 2)]
         t.js("document.getElementById('mfScanName').value = 'Receipts-0421'; document.getElementById('mfScanStart').click()")
-        assert t.wait_for("document.getElementById('mfScanState').classList.contains('done')", 90), \
+        assert t.wait_for("document.querySelectorAll('#mfTrayGrid .mf-tray-page').length === 2", 90), \
             t.js("document.getElementById('mfScanState').innerText")
-        _shoot(t, out / "04-scan-done.png", rewrite, "#mfScanPanel")
+        escl.docs = [_doc_pdf("Contract-0421", 1)]
+        t.js("document.getElementById('mfScanStart').click()")
+        assert t.wait_for("document.querySelectorAll('#mfTrayGrid .mf-tray-page').length === 3", 90)
+        assert t.wait_for("[...document.querySelectorAll('#mfTrayGrid img')].every(i => i.complete && i.naturalWidth > 0)", 30)
+        _shoot(t, out / "04-scan-tray.png", rewrite, "#mfTray")
+        t.js("document.getElementById('mfTraySave').click()")
+        assert t.wait_for("document.getElementById('mfTrayState').classList.contains('done')", 90), \
+            t.js("document.getElementById('mfTrayState').innerText")
+        _shoot(t, out / "04-scan-done.png", rewrite, "#mfTrayState")
 
         # 5. FUJIFILM 信箱取件：列出文件、勾一份
         open_tool()

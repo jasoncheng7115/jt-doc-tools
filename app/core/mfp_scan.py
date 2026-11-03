@@ -8,6 +8,9 @@
   工作區停用或額度不夠時，檔案留在暫存區 `RESULT_TTL` 秒給本人下載（多個檔案打包成 ZIP）。
 * 產出格式（使用者 2026-10-14）：掃描可以存 PDF 或 JPEG（每頁一個檔）；信箱取件預設存 PDF，也可以存設備給的
   原始格式（TIFF / JPEG，不轉檔）。轉 PDF 失敗（例如 TIFF 用了不支援的壓縮）就改存原始檔並註明。
+* **先暫存、最後合併**（使用者 2026-11-03）：掃描存成 PDF 時可以帶 `hold`，掃完不存進工作區，
+  留在暫存區給畫面預覽；接著掃多次之後，`merge()` 照畫面上的頁序合成一份多頁 PDF，走跟一般掃描一樣的
+  存檔流程（存進工作區；存不進去就留在暫存區給本人下載），暫存的那幾次一起清掉。平台玻璃一次一頁時特別需要。
 * **信箱的帳密只在這條執行緒的記憶體裡**，作業結束就丟掉；不寫進紀錄、資料庫、協定紀錄。
 * 服務重啟時還在排隊或執行中的，第一次用到這個模組時標成「中斷」（隊伍只存在記憶體裡）。
 """
@@ -32,6 +35,11 @@ MAX_QUEUE_WAIT = 30 * 60
 RESULT_TTL = 24 * 3600
 #: 信箱取件的存檔格式：PDF（預設）或設備給的原始格式。
 BOX_OUTPUTS = ("pdf", "original")
+#: 先暫存的掃描：每人最多暫存幾次（含排隊中），合併一次最多幾頁。
+MAX_HELD = 40
+MAX_MERGE_PAGES = 300
+#: 預覽圖的寬度（像素）：縮圖、放大看。
+PREVIEW_WIDTHS = (240, 1200)
 
 MESSAGES: dict[str, str] = {
     "SCAN_QUEUE_TIMEOUT": "排隊太久，已放棄這次作業",
@@ -41,6 +49,15 @@ MESSAGES: dict[str, str] = {
     "SCAN_NO_FILE": "這次作業沒有可以下載的檔案（已存進工作區，或已超過保留時間）",
     "WS_DISABLED": "工作區功能未啟用，檔案留在暫存區 24 小時，請下載",
     "WS_FAILED": "有檔案存不進工作區（可能超過大小上限或額度），留在暫存區 24 小時，請下載",
+    "HELD": "已暫存、還沒存進工作區：可以接著掃，最後按「存成一份 PDF」（暫存 24 小時）",
+    "MERGED": "已合併成一份 PDF 存進你的工作區",
+    "MERGED_SOURCE": "已合併到另一份 PDF，暫存檔已清掉",
+    "DISCARDED": "已清除暫存的掃描檔",
+    "HOLD_TOO_MANY": "暫存的掃描太多了（最多 40 次），請先存成 PDF 或清除",
+    "MERGE_EMPTY": "沒有要合併的頁面",
+    "MERGE_TOO_MANY": "一次最多合併 300 頁",
+    "MERGE_SOURCE_GONE": "有暫存的掃描檔已過期或已清除，請重新整理後再試",
+    "MERGE_FAILED": "合併成 PDF 時失敗",
     # 工作區不收的格式（例如檔案分享裡的 DocuWorks .xdw）：原本混在 WS_FAILED 裡，畫面說「可能超過大小上限」，
     # 讓人以為是檔案太大（2026-11-02 文章查證時發現）
     "WS_UNSUPPORTED": "有檔案的格式工作區不收（例如 DocuWorks 的 .xdw），沒有轉成 PDF，原樣留在暫存區 24 小時，請下載",
@@ -160,6 +177,12 @@ def start(*, owner: str, user_id: Optional[int], user_label: str, conn: dict, ca
     —— 兩種都在排隊之前就檢查完，不會留下半套紀錄。"""
     _init_once()
     _xml, eff = mfp_escl.build_settings(caps, opts)          # 先驗設定（不合法就不排隊）
+    # 先暫存只用在存成 PDF（JPEG 照舊每頁一個檔直接存）
+    hold = opts.get("hold") is True and eff.get("output") != "jpeg"
+    if hold:
+        if mfp_store.count_held_or_pending(owner) >= MAX_HELD:
+            raise mfp_escl.ScanError("HOLD_TOO_MANY")
+        eff = dict(eff, hold=True)
     # 走什麼協定也記下來給畫面顯示（使用者 2026-10-14：「掃描是走什麼協定 也要顯示」）
     via = {"protocol": "eSCL", "scheme": scheme, "port": int(port)}
     eff = dict(eff, via=via)
@@ -182,7 +205,7 @@ def start(*, owner: str, user_id: Optional[int], user_label: str, conn: dict, ca
     th = threading.Thread(target=_run_scan, name=f"mfp-scan-{job_id[:8]}", daemon=True, kwargs=dict(
         job_id=job_id, ticket=ticket, cancel=cancel, user_id=user_id, user_label=user_label,
         host=conn["host"], ip=ip, scheme=scheme, port=port, caps=caps, opts=dict(opts, **eff),
-        stem=stem, via=via))
+        stem=stem, via=via, hold=hold))
     th.start()
     return rec
 
@@ -256,7 +279,8 @@ def _finish_thread(job_id: str, ticket, workdir: Path) -> None:
 
 
 def _run_scan(*, job_id: str, ticket, cancel: threading.Event, user_id: Optional[int], user_label: str,
-              host: str, ip: str, scheme: str, port: int, caps: dict, opts: dict, stem: str, via: dict) -> None:
+              host: str, ip: str, scheme: str, port: int, caps: dict, opts: dict, stem: str, via: dict,
+              hold: bool = False) -> None:
     workdir = _work_root() / job_id
     try:
         if not _wait(job_id, ticket, cancel):
@@ -274,7 +298,14 @@ def _run_scan(*, job_id: str, ticket, cancel: threading.Event, user_id: Optional
         files = [{"path": o["path"], "kind": o["kind"], "pages": o["pages"],
                   "name": stem + (f"-p{i:02d}" if multi else "") + mfp_output.EXT[o["kind"]]}
                  for i, o in enumerate(outs, 1)]
-        saved, note = _save_files(files, user_id, user_label, job_id, {})
+        if hold:
+            # 先暫存：不進工作區，檔案留在這件作業的目錄給預覽與之後的合併
+            saved = [{"name": f["name"], "kind": f["kind"], "pages": f["pages"],
+                      "bytes": Path(f["path"]).stat().st_size, "kept": True,
+                      "stored": str(Path(f["path"]).relative_to(workdir))} for f in files]
+            note = mfp_store.HELD_NOTE
+        else:
+            saved, note = _save_files(files, user_id, user_label, job_id, {})
         items = [{"files": saved}]
         first = next((f for f in saved if f.get("workspace_file_id")), None)
         kept = next((f for f in saved if f.get("kept")), None)
@@ -735,6 +766,175 @@ def _save_files(files: list[dict], user_id: Optional[int], user_label: str, job_
     for r in out:
         r.pop("path", None)
     return out, note
+
+
+# --------------------------------------------------------------------------- 先暫存、最後合併
+
+def _held_pages(owner: str, job_id: str) -> Optional[list[tuple[Path, str, int]]]:
+    """暫存掃描的每一頁：`[(檔案, kind, 檔案裡的第幾頁)]`；不是本人的暫存掃描或已過期回 None。"""
+    rec = mfp_store.get_scan(owner, job_id)
+    if (not rec or (rec.get("kind") or "scan") != "scan" or rec.get("status") != "done"
+            or rec.get("workspace_note") != mfp_store.HELD_NOTE):
+        return None
+    files = result_files(owner, job_id)
+    if not files:
+        return None
+    out: list[tuple[Path, str, int]] = []
+    for path, _name in files:
+        kind = mfp_output.sniff(path)
+        if kind == "pdf":
+            n = mfp_output.inspect(path, "pdf")["pages"]
+            out += [(path, "pdf", i) for i in range(n)]
+        elif kind == "jpeg":
+            out.append((path, "jpeg", 0))
+    return out or None
+
+
+def list_held(owner: str, conn_id: Optional[int] = None) -> list[dict]:
+    """畫面重新整理後把暫存的掃描接回來：還在保留期、檔案還在的。"""
+    out = []
+    for r in mfp_store.list_held(owner, conn_id):
+        if result_files(owner, r["id"]):
+            out.append(public(r))
+    return out
+
+
+def preview(owner: str, job_id: str, page: int, width: int) -> Optional[Path]:
+    """暫存掃描第 `page` 頁（從 0 起算）的預覽 PNG（快取在作業目錄裡）。不是本人的、沒有這頁回 None。"""
+    if width not in PREVIEW_WIDTHS:
+        return None
+    pages = _held_pages(owner, job_id)
+    if not pages or not (0 <= page < len(pages)):
+        return None
+    path, kind, idx = pages[page]
+    out = path.parent / f"preview-{page:04d}-{width}.png"
+    if out.is_file():
+        return out
+    tmp = out.with_suffix(".part")
+    if kind == "pdf":
+        import fitz
+        with fitz.open(str(path), filetype="pdf") as d:
+            pg = d[idx]
+            zoom = width / max(1.0, pg.rect.width)
+            pg.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False).save(str(tmp), output="png")
+    else:
+        from PIL import Image
+        with Image.open(path) as im:
+            im.draft("RGB", (width, width * 2))
+            im = im.convert("RGB")
+            im.thumbnail((width, width * 4))
+            im.save(tmp, "PNG")
+    tmp.replace(out)
+    return out
+
+
+def _release(owner: str, job_ids: list[str], note: str) -> int:
+    """暫存的掃描清掉檔案、紀錄標成合併或清除（之後不會再出現在暫存區，也沒有檔案可下載）。"""
+    n = 0
+    for jid in dict.fromkeys(job_ids):
+        rec = mfp_store.get_scan(owner, jid)
+        if not rec or rec.get("workspace_note") != mfp_store.HELD_NOTE:
+            continue
+        shutil.rmtree(_work_root() / jid, ignore_errors=True)
+        items = [dict(i, files=[{k: v for k, v in f.items() if k not in ("kept", "stored")}
+                                for f in i.get("files") or []]) for i in rec.get("items") or []]
+        mfp_store.update_scan(jid, workspace_note=note, result_path=None, items=items)
+        n += 1
+    return n
+
+
+def discard(owner: str, job_ids: list[str]) -> int:
+    """清除暫存的掃描（畫面的「全部清除」）。回傳清了幾次。"""
+    return _release(owner, [str(j) for j in job_ids if re.fullmatch(r"[0-9a-f]{32}", str(j))], "DISCARDED")
+
+
+class MergeError(Exception):
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
+        self.message = MESSAGES.get(code, code)
+
+
+def merge(*, owner: str, user_id: Optional[int], user_label: str, pages: list, file_name: str,
+          release: list[str]) -> dict:
+    """暫存的掃描照 `pages`（`[[作業 id, 第幾頁], …]`，畫面上的順序）合成一份 PDF，存進工作區
+    （存不進去就留在暫存區給本人下載）。成功後 `release` 裡的暫存掃描一起清掉。回傳新的作業紀錄。"""
+    _init_once()
+    if not isinstance(pages, list) or not pages:
+        raise MergeError("MERGE_EMPTY")
+    if len(pages) > MAX_MERGE_PAGES:
+        raise MergeError("MERGE_TOO_MANY")
+    cache: dict[str, list[tuple[Path, str, int]]] = {}
+    picks: list[tuple[Path, str, int, int]] = []
+    for item in pages:
+        if not (isinstance(item, (list, tuple)) and len(item) == 2):
+            raise MergeError("MERGE_EMPTY")
+        jid, n = str(item[0]), item[1]
+        if not re.fullmatch(r"[0-9a-f]{32}", jid) or not isinstance(n, int) or isinstance(n, bool):
+            raise MergeError("MERGE_SOURCE_GONE")
+        if jid not in cache:
+            got = _held_pages(owner, jid)
+            if not got:
+                raise MergeError("MERGE_SOURCE_GONE")
+            cache[jid] = got
+        if not 0 <= n < len(cache[jid]):
+            raise MergeError("MERGE_SOURCE_GONE")
+        path, kind, idx = cache[jid][n]
+        res = int(((mfp_store.get_scan(owner, jid) or {}).get("settings") or {}).get("resolution") or 0)
+        picks.append((path, kind, idx, res))
+    first = mfp_store.get_scan(owner, str(pages[0][0])) or {}
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    stem = clean_stem(file_name or "", f"scan-{stamp}")
+    job_id = secrets.token_hex(16)
+    sources = list(dict.fromkeys(str(x[0]) for x in pages))
+    settings = dict(first.get("settings") or {}, hold=False, merged_from=len(sources))
+    mfp_store.create_scan(job_id, conn_id=int(first.get("conn_id") or 0), owner=owner, owner_user_id=user_id,
+                          device=first.get("device") or "", conn_name=first.get("conn_name") or "",
+                          settings=settings, file_name=stem + ".pdf", kind="scan")
+    workdir = _work_root() / job_id
+    workdir.mkdir(parents=True, exist_ok=True)
+    out = workdir / "merged.pdf"
+    try:
+        import fitz
+        doc = fitz.open()
+        opened: dict[Path, Any] = {}
+        try:
+            for path, kind, idx, res in picks:
+                if kind == "pdf":
+                    if path not in opened:
+                        opened[path] = fitz.open(str(path), filetype="pdf")
+                    doc.insert_pdf(opened[path], from_page=idx, to_page=idx)
+                else:
+                    one = workdir / f"jpeg-{len(doc):04d}.pdf"
+                    mfp_output.to_pdf([(path, "jpeg")], one, res)
+                    with fitz.open(str(one), filetype="pdf") as src:
+                        doc.insert_pdf(src)
+                    one.unlink(missing_ok=True)
+            doc.save(str(out), garbage=3, deflate=True)
+            n_pages = doc.page_count
+        finally:
+            for d in opened.values():
+                d.close()
+            doc.close()
+    except Exception as e:  # noqa: BLE001 —— PyMuPDF / Pillow 的各種例外
+        logger.info("mfp 合併 %s 失敗：%s", job_id[:8], e.__class__.__name__)
+        shutil.rmtree(workdir, ignore_errors=True)
+        mfp_store.finish_scan(job_id, status="error", error_code="MERGE_FAILED",
+                              error_detail={"error": e.__class__.__name__})
+        raise MergeError("MERGE_FAILED") from None
+    size = out.stat().st_size
+    files = [{"path": out, "kind": "pdf", "pages": n_pages, "name": stem + ".pdf"}]
+    saved, note = _save_files(files, user_id, user_label, job_id, {"merged_from": len(sources)})
+    kept = next((f for f in saved if f.get("kept")), None)
+    first_ws = next((f for f in saved if f.get("workspace_file_id")), None)
+    mfp_store.finish_scan(job_id, status="done", pages=n_pages, bytes=size,
+                          workspace_file_id=first_ws["workspace_file_id"] if first_ws else None,
+                          workspace_note=note or "MERGED", items=[{"files": saved}],
+                          result_path=str(workdir / kept["stored"]) if kept else None)
+    if not kept:
+        shutil.rmtree(workdir, ignore_errors=True)
+    _release(owner, list(release or []) + sources, "MERGED_SOURCE")
+    return mfp_store.get_scan(owner, job_id) or {}
 
 
 def public(rec: dict) -> dict:

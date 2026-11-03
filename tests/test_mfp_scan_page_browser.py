@@ -142,19 +142,47 @@ def test_scan_from_the_tool_page(live, locale):
         assert t.js("document.getElementById('mfScanRes').value") == "300"
         assert t.js("!!document.querySelector('#mfScanPanel .jt-select-trigger')"), "掃描選項要是本站樣式的下拉"
         t.shot(f"mfp_scan_{locale}_panel_1280", 1280)
+        # 存成 PDF：先暫存、預覽，接著掃，最後存成一份（使用者 2026-11-03）
         fake.docs = [pdf_bytes(2)]
         t.js("document.getElementById('mfScanName').value = 'scan-20261014-144007'; document.getElementById('mfScanStart').click()")
-        assert t.wait_for("document.getElementById('mfScanState').classList.contains('done')", 60), \
+        assert t.wait_for("document.querySelectorAll('#mfTrayGrid .mf-tray-page').length === 2", 60), \
             t.js("document.getElementById('mfScanState').innerText")
         state = t.js("document.getElementById('mfScanState').innerText")
-        assert "2" in state, state
-        assert t.js("!!document.querySelector('#mfScanState a[href^=\"/workspace/file/\"]')"), "完成後要能打開工作區的檔案"
-        # 也要能直接下載（使用者 2026-10-14：「掃描完成 應該還要有下載按鈕」）
-        assert t.js("!!document.querySelector('#mfScanState a[href$=\"?dl=1\"]')"), "完成後要有下載"
         # 走什麼協定要顯示（使用者 2026-10-14）
         assert "eSCL" in state and ("HTTP " + str(fake.port)) in state, state
-        # 沒填檔名：用瀏覽器這邊的時間（伺服器可能是 UTC）—— 這次有填，檔名就是它
-        assert "scan-20261014-144007.pdf" in t.js("document.getElementById('mfScansWrap').innerText")
+        assert t.js("!document.querySelector('#mfScanState a[href^=\"/workspace/file/\"]')"), "先暫存：還不可以已經在工作區"
+        assert t.wait_for("[...document.querySelectorAll('#mfTrayGrid img')].every(i => i.complete && i.naturalWidth > 0)", 20), \
+            "預覽圖要真的載得出來"
+        # 平台玻璃換一張，接著掃
+        fake.docs = [pdf_bytes(1)]
+        t.js("document.getElementById('mfScanStart').click()")
+        assert t.wait_for("document.querySelectorAll('#mfTrayGrid .mf-tray-page').length === 3", 60), "第二次掃描沒有接在後面"
+        title = t.js("document.getElementById('mfTrayTitle').innerText")
+        assert "3" in title, title
+        t.shot(f"mfp_scan_{locale}_tray_1280", 1280)
+        # 調整順序、刪一頁、放大看
+        first = t.js("document.querySelector('#mfTrayGrid img').getAttribute('src')")
+        t.js("document.querySelectorAll('#mfTrayGrid .mf-tray-page')[0].querySelectorAll('button')[1].click()")
+        assert t.wait_for(f"document.querySelectorAll('#mfTrayGrid img')[1].getAttribute('src') === {first!r}"), "往後移沒有作用"
+        t.js("[...document.querySelectorAll('#mfTrayGrid .mf-tray-page')].pop().querySelectorAll('button')[2].click()")
+        assert t.wait_for("document.querySelectorAll('#mfTrayGrid .mf-tray-page').length === 2")
+        t.js("document.querySelector('#mfTrayGrid img').click()")
+        assert t.wait_for("!document.getElementById('mfTrayZoom').hidden && document.getElementById('mfTrayZoomImg').naturalWidth > 600", 20), \
+            "放大預覽沒有出現"
+        t.js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))")
+        assert t.wait_for("document.getElementById('mfTrayZoom').hidden")
+        # 存成一份 PDF
+        t.js("document.getElementById('mfTraySave').click()")
+        assert t.wait_for("document.getElementById('mfTrayState').classList.contains('done')", 60), \
+            t.js("document.getElementById('mfTrayState').innerText")
+        assert t.js("document.getElementById('mfTray').hidden"), "存好之後暫存區要清空"
+        merged = t.js("document.getElementById('mfTrayState').innerText")
+        assert "2" in merged, merged
+        assert t.js("!!document.querySelector('#mfTrayState a[href^=\"/workspace/file/\"]')"), "完成後要能打開工作區的檔案"
+        # 也要能直接下載（使用者 2026-10-14：「掃描完成 應該還要有下載按鈕」）
+        assert t.js("!!document.querySelector('#mfTrayState a[href$=\"?dl=1\"]')"), "完成後要有下載"
+        assert t.wait_for("document.getElementById('mfScansWrap').innerText.includes('scan-20261014-144007.pdf')"), \
+            "最近的掃描沒有列出合併的檔案"
         assert t.wait_for("document.querySelectorAll('#mfScansWrap tbody tr').length >= 1"), "最近的掃描沒有列出來"
         # 「最近的掃描與取件」的按鈕排成一排、不超出外框（使用者 2026-10-15：欄位還有很大空位，按鈕卻被擠成三行）
         for width in (1280, 1180, 900):
@@ -164,6 +192,7 @@ def test_scan_from_the_tool_page(live, locale):
             rows = t.js("[...document.querySelectorAll('#mfScansWrap tbody tr')].map(tr => { const bs = "
                         "[...tr.querySelectorAll('td:last-child .btn')]; return [bs.length, "
                         "new Set(bs.map(b => Math.round(b.getBoundingClientRect().top))).size]; })")
+            rows = [r for r in rows if r[0]]      # 合併掉的暫存掃描沒有按鈕（檔案已經清掉）
             assert rows and all(n >= 2 and (lines == 1 or width < 1100) for n, lines in rows), \
                 f"{width} 寬：按鈕折行了 {rows}"
             assert t.js("(() => { const w = document.getElementById('mfScansWrap');"

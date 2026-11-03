@@ -447,6 +447,10 @@ def set_members(conn_id: int, members: list[tuple[str, str]]) -> list[dict]:
 
 #: 每個擁有者保留最近幾筆掃描紀錄。
 MAX_SCANS_PER_OWNER = 50
+#: 「先暫存、最後合併」的掃描（`workspace_note='HELD'`）：保留期內不算進上面的筆數、不會被擠掉
+#: —— 不然暫存了十幾次再掃，最早那幾頁的紀錄與檔案就被刪了（合併時才發現少頁）。
+HELD_NOTE = "HELD"
+HELD_TTL = 24 * 3600
 
 
 def _scan_row(r: sqlite3.Row) -> dict[str, Any]:
@@ -475,8 +479,9 @@ def create_scan(scan_id: str, *, conn_id: int, owner: str, owner_user_id: Option
                   (scan_id, int(conn_id), owner, owner_user_id, device, (conn_name or "")[:64], "queued",
                    json.dumps(settings, ensure_ascii=False), file_name, time.time(), kind))
         old = c.execute("SELECT id, result_path FROM mfp_scans WHERE owner_scope=? AND status NOT IN"
-                        " ('queued','running') ORDER BY created_at DESC LIMIT -1 OFFSET ?",
-                        (owner, MAX_SCANS_PER_OWNER)).fetchall()
+                        " ('queued','running') AND NOT (COALESCE(workspace_note,'')=? AND finished_at>?)"
+                        " ORDER BY created_at DESC LIMIT -1 OFFSET ?",
+                        (owner, HELD_NOTE, time.time() - HELD_TTL, MAX_SCANS_PER_OWNER)).fetchall()
         if old:
             c.executemany("DELETE FROM mfp_scans WHERE id=?", [(r["id"],) for r in old])
     _remove_result_files([r["result_path"] for r in old])
@@ -522,6 +527,26 @@ def get_scan(owner: str, scan_id: str) -> Optional[dict]:
 def get_scan_any(scan_id: str) -> Optional[dict]:
     r = _conn().execute("SELECT * FROM mfp_scans WHERE id=?", (str(scan_id),)).fetchone()
     return _scan_row(r) if r else None
+
+
+def list_held(owner: str, conn_id: Optional[int] = None) -> list[dict]:
+    """還在保留期內、暫存著還沒合併的掃描（舊的在前）。"""
+    sql = ("SELECT * FROM mfp_scans WHERE owner_scope=? AND kind='scan' AND status='done'"
+           " AND workspace_note=? AND finished_at>?")
+    args: list = [_check_owner(owner), HELD_NOTE, time.time() - HELD_TTL]
+    if conn_id is not None:
+        sql += " AND conn_id=?"
+        args.append(int(conn_id))
+    return [_scan_row(r) for r in _conn().execute(sql + " ORDER BY created_at", args).fetchall()]
+
+
+def count_held_or_pending(owner: str) -> int:
+    """暫存中＋還在排隊 / 掃描中的暫存掃描（上限檢查用）。"""
+    r = _conn().execute("SELECT COUNT(*) AS n FROM mfp_scans WHERE owner_scope=? AND kind='scan' AND"
+                        " ((status='done' AND workspace_note=? AND finished_at>?) OR"
+                        "  (status IN ('queued','running') AND settings LIKE '%\"hold\": true%'))",
+                        (_check_owner(owner), HELD_NOTE, time.time() - HELD_TTL)).fetchone()
+    return int(r["n"])
 
 
 def list_scans(owner: str, limit: int = 20) -> list[dict]:
