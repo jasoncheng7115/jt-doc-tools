@@ -246,6 +246,12 @@
   const RULE = { any: tr('任一人核准'), all: tr('全員核准'), n: tr('至少 {0} 人核准') };
   let home = null, box = 'mine', cur = null, page = 1, flowAssets = [], plc = [];
 
+  // 接進網址的編號一律先驗證再編碼（案件、附件、章的編號只有英數字、底線與連字號）
+  function seg(v) {
+    const t = String(v == null ? '' : v);
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(t)) throw new Error('bad id');
+    return encodeURIComponent(t);
+  }
   async function api(method, path, body, isForm) {
     const opt = { method };
     if (body && isForm) opt.body = body;
@@ -327,7 +333,7 @@
 
   // ---- 案件
   async function openCase(id) {
-    const res = await api('GET', '/cases/' + id);
+    const res = await api('GET', '/cases/' + seg(id));
     if (!res.ok) { showAlert(res.message); return; }
     cur = res.case;
     history.replaceState(null, '', '#case=' + id);
@@ -377,7 +383,7 @@
     $('srDocPanel').hidden = !(c.documents && c.doc);
     if (c.documents && c.doc) {
       $('srDocName').textContent = c.doc.name;
-      $('srDocDownload').href = BASE + '/cases/' + c.id + '/document';
+      $('srDocDownload').href = BASE + '/cases/' + seg(c.id) + '/document';
       renderPage();
     }
     // 用印
@@ -388,7 +394,7 @@
     $('srDone').hidden = !c.has_result;
     if (c.has_result) {
       $('srDoneMeta').textContent = tr('保管人：{0} · 完成時間：{1}').replace('{0}', c.stamped_by_label || '').replace('{1}', fmt(c.done_at));
-      $('srResultDl').href = BASE + '/cases/' + c.id + '/result';
+      $('srResultDl').href = BASE + '/cases/' + seg(c.id) + '/result';
       $('srResultDl').hidden = c.state === 'void' && !(home && home.me.auditor);
       $('srResultWs').hidden = !c.workspace || c.state === 'void';
       $('srVoidMsg').hidden = c.state !== 'void';
@@ -459,12 +465,12 @@
     if (!items.length) { ul.replaceChildren(el('li', 'muted', tr('沒有附件'))); return; }
     ul.replaceChildren(...items.map(a => {
       const li = el('li');
-      const link = el('a', null, a.name); link.href = BASE + '/cases/' + cur.id + '/attachments/' + a.id; link.dataset.i18n = 'skip';
+      const link = el('a', null, a.name); link.href = BASE + '/cases/' + seg(cur.id) + '/attachments/' + seg(a.id); link.dataset.i18n = 'skip';
       li.append(link, document.createTextNode(' (' + Math.ceil(a.size / 1024) + ' KB) '));
       if (editable) {
         const del = iconBtn('btn btn-small', 'trash', tr('移除'));
         del.addEventListener('click', async () => {
-          const res = await api('DELETE', '/cases/' + cur.id + '/attachments/' + a.id);
+          const res = await api('DELETE', '/cases/' + seg(cur.id) + '/attachments/' + seg(a.id));
           if (!res.ok) { showAlert(res.message); return; }
           cur.attachments = res.attachments; renderAtts(ul, true);
         });
@@ -489,7 +495,7 @@
     return body;
   }
   async function save() {
-    const res = await api('PUT', '/cases/' + cur.id, collect());
+    const res = await api('PUT', '/cases/' + seg(cur.id), collect());
     if (!res.ok) { $('srEditMsg').textContent = res.message; return false; }
     cur = res.case; renderCase(); $('srEditMsg').textContent = tr('已儲存');
     return true;
@@ -498,7 +504,7 @@
   $('srSubmit').addEventListener('click', async () => {
     if (!(await save())) return;
     if (!(await showConfirm(tr('確定送出？送出後會依流程交給審核者，內容不能再修改（除非被退回補件）。'), { title: tr('送出申請'), okText: tr('送出') }))) return;
-    const res = await api('POST', '/cases/' + cur.id + '/submit');
+    const res = await api('POST', '/cases/' + seg(cur.id) + '/submit');
     if (!res.ok) {
       let m = res.message;
       if (res.code === 'INSUFFICIENT_APPROVERS' && res.detail.name) m += tr('（第 {0} 關「{1}」需要 {2} 人，目前 {3} 人）').replace('{0}', res.detail.stage).replace('{1}', res.detail.name).replace('{2}', res.detail.need).replace('{3}', res.detail.have);
@@ -508,7 +514,7 @@
   });
   $('srDeleteDraft').addEventListener('click', async () => {
     if (!(await showConfirm(tr('確定刪除這份草稿？'), { title: tr('刪除草稿'), kind: 'danger', okText: tr('刪除') }))) return;
-    const res = await api('DELETE', '/cases/' + cur.id);
+    const res = await api('DELETE', '/cases/' + seg(cur.id));
     if (!res.ok) { showAlert(res.message); return; }
     cur = null; show('mine');
   });
@@ -516,7 +522,7 @@
     if (!file) return;
     $('srDocMsg').textContent = tr('上傳中…');
     const fd = new FormData(); fd.append('file', file);
-    const res = await api('POST', '/cases/' + cur.id + '/document', fd, true);
+    const res = await api('POST', '/cases/' + seg(cur.id) + '/document', fd, true);
     if (!res.ok) { $('srDocMsg').textContent = res.message; return; }
     cur = res.case; page = 1; renderCase();
   }
@@ -531,7 +537,7 @@
     const f = e.target.files[0]; e.target.value = '';
     if (!f) return;
     const fd = new FormData(); fd.append('file', f);
-    const res = await api('POST', '/cases/' + cur.id + '/attachments', fd, true);
+    const res = await api('POST', '/cases/' + seg(cur.id) + '/attachments', fd, true);
     if (!res.ok) { showAlert(res.message); return; }
     cur.attachments = res.attachments; renderAtts($('srAttList'), true);
   });
@@ -559,7 +565,7 @@
         wrap.append(b);
       });
     };
-    img.src = BASE + '/cases/' + c.id + '/pages/' + page + '?r=' + c.updated_at;
+    img.src = BASE + '/cases/' + seg(c.id) + '/pages/' + seg(parseInt(page, 10) || 1) + '?r=' + encodeURIComponent(String(c.updated_at || ''));
   }
   $('srPrev').addEventListener('click', () => { page--; renderPage(); });
   $('srNext').addEventListener('click', () => { page++; renderPage(); });
@@ -613,7 +619,7 @@
       if (p.page !== page) return;
       const d = el('div', 'sr-seal');
       const im = el('img'); im.alt = nameOf(p.asset_id);
-      im.src = BASE + '/cases/' + cur.id + '/assets/' + p.asset_id + '/image';
+      im.src = BASE + '/cases/' + seg(cur.id) + '/assets/' + seg(p.asset_id) + '/image';
       d.append(im);
       const place = () => {
         d.style.left = (p.x_mm * sx) + 'px'; d.style.top = (p.y_mm * sy) + 'px';
@@ -649,7 +655,7 @@
     if (!(await showConfirm(tr('確定用印？') + '\n' + lines.join('\n'), { title: tr('確認用印'), okText: tr('用印') }))) return;
     const btn = $('srStampGo');
     btn.disabled = true; $('srStampMsg').textContent = tr('用印中…');
-    const res = await api('POST', '/cases/' + cur.id + '/stamp', { placements: plc, exec_id: randHex() });
+    const res = await api('POST', '/cases/' + seg(cur.id) + '/stamp', { placements: plc, exec_id: randHex() });
     btn.disabled = false;
     if (!res.ok) { $('srStampMsg').textContent = res.message; return; }
     cur = res.case; renderCase(); refreshHome();
@@ -659,12 +665,12 @@
     const comment = $('srCustComment').value.trim();
     if (!comment) { $('srStampMsg').textContent = tr('請填寫原因'); return; }
     if (!(await showConfirm(tr('確定退回給申請者補件？'), { title: tr('確認'), okText: tr('確定') }))) return;
-    const res = await api('POST', '/cases/' + cur.id + '/custodian-return', { comment });
+    const res = await api('POST', '/cases/' + seg(cur.id) + '/custodian-return', { comment });
     if (!res.ok) { $('srStampMsg').textContent = res.message; return; }
     cur = res.case; renderCase(); refreshHome();
   });
   $('srResultWs').addEventListener('click', async () => {
-    const res = await api('POST', '/cases/' + cur.id + '/result/workspace', {});
+    const res = await api('POST', '/cases/' + seg(cur.id) + '/result/workspace', {});
     $('srDoneMsg').textContent = res.ok ? tr('已存到工作區') : res.message;
   });
 
@@ -673,7 +679,7 @@
     const comment = $('srReviewComment').value.trim();
     if (needComment && !comment) { $('srReviewMsg').textContent = tr('請填寫原因'); return; }
     if (confirmText && !(await showConfirm(confirmText, { title: tr('確認'), okText: tr('確定') }))) return;
-    const res = await api('POST', '/cases/' + cur.id + '/' + path, { comment });
+    const res = await api('POST', '/cases/' + seg(cur.id) + '/' + path, { comment });
     if (!res.ok) { $('srReviewMsg').textContent = res.message; return; }
     cur = res.case; renderCase(); refreshHome();
   }
@@ -682,14 +688,14 @@
   $('srReject').addEventListener('click', () => act('reject', true, tr('確定駁回？駁回後這件申請就結束了。')));
   $('srWithdraw').addEventListener('click', async () => {
     if (!(await showConfirm(tr('確定撤回這件申請？'), { title: tr('撤回申請'), okText: tr('撤回') }))) return;
-    const res = await api('POST', '/cases/' + cur.id + '/withdraw', {});
+    const res = await api('POST', '/cases/' + seg(cur.id) + '/withdraw', {});
     if (!res.ok) { showAlert(res.message); return; }
     cur = res.case; renderCase();
   });
   $('srCommentBtn').addEventListener('click', async () => {
     const text = $('srCommentText').value.trim();
     if (!text) return;
-    const res = await api('POST', '/cases/' + cur.id + '/comment', { text });
+    const res = await api('POST', '/cases/' + seg(cur.id) + '/comment', { text });
     if (!res.ok) { showAlert(res.message); return; }
     $('srCommentText').value = '';
     cur = res.case; renderCase();
@@ -708,7 +714,7 @@
 
   refreshHome().then(() => {
     const h = location.hash.slice(1);
-    if (h.startsWith('case=')) openCase(h.slice(5));
+    if (h.startsWith('case=') && /^[A-Za-z0-9_-]{1,64}$/.test(h.slice(5))) openCase(h.slice(5));
     else show(['new', 'mine', 'review', 'stamp', 'handled', 'all'].includes(h) ? h
               : ((home && home.stamp_count) ? 'stamp' : (home && home.review_count) ? 'review' : 'mine'));
   });

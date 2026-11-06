@@ -660,7 +660,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **539 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **540 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -1109,6 +1109,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_seal_policy_entry_points.py` | 結構檢查：讀資產庫給使用者用的每一個函式，都要經過用印申請的管制判斷 |
 | `test_seal_request_admin_browser.py` | 設定 → 用印申請（真瀏覽器）：啟用、把章改成管制、用印工具看不到、還有管制的章時不能停用 |
 | `test_seal_request_page_browser.py` | 用印申請頁（真瀏覽器）：申請者建立 → 上傳 → 選章與位置 → 送出；審核者在「待我審核」核准 |
+| `test_seal_request_url_ids.py` | 用印申請頁：接進網址的編號一律先經過 `seg()`（驗證＋編碼） |
 | `test_seal_simulate_watermark.py` | 用印申請：沒啟用時先準備設定、流程模擬、流程附加浮水印（v1.17.32，使用者 2026-11-06） |
 | `test_seal_stamp.py` | 用印申請第 3 版：保管人用印、成果、失敗重試、作廢、保存期限、通知（規格第 7～9、14 節） |
 | `test_seal_zone_marker.py` | 用印區的排除條件：**標籤才算，說明句不算** |
@@ -6334,7 +6335,8 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 - [ ] 「公司地址(英文)」填英文地址；「發票地址(英文)」不填中文發票地址。
 - [ ] 「連絡人:　職務:　電話:」同一行：值不壓到「人:」，也不跨過「職務」。
 - [ ] 全表單回歸 `python temp_pdfs/_regress/run_fill_regress.py --compare <基準>`：沒有任何一份變差。
-- 自動化：`tests/test_seal_simulate_watermark.py`、`tests/test_pdf_form_noline_rows.py`
+- [ ] 用印申請頁網址改成 `#case=../x`、`#case=<script>`：直接回清單、主控台沒有錯誤（v1.17.33）。
+- 自動化：`tests/test_seal_simulate_watermark.py`、`tests/test_pdf_form_noline_rows.py`、`tests/test_seal_request_url_ids.py`
 
 ### 6.140 v1.17.30 — 用印申請第 3 版：保管人用印、成果、保留期限、通知（**每次發版必過**）
 

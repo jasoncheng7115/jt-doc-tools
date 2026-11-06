@@ -5,11 +5,17 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (961 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (962 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.33] - 2026-11-07
+
+### Seal request page: validate IDs in URLs
+
+- Request, attachment and seal IDs are validated and encoded before being put into URLs, and a malformed `#case=` value falls back to the list (two CodeQL findings). The server already checks permissions; this adds a client-side check.
 
 ## [1.17.32] - 2026-11-06
 
