@@ -36,8 +36,8 @@ async def asset_file(asset_id: str, request: Request, _user: dict = Depends(requ
     asset = asset_manager.get(asset_id)
     if not asset:
         raise HTTPException(404, "asset not found")
-    if not asset_access.can_use(request, asset.type):
-        raise HTTPException(403, asset_access.DENIED_MESSAGE)
+    if not asset_access.can_use_asset(request, asset):
+        raise HTTPException(403, asset_access.denied_message(asset))
     path = asset_manager.file_path(asset)
     if not path.exists():
         raise HTTPException(404, "asset file missing")
@@ -49,8 +49,8 @@ async def asset_thumb(asset_id: str, request: Request, _user: dict = Depends(req
     asset = asset_manager.get(asset_id)
     if not asset:
         raise HTTPException(404, "asset not found")
-    if not asset_access.can_use(request, asset.type):
-        raise HTTPException(403, asset_access.DENIED_MESSAGE)
+    if not asset_access.can_use_asset(request, asset):
+        raise HTTPException(403, asset_access.denied_message(asset))
     path = asset_manager.thumb_path(asset)
     if not path.exists():
         # Fall back to the full image if the thumbnail is somehow missing.

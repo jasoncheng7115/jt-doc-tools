@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from ...config import settings
 from ...core import pdf_preview
 from ...core.asset_manager import asset_manager
+from ...core import asset_access  # 用印申請管制：每顆章能不能用（`can_use_asset`）
 
 
 router = APIRouter()
@@ -700,6 +701,10 @@ async def list_assets(request: Request):
             restricted = restricted or bool(items)
             continue
         for a in items:
+            if not asset_access.can_use_asset(request, a):
+                # 用印申請管制的章（僅限核准案件使用）：不列出，畫面一樣講原因
+                restricted = True
+                continue
             out.append({
                 "id": a.id,
                 "name": a.name,
@@ -1107,7 +1112,7 @@ def _upgrade_cjk_font(page, builtin_name: str, cache: dict, pno: int,
 
 def _insert_mixed_text(page, x: float, y: float, text: str, *,
                        cjk_font: str, ascii_font: str,
-                       font_size: float, color: tuple) -> float:
+                       font_size: float, color: tuple, morph=None) -> float:
     """Render a text run by splitting into consecutive CJK / ASCII groups
     and drawing each with the right font. This avoids PyMuPDF's China-
     series fonts rendering ASCII punctuation as wide "full-width" glyphs
@@ -1157,7 +1162,7 @@ def _insert_mixed_text(page, x: float, y: float, text: str, *,
         for try_fn in fallbacks:
             try:
                 page.insert_text(fitz.Point(cx, y), run,
-                                 fontname=try_fn, fontsize=font_size, color=color)
+                                 fontname=try_fn, fontsize=font_size, color=color, morph=morph)
                 ok_font = try_fn
                 break
             except Exception as e:
@@ -1191,6 +1196,78 @@ def _insert_mixed_text(page, x: float, y: float, text: str, *,
             except Exception:
                 cx += font_size * len(run) * 0.6
     return cx
+
+
+def _angle_of(obj: dict) -> float:
+    """畫面上的旋轉角度（順時針、度），換算到 (-180, 180]；非數字當 0。"""
+    try:
+        a = float(obj.get("angle") or 0.0) % 360.0
+    except (TypeError, ValueError):
+        return 0.0
+    return a - 360.0 if a > 180.0 else a
+
+
+def _quad_of(obj: dict) -> Optional[list]:
+    """旋轉後的四個角（`quad`：左上、右上、右下、左下，PDF pt）。沒有或格式不對回 None。
+
+    畫面算好送來（用物件自己的轉換矩陣，縮放、旋轉、軸心都算進去了）。
+    只有轉過的物件（角度不是 0）才會用到 —— 沒轉的照舊用 x / y / w / h。"""
+    q = obj.get("quad")
+    if not isinstance(q, list) or len(q) != 4:
+        return None
+    pts = []
+    for c in q:
+        if not (isinstance(c, (list, tuple)) and len(c) == 2):
+            return None
+        try:
+            x, y = float(c[0]), float(c[1])
+        except (TypeError, ValueError):
+            return None
+        if not (abs(x) < 1e6 and abs(y) < 1e6):
+            return None
+        pts.append(fitz.Point(x, y))
+    return pts
+
+
+def _image_bytes_for(img_bytes: bytes, *, opacity: float, angle: float,
+                     w_pt: float, h_pt: float) -> bytes:
+    """圖片照畫面上的不透明度與旋轉先處理好（Pillow），回 PNG。
+
+    * 不透明度：**乘在 alpha 通道上**（PyMuPDF 的 `alpha=` 會蓋掉每個像素原本的透明度，
+      印章、簽名的透明背景會不見）。
+    * 旋轉：PyMuPDF 的 `rotate=` 只收 90 的倍數 —— 畫面上轉 15 度送過去會丟錯，
+      那張圖就從輸出裡消失（2026-11-04 盤點時發現）。改成先依畫面上的長寬比縮放、
+      再轉（透明背景、擴展畫布），呼叫端放進旋轉後外框的範圍。"""
+    from PIL import Image
+    im = Image.open(io.BytesIO(img_bytes))
+    im.load()
+    im = im.convert("RGBA")
+    if opacity < 0.999:
+        a = im.getchannel("A").point(lambda v: int(round(v * max(0.0, opacity))))
+        im.putalpha(a)
+    if angle:
+        # 先照畫面上的長寬（可能不等比縮放過）變形，解析度維持原圖的
+        scale = max(1.0, im.width / max(w_pt, 1.0))
+        tw = max(1, min(8000, int(round(w_pt * scale))))
+        th = max(1, min(8000, int(round(h_pt * scale))))
+        if (tw, th) != im.size:
+            im = im.resize((tw, th), Image.LANCZOS)
+        im = im.rotate(-angle, resample=Image.BICUBIC, expand=True)   # PIL 逆時針為正
+    out = io.BytesIO()
+    im.save(out, "PNG")
+    return out.getvalue()
+
+
+def _bbox_of(pts: list) -> "fitz.Rect":
+    return fitz.Rect(min(p.x for p in pts), min(p.y for p in pts),
+                     max(p.x for p in pts), max(p.y for p in pts))
+
+
+def _draw_quad(page, pts: list, *, color, fill, width: float, fill_opacity: float = 1.0) -> None:
+    shape = page.new_shape()
+    shape.draw_polyline(pts + [pts[0]])
+    shape.finish(color=color, fill=fill, width=width, fill_opacity=fill_opacity, closePath=True)
+    shape.commit(overlay=True)
 
 
 def _sample_path(path_str: str, ox: float, oy: float,
@@ -1374,8 +1451,8 @@ def _library_stamps(pages, request) -> list[dict]:
                 continue            # 跟原本一樣：找不到的資產在畫的時候略過
             if a.type not in EDITOR_ASSET_TYPES:
                 raise HTTPException(400, "這種資產不能用在編輯器")
-            if not asset_access.can_use(request, a.type):
-                raise HTTPException(403, asset_access.DENIED_MESSAGE)
+            if not asset_access.can_use_asset(request, a):
+                raise HTTPException(403, asset_access.denied_message(a))
             if a.type in ("stamp", "signature"):
                 used.append({"asset_id": a.id, "type": a.type, "page": pg.get("page")})
     return used
@@ -1645,12 +1722,18 @@ async def save(request: Request):
                     w = float(obj.get("w", 0))
                     h = float(obj.get("h", 0))
                     rect = fitz.Rect(x, y, x + w, y + h)
+                    # 畫面上轉過的物件（v1.17.27）：照送來的四個角畫，不然輸出是正的
+                    angle = _angle_of(obj)
+                    quad = _quad_of(obj) if angle else None
                     if ot == "whiteout":
                         # Paint an opaque white rectangle over the target area.
                         # Not a redaction (that removes content); this is a
                         # visual cover. True redact lives in a later phase.
-                        page.draw_rect(rect, color=None, fill=(1, 1, 1),
-                                       fill_opacity=1.0, overlay=True)
+                        if quad:
+                            _draw_quad(page, quad, color=None, fill=(1, 1, 1), width=0)
+                        else:
+                            page.draw_rect(rect, color=None, fill=(1, 1, 1),
+                                           fill_opacity=1.0, overlay=True)
                     elif ot == "image":
                         # Source: either an asset (stamp/signature/logo) OR an
                         # extracted existing image (existing_src points to a PNG
@@ -1659,7 +1742,8 @@ async def save(request: Request):
                         asset_id = obj.get("asset_id") or ""
                         if asset_id:
                             a = asset_manager.get(asset_id)
-                            if a:
+                            # 第二道：存檔前 `_library_stamps` 已經擋過，畫的時候再確認一次（受管制的章不畫）
+                            if a and asset_access.can_use_asset(request, a):
                                 cand = settings.assets_files_dir / a.file_key
                                 if cand.exists():
                                     src_file = cand
@@ -1683,19 +1767,31 @@ async def save(request: Request):
                             # on some PyMuPDF versions.
                             with open(src_file, "rb") as _f:
                                 img_bytes = _f.read()
-                            kwargs = dict(stream=img_bytes,
-                                          keep_proportion=False, overlay=True)
-                            ang = float(obj.get("angle") or 0.0)
-                            if ang:
-                                kwargs["rotate"] = ang
-                            page.insert_image(rect, **kwargs)
-                            # Optional opacity wasn't applied here — we omit
-                            # it on purpose because `alpha=int` in PyMuPDF
-                            # overwrites per-pixel transparency. If future
-                            # versions need user-controlled opacity, apply
-                            # via a Pillow pre-pass that multiplies the
-                            # alpha channel.
+                            # 0 也是合法值（畫面上看不見），不可以用 `or 1` 變回不透明
+                            _op = obj.get("opacity", 1)
+                            try:
+                                opacity = 1.0 if _op is None else float(_op)
+                            except (TypeError, ValueError):
+                                opacity = 1.0
+                            opacity = min(1.0, max(0.0, opacity))
+                            target = rect
+                            if opacity < 0.999 or angle:
+                                img_bytes = _image_bytes_for(img_bytes, opacity=opacity, angle=angle,
+                                                             w_pt=w, h_pt=h)
+                                if angle:
+                                    # 轉過的：放進旋轉後四個角的外框（沒送四個角就以左上角為軸心自己算）
+                                    if not quad:
+                                        import math as _m
+                                        rad = _m.radians(angle)
+                                        c, sn = _m.cos(rad), _m.sin(rad)
+                                        quad = [fitz.Point(x + dx * c - dy * sn, y + dx * sn + dy * c)
+                                                for dx, dy in ((0, 0), (w, 0), (w, h), (0, h))]
+                                    target = _bbox_of(quad)
+                            page.insert_image(target, stream=img_bytes,
+                                              keep_proportion=False, overlay=True)
                         except Exception:
+                            import logging as _lg
+                            _lg.getLogger(__name__).warning("pdf-editor 圖片沒有畫上去", exc_info=True)
                             continue
                     elif ot == "rect":
                         stroke = str(obj.get("stroke") or "#000000").lstrip("#")
@@ -1703,13 +1799,16 @@ async def save(request: Request):
                         sw = float(obj.get("stroke_width") or 1.0)
                         sr, sg, sb = _hex_rgb01(stroke)
                         fill_rgb = _hex_rgb01(str(fill).lstrip("#")) if fill else None
-                        page.draw_rect(
-                            rect,
-                            color=(sr, sg, sb),
-                            fill=fill_rgb,
-                            width=sw,
-                            overlay=True,
-                        )
+                        if quad:
+                            _draw_quad(page, quad, color=(sr, sg, sb), fill=fill_rgb, width=sw)
+                        else:
+                            page.draw_rect(
+                                rect,
+                                color=(sr, sg, sb),
+                                fill=fill_rgb,
+                                width=sw,
+                                overlay=True,
+                            )
                     elif ot == "line":
                         x2 = float(obj.get("x2", x + w))
                         y2 = float(obj.get("y2", y + h))
@@ -1751,8 +1850,11 @@ async def save(request: Request):
                         # text spans, which we don't track here).
                         color_hex = str(obj.get("color") or "#fde047").lstrip("#")
                         r, g, b = _hex_rgb01(color_hex)
-                        page.draw_rect(rect, color=None, fill=(r, g, b),
-                                       fill_opacity=0.45, overlay=True)
+                        if quad:
+                            _draw_quad(page, quad, color=None, fill=(r, g, b), width=0, fill_opacity=0.45)
+                        else:
+                            page.draw_rect(rect, color=None, fill=(r, g, b),
+                                           fill_opacity=0.45, overlay=True)
                     elif ot == "sticky":
                         # Real PDF text annotation — clickable in viewers,
                         # shows the note text as a popup bubble.
@@ -1805,8 +1907,10 @@ async def save(request: Request):
                         sw = float(obj.get("stroke_width") or 1.0)
                         sr, sg, sb = _hex_rgb01(stroke)
                         fill_rgb = _hex_rgb01(str(fill).lstrip("#")) if fill else None
+                        # 轉過的：畫在四個角圍成的四邊形裡（fitz.Quad 的順序是左上、右上、左下、右下）
                         page.draw_oval(
-                            rect, color=(sr, sg, sb), fill=fill_rgb,
+                            fitz.Quad(quad[0], quad[1], quad[3], quad[2]) if quad else rect,
+                            color=(sr, sg, sb), fill=fill_rgb,
                             width=sw, overlay=True,
                         )
                     elif ot == "text":
@@ -1959,6 +2063,10 @@ async def save(request: Request):
 
                         lines = text.split("\n") if "\n" in text else [text]
                         ybase = rect.y0 + font_size
+                        # 畫面上轉過的文字框：以左上角為軸心轉（跟畫面上的軸心一樣）。
+                        # 畫面的角度是順時針；fitz.Matrix(角度) 在頁面上是逆時針，所以取負號。
+                        pivot = fitz.Point(rect.x0, rect.y0)
+                        morph = (pivot, fitz.Matrix(-angle)) if angle else None
                         for i, line in enumerate(lines):
                             if not line:
                                 continue
@@ -1966,23 +2074,27 @@ async def save(request: Request):
                                 _insert_mixed_text(
                                     page, rect.x0, ybase + i * font_size * 1.2,
                                     line, cjk_font=cjk_font, ascii_font=ascii_font,
-                                    font_size=font_size, color=col,
+                                    font_size=font_size, color=col, morph=morph,
                                 )
                             except Exception:
                                 try:
                                     page.insert_text(
                                         fitz.Point(rect.x0, ybase + i * font_size * 1.2),
                                         line, fontname="helv",
-                                        fontsize=font_size, color=col,
+                                        fontsize=font_size, color=col, morph=morph,
                                     )
                                 except Exception:
                                     pass
                         # Underline drawn manually beneath the first line
                         if underline:
                             y_line = rect.y1 - font_size * 0.15
+                            a, b = fitz.Point(rect.x0, y_line), fitz.Point(rect.x1, y_line)
+                            if angle:      # 底線跟著轉（點的座標轉換：Matrix(+角度) 在頁面上是順時針，跟 morph 相反）
+                                m = fitz.Matrix(1, 0, 0, 1, -pivot.x, -pivot.y) * fitz.Matrix(angle) \
+                                    * fitz.Matrix(1, 0, 0, 1, pivot.x, pivot.y)
+                                a, b = a * m, b * m
                             page.draw_line(
-                                fitz.Point(rect.x0, y_line),
-                                fitz.Point(rect.x1, y_line),
+                                a, b,
                                 color=col, width=max(0.5, font_size * 0.05),
                                 overlay=True,
                             )

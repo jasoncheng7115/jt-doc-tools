@@ -333,7 +333,8 @@ _CJK_FOLD = str.maketrans({
 
 
 def _split_multi_colon_span(
-    text: str, bbox: tuple[float, float, float, float]
+    text: str, bbox: tuple[float, float, float, float],
+    char_boxes: Optional[list[tuple[float, float, float, float]]] = None,
 ) -> list[tuple[str, tuple[float, float, float, float]]]:
     """Split 'A:   B:   C:' into per-label sub-spans.
 
@@ -342,6 +343,10 @@ def _split_multi_colon_span(
     銀行代號 as independent labels. We re-emit each non-empty chunk ending
     in a colon as its own candidate, with the bbox proportionally sliced
     from the parent span's x-range.
+
+    有逐字座標（`char_boxes`，跟 `text` 一字對一格）時用實際位置：中文字與
+    半形空白寬度差一倍以上，等寬估算會讓後面的標籤框偏掉，值寫上去就壓到
+    「人:」「話:」這類標籤尾巴。
     """
     # Find each chunk: some chars, ending in a colon. Minimum 2 chars of
     # actual label text so we don't split on stray lone colons.
@@ -354,11 +359,42 @@ def _split_multi_colon_span(
         return []
     char_w = (x1 - x0) / n
     out: list[tuple[str, tuple[float, float, float, float]]] = []
+    exact = bool(char_boxes) and len(char_boxes) == n
     for m in matches:
         sub = m.group(0)
-        sub_x0 = x0 + m.start() * char_w
-        sub_x1 = x0 + m.end() * char_w
+        if exact:
+            sub_x0 = char_boxes[m.start()][0]
+            sub_x1 = char_boxes[m.end() - 1][2]
+        else:
+            sub_x0 = x0 + m.start() * char_w
+            sub_x1 = x0 + m.end() * char_w
         out.append((sub, (sub_x0, y0, sub_x1, y1)))
+    return out
+
+
+#: 中文欄位 → 英文版欄位。標籤結尾註明「(英文)」時改填英文版。
+_ENGLISH_OF = {"address": "english_address", "company_name": "english_name",
+               "owner": "owner_en"}
+_ENGLISH_NOTE = re.compile(r"[\(（]\s*(英文|英|english|eng\.?|en)\s*[\)）]\s*[:：]?\s*$", re.I)
+
+
+def _says_english(label: str) -> bool:
+    """標籤結尾是不是「(英文)」這類註記。
+
+    `_normalize` 會拿掉結尾的括號註記（「負責人(中文)」要對到「負責人」），
+    於是「公司地址(英文)」也變成「公司地址」，英文欄被填進中文地址。
+    """
+    return bool(_ENGLISH_NOTE.search(unicodedata.normalize("NFKC", label or "")))
+
+
+def _english_keys(keys: list[str]) -> list[str]:
+    """換成英文版欄位；本來就是英文欄位的保留；沒有英文版的丟掉（不把中文寫進英文欄）。"""
+    out = []
+    for k in keys:
+        if k in _ENGLISH_OF:
+            out.append(_ENGLISH_OF[k])
+        elif k in _ENGLISH_OF.values() or k.endswith("_en"):
+            out.append(k)
     return out
 
 
@@ -540,6 +576,8 @@ def detect_fields(
     page_checkbox_texts: list[set[str]] = []
     # 每頁：span 的 bbox（取整）→ 該 span 的逐字座標
     page_char_boxes: list[dict] = []
+    # 每頁：以空白切開的字詞框（同一列裡「標籤：　　　發票章：」常是同一個 span）
+    page_words: list[list[tuple[float, float, float, float]]] = []
     # pdfplumber-based cells (primary); fall back to line-based when empty.
     page_cells_pp = pdf_layout.extract_cells_pdfplumber(pdf_path)
 
@@ -572,6 +610,7 @@ def detect_fields(
                         _bb = tuple(round(v) for v in (_sp.get("bbox") or (0, 0, 0, 0)))
                         _chars[_bb] = [tuple(c.get("bbox")) for c in _sp.get("chars", [])]
             page_char_boxes.append(_chars)
+            page_words.append([tuple(w[:4]) for w in page.get_text("words")])
             page_lines.append(pdf_layout.extract_lines(page))
             # Extract checkbox option texts for occupancy filtering.
             from . import pdf_checkbox
@@ -602,8 +641,9 @@ def detect_fields(
                         # — PyMuPDF sometimes emits these as a single span when
                         # the form designer used whitespace instead of column
                         # separators, hiding each sub-label from the matcher.
+                        _sbb = tuple(span.get("bbox") or (0, 0, 0, 0))
                         for sub_t, sub_b in _split_multi_colon_span(
-                            t, tuple(span.get("bbox") or (0, 0, 0, 0))
+                            t, _sbb, page_char_boxes[pno].get(tuple(round(v) for v in _sbb))
                         ):
                             if sub_t != t:
                                 candidates.append((sub_t, sub_b, span.get("size", 10.0)))
@@ -646,6 +686,8 @@ def detect_fields(
                                 if k:
                                     keys = k
                                     break
+                        if keys and _says_english(text):
+                            keys = _english_keys(keys)
                         if not keys:
                             continue
                         x0, y0, x1, y1 = bbox
@@ -768,6 +810,114 @@ def detect_fields(
                                     slot_kind=slot_kind,
                                 )
                             )
+
+    # **沒有格線的表：值只能用標籤自己那一列。**
+    #
+    # 整張表只有一個外框、裡面一條橫線都沒有時，標籤所在的「格子」就是整個
+    # 外框，inline 的值格會從這一列一路延伸到下一條畫出來的橫線（實測跨了
+    # 二十幾列）。填寫時值放在格子垂直置中的位置，就掉到下面幾列，壓在別的
+    # 標籤上；那些標籤沒對應到資料欄位，下面「不可以蓋到別的標籤」的檢查也看
+    # 不到它們。
+    #
+    # 判準：值格的垂直範圍裡，標籤那一列以外還有別的文字（落在整個格子的寬度
+    # 內，包含標籤欄），就代表這一格其實是好幾列。這時上下界收到相鄰列的文字
+    # 為止，右界收到同一列下一段文字或穿過這一列的直線為止（例如章框）。
+    # right-adj：右邊那一格跨了好幾列標籤（章框切出來的格子）就改用這一列；
+    # unbounded：固定寬度一樣停在同一列下一段字前面。below-adj、子標籤、括號
+    # 另有專門的規則，不動。
+    def _row_right(d, sx0: float, right: float) -> float:
+        """同一列（標籤那一條帶）往右遇到的第一段字或直線。"""
+        lx0, ly0, lx1, ly1 = d.label_rect
+        cy = (ly0 + ly1) / 2
+        for bx0, by0, bx1, by1 in page_words[d.page]:
+            if bx0 <= lx1 + 1:
+                continue
+            if by0 - 1 <= cy <= by1 + 1 and bx0 - 3 < right:
+                right = bx0 - 3               # 同一列下一段文字
+        for vx, vy0, vy1 in page_lines[d.page][1]:
+            if vy0 - 1 <= cy <= vy1 + 1 and sx0 + 30 < vx and vx - 3 < right:
+                right = vx - 3                # 穿過這一列的直線（章框）
+        return right
+
+    def _other_rows(d, x0: float, x1: float, y0: float, y1: float) -> tuple[float, float, bool]:
+        """[y0, y1] 範圍、x 在 [x0, x1] 內，標籤那一列以外還有沒有別的字；回（上界, 下界, 有沒有）。"""
+        lx0, ly0, lx1, ly1 = d.label_rect
+        # 同一個欄位的另一行標籤（「(中)」「(Chinese)」分兩行印在同一格）不算別列
+        same = {g.label_rect for g in detected if g.page == d.page and g.profile_key == d.profile_key}
+        top, bottom, hit = y0, y1, False
+        for _t, (bx0, by0, bx1, by1), _sz, _c in page_spans[d.page]:
+            if not (_t or "").strip() or (bx0, by0, bx1, by1) in same:
+                continue
+            if any(abs(bx0 - r[0]) < 1 and abs(by0 - r[1]) < 1 for r in same):
+                continue
+            if bx1 <= x0 or bx0 >= x1:
+                continue
+            if by0 >= ly1 - 1 and by0 < bottom:
+                bottom, hit = by0, True       # 下面一列
+            elif by1 <= ly0 + 1 and by1 > top:
+                top, hit = by1, True          # 上面一列
+        return top, bottom, hit
+
+    for d in detected:
+        if d.value_slot is None or d.slot_kind not in ("inline", "right-adj", "unbounded"):
+            continue
+        sx0, sy0, sx1, sy1 = d.value_slot
+        lx0, ly0, lx1, ly1 = d.label_rect
+        lh = ly1 - ly0
+        if d.slot_kind == "unbounded":
+            # 偵測端給的固定寬度：一樣不可以跨過同一列下一段字
+            # 縮完還放得下才縮；放不下就維持原樣（逐格分寫的數字框等版型靠這個寬度）
+            right = _row_right(d, sx0, sx1)
+            if right < sx1 and right - sx0 >= pdf_layout.MIN_VALUE_SLOT_WIDTH:
+                d.value_slot = (sx0, sy0, right, sy1)
+            continue
+        if sy1 - sy0 <= lh * 1.8:
+            continue
+        if d.slot_kind == "inline" and sx1 - sx0 < pdf_layout.MIN_VALUE_SLOT_WIDTH:
+            # 本來就窄的格子不動：收矮之後會躲過「蓋到別的標籤」那道檢查，值反而被塞進窄格折行
+            continue
+        if d.slot_kind == "right-adj":
+            # 右邊那一格跨了好幾列標籤（例如章框切出來的格子）：那不是這一列的值格。
+            # 只看標籤欄（右邊那一格左緣以左）有沒有別列的字。
+            top, bottom, hit = _other_rows(d, lx0, sx0 - 1, sy0, sy1)
+            if not hit:
+                continue
+            new_x0, new_x1 = lx1 + 3, sx0 - 6
+            if new_x1 - new_x0 < pdf_layout.MIN_VALUE_SLOT_WIDTH:
+                continue
+            top = max(top, ly0 - 2)
+            bottom = min(bottom - 1, ly1 + lh)
+            d.value_slot = (new_x0, top, _row_right(d, new_x0, new_x1), bottom)
+            d.slot_kind = "inline"
+            if d.value_anchor is not None:
+                d.value_anchor = (new_x0, d.value_anchor[1])
+            continue
+        top, bottom, hit = _other_rows(d, lx0, sx1, sy0, sy1)
+        if not hit:
+            continue                          # 格子裡只有這一列：照舊
+        top = max(top, ly0 - 2)
+        bottom = min(bottom - 1, ly1 + lh)
+        right = _row_right(d, sx0, sx1)
+        if right - sx0 < pdf_layout.MIN_VALUE_SLOT_WIDTH:
+            right = sx1                       # 收窄後放不下：只收上下
+        d.value_slot = (sx0, top, right, bottom)
+
+    # **標籤後面單獨印的冒號**：「公司名稱」與「：」常是兩段字，值格從標籤右緣
+    # 起算就會壓在冒號上。
+    for d in detected:
+        if d.value_slot is None or d.slot_kind not in ("inline", "unbounded"):
+            continue
+        sx0, sy0, sx1, sy1 = d.value_slot
+        lx0, ly0, lx1, ly1 = d.label_rect
+        for _t, (bx0, by0, bx1, by1), _sz, _c in page_spans[d.page]:
+            if (_t or "").strip(" 　:：") or not (_t or "").strip():
+                continue
+            if lx1 - 1 <= bx0 <= lx1 + 2 and min(ly1, by1) - max(ly0, by0) > 1 and bx1 + 3 > sx0:
+                if sx1 - (bx1 + 3) >= 24:
+                    sx0 = bx1 + 3
+                    d.value_slot = (sx0, sy0, sx1, sy1)
+                    if d.value_anchor is not None:
+                        d.value_anchor = (sx0, d.value_anchor[1])
 
     # **值的起點要推到「印在值格裡的子標籤」後面。**
     #

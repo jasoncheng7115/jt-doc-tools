@@ -60,6 +60,10 @@ MANAGED: tuple[dict, ...] = (
      "impact": "使用者新增的事務機與連線測試記錄遺失，需要重新新增",
      "impact_en": "the multifunction printers users added and their connection tests "
                   "are lost; they have to be added again"},
+    {"file": "seal_requests.sqlite", "label": "用印申請", "backup": True,
+     "impact": "用印申請的流程、案件與核准紀錄遺失（案件檔案在 seal_cases 目錄，不受影響但對不上案件）",
+     "impact_en": "seal request flows, requests and approval records are lost (the files in seal_cases "
+                  "remain but can no longer be matched to requests)"},
     {"file": "vat_db.sqlite", "label": "統編資料庫", "backup": False,
      "impact": "統一編號查詢失效；可從官方來源重新下載（檔案大，不納入備份）",
      "impact_en": "VAT lookup unavailable; re-downloadable from the official "

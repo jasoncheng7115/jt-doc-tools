@@ -33,7 +33,7 @@ class FillReport:
     expanded_refs: list[dict] = field(default_factory=list)
 
 
-def _clamp_before_next_label(slot, d, detected):
+def _clamp_before_next_label(slot, d, detected, words=None):
     """把退路的右緣夾到「同一列下一個標籤」的左邊。
 
     退路是「從 anchor 往右畫 240pt」，那個寬度是憑空給的，很容易一路蓋過
@@ -41,20 +41,30 @@ def _clamp_before_next_label(slot, d, detected):
     本來就是這一欄該填的地方（實測這樣救回幾個原本會被退掉的填入）。
 
     縮完太窄（放不下任何字）就回 None，由呼叫端留白。
+
+    `words`（這一頁印好的字詞框）也算障礙：「連絡人:　職務:　電話:」裡的
+    「職務」沒對應到資料欄位、不在 `detected` 裡，只看標籤的話會一路蓋過去。
     """
     sx0, sy0, sx1, sy1 = slot
-    for other in detected:
-        if other is d or other.page != d.page:
-            continue
-        bx0, by0, bx1, by1 = other.label_rect
+    boxes = [o.label_rect for o in detected if o is not d and o.page == d.page]
+    boxes += list(words or [])
+    for bx0, by0, bx1, by1 in boxes:
         if min(sy1, by1) - max(sy0, by0) <= 1:      # 不同列
             continue
-        if bx0 <= sx0:                              # 在左邊，不是障礙
+        if bx0 <= sx0 + 1:                          # 在左邊（或就是標籤的冒號），不是障礙
             continue
         sx1 = min(sx1, bx0 - 2)
     if sx1 - sx0 < 40:
         return None
     return (sx0, sy0, sx1, sy1)
+
+
+def _approx_text_width(text: str, size: float) -> float:
+    """估計一行字的寬度（pt）：全形字一個字號寬、半形約一半。只用來判斷放不放得下。"""
+    w = 0.0
+    for ch in text:
+        w += size if ord(ch) > 0x2E7F else size * 0.55
+    return w
 
 
 def _overlaps_printed_text(slot, d, detected) -> bool:
@@ -116,6 +126,16 @@ def fill_pdf(
         return rep
 
     detected, _pages = pdf_form_detect.detect_fields(src_pdf)
+    _words_cache: dict[int, list] = {}
+
+    def _page_words(pno: int) -> list:
+        if pno not in _words_cache:
+            import fitz as _fz
+            with _fz.open(str(src_pdf)) as _d:
+                _words_cache[pno] = ([tuple(w[:4]) for w in _d[pno].get_text("words")]
+                                     if 0 <= pno < _d.page_count else [])
+        return _words_cache[pno]
+
     all_checkboxes = pdf_checkbox.extract_checkboxes(src_pdf)
     blank_clusters = pdf_checkbox.extract_blank_box_clusters(src_pdf)
     cells_per_page = pdf_layout.extract_cells_pdfplumber(src_pdf)
@@ -315,11 +335,26 @@ def fill_pdf(
             # 位置會不會壓到字」：不會就填，會就留白。
             fb = (d.value_anchor[0], d.label_rect[1],
                   d.value_anchor[0] + 240, d.label_rect[3])
-            fb = _clamp_before_next_label(fb, d, detected)
+            fb = _clamp_before_next_label(fb, d, detected, _page_words(d.page))
             if fb is None or _overlaps_printed_text(fb, d, detected):
                 unfilled.add(d.profile_key)
                 continue
+            # 縮到下一段字前面之後，**放不下這個值就留白**：硬塞會折成兩行，
+            # 第二行掉進下一列（實測「＿＿銀行」前只剩 40pt，八個字折行）。
+            if fb[2] - fb[0] < _approx_text_width(str(profile.get(d.profile_key) or ""),
+                                                  d.font_size or 10.0) * 0.85:
+                unfilled.add(d.profile_key)
+                continue
             slot = fb
+
+        # **只容得下一行的格子，寬度連值的六成都不到就留白**：硬塞會折成好幾行、
+        # 壓到下一列（實測「往來銀行」旁 29pt 的窄格塞八個字，折成三行）。
+        # 六成是留給字級自動縮小的空間；能折行的高格子不受這條限制。
+        _fs = d.font_size or 10.0
+        if (slot[3] - slot[1] < _fs * 2.0
+                and slot[2] - slot[0] < _approx_text_width(str(value), _fs) * 0.6):
+            unfilled.add(d.profile_key)
+            continue
 
         # Fix A (same-key Y-overlap → prefer larger slot): when two detections
         # for the SAME profile_key have vertically-overlapping slots, it's

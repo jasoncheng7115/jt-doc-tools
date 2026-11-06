@@ -45,6 +45,9 @@ ACL_PATTERNS = (
     r"\b_check_case_acl\(",        # submission-check
     r"\b_require_case\b",          # 公文撰擬（案件；多半寫成 to_thread(_require_case, …)）
     r"\b_job_access\(",            # 作業 API / pdf-to-office 預覽與報告
+    # 用印申請：`_case_for` 呼叫 `seal_flow.can_view`（申請者 / 審核者 / 保管人 / 稽核員），
+    # 狀態轉換的端點經 `_case_action` 走同一個 `_case_for`；行為由 test_seal_flow 的「誰看得到什麼」驗
+    r"\b_case_for\(", r"\b_case_action\(",
     r"\brequire_admin\b", r"\b_require_admin\b",
     r"\b_require_tool\(",
     r"Depends\(require_login\)",   # router 參數層級的登入閘
@@ -356,6 +359,10 @@ def test_acl_exceptions_are_never_swallowed():
                 continue
             for h in node.handlers:
                 hs = "\n".join(ast.unparse(b) for b in h.body)
+                # 例外：把錯誤轉成錯誤回應（用印申請的 `_err` / `_flow_err` 一律用例外帶的 4xx 狀態碼回）
+                # 不是吞掉 —— 呼叫端拿到的就是 403 / 404。其他任何 `return` 照舊算吞掉。
+                if hs.strip().startswith(("return _err(e)", "return _flow_err(e)")):
+                    continue
                 if hs.strip() in ("pass", "...") or hs.strip().startswith("return"):
                     bad.append(f"{f}: except {ast.unparse(h.type) if h.type else ''}")
     assert not bad, f"ACL 的例外被吞掉（等於沒檢查）：{bad}"

@@ -53,6 +53,14 @@ def _font_fingerprint(buf: bytes) -> str:
     return h.hexdigest()
 
 
+def _uni_rank(uni: int) -> tuple[int, int]:
+    """一形多碼時挑哪個字碼：部首、相容漢字排最後，其餘取最小。"""
+    late = (0x2E80 <= uni <= 0x2FDF            # 部首補充、康熙部首
+            or 0xF900 <= uni <= 0xFAFF         # 相容漢字
+            or 0x2F800 <= uni <= 0x2FA1F)      # 相容漢字補充
+    return (1 if late else 0, uni)
+
+
 def _gid_to_unicode(buf: bytes) -> dict:
     """字形編號 → Unicode 字碼。讀不出來回空 dict。"""
     key = _font_fingerprint(buf)
@@ -65,10 +73,13 @@ def _gid_to_unicode(buf: bytes) -> dict:
         font = TTFont(io.BytesIO(buf), fontNumber=0, lazy=True)
         order = font.getGlyphOrder()
         # cmap 是 Unicode → 字形名；反過來建 字形名 → Unicode。
-        # 一個字形可能對應多個字碼（異體字），取最小的那個（通常是本體）。
+        # 一個字形可能對應多個字碼（異體字），取最小的那個（通常是本體）——
+        # **但部首與相容漢字排最後**：微軟正黑體的「方」與康熙部首「⽅」
+        # （U+2F45）是同一個字形，部首的字碼比較小，照「取最小」會把正常的
+        # 「方」換成部首。字面一樣，搜尋、複製、比對全都對不上（2026-11-06 客戶表單）。
         name_to_uni: dict = {}
         for uni, gname in font.getBestCmap().items():
-            if gname not in name_to_uni or uni < name_to_uni[gname]:
+            if gname not in name_to_uni or _uni_rank(uni) < _uni_rank(name_to_uni[gname]):
                 name_to_uni[gname] = uni
         for gid, gname in enumerate(order):
             uni = name_to_uni.get(gname)

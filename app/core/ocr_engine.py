@@ -258,7 +258,64 @@ def _map_langs_to_easyocr(tess_langs: str) -> tuple:
     return tuple(mapped)
 
 
-def _easyocr_recognize(png_bytes: bytes, langs: str) -> list[dict]:
+# EasyOCR 的去雜點（3×3 中值濾波）只在「真的有雜點、解析度也夠」時做。
+# 2026-11-04 實測（兩種字型 × 10 / 13 pt × 150 / 200 / 300 DPI × 乾淨 / 掃描雜點，
+# 跟正確答案逐字比）：乾淨的影像濾了一律變差（300 DPI 掉 0.3～3%、150 DPI 小字掉到 26～50%）；
+# 有雜點的掃描在 200 DPI 以上多半變好（+1.5～+8%），150 DPI 照樣變差。
+# 雜點用「孤立單點」量：八個鄰點都不同色的點，筆畫再細也不會被算到 ——
+# 乾淨的影像（含真實掃描檔）≤ 0.004%、有雜點的掃描 ≥ 0.47%，門檻放在中間。
+EASYOCR_DENOISE_MIN_SPECKLE = 0.0005
+EASYOCR_DENOISE_MIN_SHORT_SIDE = 1600   # 約 A4 200 DPI
+
+
+def _speckle_ratio(img) -> float:
+    """孤立單點（黑底上的白點、白底上的黑點）佔全圖的比例。"""
+    import numpy as np
+    g = np.asarray(img.convert("L"))
+    total = 0
+    for mask in (g < 110, g > 190):
+        m = np.pad(mask, 1).astype(np.uint8)
+        h, w = m.shape
+        nb = sum(m[1 + dy:h - 1 + dy, 1 + dx:w - 1 + dx]
+                 for dy in (-1, 0, 1) for dx in (-1, 0, 1) if dy or dx)
+        total += int((mask & (nb == 0)).sum())
+    return total / max(1, g.size)
+
+
+def easyocr_wants_denoise(png_bytes: bytes) -> bool:
+    """這張影像要不要先去雜點再給 EasyOCR。本機與遠端都照這個判斷（遠端用 `preprocess` 欄位帶過去）。
+
+    判斷不了（影像打不開、沒有 numpy）一律不濾 —— 不濾是對乾淨影像最安全的預設。
+    """
+    try:
+        from PIL import Image
+        img = Image.open(io.BytesIO(png_bytes))
+        if min(img.size) < EASYOCR_DENOISE_MIN_SHORT_SIDE:
+            return False
+        return _speckle_ratio(img) >= EASYOCR_DENOISE_MIN_SPECKLE
+    except Exception as e:  # noqa: BLE001
+        log.info("EasyOCR 去雜點判斷失敗，不濾：%s", e)
+        return False
+
+
+def _easyocr_image(png_bytes: bytes, preprocess: bool):
+    """EasyOCR 吃的影像：RGB；`preprocess` 時先做 3×3 中值濾波去掉掃描雜點。
+
+    **跟遠端 GPU 那支（`ocr_remote_deploy/server_template.py`）做的一模一樣** ——
+    同一個引擎、同一份檔案，走本機或走遠端結果不可以不同。要不要濾由
+    `easyocr_wants_denoise()` 決定，`recognize_image` 對兩條路傳同一個值。
+    """
+    from PIL import Image
+    img = Image.open(io.BytesIO(png_bytes))
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    if preprocess:
+        from PIL import ImageFilter
+        img = img.filter(ImageFilter.MedianFilter(size=3))
+    return img
+
+
+def _easyocr_recognize(png_bytes: bytes, langs: str, preprocess: bool = True) -> list[dict]:
     """跑 EasyOCR 對 PNG 抽 word data。
     回 standardized format：[{text, conf, left, top, width, height}, ...]"""
     eo_langs = _map_langs_to_easyocr(langs)
@@ -268,11 +325,9 @@ def _easyocr_recognize(png_bytes: bytes, langs: str) -> list[dict]:
     if reader is None:
         return []
     try:
-        from PIL import Image
         import numpy as np
-        img = Image.open(io.BytesIO(png_bytes))
         # easyocr.readtext 接受 numpy array 或 path；用 numpy 避免 round-trip
-        arr = np.asarray(img.convert("RGB"))
+        arr = np.asarray(_easyocr_image(png_bytes, preprocess))
         results = reader.readtext(arr, detail=1, paragraph=False)
     except Exception as e:
         log.warning("EasyOCR readtext failed: %s", e)
@@ -396,13 +451,20 @@ def recognize_image(png_bytes: bytes, langs: str,
       呼叫者行為不變）。缺 AVX2 的 CPU 上本機 EasyOCR 會 SIGILL 打掛整個
       服務，所以「使用者沒選過引擎」的內部自動退路要傳
       `allow_local_easyocr=local_easyocr_safe()`。遠端 GPU 不受此限。
-    preprocess: 是否做影像預處理（grayscale + autocontrast）— 兩 engine 都受惠
+    preprocess: 是否做影像預處理 —— Tesseract：灰階＋拉對比；EasyOCR（本機與遠端相同）：影像有雜點且解析度夠時才做 3×3 中值濾波
 
     遠端 GPU EasyOCR server: 若 admin 已設定 + enabled,優先使用,失敗自動退本機。
 
     回 (words_list, engine_used) — engine_used 紀錄實際用的 engine（可能是 fallback 後的）
     """
     chosen = engine or get_default_engine()
+    # EasyOCR 的去雜點：呼叫端要前處理，也要影像真的有雜點才做（理由見 EASYOCR_DENOISE_*）
+    _denoise: list = []
+
+    def eo_pre() -> bool:
+        if not _denoise:
+            _denoise.append(bool(preprocess) and easyocr_wants_denoise(png_bytes))
+        return _denoise[0]
 
     # 遠端 GPU EasyOCR — 優先使用,失敗 fallback 本機
     if chosen == "easyocr":
@@ -410,7 +472,7 @@ def recognize_image(png_bytes: bytes, langs: str,
             from . import ocr_remote_settings as _ors
             if _ors.is_enabled_and_configured():
                 try:
-                    words = _remote_easyocr_recognize(png_bytes, langs, preprocess=preprocess)
+                    words = _remote_easyocr_recognize(png_bytes, langs, preprocess=eo_pre())
                     if words:
                         return words, "easyocr-remote"
                     log.info("remote EasyOCR returned 0 words, trying local")
@@ -421,7 +483,7 @@ def recognize_image(png_bytes: bytes, langs: str,
 
     if chosen == "easyocr":
         if is_easyocr_available() and allow_local_easyocr:
-            words = _easyocr_recognize(png_bytes, langs)
+            words = _easyocr_recognize(png_bytes, langs, preprocess=eo_pre())
             if words:
                 return words, "easyocr"
             log.info("EasyOCR returned 0 words, trying tesseract fallback")
@@ -438,6 +500,6 @@ def recognize_image(png_bytes: bytes, langs: str,
             return words, "tesseract"
         log.info("Tesseract returned 0 words, trying easyocr fallback")
     if is_easyocr_available() and allow_local_easyocr:
-        words = _easyocr_recognize(png_bytes, langs)
+        words = _easyocr_recognize(png_bytes, langs, preprocess=eo_pre())
         return words, "easyocr" if words else "none"
     return [], "none"

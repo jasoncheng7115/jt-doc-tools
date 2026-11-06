@@ -67,6 +67,7 @@ _IC = {
     "clock": '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
     "printer": '<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>'
                '<rect x="6" y="14" width="12" height="8"/>',
+    "seal": '<path d="M9 3h6v5l2 3H7l2-3z"/><path d="M5 14h14v3H5z"/><path d="M4 21h16"/>',
     "warn": '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>'
             '<path d="M12 9v4"/><path d="M12 17h.01"/>',
     "box": '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>'
@@ -89,7 +90,7 @@ _IC = {
 CARD_SECTIONS = ("工具本身做到的", "你的組織使用後要做的")
 CARD_ICONS = {
     "存取控制": "lock", "稽核記錄": "log", "保留期限與備份": "clock", "AI 產出可核對": "sparkle",
-    "文件處理的隔離": "box", "事務機連線與取件": "printer", "透明與安全開發": "code",
+    "文件處理的隔離": "box", "事務機連線與取件": "printer", "用印申請": "seal", "透明與安全開發": "code",
     "部署與連線": "globe", "帳號與權限": "users", "保留與備份": "db", "AI 使用與人工覆核": "eye",
 }
 

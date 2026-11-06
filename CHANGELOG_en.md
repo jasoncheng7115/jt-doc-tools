@@ -5,11 +5,89 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (955 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (961 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.32] - 2026-11-06
+
+### Seal requests: prepare before enabling, flow simulation, watermarks (Beta)
+
+- Seal requests are now marked Beta (sidebar, settings page and both page titles).
+- Custodians, requesters, flows and the retention period can be set up before the feature is enabled; only switching a seal to "approved requests only" has to wait, because it takes effect immediately.
+- Flows can be simulated: pick an applicant and seals and check them against the same rules used at submission (enough eligible reviewers per stage, allowed to request, custodian available, a shared custodian for several seals). Nothing is created and nobody is notified.
+- Each flow can add a watermark when stamping: text (with `{number}` / `{date}`) or a watermark image from the asset library, with opacity, angle, size and gap, tiled on every page and applied before the seals. The setting is frozen at submission; a deleted watermark image makes stamping fail with a clear reason.
+- Settings page redesign: four-step overview with note cards, stages as a timeline, reviewers and applicants as tags, seal thumbnails, site-style dropdowns, icons on every button, equal row heights.
+- API: `POST /admin/seal-request/api/simulate`; flows gain a `watermark` field.
+- Simulation: directory accounts that have never signed in are no longer called "disabled"; the result explains they become active after the first sign-in and assumes they have signed in, and stages and custodians note how many such accounts are not counted yet (submission rules are unchanged). Every result item carries its message. The applicant dropdown supports type-to-search.
+- Site dropdowns gain optional type-to-search (only with `<select data-search>`; other dropdowns are unchanged).
+- Directory (AD / LDAP) accounts that have never signed in are now counted as reviewers and custodians (they must sign in once to actually review or stamp, which activates them); accounts disabled in AD, disabled by an administrator, or no longer in the directory are still excluded. Previously they were not counted, so with many managers who had never signed in, submissions failed with "not enough reviewers".
+- Custodians and requesters in the seal list are shown as tags (groups outlined, removed entries in red) and unset ones as grey dashed tags. The simulation now says explicitly when the only reviewer or custodian is the applicant, and when a seal has no requesters (none set means nobody can request it).
+
+### Form filling: forms without grid lines
+
+- On forms with a single outer frame and no row lines, value slots used to extend down to the next drawn line, so values landed several rows below on other labels. Slots now use the label's own row and stop at the next text on that row or at a seal box; an adjacent cell spanning several label rows is treated the same way.
+- Labels ending in "(English)" (in Chinese, `(英文)`) fill the English field; fields without an English version are left blank instead of receiving Chinese text.
+- Several labels in one text run are split using real glyph positions; a colon printed as its own run is skipped. Fallback positions stop before the next printed word, and single-line slots far too narrow for the value are left blank.
+- Full form regression: no sample got worse; overlaps 20 → 10.
+- Glyph-based text recovery (shared by text extraction, redaction and others): when one glyph maps to both a CJK ideograph and a Kangxi radical (for example in Microsoft JhengHei), the radical used to win and correct text was replaced by a look-alike with a different code point; the ideograph is now preferred.
+
+## [1.17.31] - 2026-11-06
+
+### Seal requests (phase 4: documentation)
+
+- The README, the project site and the compliance page now describe seal requests: per-seal control, stage-by-stage review, stamping by the custodian, records and retention. They also state that account login must be enabled first, that the feature is off by default, and that the stamped seal is an image, not a digital signature.
+- The compliance page gains a "Seal requests" card (segregation of duties, no substitution, who can see the documents); the ISO/IEC 27001:2022 A.5.3 row mentions seal requests, and the database backup item now lists four databases.
+
+## [1.17.30] - 2026-11-06
+
+### Seal requests (phase 3: stamping by the custodian)
+
+- Once every stage approves, the request appears under the custodian's "Awaiting my stamping" (also counted in the sidebar badge). The custodian sees the actual seal images on the preview, starting from the applicant's preferred positions, and can drag them or edit page, position, size and angle, add or remove positions. Before confirming, a summary lists which seal goes on which pages and how many times; confirming produces the stamped PDF.
+- Only custodians stamp: applicants cannot stamp their own requests; only the approved seals can be used, each at least once. Before stamping, the document and seal images are checked against the approved versions; if either was replaced, stamping is refused and the request must be returned and resubmitted. Clicking twice stamps once.
+- Custodians can return a request to the applicant (reason required), which restarts review from the first stage after resubmission. Failed stamping keeps the approval and can be retried; a stamping interrupted by a service restart becomes "stamping failed" after 10 minutes.
+- When done, the applicant downloads the stamped PDF from the request page or saves it to their workspace; the result is stored before anyone is notified. Stamping is recorded in the stamp history (marked as coming from a seal request, with the request number). Administrators can void a completed request (reason required), which stops normal downloads; copies already downloaded cannot be recalled.
+- Administrators can set a retention period for requests (default 0 = never delete) according to their document retention rules; expired closed requests are deleted entirely by the scheduled cleanup and audited. The request database is included in the daily database backup.
+- Notifications are sent through each user's own channels on submission, the next stage, full approval, return, rejection, completion and failed stamping (a link only, no attachments).
+- The records show that a document was approved and stamped, but cannot stop anyone extracting the seal's appearance from the PDF; this is not a digital signature. The API manual covers the new stamping endpoints.
+
+## [1.17.29] - 2026-11-06
+
+### Seal requests (phase 2: requests and reviews)
+
+- With seal requests enabled, the sidebar shows "Seal requests": choose a flow, upload the document to stamp (a PDF, or an office document that is converted to PDF), fill in the subject and purpose, choose seals and preferred positions (page and position; placeholder boxes are drawn on the preview), add reference attachments, and submit for stage-by-stage review. Applicants never see the original seal images.
+- Administrators create flows in "Settings → Seal requests": each stage has reviewers (users or groups) and a passing rule (any one, everyone, or at least N), with optional limits on who can apply and which seals apply. Changing a flow does not affect requests already submitted.
+- Reviewers approve, return for changes or reject (the last two need a reason) under "Awaiting my review". After all stages approve, the request is "awaiting stamping"; stamping by the custodian comes in the next release. Applicants cannot approve their own requests, each person counts once, and simultaneous approvals advance a stage only once.
+- Submission checks that every stage has enough eligible reviewers; if reviewers are later disabled or leave a group, the request stops at that stage marked "needs reassignment" until an administrator reassigns it (reason required) under "Request overview"; stages are never skipped.
+- Resubmitting after changes creates a new version reviewed again from the first stage; earlier versions are kept. PDFs with an open password or an existing digital signature cannot be submitted.
+- Documents, attachments and previews are only available to the applicant, reviewers, custodians and auditors; administrators see request details but not documents; anyone else gets "not found". Every action is recorded in the request history and the audit log. The API manual has a new "Seal request API" section.
+
+## [1.17.28] - 2026-11-05
+
+### Seal requests (phase 1: seal restrictions)
+
+- New "Settings → Seal requests", **off by default**. Once enabled, official seals or signatures (such as the company seal) can be set to "approved requests only", with custodians and requesters set per seal. Requests, approvals and stamping come in later releases.
+- Seals set to "approved requests only" cannot be used directly in Stamp & Signature, Seam Stamp or the PDF Editor (including their APIs): they are not listed, and their asset image URLs are not served, for administrators too. Seals left unchanged behave exactly as before.
+- Account login must be enabled first; the feature cannot be disabled while any seal is restricted, so restrictions never disappear silently. If the settings file cannot be read, all seals and signatures are treated as restricted.
+- The settings are included in settings backups and changes are audited. The API manual has a new "Seal requests (administrators)" section.
+
+## [1.17.27] - 2026-11-04
+
+### PDF editor
+
+- Three cases where the saved PDF did not match the screen are fixed: image opacity was ignored (always opaque); an image rotated by anything other than a multiple of 90 degrees **disappeared** from the saved file; rotated text, rectangles, ellipses, white-out and highlights were saved unrotated. All of these now keep the on-screen angle and position, and rotated lines and arrows use their rotated end points.
+- Sticky notes no longer show a rotation handle (they are saved as standard PDF note icons, which do not rotate).
+- API: objects accept `angle` and `quad` (the four corners after rotation); the manual now documents them, and the example's font size key is corrected (`font_size`, not `size`).
+
+### OCR
+
+- EasyOCR's de-speckle step (3x3 median filter) now runs only when the image really has scanner speckles and enough resolution (roughly A4 at 200 DPI or more). Previously the remote GPU server always applied it and the local engine never did, so the same file could give different results depending on whether a remote server was configured; measurements showed unconditional filtering makes clean pages worse, especially small text at low resolution. On synthetic test pages checked against the known text: always filter 87.6%, never filter 92.3%, decide per image 93.7%. Local and remote use the same decision; the remote server does not need to be redeployed.
+
+### Documentation
+
+- Security issues are now reported privately: SECURITY.md is rewritten (use GitHub "Report a vulnerability" or email, not a public issue; response and fix targets; only the latest release receives security fixes; where published advisories are). The README and the site footer link to it.
 
 ## [1.17.26] - 2026-11-03
 
@@ -92,6 +170,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 
 ## [1.17.12] - 2026-10-22
 
+### Security
+
+- [GHSA-29r9-6ff3-vp55](https://github.com/jasoncheng7115/jt-doc-tools/security/advisories/GHSA-29r9-6ff3-vp55)
+
 - Install and update: the project environment now requires Python 3.11 or later, and Pillow is always 13.0.0. Pillow 13 dropped Python 3.10 and 12.x has no fixed release, so environments built on 3.10 had collected 28 unfixed Pillow advisories (5 critical, including an argument injection that can lead to remote code execution when an EPS file is opened; published 2026-10-20 and 10-21). **A host that only has Python 3.10 can still install and update**: on Linux the installer and `jtdt update` build the environment with the install directory's own Python 3.12, as Windows already did. Existing installs still on a Python 3.10 environment: run `jtdt update`; the environment is rebuilt automatically on Python 3.11 or later, which downloads all dependencies again and takes longer than usual, while data and settings are kept. If the service does not start after the update, run `jtdt update` once more (it moves the environment to the install directory's Python 3.12). The README system requirements now say Python 3.11+ (with a note that a 3.10 host is fine).
 
 ## [1.17.11] - 2026-10-22
@@ -114,6 +196,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - Install and update: on Linux, an environment built on Python older than 3.11 (for example an old install on the Ubuntu 22.04 system Python) is now rebuilt once with the install directory's own Python 3.12 by `jtdt update` or by re-running the installer, so it receives the Pillow 13 security fixes (Pillow 13 needs Python 3.11+). The rebuild downloads all dependencies again and takes longer than usual; data is not affected. The project still supports Python 3.10, and Windows already uses its own Python 3.12. Because the updater is loaded before it updates itself, `jtdt update` needs to be run twice (the first run installs the new code, the second rebuilds the environment); re-running the one-line installer rebuilds it in one go.
 
 ## [1.17.7] - 2026-10-21
+
+### Security
+
+- [GHSA-29r9-6ff3-vp55](https://github.com/jasoncheng7115/jt-doc-tools/security/advisories/GHSA-29r9-6ff3-vp55)
 
 - Security: Pillow 12.3.0 → 13.0.0, fixing a heap overflow in JPEG decoding (critical) plus 6 high and 2 moderate issues in TIFF, GIF, PDF page trees and morphology (published 2026-10-20); this site decodes uploaded images and JPEGs inside PDFs, so it is directly affected. certifi 2026.4.22 → 2026.10.19, removing the emSign root CAs whose intermediate keys were compromised (critical).
 - Known issue: Pillow 13 requires Python 3.11 or later and Pillow 12 has no patched release, so installs on Python 3.10 (for example the Ubuntu 22.04 system Python) stay on Pillow 12.3.0 with those issues; please move to Python 3.11 or later. The certifi fix applies regardless.
@@ -185,6 +271,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - The protocol log no longer records URL query strings (a download address from the device may carry a one-time token).
 
 ## [1.16.94] - 2026-10-15
+
+### Security
+
+- [GHSA-6mqq-4jmr-f2pr](https://github.com/jasoncheng7115/jt-doc-tools/security/advisories/GHSA-6mqq-4jmr-f2pr)
 
 - Fix: when an AD / LDAP server was slow or unreachable, **the whole site stalled** for everyone. Sign-in, reverse-proxy SSO (Kerberos), the connection and account tests in the authentication settings, and the directory functions on the admin pages (group sync, group members, directory tree, OU users, user details, object picker) waited for LDAP on the service's main loop. These waits now run on background threads, so other people are not affected; hashing the password for local account sign-in moved to the background too.
 - Fix: with several domain controllers configured and none reachable, the connection used to retry forever; it now gives up after one round and reports that no LDAP server can be reached.
@@ -521,6 +611,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - **Windows installer: you can see what it is doing, and the uninstaller's last page now talks about uninstalling.** The wizard now shows each step as it happens (checking the network, downloading the code, installing Python and its packages, downloading OxOffice, registering the service...). The OxOffice download shows how much is done, the speed and the estimated time left; installing the Python packages shows which one is being downloaded. Before, the window showed the same two lines for the whole 10 to 30 minutes. Chinese, Japanese and English text all display correctly: progress now travels through a Unicode status file instead of the system ANSI code page that used to garble child-process output. The output of the Python package step is now also kept in `installer.log`. After uninstalling, the last page used to say the installation was about to finish, the window title said Setup and "Open the web interface" was ticked; it now says the program was uninstalled and where your data was kept (or that it was deleted), without the checkbox and the website link. The "also delete your data?" question is now asked when the uninstall starts (its title bar used to show the setup title), after the install folder has been checked. These changes are inside the installer, so they show up from the 1.16.55 installer on; one-line installs and `jtdt update` are unaffected.
 
 ## [1.16.54] - 2026-10-05
+
+### Security
+
+- [GHSA-7xx9-vf5g-xcfx](https://github.com/jasoncheng7115/jt-doc-tools/security/advisories/GHSA-7xx9-vf5g-xcfx)
 
 - **Stamps and signatures from the asset library now follow the Stamp and sign permission (issue #54).** With sign-in enabled, people without permission to use Stamp and sign no longer see the library's stamps and signatures under the PDF editor's stamp / signature picker (logos are unchanged); the picker explains why, and Upload a new image still works. Previously an ordinary user (who has no stamping permission by default) could pick the company stamp in the editor and put it on a PDF. Saving checks too: a hand-built request naming a stamp asset is refused with 403 and produces no file. The asset image addresses (`/assets/{id}/file` and `/assets/{id}/thumb`) follow the same rule: a stamp needs Stamp and sign or Seam stamp, a signature needs Stamp and sign, a watermark needs Watermark, and a logo only needs sign-in. They used to be open to anyone signed in, so downloading an image and uploading it again got around the permission. The seam stamp tool only takes stamps from the library: a hand-built request naming a signature, watermark or logo is refused (with only seam stamp permission, a signature could previously be stamped across pages). Stamping with a library stamp or signature in the PDF editor is now saved to the Stamp and signature history on a manual save, like the stamp tool, marked as coming from the editor; autosaves are not recorded, and saving again with nothing changed adds no entry. Nothing changes with sign-in turned off (single-user mode).
 

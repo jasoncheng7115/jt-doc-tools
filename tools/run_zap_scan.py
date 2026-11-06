@@ -97,6 +97,11 @@ def _start_authenticated_instance(tmp: Path) -> tuple[subprocess.Popen, int, str
         "if not u:\n"
         "    user_manager.create_local('jtdt-admin', 'ZAP admin', pw, roles=['admin'])\n"
         "    u = user_manager.get_by_username('jtdt-admin')\n"
+        "# 用印申請預設不啟用：打開並建一個流程，爬蟲才掃得到啟用狀態的頁面與 API\n"
+        "from app.core import seal_policy, seal_flow\n"
+        "seal_policy.set_enabled(True)\n"
+        "seal_flow.save_flow(None, {'name': 'zap', 'stages': [{'name': 's1', 'rule': 'any', "
+        "'candidates': [{'type': 'user', 'key': str(u['id'])}]}]})\n"
         "tok, _ = sessions.issue(u['id'], remember=True, ip='127.0.0.1', ua='zap')\n"
         "print(tok)\n" % (str(ROOT), secrets.token_urlsafe(18)),
         encoding="utf-8")

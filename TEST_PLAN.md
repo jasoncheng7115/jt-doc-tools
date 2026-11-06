@@ -641,6 +641,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - **`app/core/auth_db.py`**：`_m1_initial`、`_m2_username_source_unique`、`_m3_rename_pdf_diff_to_doc_diff`、`_m4_grant_image_to_pdf`、`_m5_grant_translate_doc`、`_m6_totp_columns`、`_m7_audit_seed_column`、`_m8_sso_sources`、`_m9_role_seed_snapshot`、`_m10_role_default_for_new`、`_m11_group_sync_cache`、`_m12_unprovision_mirrored_users`、`_m13_grant_pdf_to_slides`、`_m14_user_email`、`_m15_directory_presence`、`_m16_session_last_seen`、`_m17_directory_account_state`、`_m18_grant_transit_proof_and_border`、`_m19_grant_pdf_bookmark`、`_m20_grant_seam_stamp`、`_m21_grant_page_size`、`_m22_grant_office_convert`、`_m23_canon_ou_subject_keys`、`_m24_index_group_members_user`、`_m25_grant_doc_translate`、`_m26_grant_doc_straighten`、`_m27_grant_meeting_summary`、`_m28_grant_meeting_transcribe`、`_m29_grant_official_doc`
 - **`app/core/audit_db.py`**：`_m1_initial`
 - **`app/core/job_store.py`**：`_m1_initial`、`_m2_metrics`、`_m3_started_at`
+- **`app/core/seal_store.py`**：`_m1_initial`（v1.17.29：用印申請的流程、案件、版本、票、事件，全新建立）、`_m2_stamping`（v1.17.30：`seal_cases` 加用印相關欄位（ADD COLUMN），第 2 版的案件都還在、新欄位是預設值：`tests/test_seal_stamp.py::test_migration_from_v1_keeps_cases`）、`_m3_watermark`（v1.17.32：`seal_flows` 與 `seal_case_versions` 各加 `watermark`（ADD COLUMN），第 3 版的流程與版本都還在、浮水印預設 `{}`：`tests/test_seal_simulate_watermark.py::test_migration_v2_to_v3_keeps_flows_and_versions`）
 - **`app/core/mfp_store.py`**：`_m1_initial`、`_m2_shared_and_scans`（v1.16.87：只新增 `mfp_members`、`mfp_scans` 兩張表，不動 `mfp_connections`；v1 的事務機升上來都還在：`tests/test_mfp_shared_and_scan.py::test_migration_from_v1_keeps_existing_connections`）、`_m3_job_kind_and_items`（v1.16.89：`mfp_scans` 加 `kind`、`items` 兩欄（ADD COLUMN），舊紀錄都還在、一律是掃描：`tests/test_mfp_shared_and_scan.py::test_migration_from_v2_keeps_existing_scans`）、`_m4_prefs`（v1.17.5：只新增 `mfp_prefs`（記住的設定，FK cascade），v3 的事務機都還在、刪事務機時設定一起刪：`tests/test_mfp_prefs_and_ownership.py::test_migration_from_v3_keeps_connections_and_adds_prefs`）
 - **`app/core/kb/store.py`**（知識庫；在子資料夾裡，上面那條自動比對不會掃到，這裡手動列）：
   - [ ] **`_m2_gov_imports`**：只新增 `kb_gov_items`、`kb_gov_versions` 兩張表，不重建既有的表；
@@ -659,7 +660,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **528 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **539 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -970,6 +971,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_notify_test_sends_real_layout.py` | 通知設定的「傳送測試」：Email 寄的是**跟作業完成通知同一個版面**的範例信 |
 | `test_notify_zulip_api.py` | Zulip 通知對一台假的 Zulip 伺服器實際走 HTTP（v1.17.0，Zulip 維護人員 2026-10-18 的要求） |
 | `test_ocr_avx2_guard.py` | 本機 EasyOCR 在缺 AVX2 的 CPU 上會 SIGILL 打掛整個服務 |
+| `test_ocr_easyocr_local_preprocess.py` | EasyOCR 的去雜點：本機與遠端做一樣的事，而且只在影像真的有雜點、解析度也夠時才做 |
 | `test_ocr_engine_note_on_both_paths.py` | OCR 完成訊息要講出「實際用了哪個引擎、有沒有退回」—— 網頁與 API 兩條路都要 |
 | `test_ocr_first_download_message.py` | 第一次用本機 EasyOCR 時，狀態文字要說「正在下載辨識模型」 |
 | `test_ocr_server_gpu_select.py` | Unit tests for jt-ocr-server's auto GPU selection (server_template.py). |
@@ -1036,8 +1038,11 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_pdf_compress.py` | Tests for the pdf-compress tool, focused on transparency preservation. |
 | `test_pdf_editor_draft_survives_reload.py` | PDF 編輯器：**斷線 / 誤關分頁之後編輯內容要救得回來** |
 | `test_pdf_editor_font_subset.py` | PDF 編輯器寫進去的中文：字形要看得見、檔案不可以是十幾 MB |
+| `test_pdf_editor_rotation_browser.py` | PDF 編輯器（真瀏覽器）：畫面上轉過的物件，按存檔之後產出的 PDF 也是轉過的 |
+| `test_pdf_editor_rotation_opacity_saved.py` | PDF 編輯器：畫面上轉過、調過透明度的物件，存檔後要跟畫面一樣 |
 | `test_pdf_fill_positioning.py` | 表單自動填寫的定位規則 |
 | `test_pdf_form_detect.py` | Unit tests for the field detector. Builds tiny synthetic PDFs in memory |
+| `test_pdf_form_noline_rows.py` | 沒有格線的表單：整張只有一個外框、裡面一列一列的「標籤：」（v1.17.32） |
 | `test_pdf_isolate.py` | 解析器的行程隔離（外部稽核 F04） |
 | `test_pdf_ocr_preview_acl.py` | End-to-end ACL test for pdf-ocr `/preview/{uid}.pdf` endpoint (v1.7.6). |
 | `test_pdf_page_size.py` | 頁面尺寸統一 |
@@ -1099,6 +1104,13 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_scanner_regexes_are_linear.py` | 檢查的正規式不可以有**重疊的分支** —— 那是指數級回溯 |
 | `test_scheduled_export.py` | Scheduled settings export (v1.12.54). |
 | `test_script_line_endings.py` | Windows 批次檔一律 CRLF、Unix 腳本一律 LF |
+| `test_seal_flow.py` | 用印申請第 2 版：流程範本、申請、審核（規格第 4～7、14 節） |
+| `test_seal_policy.py` | 用印申請第 1 版：功能開關、每顆章的管制，以及所有用印入口一致擋下受管制的章 |
+| `test_seal_policy_entry_points.py` | 結構檢查：讀資產庫給使用者用的每一個函式，都要經過用印申請的管制判斷 |
+| `test_seal_request_admin_browser.py` | 設定 → 用印申請（真瀏覽器）：啟用、把章改成管制、用印工具看不到、還有管制的章時不能停用 |
+| `test_seal_request_page_browser.py` | 用印申請頁（真瀏覽器）：申請者建立 → 上傳 → 選章與位置 → 送出；審核者在「待我審核」核准 |
+| `test_seal_simulate_watermark.py` | 用印申請：沒啟用時先準備設定、流程模擬、流程附加浮水印（v1.17.32，使用者 2026-11-06） |
+| `test_seal_stamp.py` | 用印申請第 3 版：保管人用印、成果、失敗重試、作廢、保存期限、通知（規格第 7～9、14 節） |
 | `test_seal_zone_marker.py` | 用印區的排除條件：**標籤才算，說明句不算** |
 | `test_seam_preview_lightbox_e2e.py` | 騎縫章的預覽點下去要看到**真的比較大**的圖（使用者 2026-09-14 要求） |
 | `test_seam_preview_speed.py` | 騎縫章預覽：只蓋要看的那一頁 |
@@ -2789,6 +2801,34 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
       — 背景作業（回 `job_id`）；還沒下載就匯入 → 400；同時只能一件 → 409；寫 `kb_import` 稽核
 - [ ] `POST /admin/knowledge/api/gov/packages/{pid}/upload` — 手動上傳下載檔（同一套檢查）；超過上限 → 413；背景處理、失敗原因記在那個下載檔上
 
+### 用印申請（管理員，`/admin/seal-request`）🆕 v1.17.28
+- [ ] `GET /admin/seal-request/api/state` — 未啟用時 `enabled=false`、每顆章 `mode=direct`；清單只有印章與簽名（沒有 Logo、浮水印）
+- [ ] `PUT /admin/seal-request/api/enabled` — 未啟用登入 → 409 `AUTH_REQUIRED`；還有受管制的章時停用 → 409 `STILL_CONTROLLED` 並列出是哪幾顆；非布林值 → 400；寫稽核 `seal_request_toggle`
+- [ ] `PUT /admin/seal-request/api/assets/{asset_id}` — 未啟用 → 409 `NOT_ENABLED`；不存在 → 404；模式、人員格式錯 → 400 且設定沒變；寫稽核 `seal_asset_policy_change`
+- [ ] `GET /admin/seal-request/api/subjects` — 列出使用者（`帳號@來源`）與群組（本站人數）
+- [ ] 四支都只有管理員能用：一般使用者 403 / 401，且設定沒變
+- [ ] `GET|POST /admin/seal-request/api/flows`、`PUT|DELETE /admin/seal-request/api/flows/{flow_id}`（v1.17.29）— 名稱、關卡（1～10 關、每關要有審核者、至少 N 人的 N 在 1～50）不合法 → 400 且沒存；未啟用 → 409；修改版本 +1；寫稽核 `seal_flow_change`
+- [ ] `GET /admin/seal-request/api/cases`、`POST /admin/seal-request/api/cases/{case_id}/reassign`（v1.17.29）— 總覽不含文件；改派原因必填、新審核者人數不夠 → 409；寫事件 `reassign` 與稽核 `seal_req_reassign`
+
+### 用印申請（使用者，`/seal-request/api/*`）🆕 v1.17.29
+- [ ] `GET /seal-request/api/home`、`GET /seal-request/api/flows/{flow_id}/assets` — 只列我能用的流程、我能申請的受管制章（沒有圖檔網址）
+- [ ] `GET|POST /seal-request/api/cases`、`GET|PUT|DELETE /seal-request/api/cases/{case_id}` — 清單 `mine` / `review` / `handled` / `all`（只有管理員、稽核員）；草稿以外不能刪；不是申請者不能改
+- [ ] `POST|GET /seal-request/api/cases/{case_id}/document`、`GET /seal-request/api/cases/{case_id}/pages/{page}` — 有開啟密碼、數位簽章、不是 PDF 也轉不了的檔被擋；下載是 attachment
+- [ ] `POST /seal-request/api/cases/{case_id}/attachments`、`GET|DELETE /seal-request/api/cases/{case_id}/attachments/{att_id}` — 一律下載、`nosniff`；送出後不能改
+- [ ] `POST /seal-request/api/cases/{case_id}/submit` — 必填欄位、文件、章都要有；合格審核者不夠 → 409 `INSUFFICIENT_APPROVERS`
+- [ ] `POST /seal-request/api/cases/{case_id}/approve` — 只有輪到的審核者；申請者不能核准；同一人不能重複計票；狀態被別人改過回 409
+- [ ] `POST /seal-request/api/cases/{case_id}/return`、`POST /seal-request/api/cases/{case_id}/reject` — 原因必填
+- [ ] `POST /seal-request/api/cases/{case_id}/withdraw` — 只有申請者；結束的案件不能撤回
+- [ ] `POST /seal-request/api/cases/{case_id}/comment` — 不改變狀態；只有看得到案件的人能留言
+- [ ] 無關的人拿案件編號：詳情、文件、預覽、附件一律 404；功能沒啟用一律 404
+- [ ] `GET /seal-request/api/cases/{case_id}/assets/{asset_id}/image`（v1.17.30）— 只有這件案件的保管人、只在待用印 / 用印中 / 用印失敗；申請者、審核者、管理員、稽核員一律 404；完成後也 404
+- [ ] `POST /seal-request/api/cases/{case_id}/stamp`（v1.17.30）— 申請者 403、非保管人 403 / 404；只收核准的章、每顆至少一處、頁與尺寸範圍；文件或章圖跟核准時不同 409；同一個 `exec_id` 重送只蓋一次
+- [ ] `POST /seal-request/api/cases/{case_id}/custodian-return`（v1.17.30）— 原因必填；不是保管人 403
+- [ ] `GET /seal-request/api/cases/{case_id}/result`（v1.17.30）— 申請者、審核者、保管人、稽核員拿得到；作廢後只剩稽核員；記下申請者第一次下載時間
+- [ ] `POST /seal-request/api/cases/{case_id}/result/workspace`（v1.17.30）— 只有申請者；工作區沒啟用 409；工作區滿了不影響案件
+- [ ] `POST /admin/seal-request/api/cases/{case_id}/void`、`PUT /admin/seal-request/api/retention`（v1.17.30）— 作廢只限已完成、原因必填；保留期限 0～36500 天整數，其他 400
+- [ ] `POST /admin/seal-request/api/simulate`（v1.17.32）— 只有管理員；只讀（不建案件、不發通知）；流程內容可以是還沒儲存的；人數不足、不是可申請對象、沒有保管人、章沒有共同保管人都列出；流程格式錯 400、申請者不存在 404
+
 ### 4.6.1 之前靠「尾段字串」假通過的那幾支 🆕 v1.15.30
 
 > 涵蓋檢查原本比對「`/api/` 之後那一截」—— `list` / `count` / `assets` /
@@ -3179,7 +3219,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 目前沒有自動化測試碰過，跑 `python tools/report_endpoint_test_coverage.py`，
 那份是**提示不是判決**。
 
-共 **321 支**（工具首頁不列，§2 已逐支驗收）。
+共 **322 支**（工具首頁不列，§2 已逐支驗收）。
 
 **全站（認證 / 帳號 / 工作區 / 介面語言）**
 
@@ -3222,6 +3262,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `POST /me/2fa/verify`
 - [ ] `POST /me/email`
 - [ ] `GET /my-jobs`
+- [ ] `GET /seal-request` — 用印申請頁（v1.17.29）：功能沒啟用時說明「尚未啟用」；啟用後側欄出現「用印申請」與待我審核件數
 - [ ] `GET /setup-admin`
 - [ ] `POST /setup-admin`
 - [ ] `POST /setup-admin/reuse-existing`
@@ -6276,6 +6317,95 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > **最高原則：加 i18n 不可以改壞現有功能。** 所以每一個階段的第一條驗收都是
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
+
+### 6.141 v1.17.32 — 用印申請：先準備設定、流程模擬、浮水印；無格線表單的填寫位置（**每次發版必過**）
+
+- [ ] 用印申請沒啟用時：設定 → 用印申請 可以設保管人、可申請對象、用印流程、保留期限；使用模式不能改成「僅限核准案件使用」，頁面寫明原因。
+- [ ] 說明區是四步流程＋三張說明卡；設定那兩列一樣高；下拉選單是本站樣式；所有按鈕都有圖示；流程的「適用的章」有縮圖。
+- [ ] 關卡是時間軸：申請者送出 → 各關（編號圓點、審核者標籤）→ 保管人用印；上移、移除、加一關都正常。
+- [ ] 「模擬申請」：挑申請者與章 → 開始模擬；人數不足的那一關標紅並說需要幾人；不是可申請對象、沒有保管人都列出；模擬後案件總覽沒有多案件、沒有人收到通知。
+- [ ] 流程勾「用印時附加浮水印」：文字（含 `{編號}`、`{日期}`）或資產庫的浮水印圖、透明度、角度、大小；用印後每一頁都有浮水印、章在浮水印上面；流程清單標「浮水印」。
+- [ ] 送出後把流程的浮水印關掉：那件案件用印時仍照送出時的設定。
+- [ ] 浮水印圖在送出後被刪：用印失敗並說明原因。
+- [ ] AD 帳號從沒登入過（目錄同步進來、未啟用）：設成審核者 / 保管人時算進人數，模擬提醒「要登入一次才能審核」；AD 停用、管理員停用的不算。拿這種帳號當申請者模擬：說「要登入一次才看得到申請入口」，不說「已停用」。
+- [ ] 模擬的申請者下拉可以打字搜尋；只剩一個時按 Enter 直接選。
+- [ ] Beta：側欄「用印申請」、設定 → 用印申請、兩頁標題都標 Beta。
+- [ ] 表單填寫：只有一個外框、裡面沒有橫線的表（每列「1. 公司名稱:」…）：每一欄填在自己那一列，不掉到下面幾列；同一列右邊有「發票章：」或章框時值停在前面。
+- [ ] 「公司地址(英文)」填英文地址；「發票地址(英文)」不填中文發票地址。
+- [ ] 「連絡人:　職務:　電話:」同一行：值不壓到「人:」，也不跨過「職務」。
+- [ ] 全表單回歸 `python temp_pdfs/_regress/run_fill_regress.py --compare <基準>`：沒有任何一份變差。
+- 自動化：`tests/test_seal_simulate_watermark.py`、`tests/test_pdf_form_noline_rows.py`
+
+### 6.140 v1.17.30 — 用印申請第 3 版：保管人用印、成果、保留期限、通知（**每次發版必過**）
+
+- [ ] 全部關卡核准後，保管人在「待我用印」看得到、側欄件數加一；申請者、審核者看不到這個分頁裡有它。
+- [ ] 保管人打開案件：預覽上顯示實際的章圖（不是示意框），位置帶入申請者標的；可以拖曳、改數字、加一處、移除。
+- [ ] 按「確認用印」前列出哪顆章、蓋在哪幾頁、共幾處；確定後狀態「已完成」，用印後的 PDF 打開看得到章、位置正確，沒蓋的頁沒有章。
+- [ ] 旋轉頁、不同紙張尺寸（A4 直 / 橫、Letter）：預覽位置與成果一致。
+- [ ] 申請者在案件頁下載用印後的 PDF、按「存到工作區」；工作區關閉時沒有那個按鈕。
+- [ ] 換成沒核准的章、少蓋一顆、頁碼超出：被擋並說明。
+- [ ] 核准後在資產庫換掉那顆章的圖：用印被擋，說明要退回重送；改文件檔也一樣。
+- [ ] 連按兩次「確認用印」：只蓋一次。
+- [ ] 保管人退回補件（原因必填）→ 申請者重送 → 新版本從第一關重審。
+- [ ] 用印失敗（例如磁碟滿）：狀態「用印失敗」、顯示原因、保留核准；按確認用印可以重試；沒有成果檔。
+- [ ] 用印中重啟服務：超過 10 分鐘後變成「用印失敗」可以重試。
+- [ ] 管理員在「案件總覽」作廢已完成的案件（原因必填）：申請者不能再下載；稽核員可以。
+- [ ] 設定保留期限 30 天：結束超過 30 天的案件由排程整筆刪除（含檔案），稽核記錄 `seal_req_purge`；預設 0 不刪；沒結束的案件不刪。
+- [ ] 通知（使用者有設定通知管道時）：送出→第一關審核者、通過一關→下一關、全部核准→保管人與申請者、退回 / 駁回→申請者、完成→申請者、失敗→保管人；信裡只有連結、沒有附件。
+- [ ] 用印歷史（設定 → 稽核員的歷史）出現這筆，標明來自用印申請與案件編號。
+- [ ] 每日資料庫備份含 `seal_requests.sqlite`。
+- [ ] 受管制的章在用印工具、騎縫章、PDF 編輯器仍然不能直接用（保管人也一樣）。
+- 自動化：`tests/test_seal_stamp.py`（雜湊核對、同一次按下只蓋一次、保管人檢查、只用核准的章四處變異驗證過）、`tests/test_seal_request_page_browser.py`（含保管人用印）
+
+### 6.139 v1.17.29 — 用印申請第 2 版：流程範本、申請、審核（**每次發版必過**）
+
+- [ ] 設定 → 用印申請 →「用印流程」：新增一個兩關的流程（第 1 關任一人、第 2 關至少 2 人），審核者用使用者與群組；修改後版本 +1。
+- [ ] 一般使用者側欄出現「用印申請」；「新增申請」看得到可以用的流程；選章時看不到原始印章圖，只有名稱。
+- [ ] 建立草稿 → 上傳 PDF（或 Word，會先轉成 PDF）→ 填主旨、用途 → 勾章、選頁與位置 → 儲存：預覽圖上畫出示意框，位置正確。
+- [ ] 有開啟密碼、已有數位簽章的 PDF：上傳時被擋並說明原因。
+- [ ] 加入參考附件、移除附件；送出前要確認；送出後不能再改。
+- [ ] 送出後第 1 關的審核者在「待我審核」看得到、側欄有件數；其他人看不到。審核者看得到文件預覽、可以下載 PDF 與附件。
+- [ ] 核准 → 進第 2 關；第 2 關兩人核准 → 狀態「待用印」（不是已蓋章）；同一人按兩次只算一票。
+- [ ] 申請者本人在候選名單裡也不能核准自己的申請；只有申請者一個候選人的關卡 → 送出時說明合格的審核者不夠。
+- [ ] 退回補件（原因必填）→ 申請者改文件後重送 → 第 2 版、從第一關重審；第 1 版的文件與紀錄還在。
+- [ ] 駁回（原因必填）結束案件；申請者可以撤回審核中的案件；草稿只能刪除不能撤回。
+- [ ] 全員核准的關卡有人被停用：案件標「需要改派」、不會被跳過；管理員在「案件總覽」改派（原因必填），處理紀錄寫出原因。
+- [ ] 管理員在「案件總覽」看得到案件資料，打不開文件；稽核員在「全部案件」看得到文件（唯讀）。
+- [ ] 無關的使用者拿案件編號打 API：一律找不到。
+- [ ] 留言不改變狀態；處理紀錄依時間列出每個動作與意見。
+- [ ] 稽核記錄查得到 `seal_req_create`、`seal_req_submit`、`seal_req_approve`、`seal_req_return`、`seal_req_reject`、`seal_req_withdraw`、`seal_req_download`、`seal_flow_change`、`seal_req_reassign`。
+- 自動化：`tests/test_seal_flow.py`（含兩人同時核准只前進一次、自我核准、管理員看不到文件的變異驗證）、`tests/test_seal_request_page_browser.py`
+
+### 6.138 v1.17.28 — 用印申請第 1 版：每顆章的管制與全入口檢查（**每次發版必過**）
+
+- [ ] 升級後打開「設定 → 用印申請」：預設**不啟用**，清單裡每顆章都是「直接使用」，不能改；用印與簽名、騎縫章、PDF 編輯器的行為跟升級前一樣。
+- [ ] 未啟用帳號登入：開關按不下去，頁面說明要先啟用登入。
+- [ ] 啟用後把一顆公司章改成「僅限核准案件使用」：
+  - [ ] 用印與簽名、騎縫章的選單看不到它；PDF 編輯器的「套印 / 簽名」看不到它，畫面說明原因。
+  - [ ] 直接打 `/assets/{id}/file`、`/assets/{id}/thumb` → 403，說明「請提出用印申請」。
+  - [ ] 用 API（`/tools/pdf-stamp/api/pdf-stamp` 帶 `asset_id`、或在 `placements_json` 裡指定）→ 403；騎縫章預覽指定它 → 403；PDF 編輯器存檔帶它 → 403。
+  - [ ] **管理員也一樣不能直接用**（管理員不因身分取得用印權）。
+  - [ ] 其他沒改的章照常能用。
+- [ ] 還有受管制的章時按停用：被擋，開關回到啟用，訊息列出是哪幾顆；改回「直接使用」之後才能停用。
+- [ ] 保管人、可申請對象可以勾選使用者與群組並儲存，重新整理後還在（第 1 版只存設定，申請與用印在之後的版本）。
+- [ ] 在資產庫刪掉一顆受管制的章：它的設定一起清掉。
+- [ ] 把 `seal_request.json` 弄壞（例如寫入亂碼）：所有印章與簽名都當成受管制、頁面紅字說明；修好檔案後恢復。
+- [ ] 設定備份的分類裡有「用印申請」，搬機還原後管制還在。
+- [ ] 稽核記錄查得到 `seal_request_toggle`、`seal_asset_policy_change`。
+- 自動化：`tests/test_seal_policy.py`、`tests/test_seal_policy_entry_points.py`（讀資產庫的函式都要經過管制判斷，新入口忘了接會紅）、`tests/test_seal_request_admin_browser.py`
+
+### 6.137 v1.17.27 — PDF 編輯器：轉過、調過透明度的物件存檔後跟畫面一樣；本機 EasyOCR 前處理（**每次發版必過**）
+
+- [ ] 加一張圖片、透明度調到 30%：存檔後下載，圖片是淡的（不是全不透明）。
+- [ ] 同一張圖片轉 30 度：存檔後圖片還在、角度與位置跟畫面一樣（原本整張不見）。
+- [ ] 文字框、矩形（含填色）、橢圓、白底、螢光筆各轉一個角度：存檔後角度與位置跟畫面一樣；文字仍選取得到、搜尋得到。
+- [ ] 線條、箭頭轉一個角度：存檔後兩端點跟畫面一樣。
+- [ ] 便箋沒有旋轉控制點。
+- [ ] 沒轉過的物件：存檔結果跟上一版一樣（位置不跑）。
+- [ ] API：照手冊範例呼叫 `/tools/pdf-editor/api/pdf-editor`，字級是 14（`font_size`）。
+- [ ] OCR（EasyOCR，本機）：乾淨的 PDF 300 DPI 辨識結果不比上一版差；有明顯雜點的掃描檔（200 DPI 以上）辨識得比上一版好。
+- [ ] OCR（EasyOCR，遠端 GPU）：同一份檔案走遠端與走本機，前處理一致（乾淨的頁面不再被濾）。
+- 自動化：`tests/test_pdf_editor_rotation_opacity_saved.py`、`tests/test_pdf_editor_rotation_browser.py`、`tests/test_ocr_easyocr_local_preprocess.py`
 
 ### 6.136 v1.17.26 — 從本站掃描：先暫存預覽、接著掃、最後存成一份 PDF（**每次發版必過**）
 

@@ -191,6 +191,7 @@ def test_plain_users_cannot_open_the_llm_page(admin_session, kb_isolated):
 #: 「設定」裡標 Beta 的頁面與理由。Beta 是刻意的告知，**多一個就要寫進來**，不可以順手加在別的頁面上。
 _BETA_SETTINGS = {
     "/admin/knowledge": "公文知識庫",
+    "/admin/seal-request": "用印申請：2026-11-06 剛上線，先標 Beta（使用者決定）",
 }
 
 

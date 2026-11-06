@@ -4,12 +4,18 @@
 
 ## 漏洞回報
 
-請開 GitHub issue 標 `security` label，或 email 給專案維護者（不要在公開 issue 揭露 PoC 細節）。
+**請不要開公開的 issue。** 請用本 repo Security 分頁的「Report a vulnerability」私下回報，或寄信到 service@jason.tools。
 
-> 截至 v1.5.3，本專案無已知未修補的高 / 中危漏洞：
-> - **依賴 CVE**：python-multipart / Pillow / Starlette 5 個 High CVE 在 v1.5.3 已 bump 修補，Dependabot alerts 全清。
-> - **CodeQL Critical（Partial SSRF）**：v1.5.3 在 `app/core/llm_client.py:_validate_llm_base_url` 加 URL allowlist + 雲端 metadata host 黑名單，並補 27 個 regression test。
-> - **CodeQL High（Path Injection）**：v1.5.3 補 12 個 endpoint 的 `upload_owner.require()` ACL（`pdf_pageno/thumb` / `pdf_pages/thumb` / `pdf_extract_images/page-thumb` 等)，並寫 `tests/test_path_traversal_audit.py` AST 結構審計避免回歸。
+- 3 個工作天內回覆收到；確認的問題以 7 天內釋出修正版、同時發布 GitHub Security Advisory 為目標。
+- 只有最新版會收到資安修正，回報前請先升級到最新版確認還有問題。
+- 已發布的安全公告：<https://github.com/jasoncheng7115/jt-doc-tools/security/advisories>
+
+### Reporting a vulnerability (English)
+
+Please do not open a public issue. Use "Report a vulnerability" on the Security tab, or email service@jason.tools.
+We aim to acknowledge within 3 business days and to release a fix and publish a GitHub Security Advisory
+within 7 days for confirmed issues. Only the latest release receives security fixes; please upgrade before reporting.
+Published advisories: <https://github.com/jasoncheng7115/jt-doc-tools/security/advisories>
 
 ## 設計原則
 

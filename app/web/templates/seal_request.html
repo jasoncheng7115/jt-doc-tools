@@ -1,0 +1,718 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}{{ tr('用印申請') }} · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('stamp', size=22) }} {{ tr('用印申請') }}<span class="tool-beta" title="{{ tr('試用中：功能還可能調整') }}">Beta</span></h1>
+{% if not ready %}
+<div class="panel">
+  <p>{{ tr('用印申請尚未啟用。管理員可以在「設定 → 用印申請」啟用（需要先啟用帳號登入）。') }}</p>
+</div>
+{% else %}
+<p class="muted">{{ tr('要用公司章這類受管制的章時，在這裡送出申請：經各關審核通過後，由印章保管人確認用印。審核通過不等於已經蓋章。') }}</p>
+
+<nav class="sr-tabs" id="srTabs" role="tablist">
+  <button type="button" class="sr-tab" data-box="new">{{ icon('plus', size=14) }} <span>{{ tr('新增申請') }}</span></button>
+  <button type="button" class="sr-tab" data-box="mine">{{ icon('list', size=14) }} <span>{{ tr('我的申請') }}</span></button>
+  <button type="button" class="sr-tab" data-box="review">{{ icon('check', size=14) }} <span>{{ tr('待我審核') }}</span> <span class="sr-badge" id="srReviewCount" hidden></span></button>
+  <button type="button" class="sr-tab" data-box="stamp">{{ icon('stamp', size=14) }} <span>{{ tr('待我用印') }}</span> <span class="sr-badge" id="srStampCount" hidden></span></button>
+  <button type="button" class="sr-tab" data-box="handled">{{ icon('clock', size=14) }} <span>{{ tr('我已處理') }}</span></button>
+  <button type="button" class="sr-tab" data-box="all" id="srTabAll" hidden>{{ icon('archive', size=14) }} <span>{{ tr('全部案件') }}</span></button>
+</nav>
+
+<section class="panel" id="srNew" hidden>
+  <h2>{{ tr('新增申請') }}</h2>
+  <p class="muted" id="srNoFlow" hidden>{{ tr('目前沒有你可以使用的用印流程，請洽管理員。') }}</p>
+  <div class="sr-flow-list" id="srFlows"></div>
+</section>
+
+<section class="panel" id="srList" hidden>
+  <table class="sr-table">
+    <thead><tr><th>{{ tr('編號') }}</th><th>{{ tr('主旨') }}</th><th>{{ tr('流程') }}</th><th>{{ tr('申請人') }}</th><th>{{ tr('狀態') }}</th><th>{{ tr('更新時間') }}</th></tr></thead>
+    <tbody id="srRows"></tbody>
+  </table>
+  <p class="muted" id="srEmpty" hidden>{{ tr('沒有案件。') }}</p>
+</section>
+
+<section id="srCase" hidden>
+  <div class="panel">
+    <p><button type="button" class="btn btn-small" id="srBack">{{ icon('back', size=14) }} <span>{{ tr('回到清單') }}</span></button></p>
+    <h2 id="srCaseTitle"></h2>
+    <p class="sr-meta" id="srCaseMeta"></p>
+    <div id="srStageBox"></div>
+  </div>
+
+  <div class="panel" id="srEdit" hidden>
+    <h3>{{ tr('申請內容') }}</h3>
+    <div class="form-row"><label for="srFSubject">{{ tr('主旨') }} *</label><input class="field" id="srFSubject" maxlength="200"></div>
+    <div class="form-row"><label for="srFPurpose">{{ tr('用印用途') }} *</label><textarea class="field" id="srFPurpose" maxlength="500" rows="2"></textarea></div>
+    <div class="form-row"><label for="srFRecipient">{{ tr('收件對象') }}</label><input class="field" id="srFRecipient" maxlength="200"></div>
+    <div class="form-row"><label for="srFDocType">{{ tr('文件類別') }}</label><input class="field" id="srFDocType" maxlength="60" placeholder="{{ tr('例如：報價、合約、證明') }}"></div>
+    <div class="form-row"><label for="srFDue">{{ tr('希望完成日期') }}</label><input class="field" id="srFDue" type="date"></div>
+    <div class="form-row"><label for="srFNote">{{ tr('補充說明') }}</label><textarea class="field" id="srFNote" maxlength="2000" rows="2"></textarea></div>
+
+    <h3>{{ tr('用印文件') }}</h3>
+    <p class="muted">{{ tr('PDF，或可以轉成 PDF 的辦公文件。審核者看到的、最後蓋章的，都是這一份 PDF。') }}</p>
+    <p>
+      <input type="file" id="srDocFile" accept=".pdf,.doc,.docx,.odt,.xls,.xlsx,.ods,.ppt,.pptx,.odp" hidden>
+      <button type="button" class="btn" id="srDocPick">{{ icon('upload', size=14) }} <span>{{ tr('上傳文件') }}</span></button>
+      <button type="button" class="btn" id="srDocWs" hidden>{{ icon('archive', size=14) }} <span>{{ tr('從工作區選取') }}</span></button>
+      <span class="muted" id="srDocMsg" aria-live="polite"></span>
+    </p>
+
+    <h3>{{ tr('申請的章與希望位置') }}</h3>
+    <p class="muted">{{ tr('位置只是希望，保管人會確認或調整。框是示意，不是實際的章。') }}</p>
+    <div id="srAssets"></div>
+
+    <h3>{{ tr('參考附件') }}</h3>
+    <p class="muted">{{ tr('給審核者參考用，不會被蓋章。') }}</p>
+    <p>
+      <input type="file" id="srAttFile" hidden>
+      <button type="button" class="btn" id="srAttPick">{{ icon('paperclip', size=14) }} <span>{{ tr('加入附件') }}</span></button>
+    </p>
+    <ul class="sr-atts" id="srAttList"></ul>
+
+    <p class="sr-actions">
+      <button type="button" class="btn btn-primary" id="srSave">{{ icon('save', size=14) }} <span>{{ tr('儲存') }}</span></button>
+      <button type="button" class="btn btn-primary" id="srSubmit">{{ icon('check', size=14) }} <span>{{ tr('送出申請') }}</span></button>
+      <button type="button" class="btn" id="srDeleteDraft" hidden>{{ icon('trash', size=14) }} <span>{{ tr('刪除草稿') }}</span></button>
+      <span class="muted" id="srEditMsg" aria-live="polite"></span>
+    </p>
+  </div>
+
+  <div class="panel" id="srView" hidden>
+    <h3>{{ tr('申請內容') }}</h3>
+    <dl class="sr-dl" id="srFields"></dl>
+    <h3>{{ tr('參考附件') }}</h3>
+    <ul class="sr-atts" id="srViewAtts"></ul>
+  </div>
+
+  <div class="panel" id="srDocPanel" hidden>
+    <h3>{{ tr('用印文件') }} <span class="muted" id="srDocName"></span></h3>
+    <p>
+      <a class="btn btn-small" id="srDocDownload" href="#">{{ icon('download', size=14) }} <span>{{ tr('下載 PDF') }}</span></a>
+      <span class="sr-pager">
+        <button type="button" class="btn btn-small" id="srPrev">{{ icon('back', size=14) }}</button>
+        <span id="srPageNo"></span>
+        <button type="button" class="btn btn-small" id="srNext">{{ icon('next', size=14) }}</button>
+      </span>
+    </p>
+    <div class="sr-page" id="srPage"><img id="srPageImg" alt=""></div>
+  </div>
+
+  <div class="panel" id="srReview" hidden>
+    <h3>{{ tr('審核') }}</h3>
+    <textarea class="field" id="srReviewComment" rows="3" maxlength="1000" placeholder="{{ tr('意見（退回補件、駁回時必填）') }}"></textarea>
+    <p class="sr-actions">
+      <button type="button" class="btn btn-primary" id="srApprove">{{ icon('check', size=14) }} <span>{{ tr('核准') }}</span></button>
+      <button type="button" class="btn" id="srReturn">{{ icon('back', size=14) }} <span>{{ tr('退回補件') }}</span></button>
+      <button type="button" class="btn btn-danger" id="srReject">{{ icon('close', size=14) }} <span>{{ tr('駁回') }}</span></button>
+      <span class="muted" id="srReviewMsg" aria-live="polite"></span>
+    </p>
+  </div>
+
+  <div class="panel" id="srStamp" hidden>
+    <h3>{{ tr('確認用印') }}</h3>
+    <p class="muted">{{ tr('只能用這件申請核准的章。可以在預覽圖上拖曳章的位置，或直接改數字（單位 mm，從頁面左上角算起）。按下確認用印才會產生蓋好章的 PDF。') }}</p>
+    <p class="sr-stuck" id="srStampError" hidden></p>
+    <table class="sr-table sr-plc">
+      <thead><tr><th>{{ tr('章') }}</th><th>{{ tr('頁') }}</th><th>X</th><th>Y</th><th>{{ tr('寬') }}</th><th>{{ tr('高') }}</th><th>{{ tr('角度') }}</th><th></th></tr></thead>
+      <tbody id="srPlcRows"></tbody>
+    </table>
+    <p class="sr-actions">
+      <button type="button" class="btn btn-small" id="srPlcAdd">{{ icon('plus', size=14) }} <span>{{ tr('加一處') }}</span></button>
+    </p>
+    <p class="sr-actions">
+      <button type="button" class="btn btn-primary" id="srStampGo">{{ icon('stamp', size=14) }} <span>{{ tr('確認用印') }}</span></button>
+      <span class="muted" id="srStampMsg" aria-live="polite"></span>
+    </p>
+    <textarea class="field" id="srCustComment" rows="2" maxlength="1000" placeholder="{{ tr('退回原因（例如位置標錯、文件有問題）') }}"></textarea>
+    <p class="sr-actions"><button type="button" class="btn" id="srCustReturn">{{ icon('back', size=14) }} <span>{{ tr('退回申請者補件') }}</span></button></p>
+  </div>
+
+  <div class="panel" id="srDone" hidden>
+    <h3>{{ tr('用印完成') }}</h3>
+    <p class="sr-meta" id="srDoneMeta"></p>
+    <p class="sr-stuck" id="srVoidMsg" hidden></p>
+    <p class="sr-actions">
+      <a class="btn btn-primary" id="srResultDl" href="#">{{ icon('download', size=14) }} <span>{{ tr('下載用印後的 PDF') }}</span></a>
+      <button type="button" class="btn" id="srResultWs" hidden>{{ icon('archive', size=14) }} <span>{{ tr('存到工作區') }}</span></button>
+      <span class="muted" id="srDoneMsg" aria-live="polite"></span>
+    </p>
+    <p class="muted">{{ tr('用印紀錄能證明這份文件經過核准與用印，但不能防止別人從 PDF 擷取或仿製章的外觀；這不是數位簽章。') }}</p>
+  </div>
+
+  <div class="panel">
+    <h3>{{ tr('處理紀錄') }}</h3>
+    <ol class="sr-events" id="srEvents"></ol>
+    <div>
+      <textarea class="field" id="srCommentText" rows="2" maxlength="2000" placeholder="{{ tr('留言（不會改變審核狀態）') }}"></textarea>
+      <p class="sr-actions">
+        <button type="button" class="btn btn-small" id="srCommentBtn">{{ icon('edit', size=14) }} <span>{{ tr('留言') }}</span></button>
+        <button type="button" class="btn btn-small" id="srWithdraw" hidden>{{ icon('reset', size=14) }} <span>{{ tr('撤回申請') }}</span></button>
+      </p>
+    </div>
+  </div>
+</section>
+
+<style nonce="{{ request.state.csp_nonce }}">
+  .sr-tabs { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0; }
+  .sr-tab { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border:1px solid var(--border, #d1d5db); border-radius:999px; background:var(--card, #fff); cursor:pointer; font-size:13px; }
+  .sr-tab.active { background:var(--accent, #2563eb); border-color:var(--accent, #2563eb); color:#fff; }
+  .sr-badge { background:#dc2626; color:#fff; border-radius:999px; padding:0 7px; font-size:11px; }
+  .sr-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .sr-table th, .sr-table td { padding:7px 8px; border-bottom:1px solid var(--border, #e5e7eb); text-align:left; }
+  .sr-table th { font-size:11px; color:var(--muted, #6b7280); }
+  .sr-table tbody tr { cursor:pointer; }
+  .sr-table tbody tr:hover { background:var(--hover, #f3f4f6); }
+  .sr-state { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; background:#e5e7eb; color:#374151; white-space:nowrap; }
+  .sr-state.reviewing { background:#dbeafe; color:#1e40af; }
+  .sr-state.returned { background:#fef3c7; color:#92400e; }
+  .sr-state.awaiting_stamp { background:#dcfce7; color:#166534; }
+  .sr-state.rejected, .sr-state.withdrawn { background:#f3f4f6; color:#6b7280; }
+  .sr-flow-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:12px; }
+  .sr-flow { border:1px solid var(--border, #e5e7eb); border-radius:8px; padding:12px; }
+  .sr-flow h4 { margin:0 0 6px; }
+  .sr-flow ol { margin:6px 0 10px 18px; padding:0; font-size:13px; }
+  .sr-meta { color:var(--muted, #6b7280); font-size:13px; }
+  .sr-stuck { color:#b91c1c; font-weight:600; }
+  .sr-stages { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .sr-stagechip { padding:3px 10px; border-radius:6px; border:1px solid var(--border, #d1d5db); font-size:12px; }
+  .sr-stagechip.done { background:#dcfce7; border-color:#86efac; }
+  .sr-stagechip.cur { background:#dbeafe; border-color:#93c5fd; font-weight:600; }
+  .sr-asset { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:6px 0; border-bottom:1px dashed var(--border, #e5e7eb); }
+  .sr-asset label.sr-name { min-width:180px; display:inline-flex; gap:6px; align-items:center; }
+  .sr-asset .field { width:auto; }
+  .sr-atts { margin:4px 0 0 18px; padding:0; font-size:13px; }
+  .sr-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .sr-dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 12px; font-size:13px; }
+  .sr-dl dt { color:var(--muted, #6b7280); }
+  .sr-dl dd { margin:0; white-space:pre-wrap; }
+  .sr-page { position:relative; display:inline-block; max-width:min(100%, 640px); border:1px solid var(--border, #e5e7eb); }
+  .sr-page img { display:block; max-width:100%; height:auto; }
+  #srReviewComment, #srCustComment, #srCommentText { width:100%; box-sizing:border-box; }
+  .sr-seal { position:absolute; cursor:move; outline:1px dashed #2563eb; touch-action:none; }
+  .sr-seal img { width:100%; height:100%; object-fit:contain; pointer-events:none; }
+  .sr-plc input.field, .sr-plc select.field { width:72px; padding:3px 4px; }
+  .sr-plc select.field { width:auto; }
+  .sr-box { position:absolute; border:2px dashed #dc2626; background:rgba(220, 38, 38, 0.08); color:#b91c1c; font-size:11px; display:flex; align-items:center; justify-content:center; text-align:center; overflow:hidden; pointer-events:none; }
+  .sr-pager { display:inline-flex; gap:6px; align-items:center; margin-left:12px; }
+  .sr-events { margin:0 0 10px 18px; padding:0; font-size:13px; }
+  .sr-events li { margin:3px 0; }
+  .sr-events .sr-ev-comment { display:block; color:var(--muted, #6b7280); white-space:pre-wrap; }
+  @media (max-width: 640px) { .sr-asset label.sr-name { min-width:0; width:100%; } }
+</style>
+<template id="srIcons">
+  <span data-icon="trash">{{ icon('trash', size=14) }}</span>
+  <span data-icon="next">{{ icon('next', size=14) }}</span>
+</template>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if ready %}
+<script src="/static/js/custom_select.js"></script>
+<script nonce="{{ request.state.csp_nonce }}">
+(function () {
+  const BASE = '/seal-request/api';
+  const $ = id => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  // 圖示從 <template id="srIcons"> 複製（伺服器用 icon() 畫好的）；文字放自己的 <span>。
+  const ICONS = document.getElementById('srIcons').content;
+  function iconBtn(cls, name, label) {
+    const b = el('button', cls); b.type = 'button';
+    const svg = ICONS.querySelector('[data-icon="' + name + '"] svg');
+    if (svg) b.append(svg.cloneNode(true));
+    b.append(el('span', null, label));
+    return b;
+  }
+  // 下拉一律用本站樣式；原生 select 的 disabled 要帶到可見的那顆按鈕上。
+  function jtSel(sel) {
+    sel.classList.add('jt-select');
+    if (window.JtSelect && sel.parentNode) {
+      new window.JtSelect(sel);
+      if (sel._jtSelect) sel._jtSelect.trigger.disabled = sel.disabled;
+    }
+  }
+  const STATE = { draft: tr('草稿'), reviewing: tr('審核中'), returned: tr('待補件'), rejected: tr('已駁回'),
+                  withdrawn: tr('已撤回'), awaiting_stamp: tr('待用印'), stamping: tr('用印中'),
+                  stamp_failed: tr('用印失敗'), done: tr('已完成'), 'void': tr('已作廢') };
+  const ACTION = { submit: tr('送出申請'), resubmit: tr('補件後重新送出'), approve: tr('核准'), stage_passed: tr('通過這一關'),
+                   approved: tr('全部關卡核准，等待保管人用印'), 'return': tr('退回補件'), reject: tr('駁回'),
+                   withdraw: tr('撤回申請'), comment: tr('留言'), reassign: tr('管理員改派審核者'),
+                   custodian_return: tr('保管人退回補件'), stamp_start: tr('保管人確認用印'), done: tr('用印完成'),
+                   stamp_failed: tr('用印失敗'), 'void': tr('作廢') };
+  const POS = [['br', tr('右下角')], ['bl', tr('左下角')], ['tr', tr('右上角')], ['tl', tr('左上角')],
+               ['center', tr('頁面中央')], ['custodian', tr('交給保管人決定')]];
+  const RULE = { any: tr('任一人核准'), all: tr('全員核准'), n: tr('至少 {0} 人核准') };
+  let home = null, box = 'mine', cur = null, page = 1, flowAssets = [], plc = [];
+
+  async function api(method, path, body, isForm) {
+    const opt = { method };
+    if (body && isForm) opt.body = body;
+    else if (body) { opt.headers = { 'Content-Type': 'application/json' }; opt.body = JSON.stringify(body); }
+    const r = await fetch(BASE + path, opt);
+    let j = null;
+    try { j = await r.json(); } catch (e) { j = null; }
+    if (!r.ok || !j || j.ok === false) return { ok: false, code: j && j.code, message: tr((j && j.message) || '發生錯誤'), detail: (j && j.detail) || {} };
+    return j;
+  }
+  const fmt = ts => (window.jtTime && ts ? window.jtTime.dt(ts) : '');
+  function ruleText(s) { return (RULE[s.rule] || '').replace('{0}', String(s.n || 1)); }
+  function stateChip(st) { const s = el('span', 'sr-state ' + st, STATE[st] || st); return s; }
+
+  // ---- 分頁
+  function show(which) {
+    box = which;
+    document.querySelectorAll('.sr-tab').forEach(b => b.classList.toggle('active', b.dataset.box === which));
+    $('srNew').hidden = which !== 'new';
+    $('srList').hidden = which === 'new' || which === 'case';
+    $('srCase').hidden = which !== 'case';
+    if (which === 'new') renderFlows();
+    else if (which !== 'case') loadList();
+  }
+  document.querySelectorAll('.sr-tab').forEach(b => b.addEventListener('click', () => { history.replaceState(null, '', '#' + b.dataset.box); show(b.dataset.box); }));
+  $('srBack').addEventListener('click', () => {
+    const back = cur && cur.mine ? 'mine' : (cur && cur.can_stamp ? 'stamp' : 'review');
+    history.replaceState(null, '', '#' + back); show(back);
+  });
+
+  function renderFlows() {
+    const list = $('srFlows');
+    const flows = (home && home.flows) || [];
+    $('srNoFlow').hidden = flows.length > 0;
+    list.replaceChildren(...flows.map(f => {
+      const card = el('div', 'sr-flow');
+      const h = el('h4', null, f.name); h.dataset.i18n = 'skip';
+      card.append(h);
+      if (f.description) { const p = el('p', 'muted', f.description); p.dataset.i18n = 'skip'; card.append(p); }
+      const ol = el('ol');
+      f.stages.forEach(s => { const li = el('li', null, s.name + ' · ' + ruleText(s)); li.dataset.i18n = 'skip'; ol.append(li); });
+      card.append(ol);
+      const b = iconBtn('btn btn-primary btn-small', 'next', tr('用這個流程申請'));
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        const res = await api('POST', '/cases', { flow_id: f.id });
+        b.disabled = false;
+        if (!res.ok) { showAlert(res.message); return; }
+        openCase(res.case.id);
+      });
+      card.append(b);
+      return card;
+    }));
+  }
+
+  async function loadList() {
+    const res = await api('GET', '/cases?box=' + encodeURIComponent(box));
+    const rows = $('srRows');
+    if (!res.ok) { rows.replaceChildren(); $('srEmpty').hidden = false; $('srEmpty').textContent = res.message; return; }
+    rows.replaceChildren(...res.cases.map(c => {
+      const t = el('tr');
+      const tdNo = el('td', null, c.number);
+      const tdSub = el('td', null, c.subject || tr('（未填主旨）')); tdSub.dataset.i18n = 'skip';
+      const tdFlow = el('td', null, c.flow_name); tdFlow.dataset.i18n = 'skip';
+      const tdApp = el('td', null, c.applicant_label); tdApp.dataset.i18n = 'skip';
+      const tdSt = el('td'); tdSt.append(stateChip(c.state));
+      if (c.stage && c.state === 'reviewing') {
+        tdSt.append(document.createTextNode(' ' + tr('第 {0} 關').replace('{0}', String(c.stage.index + 1))));
+        if (c.stage.stuck) tdSt.append(el('span', 'sr-stuck', ' ' + tr('需要改派')));
+      }
+      const tdTime = el('td', null, fmt(c.updated_at));
+      t.append(tdNo, tdSub, tdFlow, tdApp, tdSt, tdTime);
+      t.addEventListener('click', () => openCase(c.id));
+      return t;
+    }));
+    $('srEmpty').hidden = res.cases.length > 0;
+    $('srEmpty').textContent = tr('沒有案件。');
+  }
+
+  // ---- 案件
+  async function openCase(id) {
+    const res = await api('GET', '/cases/' + id);
+    if (!res.ok) { showAlert(res.message); return; }
+    cur = res.case;
+    history.replaceState(null, '', '#case=' + id);
+    page = 1;
+    if (cur.can_edit && cur.flow_id) {
+      const a = await api('GET', '/flows/' + cur.flow_id + '/assets');
+      flowAssets = a.ok ? a.assets : [];
+    } else flowAssets = [];
+    show('case');
+    renderCase();
+  }
+
+  function renderCase() {
+    const c = cur;
+    $('srCaseTitle').textContent = c.number + ' ' + (c.subject || tr('（未填主旨）'));
+    $('srCaseTitle').dataset.i18n = 'skip';
+    const meta = $('srCaseMeta');
+    meta.replaceChildren(stateChip(c.state), document.createTextNode(' ' + tr('申請人：{0}').replace('{0}', c.applicant_label)
+      + ' · ' + tr('流程：{0}').replace('{0}', c.flow_name) + (c.version ? ' · ' + tr('第 {0} 版').replace('{0}', String(c.version)) : '')));
+    meta.dataset.i18n = 'skip';
+    // 關卡
+    const sb = $('srStageBox');
+    sb.replaceChildren();
+    const lastV = (c.versions || [])[c.versions.length - 1];
+    if (lastV) {
+      const wrap = el('div', 'sr-stages');
+      lastV.stages.forEach((s, i) => {
+        let cls = 'sr-stagechip';
+        if (c.state === 'awaiting_stamp' || (c.state === 'reviewing' && i < c.stage_idx)) cls += ' done';
+        if (c.state === 'reviewing' && i === c.stage_idx) cls += ' cur';
+        const chip = el('span', cls, (i + 1) + '. ' + s.name + ' · ' + ruleText(s));
+        chip.dataset.i18n = 'skip';
+        wrap.append(chip);
+      });
+      sb.append(wrap);
+      if (c.stage && c.state === 'reviewing') {
+        const p = el('p', 'sr-meta', tr('這一關已核准 {0} / {1}').replace('{0}', String(c.stage.approved)).replace('{1}', String(c.stage.need)));
+        if (c.stage.stuck) p.append(el('span', 'sr-stuck', ' ' + tr('合格的審核者不夠，等待管理員改派')));
+        sb.append(p);
+      }
+    }
+    // 編輯 / 檢視
+    $('srEdit').hidden = !c.can_edit;
+    $('srView').hidden = c.can_edit;
+    if (c.can_edit) renderEdit(); else renderView();
+    // 文件
+    $('srDocPanel').hidden = !(c.documents && c.doc);
+    if (c.documents && c.doc) {
+      $('srDocName').textContent = c.doc.name;
+      $('srDocDownload').href = BASE + '/cases/' + c.id + '/document';
+      renderPage();
+    }
+    // 用印
+    $('srStamp').hidden = !c.can_stamp;
+    if (c.can_stamp) initStamp();
+    $('srStampError').hidden = !(c.can_stamp && c.state === 'stamp_failed' && c.stamp_error);
+    $('srStampError').textContent = c.stamp_error ? tr('上次用印失敗：{0}').replace('{0}', c.stamp_error) : '';
+    $('srDone').hidden = !c.has_result;
+    if (c.has_result) {
+      $('srDoneMeta').textContent = tr('保管人：{0} · 完成時間：{1}').replace('{0}', c.stamped_by_label || '').replace('{1}', fmt(c.done_at));
+      $('srResultDl').href = BASE + '/cases/' + c.id + '/result';
+      $('srResultDl').hidden = c.state === 'void' && !(home && home.me.auditor);
+      $('srResultWs').hidden = !c.workspace || c.state === 'void';
+      $('srVoidMsg').hidden = c.state !== 'void';
+      $('srVoidMsg').textContent = c.state === 'void' ? tr('已作廢：{0}').replace('{0}', c.void_reason || '') : '';
+      $('srDoneMsg').textContent = '';
+    }
+    // 審核
+    $('srReview').hidden = !c.can_review;
+    $('srReviewComment').value = '';
+    $('srReviewMsg').textContent = '';
+    $('srWithdraw').hidden = !c.can_withdraw;
+    // 紀錄
+    $('srEvents').replaceChildren(...(c.events || []).map(e => {
+      const li = el('li');
+      li.append(document.createTextNode(fmt(e.ts) + ' · ' + (e.actor_label || tr('系統')) + ' · ' + (ACTION[e.action] || e.action)
+        + (e.stage_idx != null && ['approve', 'return', 'reject', 'reassign', 'stage_passed'].includes(e.action)
+           ? ' · ' + tr('第 {0} 關').replace('{0}', String(e.stage_idx + 1)) : '')));
+      if (e.comment) li.append(el('span', 'sr-ev-comment', e.comment));
+      li.dataset.i18n = 'skip';
+      return li;
+    }));
+  }
+
+  function renderView() {
+    const c = cur;
+    const dl = $('srFields');
+    const rows = [[tr('用印用途'), c.purpose], [tr('收件對象'), c.recipient], [tr('文件類別'), c.doc_type],
+                  [tr('希望完成日期'), c.due_date], [tr('補充說明'), c.note],
+                  [tr('申請的章'), (c.assets || []).map(a => (c.asset_names || {})[a] || a).join(tr('、'))]];
+    dl.replaceChildren(...rows.filter(r => r[1]).flatMap(([k, v]) => { const dt = el('dt', null, k); const dd = el('dd', null, v); dd.dataset.i18n = 'skip'; return [dt, dd]; }));
+    renderAtts($('srViewAtts'), false);
+  }
+
+  function renderEdit() {
+    const c = cur;
+    $('srFSubject').value = c.subject || ''; $('srFPurpose').value = c.purpose || '';
+    $('srFRecipient').value = c.recipient || ''; $('srFDocType').value = c.doc_type || '';
+    $('srFDue').value = c.due_date || ''; $('srFNote').value = c.note || '';
+    $('srDeleteDraft').hidden = !(c.state === 'draft' && !c.version);
+    $('srDocMsg').textContent = c.doc ? tr('已上傳：{0}（{1} 頁）').replace('{0}', c.doc.name).replace('{1}', String(c.doc.pages)) : tr('還沒上傳文件');
+    $('srDocWs').hidden = !window.openWorkspacePicker;
+    $('srEditMsg').textContent = '';
+    // 章與位置
+    const box = $('srAssets');
+    if (!flowAssets.length) { box.replaceChildren(el('p', 'muted', tr('這個流程沒有你可以申請的章，請洽管理員。'))); }
+    else box.replaceChildren(...flowAssets.map(a => {
+      const row = el('div', 'sr-asset');
+      row.dataset.asset = a.id;
+      const lab = el('label', 'sr-name');
+      const cb = el('input'); cb.type = 'checkbox'; cb.checked = (c.assets || []).includes(a.id);
+      const nm = el('span', null, a.name + ' (' + (a.type === 'stamp' ? tr('印章') : tr('簽名')) + ')'); nm.dataset.i18n = 'skip';
+      lab.append(cb, nm);
+      const pl = (c.placements || []).find(p => p.asset_id === a.id) || { page: 1, position: 'br' };
+      const pg = el('input', 'field'); pg.type = 'number'; pg.min = '1'; pg.max = String((c.doc && c.doc.pages) || 1); pg.value = String(pl.page);
+      pg.setAttribute('aria-label', tr('頁'));
+      const sel = el('select', 'field');
+      POS.forEach(([v, t]) => { const o = el('option', null, t); o.value = v; o.selected = pl.position === v; sel.append(o); });
+      const pgLab = el('span', 'muted', tr('第')); const pgLab2 = el('span', 'muted', tr('頁'));
+      row.append(lab, pgLab, pg, pgLab2, sel);
+      jtSel(sel);
+      return row;
+    }));
+    renderAtts($('srAttList'), true);
+  }
+
+  function renderAtts(ul, editable) {
+    const items = cur.attachments || [];
+    if (!items.length) { ul.replaceChildren(el('li', 'muted', tr('沒有附件'))); return; }
+    ul.replaceChildren(...items.map(a => {
+      const li = el('li');
+      const link = el('a', null, a.name); link.href = BASE + '/cases/' + cur.id + '/attachments/' + a.id; link.dataset.i18n = 'skip';
+      li.append(link, document.createTextNode(' (' + Math.ceil(a.size / 1024) + ' KB) '));
+      if (editable) {
+        const del = iconBtn('btn btn-small', 'trash', tr('移除'));
+        del.addEventListener('click', async () => {
+          const res = await api('DELETE', '/cases/' + cur.id + '/attachments/' + a.id);
+          if (!res.ok) { showAlert(res.message); return; }
+          cur.attachments = res.attachments; renderAtts(ul, true);
+        });
+        li.append(del);
+      }
+      return li;
+    }));
+  }
+
+  function collect() {
+    const assets = [], placements = [];
+    document.querySelectorAll('#srAssets .sr-asset').forEach(row => {
+      const cb = row.querySelector('input[type=checkbox]');
+      if (!cb || !cb.checked) return;
+      assets.push(row.dataset.asset);
+      if (cur.doc) placements.push({ asset_id: row.dataset.asset, page: parseInt(row.querySelector('input[type=number]').value, 10) || 1,
+                                     position: row.querySelector('select').value });
+    });
+    const body = { subject: $('srFSubject').value, purpose: $('srFPurpose').value, recipient: $('srFRecipient').value,
+                   doc_type: $('srFDocType').value, due_date: $('srFDue').value, note: $('srFNote').value, assets };
+    if (cur.doc) body.placements = placements;
+    return body;
+  }
+  async function save() {
+    const res = await api('PUT', '/cases/' + cur.id, collect());
+    if (!res.ok) { $('srEditMsg').textContent = res.message; return false; }
+    cur = res.case; renderCase(); $('srEditMsg').textContent = tr('已儲存');
+    return true;
+  }
+  $('srSave').addEventListener('click', save);
+  $('srSubmit').addEventListener('click', async () => {
+    if (!(await save())) return;
+    if (!(await showConfirm(tr('確定送出？送出後會依流程交給審核者，內容不能再修改（除非被退回補件）。'), { title: tr('送出申請'), okText: tr('送出') }))) return;
+    const res = await api('POST', '/cases/' + cur.id + '/submit');
+    if (!res.ok) {
+      let m = res.message;
+      if (res.code === 'INSUFFICIENT_APPROVERS' && res.detail.name) m += tr('（第 {0} 關「{1}」需要 {2} 人，目前 {3} 人）').replace('{0}', res.detail.stage).replace('{1}', res.detail.name).replace('{2}', res.detail.need).replace('{3}', res.detail.have);
+      $('srEditMsg').textContent = m; return;
+    }
+    cur = res.case; renderCase(); showToast(tr('已送出'), 'ok');
+  });
+  $('srDeleteDraft').addEventListener('click', async () => {
+    if (!(await showConfirm(tr('確定刪除這份草稿？'), { title: tr('刪除草稿'), kind: 'danger', okText: tr('刪除') }))) return;
+    const res = await api('DELETE', '/cases/' + cur.id);
+    if (!res.ok) { showAlert(res.message); return; }
+    cur = null; show('mine');
+  });
+  async function uploadDoc(file) {
+    if (!file) return;
+    $('srDocMsg').textContent = tr('上傳中…');
+    const fd = new FormData(); fd.append('file', file);
+    const res = await api('POST', '/cases/' + cur.id + '/document', fd, true);
+    if (!res.ok) { $('srDocMsg').textContent = res.message; return; }
+    cur = res.case; page = 1; renderCase();
+  }
+  $('srDocPick').addEventListener('click', () => $('srDocFile').click());
+  $('srDocFile').addEventListener('change', e => { uploadDoc(e.target.files[0]); e.target.value = ''; });
+  $('srDocWs').addEventListener('click', () => {
+    window.openWorkspacePicker({ accept: '.pdf,.doc,.docx,.odt,.xls,.xlsx,.ods,.ppt,.pptx,.odp',
+      onPick: async (id, meta) => uploadDoc(await window.workspaceFileAsFile(id, meta)) });
+  });
+  $('srAttPick').addEventListener('click', () => $('srAttFile').click());
+  $('srAttFile').addEventListener('change', async e => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    const fd = new FormData(); fd.append('file', f);
+    const res = await api('POST', '/cases/' + cur.id + '/attachments', fd, true);
+    if (!res.ok) { showAlert(res.message); return; }
+    cur.attachments = res.attachments; renderAtts($('srAttList'), true);
+  });
+
+  // ---- 預覽與位置框
+  function renderPage() {
+    const c = cur;
+    const n = c.doc.pages;
+    page = Math.min(Math.max(1, page), n);
+    $('srPageNo').textContent = tr('第 {0} / {1} 頁').replace('{0}', String(page)).replace('{1}', String(n));
+    $('srPrev').disabled = page <= 1; $('srNext').disabled = page >= n;
+    const wrap = $('srPage');
+    wrap.querySelectorAll('.sr-box').forEach(b => b.remove());
+    const img = $('srPageImg');
+    img.onload = () => {
+      const size = (c.doc.page_sizes || [])[page - 1] || [210, 297];
+      const sx = img.clientWidth / size[0], sy = img.clientHeight / size[1];
+      if (c.can_stamp) { drawSeals(sx, sy); return; }
+      const shown = c.has_result || c.state === 'stamping' ? [] : (c.placements || []);
+      shown.filter(p => p.page === page).forEach(p => {
+        const b = el('div', 'sr-box', ((c.asset_names || {})[p.asset_id] || '') + (p.position === 'custodian' ? ' · ' + tr('交給保管人決定') : ''));
+        b.dataset.i18n = 'skip';
+        b.style.left = (p.x_mm * sx) + 'px'; b.style.top = (p.y_mm * sy) + 'px';
+        b.style.width = (p.width_mm * sx) + 'px'; b.style.height = (p.height_mm * sy) + 'px';
+        wrap.append(b);
+      });
+    };
+    img.src = BASE + '/cases/' + c.id + '/pages/' + page + '?r=' + c.updated_at;
+  }
+  $('srPrev').addEventListener('click', () => { page--; renderPage(); });
+  $('srNext').addEventListener('click', () => { page++; renderPage(); });
+
+  // ---- 保管人用印
+  function nameOf(aid) { const a = (cur.approved_assets || []).find(x => x.asset_id === aid); return a ? a.name : aid; }
+  function initStamp() {
+    const src = (cur.final_placements && cur.final_placements.length) ? cur.final_placements : (cur.placements || []);
+    plc = src.map(p => {
+      const a = (cur.approved_assets || []).find(x => x.asset_id === p.asset_id) || {};
+      return { asset_id: p.asset_id, page: p.page, x_mm: p.x_mm, y_mm: p.y_mm,
+               width_mm: p.width_mm || a.width_mm || 40, height_mm: p.height_mm || a.height_mm || 40, rotation_deg: p.rotation_deg || 0 };
+    });
+    // 申請者沒標位置的章：先放在第 1 頁中央
+    (cur.approved_assets || []).forEach(a => {
+      if (!plc.some(p => p.asset_id === a.asset_id)) {
+        const size = (cur.doc.page_sizes || [])[0] || [210, 297];
+        plc.push({ asset_id: a.asset_id, page: 1, x_mm: (size[0] - a.width_mm) / 2, y_mm: (size[1] - a.height_mm) / 2,
+                   width_mm: a.width_mm, height_mm: a.height_mm, rotation_deg: 0 });
+      }
+    });
+    renderPlc();
+    $('srStampMsg').textContent = '';
+    $('srCustComment').value = '';
+  }
+  function renderPlc() {
+    const rows = $('srPlcRows');
+    rows.replaceChildren(...plc.map((p, i) => {
+      const t = el('tr');
+      const sel = el('select', 'field');
+      (cur.approved_assets || []).forEach(a => { const o = el('option', null, a.name); o.value = a.asset_id; o.selected = a.asset_id === p.asset_id; sel.append(o); });
+      sel.dataset.i18n = 'skip';
+      sel.addEventListener('change', () => { p.asset_id = sel.value; renderPage(); });
+      const num = (key, step) => {
+        const inp = el('input', 'field'); inp.type = 'number'; inp.step = step; inp.value = String(Math.round(p[key] * 10) / 10);
+        inp.addEventListener('change', () => { const v = parseFloat(inp.value); if (!isNaN(v)) { p[key] = key === 'page' ? Math.round(v) : v; } if (key === 'page') { page = p.page; } renderPage(); });
+        const td = el('td'); td.append(inp); return td;
+      };
+      const tdSel = el('td'); tdSel.append(sel); jtSel(sel);
+      const rm = iconBtn('btn btn-small', 'trash', tr('移除'));
+      rm.addEventListener('click', () => { plc.splice(i, 1); renderPlc(); renderPage(); });
+      const tdRm = el('td'); tdRm.append(rm);
+      t.append(tdSel, num('page', '1'), num('x_mm', '0.5'), num('y_mm', '0.5'), num('width_mm', '0.5'), num('height_mm', '0.5'), num('rotation_deg', '1'), tdRm);
+      return t;
+    }));
+  }
+  function drawSeals(sx, sy) {
+    const wrap = $('srPage');
+    wrap.querySelectorAll('.sr-seal').forEach(b => b.remove());
+    plc.forEach((p, i) => {
+      if (p.page !== page) return;
+      const d = el('div', 'sr-seal');
+      const im = el('img'); im.alt = nameOf(p.asset_id);
+      im.src = BASE + '/cases/' + cur.id + '/assets/' + p.asset_id + '/image';
+      d.append(im);
+      const place = () => {
+        d.style.left = (p.x_mm * sx) + 'px'; d.style.top = (p.y_mm * sy) + 'px';
+        d.style.width = (p.width_mm * sx) + 'px'; d.style.height = (p.height_mm * sy) + 'px';
+        d.style.transform = 'rotate(' + (p.rotation_deg || 0) + 'deg)';
+      };
+      place();
+      d.addEventListener('pointerdown', e => {
+        e.preventDefault(); d.setPointerCapture(e.pointerId);
+        const start = { x: e.clientX, y: e.clientY, px: p.x_mm, py: p.y_mm };
+        const move = ev => { p.x_mm = start.px + (ev.clientX - start.x) / sx; p.y_mm = start.py + (ev.clientY - start.y) / sy; place(); };
+        const up = () => { d.removeEventListener('pointermove', move); d.removeEventListener('pointerup', up); renderPlc(); };
+        d.addEventListener('pointermove', move); d.addEventListener('pointerup', up);
+      });
+      wrap.append(d);
+    });
+  }
+  $('srPlcAdd').addEventListener('click', () => {
+    const a = (cur.approved_assets || [])[0];
+    if (!a) return;
+    const size = (cur.doc.page_sizes || [])[page - 1] || [210, 297];
+    plc.push({ asset_id: a.asset_id, page, x_mm: (size[0] - a.width_mm) / 2, y_mm: (size[1] - a.height_mm) / 2,
+               width_mm: a.width_mm, height_mm: a.height_mm, rotation_deg: 0 });
+    renderPlc(); renderPage();
+  });
+  function randHex() { const b = new Uint8Array(16); crypto.getRandomValues(b); return [...b].map(x => x.toString(16).padStart(2, '0')).join(''); }
+  $('srStampGo').addEventListener('click', async () => {
+    if (!plc.length) { $('srStampMsg').textContent = tr('至少要蓋一處'); return; }
+    const by = {};
+    plc.forEach(p => { (by[p.asset_id] = by[p.asset_id] || []).push(p.page); });
+    const lines = Object.keys(by).map(aid => tr('「{0}」第 {1} 頁，共 {2} 處').replace('{0}', nameOf(aid))
+      .replace('{1}', [...new Set(by[aid])].sort((a, b) => a - b).join(tr('、'))).replace('{2}', String(by[aid].length)));
+    if (!(await showConfirm(tr('確定用印？') + '\n' + lines.join('\n'), { title: tr('確認用印'), okText: tr('用印') }))) return;
+    const btn = $('srStampGo');
+    btn.disabled = true; $('srStampMsg').textContent = tr('用印中…');
+    const res = await api('POST', '/cases/' + cur.id + '/stamp', { placements: plc, exec_id: randHex() });
+    btn.disabled = false;
+    if (!res.ok) { $('srStampMsg').textContent = res.message; return; }
+    cur = res.case; renderCase(); refreshHome();
+    if (cur.state === 'done') showToast(tr('用印完成'), 'ok');
+  });
+  $('srCustReturn').addEventListener('click', async () => {
+    const comment = $('srCustComment').value.trim();
+    if (!comment) { $('srStampMsg').textContent = tr('請填寫原因'); return; }
+    if (!(await showConfirm(tr('確定退回給申請者補件？'), { title: tr('確認'), okText: tr('確定') }))) return;
+    const res = await api('POST', '/cases/' + cur.id + '/custodian-return', { comment });
+    if (!res.ok) { $('srStampMsg').textContent = res.message; return; }
+    cur = res.case; renderCase(); refreshHome();
+  });
+  $('srResultWs').addEventListener('click', async () => {
+    const res = await api('POST', '/cases/' + cur.id + '/result/workspace', {});
+    $('srDoneMsg').textContent = res.ok ? tr('已存到工作區') : res.message;
+  });
+
+  // ---- 審核與其他動作
+  async function act(path, needComment, confirmText) {
+    const comment = $('srReviewComment').value.trim();
+    if (needComment && !comment) { $('srReviewMsg').textContent = tr('請填寫原因'); return; }
+    if (confirmText && !(await showConfirm(confirmText, { title: tr('確認'), okText: tr('確定') }))) return;
+    const res = await api('POST', '/cases/' + cur.id + '/' + path, { comment });
+    if (!res.ok) { $('srReviewMsg').textContent = res.message; return; }
+    cur = res.case; renderCase(); refreshHome();
+  }
+  $('srApprove').addEventListener('click', () => act('approve', false));
+  $('srReturn').addEventListener('click', () => act('return', true, tr('確定退回給申請者補件？')));
+  $('srReject').addEventListener('click', () => act('reject', true, tr('確定駁回？駁回後這件申請就結束了。')));
+  $('srWithdraw').addEventListener('click', async () => {
+    if (!(await showConfirm(tr('確定撤回這件申請？'), { title: tr('撤回申請'), okText: tr('撤回') }))) return;
+    const res = await api('POST', '/cases/' + cur.id + '/withdraw', {});
+    if (!res.ok) { showAlert(res.message); return; }
+    cur = res.case; renderCase();
+  });
+  $('srCommentBtn').addEventListener('click', async () => {
+    const text = $('srCommentText').value.trim();
+    if (!text) return;
+    const res = await api('POST', '/cases/' + cur.id + '/comment', { text });
+    if (!res.ok) { showAlert(res.message); return; }
+    $('srCommentText').value = '';
+    cur = res.case; renderCase();
+  });
+
+  async function refreshHome() {
+    const res = await api('GET', '/home');
+    if (!res.ok) return;
+    home = res;
+    $('srTabAll').hidden = !(res.me.admin || res.me.auditor);
+    const rc = $('srReviewCount');
+    rc.hidden = !res.review_count; rc.textContent = String(res.review_count || '');
+    const sc = $('srStampCount');
+    sc.hidden = !res.stamp_count; sc.textContent = String(res.stamp_count || '');
+  }
+
+  refreshHome().then(() => {
+    const h = location.hash.slice(1);
+    if (h.startsWith('case=')) openCase(h.slice(5));
+    else show(['new', 'mine', 'review', 'stamp', 'handled', 'all'].includes(h) ? h
+              : ((home && home.stamp_count) ? 'stamp' : (home && home.review_count) ? 'review' : 'mine'));
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

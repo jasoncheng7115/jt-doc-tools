@@ -480,6 +480,39 @@
   </div>
 </section>
 
+<!-- ======== Seal requests (v1.17) ======== -->
+<section id="seal-request" class="section section-light">
+  <div class="container">
+    <div class="section-eyebrow">New in v1.17</div>
+    <h2 class="section-title">Seal requests: stamped by the custodian after approval</h2>
+    <p class="section-lead">Official seals are no longer open to anyone: submit a seal request, have it approved stage by stage, and the seal custodian then confirms and stamps. The feature is off by default and takes effect only after an administrator enables it; account login must be enabled first. The stamped seal is an image, not a digital signature.</p>
+
+    <div class="ent-grid">
+      <div class="ent-card">
+        <div style="width:44px;height:44px;border-radius:12px;background:#eef2ff;color:#4338ca;display:flex;align-items:center;justify-content:center;margin-bottom:12px;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h3>Control each seal</h3>
+        <p>The company seal or the representative's seal can be set to <b>approved requests only</b>, with its own requesters and custodians (users, groups, organizational units). After that, the seal cannot be used directly from stamping, cross-page seals or the page editor.</p>
+      </div>
+      <div class="ent-card">
+        <div style="width:44px;height:44px;border-radius:12px;background:#ecfdf5;color:#047857;display:flex;align-items:center;justify-content:center;margin-bottom:12px;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        </div>
+        <h3>Stage-by-stage review</h3>
+        <p>Administrators define the review stages; each stage needs <b>any one, all, or a set number</b> of approvers. Applicants can neither approve nor stamp their own requests; a returned request that is resubmitted becomes a new version and starts again from the first stage.</p>
+      </div>
+      <div class="ent-card">
+        <div style="width:44px;height:44px;border-radius:12px;background:#fff7ed;color:#c2410c;display:flex;align-items:center;justify-content:center;margin-bottom:12px;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><circle cx="12" cy="15" r="3"/></svg>
+        </div>
+        <h3>Custodian stamping, fully recorded</h3>
+        <p>Once every stage approves, the <b>custodian confirms the position and stamps</b>; before stamping, the document and seal images are checked to be unchanged. Every document version, approval, stamping and download is recorded and written to the audit log; administrators cannot see the documents.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="jobs" class="section section-light">
   <div class="container">
     <div class="section-eyebrow">New in v1.14</div>
@@ -1469,6 +1502,7 @@
       <a href="compliance-en.html">Data protection and compliance</a>
       <a href="mfp-fetch-en.html">MFP Scan & Fetch guide</a>
       <a href="https://github.com/jasoncheng7115/jt-doc-tools/issues" target="_blank" rel="noopener">Report an issue</a>
+      <a href="https://github.com/jasoncheng7115/jt-doc-tools/blob/main/SECURITY.md" target="_blank" rel="noopener">Report a vulnerability</a>
     </div>
     <div class="footer-col">
       <div class="footer-h">Author</div>

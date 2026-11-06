@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse
 
 from ...config import settings
 from ...core.asset_manager import asset_manager
+from ...core import asset_access  # 用印申請管制（`is_controlled_asset`）
 from ...core.job_manager import job_manager
 from ...core import pdf_preview
 from . import service
@@ -282,6 +283,9 @@ async def _resolve_stamp_source(
         asset = asset_manager.get(stamp_id)
         if not asset or asset.type not in ("stamp", "signature", "logo"):
             raise HTTPException(400, "stamp not found")
+        if asset_access.is_controlled_asset(asset):
+            # 用印申請：僅限核准案件使用的章，這支工具（含 API）一律不能直接蓋
+            raise HTTPException(403, asset_access.CONTROLLED_MESSAGE)
         # asset.preset is a PositionPreset dataclass; service layer reads via
         # PositionPreset / dict transparently. Caller treats this as opaque.
         return asset_manager.file_path(asset), {
@@ -352,12 +356,11 @@ async def index(request: Request):
     # the same form" without needing a separate signature tool.
     items = []
     for t in ("stamp", "signature", "logo"):
-        items.extend(asset_manager.list(type=t))
-    default = (
-        asset_manager.get_default("stamp")
-        or asset_manager.get_default("signature")
-        or asset_manager.get_default("logo")
-    )
+        # 用印申請管制的章不列出（只能在核准的案件裡由保管人使用）
+        items.extend(a for a in asset_manager.list(type=t) if not asset_access.is_controlled_asset(a))
+    # 同 `asset_manager.get_default` 的順序（清單本來就是預設的排最前面）：先印章、再簽名、再 Logo，
+    # 該種類沒設預設就取第一顆 —— 只是受管制的章已經先被濾掉
+    default = next((a for t in ("stamp", "signature", "logo") for a in items if a.type == t), None)
     stamps_dict = [a.to_dict() for a in items]
     return templates.TemplateResponse(request, 
         "pdf_stamp.html",
@@ -420,6 +423,8 @@ def _parse_placements(placements_json: str, work_dir: Path,
                 a = asset_manager.get(asset_id)
                 if not a or a.type not in ("stamp", "signature", "logo"):
                     raise HTTPException(400, f"placements[{idx}].asset_id 不存在")
+                if asset_access.is_controlled_asset(a):
+                    raise HTTPException(403, asset_access.CONTROLLED_MESSAGE)
                 asset_png_cache[asset_id] = asset_manager.file_path(a)
             png_path = asset_png_cache[asset_id]
         elif it.get("png_b64"):

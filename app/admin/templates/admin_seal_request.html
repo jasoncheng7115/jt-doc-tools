@@ -1,0 +1,834 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}{{ tr('用印申請') }} · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('stamp', size=22) }} {{ tr('用印申請') }}<span class="tool-beta" title="{{ tr('試用中：功能還可能調整') }}">Beta</span></h1>
+<p class="muted">{{ tr('公司章、負責人章這類正式的章，可以設成「僅限核准案件使用」：要先送用印申請、經主管核准，再由印章保管人確認用印。') }}</p>
+
+<div class="panel" id="srIntro">
+  <ol class="sr-steps">
+    <li><span class="sr-step-ic">{{ icon('file-text', size=18) }}</span>
+      <b>{{ tr('送出申請') }}</b><span>{{ tr('使用者在側欄的「用印申請」上傳文件、選要用的章。') }}</span></li>
+    <li><span class="sr-step-ic">{{ icon('check', size=18) }}</span>
+      <b>{{ tr('逐關審核') }}</b><span>{{ tr('依下方的用印流程一關一關核准；申請者本人不能審核。') }}</span></li>
+    <li><span class="sr-step-ic">{{ icon('stamp', size=18) }}</span>
+      <b>{{ tr('保管人用印') }}</b><span>{{ tr('全部通過後，由那顆章的保管人確認位置並用印。') }}</span></li>
+    <li><span class="sr-step-ic">{{ icon('download', size=18) }}</span>
+      <b>{{ tr('取件') }}</b><span>{{ tr('申請者下載蓋好章的 PDF，或存到自己的工作區。') }}</span></li>
+  </ol>
+  <div class="sr-notes">
+    <div class="sr-note"><span class="sr-note-ic">{{ icon('info', size=16) }}</span>
+      <div><b>{{ tr('預設不啟用') }}</b><p>{{ tr('啟用前不會改變任何章的使用方式；啟用後也只有你改成「僅限核准案件使用」的章才會受管制。') }}</p></div></div>
+    <div class="sr-note"><span class="sr-note-ic">{{ icon('lock', size=16) }}</span>
+      <div><b>{{ tr('管制範圍') }}</b><p>{{ tr('受管制的章在用印與簽名、騎縫章、PDF 編輯器、API 都不能直接使用，也看不到原始圖檔。管理員在「資產庫」仍看得到所有印章圖檔（上傳與維護需要）。') }}</p></div></div>
+    <div class="sr-note"><span class="sr-note-ic">{{ icon('shield', size=16) }}</span>
+      <div><b>{{ tr('停用限制') }}</b><p>{{ tr('還有受管制的章時不能停用這個功能，要先把它們改回「直接使用」，避免管制無聲消失。') }}</p></div></div>
+  </div>
+</div>
+
+<div class="panel sr-settings">
+  <h2>{{ icon('gear', size=18) }} {{ tr('設定') }}</h2>
+  <p id="srAuthOff" class="sr-warn" hidden>{{ tr('要先啟用帳號登入，才能啟用用印申請（多人審核要分得出是誰）。') }}</p>
+  <p id="srUnreadable" class="sr-warn" hidden>{{ tr('用印申請的設定檔讀不出來，所有印章與簽名暫時都當成受管制；請檢查資料目錄裡的 seal_request.json。') }}</p>
+  <div class="form-row">
+    <label>{{ tr('啟用用印申請') }}</label>
+    <label class="switch-label"><input type="checkbox" id="srEnabled"> {{ tr('開啟此功能') }}</label>
+  </div>
+  <div class="form-row">
+    <label for="srRetention">{{ tr('案件保留期限') }}</label>
+    <span><input class="field field-num" type="number" id="srRetention" min="0" max="36500"> <span class="field-unit">{{ tr('天（0 = 不自動刪除）') }}</span>
+    <button type="button" class="btn btn-small" id="srRetentionSave">{{ icon('save', size=14) }} <span>{{ tr('儲存') }}</span></button></span>
+  </div>
+  <p class="muted">{{ tr('完成、作廢、駁回、撤回的案件，從結束那天起算保留這麼多天，到期由排程整筆刪除（含文件與用印後的 PDF）。請依公司的文件保留規定設定。') }}</p>
+  <p class="muted" id="srMsg" aria-live="polite"></p>
+</div>
+
+<div class="panel" id="srAssetsPanel">
+  <h2>{{ icon('stamp', size=18) }} {{ tr('印章與簽名') }}</h2>
+  <p class="muted" id="srDisabledHint">{{ tr('還沒啟用：保管人、可申請對象、用印流程與保留期限可以先設定好；使用模式要啟用之後才能改成「僅限核准案件使用」。') }}</p>
+  <div class="sr-table-wrap"><table class="sr-table">
+    <thead><tr><th></th><th>{{ tr('名稱') }}</th><th>{{ tr('種類') }}</th><th>{{ tr('使用模式') }}</th><th>{{ tr('保管人') }}</th><th>{{ tr('可申請對象') }}</th></tr></thead>
+    <tbody id="srRows"></tbody>
+  </table></div>
+  <p class="muted" id="srEmpty" hidden>{{ tr('資產庫裡還沒有印章或簽名。') }}</p>
+</div>
+
+<div class="panel" id="srFlowsPanel">
+  <h2>{{ icon('list', size=18) }} {{ tr('用印流程') }}</h2>
+  <p class="muted">{{ tr('每個流程依序經過幾關審核；每一關指定審核者（使用者或群組）與通過條件。申請者本人不能審自己的申請。修改流程不影響已經送出的案件。') }}</p>
+  <p><button type="button" class="btn" id="srFlowNew">{{ icon('plus', size=14) }} <span>{{ tr('新增流程') }}</span></button></p>
+  <div class="sr-table-wrap"><table class="sr-table">
+    <thead><tr><th>{{ tr('名稱') }}</th><th>{{ tr('關卡') }}</th><th>{{ tr('申請對象') }}</th><th>{{ tr('狀態') }}</th><th></th></tr></thead>
+    <tbody id="srFlowRows"></tbody>
+  </table></div>
+  <p class="muted" id="srFlowEmpty" hidden>{{ tr('還沒有流程。') }}</p>
+</div>
+
+<div class="panel" id="srFlowEditor" hidden>
+  <h2 id="srFlowEditorTitle"></h2>
+  <div class="form-row"><label for="srFlowName">{{ tr('名稱') }}</label><input class="field" id="srFlowName" maxlength="100"></div>
+  <div class="form-row"><label for="srFlowDesc">{{ tr('說明') }}</label><input class="field" id="srFlowDesc" maxlength="500"></div>
+  <div class="form-row"><label>{{ tr('啟用') }}</label><label class="switch-label"><input type="checkbox" id="srFlowEnabled" checked> {{ tr('可以用這個流程申請') }}</label></div>
+  <div class="form-row"><label>{{ tr('申請對象') }}</label>
+    <span><span class="sr-chips" id="srFlowApplicants"></span> <button type="button" class="btn btn-small" id="srFlowApplicantsBtn">{{ icon('user', size=14) }} <span>{{ tr('設定') }}</span></button>
+    <span class="muted">{{ tr('沒有設定＝不限（仍要是那顆章的可申請對象）') }}</span></span></div>
+  <div class="form-row"><label>{{ tr('適用的章') }}</label><span id="srFlowAssets"></span></div>
+  <div class="form-row"><label>{{ tr('浮水印') }}</label><label class="switch-label"><input type="checkbox" id="srWmOn"> {{ tr('用印時附加浮水印') }}</label></div>
+  <div class="sr-wm" id="srWmBox" hidden>
+    <div class="form-row"><label>{{ tr('來源') }}</label>
+      <span class="sr-wm-src">
+        <label class="switch-label"><input type="radio" name="srWmSrc" value="text" checked> {{ tr('文字') }}</label>
+        <label class="switch-label"><input type="radio" name="srWmSrc" value="asset"> {{ tr('資產庫的浮水印圖') }}</label>
+      </span></div>
+    <div class="form-row" id="srWmTextRow"><label for="srWmText">{{ tr('文字') }}</label>
+      <input class="field" id="srWmText" maxlength="100" placeholder="{{ tr('例：僅供 {編號} 申請用途使用') }}"></div>
+    <p class="muted sr-wm-hint" id="srWmTokens">{{ tr('可以用 {編號}（案件編號）與 {日期}（用印當天）。') }}</p>
+    <div class="form-row" id="srWmStyleRow"><label for="srWmColor">{{ tr('顏色與字級') }}</label>
+      <span class="sr-wm-inline"><input type="color" id="srWmColor" value="#cc0000" aria-label="{{ tr('顏色') }}">
+      <input class="field field-num" type="number" id="srWmSize" min="8" max="200" value="36" aria-label="{{ tr('字級') }}"> <span class="field-unit">pt</span></span></div>
+    <div class="form-row" id="srWmAssetRow" hidden><label for="srWmAsset">{{ tr('浮水印圖') }}</label>
+      <span class="sr-wm-inline"><select class="field" id="srWmAsset"></select><img id="srWmThumb" alt="" hidden></span></div>
+    <p class="muted" id="srWmNoAsset" hidden>{{ tr('資產庫裡還沒有浮水印圖，請先到「資產管理」上傳（種類選浮水印）。') }}</p>
+    <div class="form-row"><label for="srWmOpacity">{{ tr('透明度') }}</label>
+      <span class="sr-wm-inline"><input type="range" id="srWmOpacity" min="5" max="100" value="20"> <span id="srWmOpacityVal">20%</span></span></div>
+    <div class="form-row"><label for="srWmRot">{{ tr('角度與間距') }}</label>
+      <span class="sr-wm-inline"><input class="field field-num" type="number" id="srWmRot" min="-180" max="180" value="30" aria-label="{{ tr('角度') }}"> <span class="field-unit">{{ tr('度') }}</span>
+      <input class="field field-num" type="number" id="srWmGap" min="0" max="200" value="30" aria-label="{{ tr('間距') }}"> <span class="field-unit">{{ tr('mm 間距') }}</span></span></div>
+    <div class="form-row" id="srWmTileRow" hidden><label for="srWmTile">{{ tr('圖片大小') }}</label>
+      <span class="sr-wm-inline"><input class="field field-num" type="number" id="srWmTile" min="10" max="300" value="60"> <span class="field-unit">{{ tr('mm（長邊）') }}</span></span></div>
+    <div class="form-row"><label>{{ tr('預覽') }}</label><div class="sr-wm-prev" id="srWmPrev" aria-hidden="true"></div></div>
+    <p class="muted">{{ tr('浮水印鋪滿每一頁，用印時先上浮水印再蓋章（章不會被蓋住）。設定在送出時跟著流程凍結，之後修改不影響已送出的案件。') }}</p>
+  </div>
+  <h3>{{ tr('關卡') }}</h3>
+  <div id="srFlowStages"></div>
+  <p><button type="button" class="btn btn-small" id="srFlowAddStage">{{ icon('plus', size=14) }} <span>{{ tr('加一關') }}</span></button></p>
+  <p class="sr-actions">
+    <button type="button" class="btn btn-primary" id="srFlowSave">{{ icon('save', size=14) }} <span>{{ tr('儲存流程') }}</span></button>
+    <button type="button" class="btn" id="srFlowCancel">{{ icon('close', size=14) }} <span>{{ tr('取消') }}</span></button>
+    <button type="button" class="btn" id="srSimToggle">{{ icon('play', size=14) }} <span>{{ tr('模擬申請') }}</span></button>
+    <span class="muted" id="srFlowMsg" aria-live="polite"></span>
+  </p>
+  <div class="sr-sim" id="srSim" hidden>
+    <h3>{{ icon('play', size=16) }} {{ tr('模擬申請') }}</h3>
+    <p class="muted">{{ tr('挑一位申請者，照送出時的規則檢查一遍，用的是畫面上這份（還沒儲存也可以）。不會建立案件，也不會通知任何人。') }}</p>
+    <div class="form-row"><label for="srSimUser">{{ tr('申請者') }}</label><select class="field" id="srSimUser"></select></div>
+    <div class="form-row"><label>{{ tr('要用的章') }}</label><span id="srSimAssets"></span></div>
+    <p><button type="button" class="btn btn-primary" id="srSimRun">{{ icon('play', size=14) }} <span>{{ tr('開始模擬') }}</span></button></p>
+    <div id="srSimOut" aria-live="polite"></div>
+  </div>
+</div>
+
+<div class="panel" id="srCasesPanel">
+  <h2>{{ icon('clipboard-list', size=18) }} {{ tr('案件總覽') }}</h2>
+  <p class="muted">{{ tr('管理員看得到案件資料，看不到文件內容。合格的審核者不夠時，案件會停在那一關，在這裡改派。') }}</p>
+  <div class="sr-table-wrap"><table class="sr-table">
+    <thead><tr><th>{{ tr('編號') }}</th><th>{{ tr('主旨') }}</th><th>{{ tr('申請人') }}</th><th>{{ tr('流程') }}</th><th>{{ tr('狀態') }}</th><th></th></tr></thead>
+    <tbody id="srCaseRows"></tbody>
+  </table></div>
+  <p class="muted" id="srCaseEmpty" hidden>{{ tr('還沒有案件。') }}</p>
+</div>
+
+<div class="panel" id="srPicker" hidden>
+  <h2 id="srPickerTitle"></h2>
+  <p class="muted" id="srPickerHint"></p>
+  <div class="sr-pick-cols">
+    <div>
+      <h3>{{ tr('使用者') }} <span id="srUserCount"></span></h3>
+      <input class="field" type="search" id="srUserSearch" placeholder="{{ tr('搜尋') }}">
+      <div class="sr-pick-list" id="srUsers"></div>
+    </div>
+    <div>
+      <h3>{{ tr('群組') }} <span id="srGroupCount"></span></h3>
+      <input class="field" type="search" id="srGroupSearch" placeholder="{{ tr('搜尋') }}">
+      <div class="sr-pick-list" id="srGroups"></div>
+    </div>
+  </div>
+  <p>
+    <button class="btn btn-primary" type="button" id="srPickerSave">{{ icon('save', size=14) }} <span>{{ tr('儲存') }}</span></button>
+    <button class="btn" type="button" id="srPickerClose">{{ icon('close', size=14) }} <span>{{ tr('關閉') }}</span></button>
+    <span class="muted" id="srPickerMsg" aria-live="polite"></span>
+  </p>
+</div>
+
+<style nonce="{{ request.state.csp_nonce }}">
+  .sr-steps { list-style:none; margin:0 0 14px; padding:0; display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px; counter-reset:srstep; }
+  .sr-steps li { position:relative; padding:12px 12px 12px 14px; border:1px solid var(--border, #e5e7eb); border-radius:10px;
+    background:var(--bg); display:flex; flex-direction:column; gap:4px; font-size:13px; line-height:1.5; counter-increment:srstep; }
+  .sr-steps li b { font-size:14px; }
+  .sr-steps li b::before { content:counter(srstep) ". "; color:var(--primary); }
+  .sr-steps li span:last-child { color:var(--muted, #6b7280); }
+  .sr-step-ic { width:32px; height:32px; border-radius:9px; display:flex; align-items:center; justify-content:center;
+    background:color-mix(in srgb, var(--primary) 12%, var(--card)); color:var(--primary); margin-bottom:4px; }
+  .sr-steps li:not(:last-child)::after { content:"›"; position:absolute; right:-9px; top:50%; transform:translateY(-50%);
+    font-size:18px; color:var(--muted, #9ca3af); }
+  .sr-notes { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; }
+  .sr-note { display:flex; gap:10px; align-items:flex-start; font-size:13px; line-height:1.55; padding:10px 12px;
+    border-left:3px solid var(--primary); background:var(--card); }
+  .sr-note p { margin:2px 0 0; color:var(--muted, #6b7280); }
+  .sr-note-ic { color:var(--primary); margin-top:2px; flex:none; }
+  .sr-settings .form-row { min-height:34px; }
+  .sr-up svg { transform:rotate(90deg); }
+  .sr-sim { margin-top:14px; padding:12px 14px; border:1px dashed var(--border, #d1d5db); border-radius:10px; }
+  .sr-sim h3 { margin-top:0; }
+  .sr-sim-head { font-weight:600; margin:10px 0 6px; }
+  .sr-sim-head.ok { color:var(--success, #047857); }
+  .sr-sim-head.error { color:var(--danger, #b91c1c); }
+  .sr-sim-items { margin:0 0 8px; padding-left:18px; font-size:13px; line-height:1.6; }
+  .sr-sim-items b { margin-right:4px; }
+  .sr-sim-ok b { color:var(--success, #047857); }
+  .sr-sim-warn b { color:var(--warning, #b45309); }
+  .sr-sim-error b { color:var(--danger, #b91c1c); }
+  .sr-sim-info b { color:var(--primary); }
+  .sr-wm { margin:4px 0 10px 106px; padding:10px 12px; border:1px solid var(--border, #e5e7eb); border-radius:10px; background:var(--bg); }
+  .sr-wm-src label { width:auto; }
+  .sr-wm-src, .sr-wm-inline { display:inline-flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .sr-wm .sr-wm-inline .field-num { flex:none; width:80px; }
+  .sr-wm-hint { margin:-2px 0 6px; }
+  .sr-wm-prev { position:relative; width:168px; height:238px; overflow:hidden; background:#fff; border:1px solid var(--border, #e5e7eb);
+    box-shadow:0 1px 3px rgba(0,0,0,.12); }
+  .sr-wm-prev span, .sr-wm-prev img { position:absolute; white-space:nowrap; transform-origin:center; pointer-events:none; line-height:1; }
+  #srWmThumb { width:36px; height:36px; object-fit:contain; background:#fff; border-radius:4px; border:1px solid var(--border, #e5e7eb); }
+  @media (max-width: 640px) { .sr-wm { margin-left:0; } }
+  .sr-sim-flow { display:flex; flex-direction:column; gap:0; }
+  .sr-sim-row { position:relative; display:flex; gap:12px; padding-bottom:12px; }
+  .sr-sim-row::before { content:""; position:absolute; left:15px; top:32px; bottom:0; width:2px; background:var(--border, #e5e7eb); }
+  .sr-sim-row:last-child::before { display:none; }
+  .sr-sim-row.error .sr-tl-dot { background:var(--danger, #b91c1c); border-color:var(--danger, #b91c1c); }
+  .sr-sim-row-body { display:flex; flex-direction:column; gap:6px; padding-top:4px; font-size:13px; }
+  .sr-sim-row-title { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .sr-pill { font-size:11px; padding:1px 8px; border-radius:999px; color:#fff; }
+  .sr-pill.ok { background:var(--success, #047857); }
+  .sr-pill.error { background:var(--danger, #b91c1c); }
+  @media (max-width: 860px) {
+    .sr-steps { grid-template-columns:repeat(2, minmax(0,1fr)); }
+    .sr-steps li::after { display:none; }
+    .sr-notes { grid-template-columns:1fr; }
+  }
+  .sr-table-wrap { overflow-x:auto; max-width:100%; }
+  .sr-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .sr-table th, .sr-table td { padding:6px 8px; border-bottom:1px solid var(--border, #e5e7eb); text-align:left; vertical-align:middle; }
+  .sr-table th { font-size:11px; color:var(--muted, #6b7280); }
+  .sr-table img { width:40px; height:40px; object-fit:contain; }
+  .sr-who { color:var(--muted, #6b7280); }
+  .sr-warn { color:var(--danger, #b91c1c); font-weight:600; }
+  .switch-label { display:inline-flex; align-items:center; gap:6px; font-size:13px; }
+  .sr-pick-cols { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; }
+  .sr-pick-list { max-height:320px; overflow:auto; border:1px solid var(--border, #e5e7eb); border-radius:6px; padding:6px; margin-top:6px; }
+  .sr-pick-list label { display:flex; gap:8px; align-items:baseline; padding:3px 2px; font-size:13px; }
+  .sr-pick-list small { color:var(--muted, #6b7280); }
+  /* 關卡時間軸 */
+  #srFlowStages { position:relative; margin:6px 0 10px; }
+  .sr-tl-item { position:relative; display:flex; gap:14px; align-items:flex-start; padding-bottom:14px; }
+  .sr-tl-item::before { content:""; position:absolute; left:15px; top:32px; bottom:0; width:2px; background:var(--border, #e5e7eb); }
+  .sr-tl-item:last-child::before { display:none; }
+  .sr-tl-dot { flex:none; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:color-mix(in srgb, var(--primary) 12%, var(--card)); color:var(--primary); border:2px solid var(--primary); position:relative; z-index:1; }
+  .sr-tl-num { font-weight:700; font-size:14px; background:var(--primary); color:#fff; }
+  .sr-tl-start .sr-tl-dot, .sr-tl-end .sr-tl-dot { border-style:dashed; }
+  .sr-tl-fixed { display:flex; flex-direction:column; gap:2px; padding-top:5px; font-size:13px; }
+  .sr-stage { flex:1 1 auto; min-width:0; border:1px solid var(--border, #e5e7eb); border-radius:10px; padding:10px 12px;
+    background:var(--bg); display:flex; flex-direction:column; gap:8px; }
+  .sr-stage-top { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .sr-stage-top .sr-stage-name { flex:1 1 180px; min-width:0; }
+  .sr-stage-top .field-num { width:80px; }
+  .sr-stage-act { margin-left:auto; display:inline-flex; gap:6px; }
+  .sr-stage-who { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:13px; }
+  .sr-stage-lab { color:var(--muted, #6b7280); margin-right:2px; }
+  .sr-chips { display:inline-flex; flex-wrap:wrap; gap:6px; vertical-align:middle; }
+  .sr-chip { display:inline-flex; align-items:center; padding:2px 10px; border-radius:999px; font-size:12px;
+    background:color-mix(in srgb, var(--primary) 12%, var(--card)); color:var(--primary); }
+  .sr-chip-group { background:transparent; border:1px solid var(--primary); }
+  .sr-chip-gone { color:var(--danger, #b91c1c); background:transparent; border:1px solid var(--danger, #b91c1c); }
+  .sr-chip-none { background:transparent; border:1px dashed var(--border, #d1d5db); color:var(--muted, #6b7280); }
+  .sr-cell-chips { margin:2px 8px 2px 0; }
+  .sr-chip-empty { background:transparent; border:1px dashed var(--warning, #b45309); color:var(--warning, #b45309); }
+  .sr-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .sr-stuck { color:var(--danger, #b91c1c); font-weight:600; }
+  #srFlowAssets { display:flex; flex-wrap:wrap; gap:8px; align-items:center; flex:1 1 300px; }
+  .form-row .sr-asset-pick { width:auto; display:inline-flex; gap:6px; align-items:center; padding:4px 10px 4px 6px;
+    border:1px solid var(--border, #e5e7eb); border-radius:8px; color:inherit; cursor:pointer; }
+  .sr-asset-pick img { width:32px; height:32px; object-fit:contain; background:#fff; border-radius:4px; }
+</style>
+<template id="srIcons">
+  <span data-icon="user">{{ icon('user', size=14) }}</span>
+  <span data-icon="edit">{{ icon('edit', size=14) }}</span>
+  <span data-icon="trash">{{ icon('trash', size=14) }}</span>
+  <span data-icon="up">{{ icon('back', size=14) }}</span>
+  <span data-icon="swap">{{ icon('swap', size=14) }}</span>
+  <span data-icon="close">{{ icon('close', size=14) }}</span>
+  <span data-icon="file-text">{{ icon('file-text', size=14) }}</span>
+  <span data-icon="stamp">{{ icon('stamp', size=14) }}</span>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/custom_select.js"></script>
+<script nonce="{{ request.state.csp_nonce }}">
+(function () {
+  const BASE = '/admin/seal-request/api';
+  let state = null, subjects = null, picking = null;
+  const $ = id => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  // 圖示從 <template id="srIcons"> 複製（伺服器用 icon() 畫好的）；文字放自己的 <span>。
+  const ICONS = document.getElementById('srIcons').content;
+  function iconBtn(name, label) {
+    const b = el('button', 'btn btn-small'); b.type = 'button';
+    const svg = ICONS.querySelector('[data-icon="' + name + '"] svg');
+    if (svg) b.append(svg.cloneNode(true));
+    b.append(el('span', null, label));
+    return b;
+  }
+  // 下拉一律用本站樣式；原生 select 的 disabled 要帶到可見的那顆按鈕上。
+  function jtSel(sel) {
+    sel.classList.add('jt-select');
+    if (window.JtSelect && sel.parentNode) {
+      new window.JtSelect(sel);
+      if (sel._jtSelect) sel._jtSelect.trigger.disabled = sel.disabled;
+    }
+  }
+
+  async function api(method, path, body) {
+    const r = await fetch(BASE + path, { method, headers: body ? { 'Content-Type': 'application/json' } : {},
+                                        body: body ? JSON.stringify(body) : undefined });
+    let j = null;
+    try { j = await r.json(); } catch (e) { j = null; }
+    if (!r.ok || !j || j.ok === false) return { ok: false, message: tr((j && j.message) || '發生錯誤'), detail: j && j.detail };
+    return j;
+  }
+  function who(list) {
+    if (!list.length) return tr('（未設定）');
+    return list.map(s => s.name || s.key).join(tr('、'));
+  }
+  function render() {
+    $('srEnabled').checked = !!state.enabled;
+    $('srEnabled').disabled = !state.auth_enabled && !state.enabled;
+    $('srAuthOff').hidden = state.auth_enabled;
+    $('srUnreadable').hidden = state.readable;
+    $('srDisabledHint').hidden = state.enabled;
+    $('srRetention').value = String(state.retention_days || 0);
+    const rows = $('srRows');
+    rows.replaceChildren(...state.assets.map(a => {
+      const tr_ = el('tr');
+      const img = el('img'); img.src = a.thumb_url; img.alt = '';
+      const tdImg = el('td'); tdImg.append(img);
+      const tdName = el('td', null, a.name); tdName.dataset.i18n = 'skip';
+      const tdType = el('td', null, a.type === 'stamp' ? tr('印章') : tr('簽名'));
+      const sel = el('select', 'field');
+      [['direct', tr('直接使用')], ['approval', tr('僅限核准案件使用')]].forEach(([v, t]) => {
+        const o = el('option', null, t); o.value = v; o.selected = a.mode === v; sel.append(o);
+      });
+      sel.disabled = !state.enabled;   // 一改就生效：沒啟用時沒有人申請得了
+      sel.addEventListener('change', async () => {
+        sel.disabled = true;
+        const res = await api('PUT', '/assets/' + encodeURIComponent(a.id), { mode: sel.value });
+        if (!res.ok) { showAlert(res.message); } else { state = res; }
+        render();
+      });
+      const tdMode = el('td'); tdMode.append(sel); jtSel(sel);
+      const cell = (kind, list) => {
+        const td = el('td');
+        // 有設定：每個人 / 群組一個藍色標籤（群組外框、已不存在的以紅色標示）；未設定：灰色虛線
+        const box = el('div', 'sr-chips sr-cell-chips');
+        if (list.length) {
+          list.forEach(sj => {
+            const gone = sj.exists === false;
+            const c = el('span', 'sr-chip' + (sj.type !== 'user' ? ' sr-chip-group' : '') + (gone ? ' sr-chip-gone' : ''),
+                         (sj.type === 'group' ? tr('群組') + '：' : sj.type === 'ou' ? tr('組織單位') + '：' : '')
+                         + (sj.name || sj.key) + (gone ? ' ' + tr('（已不存在）') : ''));
+            c.dataset.i18n = 'skip';
+            box.append(c);
+          });
+        } else {
+          box.append(el('span', 'sr-chip sr-chip-none', tr('未設定')));
+        }
+        const b = iconBtn('user', tr('設定'));
+        b.addEventListener('click', () => openPicker(a, kind));
+        td.append(box, b);
+        return td;
+      };
+      tr_.append(tdImg, tdName, tdType, tdMode, cell('custodians', a.custodians), cell('requesters', a.requesters));
+      return tr_;
+    }));
+    $('srEmpty').hidden = state.assets.length > 0;
+  }
+  function row(type, key, label, sub, checked) {
+    const l = el('label');
+    const cb = el('input'); cb.type = 'checkbox'; cb.dataset.type = type; cb.dataset.key = key; cb.checked = !!checked;
+    const span = el('span', null, label); span.dataset.i18n = 'skip';
+    if (sub) span.append(el('small', null, ' ' + sub));
+    l.append(cb, span);
+    l.dataset.search = (label + ' ' + (sub || '')).toLowerCase();
+    return l;
+  }
+  function count() {
+    $('srUserCount').textContent = '(' + document.querySelectorAll('#srUsers input:checked').length + ')';
+    $('srGroupCount').textContent = '(' + document.querySelectorAll('#srGroups input:checked').length + ')';
+  }
+  // 共用的選人視窗：印章的保管人 / 可申請對象、流程的申請對象與各關審核者、改派都用這一個
+  async function ensureSubjects() {
+    if (subjects) return true;
+    const s = await api('GET', '/subjects');
+    if (!s.ok) { showAlert(s.message); return false; }
+    subjects = s;
+    return true;
+  }
+  async function pick(opts) {
+    if (!(await ensureSubjects())) return;
+    picking = opts;
+    $('srPickerTitle').textContent = opts.title;
+    $('srPickerHint').textContent = opts.hint || '';
+    $('srPickerMsg').textContent = '';
+    const chosen = new Set((opts.selected || []).map(s => s.type + ':' + s.key));
+    $('srUsers').replaceChildren(...subjects.users.map(u => row('user', u.key, (u.username || '') + '@' + (u.source || 'local'),
+      u.display_name && u.display_name !== u.username ? u.display_name : '', chosen.has('user:' + u.key))));
+    $('srGroups').replaceChildren(...subjects.groups.map(g => row('group', g.key, g.name || '',
+      tr('本站 {0} 人').replace('{0}', String(g.members || 0)), chosen.has('group:' + g.key))));
+    $('srUserSearch').value = ''; $('srGroupSearch').value = '';
+    count();
+    $('srPicker').hidden = false;
+    $('srPicker').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function openPicker(asset, kind) {
+    return pick({
+      title: (kind === 'custodians' ? tr('保管人：{0}') : tr('可申請對象：{0}')).replace('{0}', asset.name),
+      hint: kind === 'custodians' ? tr('保管人可以在核准的案件裡確認用印。申請者本人不能用印自己的案件。')
+                                  : tr('可以對這顆章提出用印申請的人；沒有設定就沒有人能申請。'),
+      selected: asset[kind] || [],
+      onSave: async list => {
+        const body = {}; body[kind] = list;
+        const res = await api('PUT', '/assets/' + encodeURIComponent(asset.id), body);
+        if (!res.ok) return res.message;
+        state = res; render();
+        return null;
+      },
+    });
+  }
+  function filter(boxId, q) {
+    q = (q || '').trim().toLowerCase();
+    $(boxId).querySelectorAll('label').forEach(l => { l.hidden = !!q && !l.dataset.search.includes(q); });
+  }
+  $('srPicker').addEventListener('change', count);
+  $('srUserSearch').addEventListener('input', e => filter('srUsers', e.target.value));
+  $('srGroupSearch').addEventListener('input', e => filter('srGroups', e.target.value));
+  $('srPickerClose').addEventListener('click', () => { $('srPicker').hidden = true; });
+  $('srPickerSave').addEventListener('click', async () => {
+    if (!picking) return;
+    const list = [...$('srPicker').querySelectorAll('input[type=checkbox]:checked')]
+      .map(cb => ({ type: cb.dataset.type, key: cb.dataset.key }));
+    const err = await picking.onSave(list);
+    if (err) { $('srPickerMsg').textContent = err; return; }
+    picking.selected = list;
+    $('srPickerMsg').textContent = tr('已儲存');
+  });
+
+  // ---- 用印流程
+  let flows = [], editing = null;
+  const RULES = [['any', tr('任一人核准')], ['all', tr('全員核准')], ['n', tr('至少 N 人核准')]];
+  function ruleText(s) { return s.rule === 'n' ? tr('至少 {0} 人核准').replace('{0}', String(s.n)) : (RULES.find(r => r[0] === s.rule) || [0, ''])[1]; }
+  async function loadFlows() {
+    const res = await api('GET', '/flows');
+    if (!res.ok) return;
+    flows = res.flows;
+    $('srFlowRows').replaceChildren(...flows.map(f => {
+      const t = el('tr');
+      const nm = el('td', null, f.name); nm.dataset.i18n = 'skip';
+      if (f.watermark && f.watermark.enabled) nm.append(' ', el('span', 'sr-chip', tr('浮水印')));
+      const st = el('td', null, f.stages.map((s, i) => (i + 1) + '. ' + s.name + '（' + ruleText(s) + '）').join(' → ')); st.dataset.i18n = 'skip';
+      const ap = el('td', 'sr-who', f.applicants.length ? who(f.applicants) : tr('不限')); ap.dataset.i18n = 'skip';
+      const en = el('td', null, f.enabled ? tr('啟用') : tr('停用'));
+      const ac = el('td');
+      const eb = iconBtn('edit', tr('編輯'));
+      eb.addEventListener('click', () => openFlow(f));
+      const db = iconBtn('trash', tr('刪除'));
+      db.addEventListener('click', async () => {
+        if (!(await showConfirm(tr('確定刪除流程「{0}」？已經送出的案件不受影響。').replace('{0}', f.name), { title: tr('刪除流程'), kind: 'danger', okText: tr('刪除') }))) return;
+        const r2 = await api('DELETE', '/flows/' + f.id);
+        if (!r2.ok) { showAlert(r2.message); return; }
+        loadFlows();
+      });
+      ac.append(eb, db);
+      t.append(nm, st, ap, en, ac);
+      return t;
+    }));
+    $('srFlowEmpty').hidden = flows.length > 0;
+  }
+  function openFlow(f) {
+    editing = f ? JSON.parse(JSON.stringify(f)) : { id: null, name: '', description: '', enabled: true, applicants: [], assets: [],
+                                                    stages: [{ name: tr('主管核准'), rule: 'any', n: 1, candidates: [] }] };
+    $('srFlowEditorTitle').textContent = f ? tr('編輯流程：{0}').replace('{0}', f.name) : tr('新增流程');
+    $('srFlowName').value = editing.name; $('srFlowDesc').value = editing.description; $('srFlowEnabled').checked = editing.enabled;
+    $('srFlowMsg').textContent = '';
+    loadWm(editing.watermark || {});
+    renderFlowEditor();
+    $('srFlowEditor').hidden = false; $('srSim').hidden = true;
+    $('srFlowEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function renderFlowEditor() {
+    $('srFlowApplicants').replaceChildren(...(editing.applicants.length
+      ? editing.applicants.map(a => { const c = el('span', 'sr-chip', a.name || labelOf(a)); c.dataset.i18n = 'skip'; return c; })
+      : [el('span', 'sr-chip', tr('不限'))]));
+    const ab = $('srFlowAssets');
+    const seals = state.assets;
+    ab.replaceChildren(...seals.map(a => {
+      const l = el('label', 'sr-asset-pick');
+      const cb = el('input'); cb.type = 'checkbox'; cb.checked = editing.assets.includes(a.id);
+      cb.addEventListener('change', () => { editing.assets = cb.checked ? [...editing.assets, a.id] : editing.assets.filter(x => x !== a.id); });
+      const img = el('img'); img.src = a.thumb_url; img.alt = ''; img.loading = 'lazy';
+      const sp = el('span', null, a.name); sp.dataset.i18n = 'skip';
+      l.append(cb, img, sp);
+      return l;
+    }), el('span', 'muted', tr('都不勾＝所有受管制的章')));
+    const box = $('srFlowStages');
+    // 時間軸：申請者送出 → 各關 → 保管人用印
+    const node = (cls, title, sub, ic) => {
+      const d = el('div', 'sr-tl-item ' + cls);
+      const dot = el('span', 'sr-tl-dot');
+      const svg = ic && ICONS.querySelector('[data-icon="' + ic + '"] svg');
+      if (svg) dot.append(svg.cloneNode(true));
+      const body = el('div', 'sr-tl-fixed');
+      body.append(el('b', null, title), el('span', 'muted', sub));
+      d.append(dot, body);
+      return d;
+    };
+    const stages = editing.stages.map((st, i) => {
+      const d = el('div', 'sr-tl-item sr-tl-stage');
+      d.append(el('span', 'sr-tl-dot sr-tl-num', String(i + 1)));
+      const card = el('div', 'sr-stage');
+      const top = el('div', 'sr-stage-top');
+      const nm = el('input', 'field sr-stage-name'); nm.value = st.name; nm.maxLength = 60; nm.setAttribute('aria-label', tr('關卡名稱'));
+      nm.placeholder = tr('關卡名稱');
+      nm.addEventListener('input', () => { st.name = nm.value; });
+      const sel = el('select', 'field');
+      RULES.forEach(([v, t]) => { const o = el('option', null, t); o.value = v; o.selected = st.rule === v; sel.append(o); });
+      const n = el('input', 'field field-num'); n.type = 'number'; n.min = '1'; n.max = '50'; n.value = String(st.n || 1); n.hidden = st.rule !== 'n';
+      n.setAttribute('aria-label', tr('人數'));
+      sel.addEventListener('change', () => { st.rule = sel.value; n.hidden = st.rule !== 'n'; });
+      n.addEventListener('input', () => { st.n = parseInt(n.value, 10) || 1; });
+      const act = el('span', 'sr-stage-act');
+      const up = iconBtn('up', tr('往前移')); up.classList.add('sr-up'); up.disabled = i === 0;
+      up.addEventListener('click', () => { [editing.stages[i - 1], editing.stages[i]] = [editing.stages[i], editing.stages[i - 1]]; renderFlowEditor(); });
+      const rm = iconBtn('trash', tr('移除')); rm.disabled = editing.stages.length <= 1;
+      rm.addEventListener('click', () => { editing.stages.splice(i, 1); renderFlowEditor(); });
+      act.append(up, rm);
+      top.append(nm, sel, n, act);
+      const whoRow = el('div', 'sr-stage-who');
+      whoRow.append(el('span', 'sr-stage-lab', tr('審核者')));
+      if (st.candidates.length) {
+        st.candidates.forEach(c => { const chip = el('span', 'sr-chip', c.name || labelOf(c)); chip.dataset.i18n = 'skip'; whoRow.append(chip); });
+      } else {
+        whoRow.append(el('span', 'sr-chip sr-chip-empty', tr('未設定審核者')));
+      }
+      const cb = iconBtn('user', tr('設定審核者'));
+      cb.addEventListener('click', () => pick({ title: tr('第 {0} 關的審核者').replace('{0}', String(i + 1)),
+        hint: tr('這些人裡（扣掉申請者本人）達到通過條件，這一關就通過。'),
+        selected: st.candidates,
+        onSave: async list => { st.candidates = list.map(x => ({ ...x, name: labelOf(x) })); renderFlowEditor(); return null; } }));
+      whoRow.append(cb);
+      card.append(top, whoRow);
+      d.append(card);
+      jtSel(sel);
+      return d;
+    });
+    box.replaceChildren(
+      node('sr-tl-start', tr('申請者送出'), tr('上傳文件、選要用的章'), 'file-text'),
+      ...stages,
+      node('sr-tl-end', tr('保管人用印'), tr('全部通過後，由那顆章的保管人確認位置並用印'), 'stamp'));
+  }
+  function labelOf(s) {
+    if (!subjects) return s.key;
+    if (s.type === 'user') { const u = subjects.users.find(x => x.key === s.key); return u ? (u.username + '@' + (u.source || 'local')) : s.key; }
+    const g = subjects.groups.find(x => x.key === s.key); return g ? g.name : s.key;
+  }
+  $('srFlowNew').addEventListener('click', () => openFlow(null));
+  $('srFlowCancel').addEventListener('click', () => { $('srFlowEditor').hidden = true; });
+  $('srFlowAddStage').addEventListener('click', () => {
+    if (editing.stages.length >= 10) return;
+    editing.stages.push({ name: tr('第 {0} 關').replace('{0}', String(editing.stages.length + 1)), rule: 'any', n: 1, candidates: [] });
+    renderFlowEditor();
+  });
+  $('srFlowApplicantsBtn').addEventListener('click', () => pick({ title: tr('流程的申請對象'),
+    hint: tr('誰可以用這個流程申請；都不勾＝不限（仍要是所選印章的可申請對象）。'), selected: editing.applicants,
+    onSave: async list => { editing.applicants = list.map(x => ({ ...x, name: labelOf(x) })); renderFlowEditor(); return null; } }));
+  function flowBody() {
+    return { name: $('srFlowName').value, description: $('srFlowDesc').value, enabled: $('srFlowEnabled').checked,
+             applicants: editing.applicants.map(s => ({ type: s.type, key: s.key })), assets: editing.assets,
+             stages: editing.stages.map(s => ({ name: s.name, rule: s.rule, n: s.rule === 'n' ? (parseInt(s.n, 10) || 1) : 1,
+                                                 candidates: s.candidates.map(c => ({ type: c.type, key: c.key })) })),
+             watermark: wmBody() };
+  }
+  // ---- 浮水印設定
+  function wmSrc() { const r = document.querySelector('input[name="srWmSrc"]:checked'); return r ? r.value : 'text'; }
+  function wmUi() {
+    const on = $('srWmOn').checked, src = wmSrc();
+    $('srWmBox').hidden = !on;
+    $('srWmTextRow').hidden = $('srWmTokens').hidden = $('srWmStyleRow').hidden = src !== 'text';
+    const noAsset = !(state.watermarks || []).length;
+    $('srWmAssetRow').hidden = src !== 'asset' || noAsset;
+    $('srWmNoAsset').hidden = src !== 'asset' || !noAsset;
+    $('srWmTileRow').hidden = src !== 'asset';
+    $('srWmOpacityVal').textContent = $('srWmOpacity').value + '%';
+    const w = (state.watermarks || []).find(x => x.id === $('srWmAsset').value);
+    $('srWmThumb').hidden = !w; if (w) $('srWmThumb').src = w.thumb_url;
+    wmPreview(src, w);
+  }
+  // 預覽：A4 縮成 168×238 px（1 mm ＝ 0.8 px），照浮水印工具的排法：
+  // 文字大小由字級決定（大小欄只用在圖片）、間距加在旋轉後的外框上、每隔一列錯開半格。
+  function wmPreview(src, w) {
+    const box = $('srWmPrev');
+    const k = 168 / 210, ptmm = 25.4 / 72;
+    const gap = (parseFloat($('srWmGap').value) || 0) * k;
+    const op = (parseFloat($('srWmOpacity').value) || 20) / 100, rot = parseFloat($('srWmRot').value) || 0;
+    const make = () => {
+      if (src === 'asset') {
+        const n = el('img'); n.alt = ''; if (w) n.src = w.thumb_url; return n;
+      }
+      const text = ($('srWmText').value || tr('浮水印')).replace(/\{編號\}|\{number\}/g, 'SR-20261106-0001')
+        .replace(/\{日期\}|\{date\}/g, jtTime.date(Date.now() / 1000));
+      const n = el('span', null, text); n.dataset.i18n = 'skip';
+      n.style.color = $('srWmColor').value;
+      n.style.fontSize = ((parseFloat($('srWmSize').value) || 36) * ptmm * k) + 'px';
+      return n;
+    };
+    // 先量一個的原始大小
+    const probe = make(); probe.style.visibility = 'hidden';
+    box.replaceChildren(probe);
+    let tw, th;
+    if (src === 'asset') {
+      const long = (parseFloat($('srWmTile').value) || 60) * k;
+      const im = $('srWmThumb'), ar = im && im.naturalWidth ? im.naturalWidth / im.naturalHeight : 1;
+      tw = ar >= 1 ? long : long * ar; th = ar >= 1 ? long / ar : long;
+    } else {
+      tw = probe.offsetWidth || 40; th = probe.offsetHeight || 10;
+    }
+    const r = Math.abs(rot) * Math.PI / 180;
+    const bw = tw * Math.cos(r) + th * Math.sin(r), bh = tw * Math.sin(r) + th * Math.cos(r);
+    const sx = Math.max(2, bw + gap), sy = Math.max(2, bh + gap);
+    const items = [];
+    let row = 0;
+    for (let y = -bh / 2; y < 238 + bh && items.length < 400; y += sy, row++) {
+      for (let x = -bw / 2 + (row % 2 ? sx / 2 : 0); x < 168 + bw && items.length < 400; x += sx) {
+        const n = make();
+        if (src === 'asset') { n.style.width = tw + 'px'; n.style.height = th + 'px'; }
+        n.style.left = (x + bw / 2 - tw / 2) + 'px'; n.style.top = (y + bh / 2 - th / 2) + 'px';
+        n.style.opacity = String(op);
+        n.style.transform = 'rotate(' + rot + 'deg)';           // 跟浮水印工具一樣：正值順時針
+        items.push(n);
+      }
+    }
+    box.replaceChildren(...items);
+  }
+  function loadWm(wm) {
+    const sel = $('srWmAsset');
+    if (!sel.dataset.filled) {
+      (state.watermarks || []).forEach(w => { const o = el('option', null, w.name); o.value = w.id; sel.append(o); });
+      sel.dataset.i18n = 'skip'; sel.dataset.filled = '1';
+      jtSel(sel);
+    }
+    $('srWmOn').checked = !!wm.enabled;
+    document.querySelectorAll('input[name="srWmSrc"]').forEach(r => { r.checked = r.value === (wm.source || 'text'); });
+    $('srWmText').value = wm.text || '';
+    $('srWmColor').value = wm.color || '#cc0000';
+    $('srWmSize').value = String(wm.text_size_pt || 36);
+    if (wm.asset_id) { sel.value = wm.asset_id; if (sel._jtSelect) sel._jtSelect.refresh(); }
+    $('srWmOpacity').value = String(Math.round((wm.opacity || 0.2) * 100));
+    $('srWmRot').value = String(wm.rotation_deg != null ? wm.rotation_deg : 30);
+    $('srWmTile').value = String(wm.size_mm || 60);
+    $('srWmGap').value = String(wm.gap_mm != null ? wm.gap_mm : 30);
+    wmUi();
+  }
+  function wmBody() {
+    if (!$('srWmOn').checked) return {};
+    const num = (id, d) => { const v = parseFloat($(id).value); return isNaN(v) ? d : v; };
+    const b = { enabled: true, source: wmSrc(), opacity: num('srWmOpacity', 20) / 100, rotation_deg: num('srWmRot', 30),
+                size_mm: num('srWmTile', 60), gap_mm: num('srWmGap', 30) };
+    if (b.source === 'text') { b.text = $('srWmText').value; b.color = $('srWmColor').value; b.text_size_pt = num('srWmSize', 36); }
+    else b.asset_id = $('srWmAsset').value;
+    return b;
+  }
+  ['srWmOn', 'srWmOpacity', 'srWmAsset', 'srWmText', 'srWmColor', 'srWmSize', 'srWmRot', 'srWmTile', 'srWmGap'].forEach(id => $(id).addEventListener('input', wmUi));
+  $('srWmAsset').addEventListener('change', wmUi);
+  document.querySelectorAll('input[name="srWmSrc"]').forEach(r => r.addEventListener('change', wmUi));
+  $('srFlowSave').addEventListener('click', async () => {
+    const body = flowBody();
+    const res = await api(editing.id ? 'PUT' : 'POST', '/flows' + (editing.id ? '/' + editing.id : ''), body);
+    if (!res.ok) { $('srFlowMsg').textContent = res.message; return; }
+    $('srFlowEditor').hidden = true;
+    loadFlows();
+  });
+
+  // ---- 模擬申請（只讀：照送出時的規則檢查一遍）
+  const SIM_TEXT = {
+    SIM_OK: tr('照這份設定可以送出，每一關都有足夠的審核者，章也有保管人可以用印。'),
+    SIM_FEATURE_OFF: tr('用印申請還沒啟用：現在使用者看不到申請入口。'),
+    SIM_AUTH_OFF: tr('帳號登入沒有啟用：用印申請要先啟用登入。'),
+    SIM_FLOW_OFF: tr('這個流程目前停用，使用者看不到它。'),
+    SIM_APPLICANT_DISABLED: tr('這個帳號已停用。'),
+    SIM_NOT_APPLICANT: tr('這個人不在流程的申請對象裡，看不到這個流程。'),
+    SIM_ASSET_DIRECT: tr('「{asset}」目前是直接使用，不用申請就能蓋；要管制請改成「僅限核准案件使用」。'),
+    SIM_ASSET_NOT_IN_FLOW: tr('「{asset}」不在這個流程適用的章裡。'),
+    SIM_NOT_REQUESTER: tr('這個人不是「{asset}」的可申請對象。'),
+    SIM_NO_CUSTODIAN: tr('「{asset}」沒有保管人可以用印（保管人不能是申請者本人）。'),
+    SIM_NO_REQUESTERS: tr('「{asset}」還沒有設定可申請對象；沒有設定＝沒有人能申請，請在「印章與簽名」設定可申請對象。'),
+    SIM_CUSTODIAN_IS_SELF: tr('「{asset}」的保管人只有申請者本人；申請者不能用印自己的申請，請再加一位保管人。'),
+    SIM_STAGE_ONLY_SELF: tr('第 {stage} 關「{name}」的審核者只有申請者本人；申請者不能核准自己的申請，請再加一位審核者。'),
+    SIM_APPLICANT_NOT_ACTIVATED: tr('這是從目錄同步進來、還沒登入過本站的帳號；要登入一次才看得到申請入口。'),
+    SIM_STAGE_PENDING: tr('第 {stage} 關「{name}」的審核者裡有 {n} 位還沒登入過本站（目錄同步進來的帳號）；已經算進去，但要登入一次才能審核。'),
+    SIM_CUSTODIAN_PENDING: tr('「{asset}」的保管人裡有 {n} 位還沒登入過本站（目錄同步進來的帳號）；已經算進去，但要登入一次才能用印。'),
+    SIM_NO_COMMON_CUSTODIAN: tr('選的幾顆章沒有同一位保管人；目前一件申請要由同一位保管人用印全部的章。'),
+    SIM_NO_ASSETS: tr('沒有可以申請的章。'),
+    SIM_STAGE_SHORT: tr('第 {stage} 關「{name}」合格的審核者不夠：需要 {need} 人，目前 {have} 人。送出時會被擋下。'),
+    SIM_SELF_EXCLUDED: tr('第 {stage} 關「{name}」的審核者包含申請者本人，這一關不算他。'),
+    SIM_WATERMARK_TEXT: tr('用印時會先附加文字浮水印「{text}」。'),
+    SIM_WATERMARK_ASSET: tr('用印時會先附加資產庫的浮水印圖。'),
+  };
+  const LEVEL = { ok: tr('通過'), info: tr('說明'), warn: tr('提醒'), error: tr('問題') };
+  function simText(it) {
+    // 認不得的代碼（例如頁面是改版前載入的）用伺服器附的說明，不要秀出代碼
+    let t = SIM_TEXT[it.code] || (it.message ? tr(it.message) : it.code);
+    Object.entries(it.detail || {}).forEach(([k, v]) => { t = t.split('{' + k + '}').join(String(v)); });
+    return t;
+  }
+  async function openSim() {
+    if (!(await ensureSubjects())) return;
+    const sel = $('srSimUser');
+    if (!sel.options.length) {
+      subjects.users.forEach(u => { const o = el('option', null, (u.username || '') + '@' + (u.source || 'local')); o.value = u.key; sel.append(o); });
+      sel.dataset.i18n = 'skip';
+      sel.setAttribute('data-search', tr('搜尋帳號'));
+      sel.setAttribute('data-search-empty', tr('找不到符合的帳號'));
+      jtSel(sel);
+    }
+    const pool = editing.assets.length ? state.assets.filter(a => editing.assets.includes(a.id)) : state.assets;
+    $('srSimAssets').replaceChildren(...pool.map(a => {
+      const l = el('label', 'sr-asset-pick');
+      const cb = el('input'); cb.type = 'checkbox'; cb.value = a.id; cb.checked = true;
+      const img = el('img'); img.src = a.thumb_url; img.alt = ''; img.loading = 'lazy';
+      const sp = el('span', null, a.name); sp.dataset.i18n = 'skip';
+      l.append(cb, img, sp);
+      return l;
+    }));
+    $('srSimOut').replaceChildren();
+    $('srSim').hidden = false;
+  }
+  $('srSimToggle').addEventListener('click', () => { if ($('srSim').hidden) openSim(); else $('srSim').hidden = true; });
+  $('srSimRun').addEventListener('click', async () => {
+    const btn = $('srSimRun'); btn.disabled = true;
+    const assets = [...document.querySelectorAll('#srSimAssets input:checked')].map(c => c.value);
+    const res = await api('POST', '/simulate', { flow: flowBody(), applicant: parseInt($('srSimUser').value, 10), assets });
+    btn.disabled = false;
+    const out = $('srSimOut');
+    if (!res.ok) { out.replaceChildren(el('p', 'sr-warn', res.message)); return; }
+    const r = res.result;
+    const head = el('p', 'sr-sim-head ' + (r.ok ? 'ok' : 'error'),
+                    (r.ok ? tr('模擬結果：可以送出') : tr('模擬結果：有問題要先處理')) + '（' + r.applicant + '）');
+    const ul = el('ul', 'sr-sim-items');
+    const ORDER = { error: 0, warn: 1, info: 2, ok: 3 };
+    [...r.items].sort((a, b) => ORDER[a.level] - ORDER[b.level]).forEach(it => {
+      const li = el('li', 'sr-sim-' + it.level);
+      li.append(el('b', null, LEVEL[it.level] || it.level), document.createTextNode(' ' + simText(it)));
+      li.dataset.i18n = 'skip';
+      ul.append(li);
+    });
+    const chips = (names, empty) => {
+      const w = el('span', 'sr-chips');
+      if (names.length) names.forEach(nm => { const c = el('span', 'sr-chip', nm); c.dataset.i18n = 'skip'; w.append(c); });
+      else w.append(el('span', 'sr-chip sr-chip-empty', empty));
+      return w;
+    };
+    const row = (num, title, sub, ok, names, empty) => {
+      const d = el('div', 'sr-sim-row ' + (ok ? 'ok' : 'error'));
+      d.append(el('span', 'sr-tl-dot sr-tl-num', num));
+      const body = el('div', 'sr-sim-row-body');
+      const t = el('div', 'sr-sim-row-title');
+      const b = el('b', null, title); b.dataset.i18n = 'skip';
+      t.append(b, el('span', 'muted', sub), el('span', 'sr-pill ' + (ok ? 'ok' : 'error'), ok ? tr('通過') : tr('人數不足')));
+      body.append(t, chips(names, empty));
+      d.append(body);
+      return d;
+    };
+    const flowBox = el('div', 'sr-sim-flow');
+    r.stages.forEach(st => flowBox.append(row(String(st.index), st.name, tr('需要 {0} 人').replace('{0}', String(st.need)),
+      st.ok, st.eligible, tr('沒有合格的審核者'))));
+    const custOk = r.common_custodians.length > 0;
+    const cRow = row('✓', tr('保管人用印'), '', custOk, r.common_custodians, tr('沒有保管人'));
+    cRow.querySelector('.sr-pill').textContent = custOk ? tr('通過') : tr('沒有保管人');
+    flowBox.append(cRow);
+    out.replaceChildren(head, ul, el('h4', null, tr('模擬的流程')), flowBox);
+  });
+
+  // ---- 案件總覽與改派
+  const STATE = { reviewing: tr('審核中'), returned: tr('待補件'), rejected: tr('已駁回'), withdrawn: tr('已撤回'), awaiting_stamp: tr('待用印'),
+                  stamping: tr('用印中'), stamp_failed: tr('用印失敗'), done: tr('已完成'), 'void': tr('已作廢') };
+  async function loadCases() {
+    const res = await api('GET', '/cases');
+    if (!res.ok) return;
+    $('srCaseRows').replaceChildren(...res.cases.map(c => {
+      const t = el('tr');
+      const cells = [c.number, c.subject, c.applicant_label, c.flow_name].map(v => { const td = el('td', null, v || ''); td.dataset.i18n = 'skip'; return td; });
+      const stTd = el('td', null, (STATE[c.state] || c.state) + (c.stage && c.state === 'reviewing' ? ' · ' + tr('第 {0} 關').replace('{0}', String(c.stage.index + 1)) : ''));
+      if (c.stage && c.stage.stuck) stTd.append(el('span', 'sr-stuck', ' ' + tr('需要改派')));
+      const ac = el('td');
+      if (c.state === 'reviewing') {
+        const b = iconBtn('swap', tr('改派'));
+        b.addEventListener('click', () => pick({ title: tr('改派 {0} 第 {1} 關的審核者').replace('{0}', c.number).replace('{1}', String(c.stage.index + 1)),
+          hint: tr('換掉這一關的審核者。已經投的票照算；原因會寫進案件的處理紀錄。'), selected: [],
+          onSave: async list => {
+            const reason = await showPrompt(tr('改派原因（必填）'), { title: tr('改派') });
+            if (!reason) return tr('請填寫原因');
+            const r2 = await api('POST', '/cases/' + c.id + '/reassign', { candidates: list, reason });
+            if (!r2.ok) return r2.message;
+            $('srPicker').hidden = true; loadCases();
+            return null;
+          } }));
+        ac.append(b);
+      }
+      if (c.state === 'done') {
+        const v = iconBtn('close', tr('作廢'));
+        v.addEventListener('click', async () => {
+          const reason = await showPrompt(tr('作廢原因（必填）。作廢後停止一般取件，但已經下載出去的檔案收不回。'), { title: tr('作廢') });
+          if (!reason) return;
+          const r2 = await api('POST', '/cases/' + c.id + '/void', { reason });
+          if (!r2.ok) { showAlert(r2.message); return; }
+          loadCases();
+        });
+        ac.append(v);
+      }
+      t.append(...cells, stTd, ac);
+      return t;
+    }));
+    $('srCaseEmpty').hidden = res.cases.length > 0;
+  }
+
+  $('srEnabled').addEventListener('change', async () => {
+    const on = $('srEnabled').checked;
+    $('srEnabled').disabled = true;
+    $('srMsg').textContent = '';
+    const res = await api('PUT', '/enabled', { enabled: on });
+    const msg = $('srMsg');
+    if (!res.ok) {
+      let m = res.message;
+      if (res.detail && res.detail.assets && state) {
+        const names = state.assets.filter(a => res.detail.assets.includes(a.id)).map(a => a.name);
+        if (names.length) m += ' ' + names.join(tr('、'));
+      }
+      msg.textContent = m;
+      render();
+      return;
+    }
+    state = res;
+    msg.textContent = on ? tr('已啟用用印申請') : tr('已停用用印申請');
+    render(); loadFlows();
+  });
+  $('srRetentionSave').addEventListener('click', async () => {
+    const days = parseInt($('srRetention').value, 10);
+    const res = await api('PUT', '/retention', { days: isNaN(days) ? -1 : days });
+    $('srMsg').textContent = res.ok ? tr('已儲存保留期限') : res.message;
+    if (res.ok) { state = res; render(); }
+  });
+  api('GET', '/state').then(res => {
+    if (!res.ok) { $('srMsg').textContent = res.message; return; }
+    state = res; render(); loadFlows(); loadCases();
+  });
+})();
+</script>
+{% endblock %}

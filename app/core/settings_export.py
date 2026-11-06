@@ -106,6 +106,10 @@ CATEGORIES: list[dict] = [
      "desc": "是否允許使用者自行新增事務機", "default": True},
     # 只有「從哪裡下載」的設定；下載下來的範本與地址簿在 `official_doc/`，
     # 可以重新下載，不進備份（見 check_settings_export_coverage 的豁免）。
+    # 用印申請：功能開關與每顆章的管制（v1.17.28）。章的 id 跟資產庫一起還原才對得上。
+    {"id": "seal_request", "label": "用印申請", "kind": "files",
+     "items": ["seal_request.json"],
+     "desc": "功能開關、哪些印章僅限核准案件使用、可申請對象與保管人", "default": True},
     {"id": "official_doc_sources", "label": "公文撰擬資料來源", "kind": "files",
      "items": ["official_doc_sources.json"],
      "desc": "公文範本與機關地址簿的下載網址與自訂來源（下載下來的資料不備份，還原後再按一次下載）",

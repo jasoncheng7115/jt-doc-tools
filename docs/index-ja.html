@@ -480,6 +480,39 @@
   </div>
 </section>
 
+<!-- ======== Seal requests (v1.17) ======== -->
+<section id="seal-request" class="section section-light">
+  <div class="container">
+    <div class="section-eyebrow">v1.17 の新機能</div>
+    <h2 class="section-title">押印申請：承認後に保管者が押印</h2>
+    <p class="section-lead">正式な印を誰でも押せる状態にしません。押印申請を出し、上長が段階ごとに承認し、印の保管者が確認して押印します。既定では無効で、管理者が有効にしてから機能します。先にアカウントのログインを有効にする必要があります。押された印は画像であり、デジタル署名ではありません。</p>
+
+    <div class="ent-grid">
+      <div class="ent-card">
+        <div style="width:44px;height:44px;border-radius:12px;background:#eef2ff;color:#4338ca;display:flex;align-items:center;justify-content:center;margin-bottom:12px;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h3>印ごとの管理</h3>
+        <p>会社印や代表者印を<b>承認済みの申請のみ</b>に設定し、申請できる人と保管者（ユーザー、グループ、組織単位）を指定できます。設定後は、押印・割印・ページエディターのどれからもその印を直接使えません。</p>
+      </div>
+      <div class="ent-card">
+        <div style="width:44px;height:44px;border-radius:12px;background:#ecfdf5;color:#047857;display:flex;align-items:center;justify-content:center;margin-bottom:12px;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        </div>
+        <h3>段階ごとの審査</h3>
+        <p>管理者が審査段階を設定し、段階ごとに<b>誰か一人・全員・指定人数</b>の承認を選べます。申請者本人は自分の申請を承認も押印もできません。差し戻し後に再提出すると新しい版になり、最初の段階から審査し直します。</p>
+      </div>
+      <div class="ent-card">
+        <div style="width:44px;height:44px;border-radius:12px;background:#fff7ed;color:#c2410c;display:flex;align-items:center;justify-content:center;margin-bottom:12px;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><circle cx="12" cy="15" r="3"/></svg>
+        </div>
+        <h3>保管者による押印と記録</h3>
+        <p>すべて承認されたら、<b>保管者が位置を確認して押印</b>します。押印前に文書と印の画像が差し替えられていないことを照合します。文書の各版、承認、押印、ダウンロードはすべて記録され、監査記録にも書き込まれます。管理者は文書の内容を見られません。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="jobs" class="section section-light">
   <div class="container">
     <div class="section-eyebrow">v1.14 の新機能</div>
@@ -1472,6 +1505,7 @@
       <a href="compliance-ja.html">データ保護とコンプライアンス</a>
       <a href="mfp-fetch-ja.html">複合機スキャン・取り込みの使い方</a>
       <a href="https://github.com/jasoncheng7115/jt-doc-tools/issues" target="_blank" rel="noopener">問題を報告</a>
+      <a href="https://github.com/jasoncheng7115/jt-doc-tools/blob/main/SECURITY.md" target="_blank" rel="noopener">脆弱性の報告</a>
     </div>
     <div class="footer-col">
       <div class="footer-h">作成者</div>

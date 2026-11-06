@@ -1061,6 +1061,12 @@ select.jt-select-native {
   padding: 4px;
 }
 .jt-select-panel[hidden] { display: none; }
+/* 隨打即找（`<select data-search>`）：搜尋框黏在清單最上面 */
+.jt-select-search { position: sticky; top: -4px; z-index: 1; padding: 4px 4px 6px; margin: -4px 0 2px;
+  background: var(--card); border-bottom: 1px solid var(--border); }
+.jt-select-search .field { width: 100%; box-sizing: border-box; padding: 5px 8px; font-size: 13px; }
+.jt-select-option[hidden] { display: none; }
+.jt-select-empty { padding: 8px 10px; color: var(--muted); font-size: 13px; }
 /* 分組標題整條有底色 ＋ 左邊主色條（2026-10-08 使用者：「要整條有背景色 才有明顯」，
    比照 PDF 編輯器字型選單的 `.fp-group`）。面板有 4px 內距，左右用負的外距撐滿整條；
    捲動時貼在上面（sticky），一眼看得出目前在哪一組。 */

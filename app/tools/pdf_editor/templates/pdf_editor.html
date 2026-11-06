@@ -1527,6 +1527,9 @@ function createObject(fc, p, tool) {
     });
     group._peType = 'sticky';
     group._noteText = tr('便箋內容…');
+    // 存檔後是 PDF 標準便箋（一個圖示），轉了沒有意義：不給旋轉
+    group.lockRotation = true;
+    group.setControlsVisibility({ mtr: false });
     fc.add(group); fc.setActiveObject(group);
   } else if (tool === 'image') {
     openAssetPicker((result) => {
@@ -3199,6 +3202,10 @@ async function savePdf(isAuto, opts) {
       const w_pt = o.getScaledWidth() / PT2PX;
       const h_pt = o.getScaledHeight() / PT2PX;
       const t = o._peType;
+      // 畫面上轉過的物件：角度與旋轉後的四個角（左上、右上、右下、左下，pt）一起送，
+      // 後端照這四個角畫 —— 原本只有圖片送角度，文字與圖形轉了之後輸出還是正的（2026-11-04 盤點）
+      const angle = ((o.angle || 0) % 360 + 360) % 360;
+      const rot = angle > 0.01 && angle < 359.99 ? { angle: angle, quad: quadPt(o) } : {};
       // Common: existing-object marker (set when extracted via pick tool)
       const origBbox = o._origBbox || null;
       if (t === 'text') {
@@ -3227,29 +3234,38 @@ async function savePdf(isAuto, opts) {
           italic: o.fontStyle === 'italic',
           underline: !!o.underline,
           original_bbox: origBbox,
+          ...rot,
         });
       } else if (t === 'whiteout') {
-        objs.push({ id: rid(), type: 'whiteout', x: x_pt, y: y_pt, w: w_pt, h: h_pt });
+        objs.push({ id: rid(), type: 'whiteout', x: x_pt, y: y_pt, w: w_pt, h: h_pt, ...rot });
       } else if (t === 'image') {
         objs.push({ id: rid(), type: 'image', x: x_pt, y: y_pt, w: w_pt, h: h_pt,
           asset_id: o._assetId,
           existing_src: o._existingSrc || null,  // URL of extracted PNG from PDF
-          opacity: o.opacity || 1, angle: o.angle || 0,
-          original_bbox: origBbox });
+          opacity: o.opacity == null ? 1 : o.opacity, angle: 0,
+          original_bbox: origBbox, ...rot });
       } else if (t === 'rect') {
         objs.push({ id: rid(), type: 'rect', x: x_pt, y: y_pt, w: w_pt, h: h_pt,
           stroke: colorToHex(o.stroke, '#000000'),
           fill: (o.fill && o.fill !== '' && o.fill !== 'transparent') ? colorToHex(o.fill, null) : null,
-          stroke_width: o.strokeWidth || 1 });
+          stroke_width: o.strokeWidth || 1, ...rot });
       } else if (t === 'ellipse') {
         objs.push({ id: rid(), type: 'ellipse', x: x_pt, y: y_pt, w: w_pt, h: h_pt,
           stroke: colorToHex(o.stroke, '#000000'),
           fill: (o.fill && o.fill !== '' && o.fill !== 'transparent') ? colorToHex(o.fill, null) : null,
-          stroke_width: o.strokeWidth || 1 });
+          stroke_width: o.strokeWidth || 1, ...rot });
       } else if (t === 'line' || t === 'arrow') {
-        const x1 = o.left, y1 = o.top;
-        const x2 = o.left + (o.x2 - o.x1);
-        const y2 = o.top  + (o.y2 - o.y1);
+        let x1 = o.left, y1 = o.top;
+        let x2 = o.left + (o.x2 - o.x1);
+        let y2 = o.top  + (o.y2 - o.y1);
+        if (rot.angle) {
+          // 轉過的線段：兩端點照物件自己的轉換矩陣算（含旋轉與縮放）
+          const lp = o.calcLinePoints();
+          const m = o.calcTransformMatrix();
+          const a = fabric.util.transformPoint(new fabric.Point(lp.x1, lp.y1), m);
+          const b = fabric.util.transformPoint(new fabric.Point(lp.x2, lp.y2), m);
+          x1 = a.x; y1 = a.y; x2 = b.x; y2 = b.y;
+        }
         objs.push({ id: rid(), type: t,
           x: x1/PT2PX, y: y1/PT2PX, x2: x2/PT2PX, y2: y2/PT2PX, w: 0, h: 0,
           stroke: colorToHex(o.stroke, '#000000'),
@@ -3257,7 +3273,7 @@ async function savePdf(isAuto, opts) {
       } else if (t === 'highlight') {
         objs.push({ id: rid(), type: 'highlight', x: x_pt, y: y_pt,
           w: w_pt, h: h_pt,
-          color: colorToHex(o.fill, '#fde047') });
+          color: colorToHex(o.fill, '#fde047'), ...rot });
       } else if (t === 'sticky') {
         objs.push({ id: rid(), type: 'sticky',
           x: x_pt, y: y_pt, w: w_pt, h: h_pt,
@@ -3515,5 +3531,15 @@ function escapeHTML(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function rid() { return 'o' + Math.random().toString(36).slice(2, 10); }
+// 物件旋轉 / 縮放後的四個角（左上、右上、右下、左下），換成 PDF pt。用物件自己的轉換矩陣，
+// 軸心、縮放、旋轉都算進去（不用 left / top 自己推，那條路轉過之後就對不上）。
+function quadPt(o) {
+  const m = o.calcTransformMatrix();
+  const w = o.width || 0, h = o.height || 0;
+  return [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]].map(([x, y]) => {
+    const pnt = fabric.util.transformPoint(new fabric.Point(x, y), m);
+    return [pnt.x / PT2PX, pnt.y / PT2PX];
+  });
+}
 </script>
 {% endblock %}

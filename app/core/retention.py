@@ -498,6 +498,12 @@ def sweep_all() -> dict[str, Any]:
             s["official_doc_cases_days"])
     except Exception:
         logger.exception("official-doc cases sweep failed")
+    # 用印申請：保存期限由管理員依規定設定（設定 → 用印申請），0 ＝ 不自動刪除
+    try:
+        from . import seal_flow
+        report["seal_requests"] = seal_flow.purge_expired()
+    except Exception:
+        logger.exception("seal-request purge failed")
     report["speech_audio"] = _sweep_speech_audio(s["speech_audio_days"])
     report["audit"] = _sweep_audit(s["audit_days"])
     report["job_records"] = _sweep_job_records(s["job_records_days"])

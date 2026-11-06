@@ -368,3 +368,36 @@ def test_page_cache_lives_on_the_document(tmp_path):
         f"這些模組層級的快取跟著文件在長大：{grew}\n"
         "  文件是每個請求開一份、用完就關，`id()` 會被重複使用 —— "
         "以文件為單位的資料放模組層級遲早會串到別份文件。")
+
+
+def test_shared_glyph_prefers_the_unified_ideograph_over_the_radical():
+    """一形多碼：同一個字形同時對應「方」(U+65B9) 與康熙部首「⽅」(U+2F45)。
+
+    原本「取最小的字碼」會挑到部首，正常的字被換成字面一樣、字碼不同的部首
+    （2026-11-06 客戶表單：有勾選框的那幾列整段走反查，「方」「支」「二」都被換掉）。
+    """
+    import io
+
+    from fontTools.fontBuilder import FontBuilder
+    from fontTools.pens.ttGlyphPen import TTGlyphPen
+
+    from app.core import glyph_text as G
+
+    fb = FontBuilder(1000, isTTF=True)
+    fb.setupGlyphOrder([".notdef", "fang", "zhi"])
+    fb.setupCharacterMap({0x65B9: "fang", 0x2F45: "fang", 0x652F: "zhi", 0x2F40: "zhi", 0xF900: "zhi"})
+    pen = TTGlyphPen(None)
+    pen.moveTo((0, 0)); pen.lineTo((0, 500)); pen.lineTo((500, 500)); pen.closePath()
+    g = pen.glyph()
+    fb.setupGlyf({".notdef": g, "fang": g, "zhi": g})
+    fb.setupHorizontalMetrics({n: (1000, 0) for n in (".notdef", "fang", "zhi")})
+    fb.setupHorizontalHeader(ascent=880, descent=-120)
+    fb.setupNameTable({"familyName": "T", "styleName": "R"})
+    fb.setupOS2(); fb.setupPost()
+    buf = io.BytesIO(); fb.save(buf)
+    G._gid_map_cache.clear()
+    table = G._gid_to_unicode(buf.getvalue())
+    assert table[1] == 0x65B9, hex(table[1])
+    assert table[2] == 0x652F, hex(table[2])
+    # 只有部首可選時仍然用它（不要變成查不到）
+    assert G._uni_rank(0x2F45) > G._uni_rank(0x9FA5) and G._uni_rank(0x41) < G._uni_rank(0x2F45)

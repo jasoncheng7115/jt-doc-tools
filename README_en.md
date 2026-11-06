@@ -1,6 +1,6 @@
 [繁體中文](README.md) ｜ **English** ｜ [日本語](README_ja.md)
 
-# Jason Tools Document Toolbox v1.17.26
+# Jason Tools Document Toolbox v1.17.32
 
 > ### ⚠ Installed with git before 2026-09-13? Run one command before this upgrade
 >
@@ -27,7 +27,7 @@
 
 > An integrated PDF / Office document platform. 52 tools cover **form filling and stamping**, **watermarks**, **merge / split / rotate / reorder**, **format conversion**, **scan stitching**, **de-identification**, **word counts**, **annotation handling**, **diffing**, **sentence translation**, **list processing**, **e-invoice processing**, **VAT lookup**, **a page editor**, **encryption / decryption** and more.
 >
-> Enterprise features: **local / LDAP / AD multi-realm authentication**, **single sign-on** (OIDC + SAML, ready for M365 / Google / Keycloak), **RBAC roles and permissions**, **audit log**, **SIEM forwarding** (syslog / CEF / GELF), **font management**, **user workspace**, **background jobs with completion notices**, a **REST API** and **MCP (lets Claude Code / Codex / OpenCode call the non-LLM tools)**.
+> Enterprise features: **local / LDAP / AD multi-realm authentication**, **single sign-on** (OIDC + SAML, ready for M365 / Google / Keycloak), **RBAC roles and permissions**, **audit log**, **SIEM forwarding** (syslog / CEF / GELF), **font management**, **user workspace**, **seal requests (stamped by the custodian after approval)**, **background jobs with completion notices**, a **REST API** and **MCP (lets Claude Code / Codex / OpenCode call the non-LLM tools)**.
 >
 > **No cloud; your data stays with you.** Runs on Linux, macOS and Windows, either standalone or as an internal server for a whole team.
 
@@ -164,6 +164,23 @@ Files your tools produce (PDF / PNG, Word / Excel / PowerPoint, OpenDocument, pl
 - **Isolation and safety**; each person sees only their own files; with authentication off it becomes one shared workspace; retention is enforced by a scheduled cleanup.
 
 Enabled by default; an administrator can turn it off at any time under “Settings → workspace settings”.
+
+---
+
+## Seal requests (optional, off by default)
+
+Official seals, such as the company seal or the representative's seal, can be set to "approved requests only": a seal request must be submitted and approved stage by stage, and the seal custodian then confirms the position and stamps.
+
+- **Per-seal settings** — each seal and signature is either "use directly" or "approved requests only", with its own requesters and custodians (users, groups, organizational units). Once a seal is restricted, it can no longer be used directly from any stamping entry point, including stamping, cross-page seals and the page editor.
+- **Approval flows** — administrators define the review stages; each stage needs any one, all, or a set number of approvers. Applicants can neither approve nor stamp their own requests. A request that is returned and resubmitted becomes a new version and starts again from the first stage.
+- **Stamping by the custodian** — once every stage approves, the custodian confirms the position and size of each seal and stamps. Before stamping, the document and the seal images are checked to be unchanged; the request is marked done only after the stamped PDF has been verified.
+- **Records** — every document version and every approval, return, rejection, stamping and download is recorded and written to the audit log. Administrators can see request details, reassign a stuck stage and void a request, but cannot see the documents.
+- **Notifications** — the people involved are notified when it is their turn to review, and when a request is returned, approved or done (using the completion-notice channels; messages contain a link, not the document).
+- **Simulation** — pick an applicant and check the flow against the same rules used at submission (enough reviewers at each stage, allowed to request the seal, a custodian available), without creating a request or notifying anyone.
+- **Watermark (optional)** — each flow can add a text or image watermark when stamping (the request number and date can be filled in); the watermark goes on first, then the seals.
+- **Retention** — closed requests are not deleted automatically by default; administrators can set a retention period in days according to company policy.
+
+Account login must be enabled first. Administrators enable the feature under "Settings → Seal requests"; custodians, flows and the retention period can be set up before enabling it; it cannot be disabled while any seal is still restricted. It is currently marked Beta. Seal requests are an internal approval process: the stamped seal is an image, not a digital signature.
 
 ---
 
@@ -398,6 +415,7 @@ Continuing to use it means accepting the terms above.
 - **Introduction site**: <https://jasoncheng7115.github.io/jt-doc-tools/index-en.html>
 - **Source repository**: <https://github.com/jasoncheng7115/jt-doc-tools>
 - **Report an issue**: <https://github.com/jasoncheng7115/jt-doc-tools/issues>
+- **Report a vulnerability**: privately, as described in [SECURITY.md](SECURITY.md); please do not open a public issue
 
 **Jason Cheng** (Jason Tools)
 

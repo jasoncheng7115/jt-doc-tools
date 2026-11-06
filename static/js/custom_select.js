@@ -55,6 +55,41 @@
     _buildPanel() {
       this.panel.innerHTML = '';
       const items = [];
+      // **隨打即找**（選用）：`<select data-search>` 才有。選項很多（例如挑使用者）時用。
+      // 比對選項文字與 data-sub，不分大小寫；只是隱藏不符的項目，不改 <select> 本身。
+      this.searchInput = null;
+      if (this.select.hasAttribute('data-search')) {
+        const box = document.createElement('div');
+        box.className = 'jt-select-search';
+        const inp = document.createElement('input');
+        inp.type = 'search';
+        inp.className = 'field';
+        inp.placeholder = this.select.getAttribute('data-search') || '';
+        inp.setAttribute('aria-label', inp.placeholder || 'search');
+        inp.autocomplete = 'off';
+        inp.addEventListener('click', e => e.stopPropagation());
+        inp.addEventListener('input', () => this._filter(inp.value));
+        inp.addEventListener('keydown', e => {
+          if (e.key !== 'Escape') e.stopPropagation();   // 不要讓清單的鍵盤處理再跳一格
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            const first = (this._items || []).find(el => !el.hidden && !el.classList.contains('disabled'));
+            if (first) { first.tabIndex = 0; first.focus(); }
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            const vis = (this._items || []).filter(el => !el.hidden && !el.classList.contains('disabled'));
+            if (vis.length === 1) { this._pick(vis[0].dataset.value); this.trigger.focus(); }
+          }
+        });
+        box.appendChild(inp);
+        this.panel.appendChild(box);
+        this.searchInput = inp;
+        const none = document.createElement('div');
+        none.className = 'jt-select-empty';
+        none.hidden = true;
+        none.textContent = this.select.getAttribute('data-search-empty') || '—';
+        this._emptyEl = none;
+      }
       Array.from(this.select.children).forEach(child => {
         if (child.tagName === 'OPTGROUP') {
           const lbl = document.createElement('div');
@@ -67,6 +102,18 @@
         }
       });
       this._items = items;
+      if (this._emptyEl) this.panel.appendChild(this._emptyEl);
+    }
+
+    _filter(q) {
+      const needle = (q || '').trim().toLowerCase();
+      let shown = 0;
+      (this._items || []).forEach(el => {
+        const hit = !needle || el.textContent.toLowerCase().includes(needle);
+        el.hidden = !hit;
+        if (hit) shown++;
+      });
+      if (this._emptyEl) this._emptyEl.hidden = shown > 0;
     }
 
     _addOption(opt) {
@@ -174,7 +221,7 @@
         if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
           e.preventDefault();
           this.open();
-          this._focusSelectedItem();
+          if (!this.searchInput) this._focusSelectedItem();
         }
       });
       this.panel.addEventListener('keydown', (e) => {
@@ -183,7 +230,7 @@
           this.trigger.focus();
           return;
         }
-        const items = (this._items || []).filter(el => !el.classList.contains('disabled'));
+        const items = (this._items || []).filter(el => !el.classList.contains('disabled') && !el.hidden);
         const cur = document.activeElement;
         const idx = items.indexOf(cur);
         if (e.key === 'ArrowDown') {
@@ -229,6 +276,11 @@
       // Scroll selected into view
       const sel = this.panel.querySelector('.jt-select-option.selected');
       if (sel) sel.scrollIntoView({ block: 'nearest' });
+      if (this.searchInput) {
+        this.searchInput.value = '';
+        this._filter('');
+        this.searchInput.focus();
+      }
     }
     _adjustPanelDirection() {
       this.wrap.classList.remove('up');

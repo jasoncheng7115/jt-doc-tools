@@ -80,7 +80,9 @@ def _resolve_stamp(uid: str, *, source: str, asset_id: str, text: str,
         try:
             return SS.normalize_upload(SS.load_asset(asset_id))
         except ValueError as e:
-            raise HTTPException(400, str(e))
+            from ...core import asset_access
+            # 受管制的章跟其他「找不到 / 壞掉」分開：是「不准」，不是請求錯
+            raise HTTPException(403 if str(e) == asset_access.CONTROLLED_MESSAGE else 400, str(e))
     if source == "upload":
         p = _stamp_file(uid)
         if not p.exists():
@@ -93,8 +95,10 @@ def _resolve_stamp(uid: str, *, source: str, asset_id: str, text: str,
 @router.get("/", response_class=HTMLResponse)
 async def page(request: Request):
     """工具頁。印章資產清單先撈好，畫面才不用再打一次 API。"""
+    from ...core import asset_access
+    # 用印申請管制的章（僅限核准案件使用）不列出
     assets = [{"id": a.id, "name": a.name}
-              for a in asset_manager.list(type="stamp")]
+              for a in asset_manager.list(type="stamp") if not asset_access.is_controlled_asset(a)]
     return request.app.state.templates.TemplateResponse(
         request, "pdf_seam_stamp.html",
         {"request": request, "title": "騎縫章", "assets": assets})

@@ -28,7 +28,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.17.26"
+VERSION = "1.17.32"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -328,6 +328,31 @@ def _tpl_workspace_enabled(request=None) -> bool:
 templates.env.globals["workspace_enabled"] = _tpl_workspace_enabled
 
 
+def _tpl_seal_request_enabled(request=None) -> bool:
+    """Jinja global：側欄的「用印申請」只在功能啟用、而且啟用登入時出現（預設不啟用）。"""
+    try:
+        from .core import auth_settings, seal_policy
+        return seal_policy.is_enabled() and auth_settings.is_enabled()
+    except Exception:
+        return False
+
+
+def _tpl_seal_review_count(request=None) -> int:
+    """側欄的「待我審核＋待我用印」件數；算不出來就不顯示（不可以讓側欄壞掉）。"""
+    try:
+        if not _tpl_seal_request_enabled(request):
+            return 0
+        from .core import seal_flow
+        from .web.seal_request_routes import todo_count
+        return todo_count(seal_flow.me(request))
+    except Exception:
+        return 0
+
+
+templates.env.globals["seal_request_enabled"] = _tpl_seal_request_enabled
+templates.env.globals["seal_review_count"] = _tpl_seal_review_count
+
+
 def _tpl_workspace_extensions() -> str:
     """Jinja global：工作區收得下的副檔名，空白分隔（例：``pdf png docx …``）。
 
@@ -582,6 +607,10 @@ templates.env.globals["nav_settings"] = [
      "url": "/admin/mfp",
      "keywords": "mfp multifunction printer copier scanner shared device member group scan escl airprint mopria "
                  "事務機 多功能事務機 影印機 複合機 共用 成員 群組 掃描 排隊"},
+    {"icon": "stamp", "name": "用印申請", "description": "哪些印章僅限核准案件使用、誰可以申請、誰是保管人（預設不啟用）",
+     "url": "/admin/seal-request", "beta": True,
+     "keywords": "seal stamp approval request workflow custodian controlled company seal signature "
+                 "用印申請 用印 印章 公司章 大小章 負責人章 核准 審核 簽核 保管人 管制 流程"},
     {"icon": "book", "name": "同義詞", "description": "PDF 標籤對應字典",
      "url": "/admin/synonyms",
      "keywords": "synonym synonyms alias dictionary label mapping 字典 同義 詞"},
@@ -680,7 +709,8 @@ NAV_SETTINGS_ORDER: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("系統運作", ("/admin/system-status", "/admin/sys-deps", "/admin/jobs", "/admin/conversion",
                   "/admin/ocr-langs", "/admin/fonts")),
     ("AI 與外部串接", ("/admin/llm-settings", "/admin/mcp", "/admin/api-tokens", "/admin/jtlw")),
-    ("品牌與資料", ("/admin/branding", "/admin/profile", "/admin/assets", "/admin/settings-export")),
+    ("品牌與資料", ("/admin/branding", "/admin/profile", "/admin/assets", "/admin/seal-request",
+                    "/admin/settings-export")),
     ("工具資料", ("/admin/templates", "/admin/synonyms", "/admin/translation-glossary", "/admin/official-doc",
                   "/admin/knowledge", "/admin/vat-db", "/admin/mfp")),
     ("帳號與權限", ("/admin/auth-settings", "/admin/sso", "/admin/users", "/admin/groups", "/admin/roles",
@@ -932,6 +962,11 @@ app.include_router(_build_web_router(templates, tools, settings.app_name, VERSIO
 from .web.workspace_routes import build_router as _build_workspace_router  # noqa: E402
 
 app.include_router(_build_workspace_router(templates))
+
+# 用印申請（v1.17.29 起）：申請、審核；功能預設不啟用（`seal_policy`）
+from .web.seal_request_routes import build_router as _build_seal_request_router  # noqa: E402
+
+app.include_router(_build_seal_request_router(templates))
 
 # 上傳的 PDF 有沒有開啟密碼（共用上傳元件用；解密本身在 PDF 密碼解除工具底下）
 from .web.pdf_password_routes import router as _pdf_password_router  # noqa: E402

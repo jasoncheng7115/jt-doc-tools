@@ -47,3 +47,45 @@ def can_use(request, asset_type: str) -> bool:
         return False
     from . import permissions
     return any(permissions.user_can_use_tool(user["user_id"], t) for t in tools)
+
+
+#: 受管制的章被擋下時的說明（`tr()` 鍵）。
+CONTROLLED_MESSAGE = "這顆章僅限核准的用印申請案件使用，請提出用印申請"
+
+
+def can_use_asset(request, asset) -> bool:
+    """這一顆資產能不能在一般工具裡看 / 用。
+
+    先看用印申請的管制（`seal_policy`）：「僅限核准案件使用」的印章與簽名，在用印工具、騎縫章、
+    PDF 編輯器、資產圖檔網址、API 一律不給 —— 不分是誰、不分認證有沒有開（只有核准案件的用印流程
+    另走自己的路徑）。沒有管制的再照種類規則（`can_use`）。**所有讀資產庫給使用者的地方都要走這裡**，
+    `tests/test_seal_policy_entry_points.py` 會檢查。
+    """
+    if asset is None:
+        return False
+    from . import seal_policy
+    if seal_policy.is_controlled(asset.id, asset.type):
+        return False
+    return can_use(request, asset.type)
+
+
+def denied_message(asset) -> str:
+    """擋下時該講哪一句（受管制的章要講「去申請」，不是「沒有權限」）。"""
+    from . import seal_policy
+    if asset is not None and seal_policy.is_controlled(asset.id, asset.type):
+        return CONTROLLED_MESSAGE
+    return DENIED_MESSAGE
+
+
+def usable(request, assets) -> list:
+    """清單只留這個人能用的（看不到就不會被選到）。"""
+    return [a for a in assets if can_use_asset(request, a)]
+
+
+def is_controlled_asset(asset) -> bool:
+    """只看用印申請的管制，不看種類權限。給本來就靠工具權限把關的地方用（用印工具、騎縫章）：
+    那些路徑換成 `can_use_asset` 會多一道種類檢查，沒綁使用者的 API Token 呼叫會被誤擋。"""
+    if asset is None:
+        return False
+    from . import seal_policy
+    return seal_policy.is_controlled(asset.id, asset.type)

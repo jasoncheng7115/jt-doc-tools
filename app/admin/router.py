@@ -52,6 +52,8 @@ def build_router(templates) -> APIRouter:
     # Router-level dependency: every admin endpoint requires admin role when
     # auth is on (no-op when auth is off — require_admin returns synthetic).
     router = APIRouter(dependencies=[Depends(require_admin)])
+    from . import seal_request_admin
+    seal_request_admin.register(router, templates)   # 設定 → 用印申請
 
     @router.get("/", response_class=HTMLResponse)
     async def admin_home(request: Request):
@@ -428,6 +430,8 @@ def build_router(templates) -> APIRouter:
         ok = asset_manager.delete(asset_id)
         if not ok:
             raise HTTPException(404, "asset not found")
+        from ..core import seal_policy
+        seal_policy.forget_asset(asset_id)   # 用印申請的管制設定一起清掉
         return {"ok": True}
 
     @router.get("/assets/{asset_id}/file")

@@ -1471,11 +1471,13 @@ POST /tools/pdf-editor/api/pdf-editor
 curl -X POST http://localhost:8765/tools/pdf-editor/api/pdf-editor \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -F "file=@document.pdf" \
-  -F 'model={"version":1,"pages":[{"page":0,"objects":[{"id":"o1","type":"text","x":100,"y":200,"w":120,"h":20,"text":"已蓋章","font":"Noto Sans TC","size":14,"color":"#cc0000"}]}]}' \
+  -F 'model={"version":1,"pages":[{"page":0,"objects":[{"id":"o1","type":"text","x":100,"y":200,"w":120,"h":20,"text":"已蓋章","font_size":14,"color":"#cc0000"}]}]}' \
   --output edited.pdf
 ```
 
 回應：套用 overlay 後的 PDF。模型格式詳見 web UI 的 pdf-editor。
+
+座標與尺寸的單位是 pt（左上角為原點）。轉過的物件另外帶 `angle`（順時針角度）與 `quad`（轉完之後的四個角 `[[x,y],…]`，依序左上、右上、右下、左下）；文字、圖片、矩形、橢圓、白底、螢光筆都適用。圖片可帶 `opacity`（`0`~`1`）。
 
 ---
 
@@ -2633,6 +2635,40 @@ PUT /tools/mfp-fetch/api/settings     # {"allow_user_devices": false}
 
 ---
 
+## 9c. 用印申請 API
+
+要用「僅限核准案件使用」的章時，送出用印申請、逐關審核，全部通過後由那顆章的保管人確認用印。功能要管理員啟用、而且要啟用帳號登入；沒有啟用時每支都回 404。所有端點都要登入（瀏覽器的登入 cookie，或綁了使用者的 API Token），只看得到跟自己有關的案件；無關的案件、文件、附件一律回 404。
+
+| 端點 | 方法 | 說明 |
+|---|---|---|
+| `/seal-request/api/home` | GET | 我能用的流程、待我審核的件數 |
+| `/seal-request/api/flows/{flow_id}/assets` | GET | 這個流程裡我能申請的章（只有名稱、種類、尺寸，沒有原始圖檔） |
+| `/seal-request/api/cases` | GET | 案件清單：`box=mine`（我的申請）、`review`（待我審核）、`stamp`（待我用印）、`handled`（我已處理）、`all`（管理員與稽核員） |
+| `/seal-request/api/cases` | POST | 建立草稿，內文 `{"flow_id": 1}` |
+| `/seal-request/api/cases/{case_id}` | GET / PUT / DELETE | 讀取；修改主旨、用途（`subject`、`purpose` 必填）、收件對象、文件類別、希望完成日期、補充說明、申請的章（`assets`）與希望位置（`placements`：`asset_id`、`page`、`position` 為 `br` / `bl` / `tr` / `tl` / `center` / `custodian`）；刪除只限從未送出的草稿 |
+| `/seal-request/api/cases/{case_id}/document` | POST / GET | 上傳用印文件（PDF，或可以轉成 PDF 的辦公文件；有開啟密碼或數位簽章的 PDF 會被擋）；下載 PDF（`version` 指定版本） |
+| `/seal-request/api/cases/{case_id}/pages/{page}` | GET | 某一頁的預覽圖（PNG） |
+| `/seal-request/api/cases/{case_id}/attachments` | POST | 加入參考附件（不會被蓋章） |
+| `/seal-request/api/cases/{case_id}/attachments/{att_id}` | GET / DELETE | 下載 / 移除參考附件 |
+| `/seal-request/api/cases/{case_id}/submit` | POST | 送出（補件後重送也是這支，會成為新版本、從第一關重審） |
+| `/seal-request/api/cases/{case_id}/approve` | POST | 核准（只有輪到的審核者，申請者本人不行），內文可帶 `{"comment": "…"}` |
+| `/seal-request/api/cases/{case_id}/return` | POST | 退回補件，`comment` 必填 |
+| `/seal-request/api/cases/{case_id}/reject` | POST | 駁回，`comment` 必填 |
+| `/seal-request/api/cases/{case_id}/withdraw` | POST | 申請者撤回 |
+| `/seal-request/api/cases/{case_id}/comment` | POST | 留言，內文 `{"text": "…"}`（不改變審核狀態） |
+| `/seal-request/api/cases/{case_id}/assets/{asset_id}/image` | GET | 核准的章圖（只給這件案件的保管人，只在待用印、用印中、用印失敗時） |
+| `/seal-request/api/cases/{case_id}/stamp` | POST | 保管人確認用印：`placements`（每處 `asset_id`、`page`、`x_mm`、`y_mm`、`width_mm`、`height_mm`、`rotation_deg`，只能用核准的章、每顆至少一處）、`exec_id`（這次按下的編號，32 位十六進位；重送同一個編號不會蓋兩次）。文件或章圖跟核准時不同回 409 `DOC_CHANGED` / `ASSET_CHANGED` |
+| `/seal-request/api/cases/{case_id}/custodian-return` | POST | 保管人退回申請者補件，`comment` 必填 |
+| `/seal-request/api/cases/{case_id}/result` | GET | 下載用印後的 PDF（作廢後只有稽核員拿得到） |
+| `/seal-request/api/cases/{case_id}/result/workspace` | POST | 申請者把用印後的 PDF 存到自己的工作區 |
+
+```bash
+curl http://localhost:8765/seal-request/api/cases?box=review \
+  -H "Authorization: Bearer YOUR_TOKEN" | jq
+```
+
+錯誤一律回 `{"ok": false, "code": "…", "message": "…"}`，例如合格的審核者不夠時送出回 409 `INSUFFICIENT_APPROVERS`（`detail` 寫是哪一關、需要幾人、目前幾人），狀態已經被別人改過回 409 `BAD_STATE`。
+
 ## 10. Job 模式 API
 
 長時間或批次操作走 job queue。流程：
@@ -2938,6 +2974,31 @@ curl -X POST http://localhost:8765/admin/branding/appearance \
 ```
 
 送 `sidebar_theme`、`builtin_logo`、`hero_glow`、`hero_title` 其中一項或幾項，代號見上一節的清單；有一項不認得就回 **400**，一項都不改。回改完之後的設定，加上 `sidebar_tone`（`dark` / `light`）與側欄、頁籤圖示現在該用的 Logo 網址（`sidebar_logo`、`icon_logo`）。上傳過企業 Logo 時一律用那一張，內建 Logo 的選擇在還原預設之後才生效。改了寫一筆稽核記錄（`settings_change`，對象 `branding`）。
+
+### 用印申請（管理員）
+
+功能開關，以及每顆印章 / 簽名的管制設定。功能預設不啟用；啟用前要先啟用帳號登入；還有「僅限核准案件使用」的章時不能停用（回 409 `STILL_CONTROLLED`，`detail.assets` 列出是哪幾顆）。沒有啟用時也可以先設定保管人、可申請對象、用印流程與保留期限；只有把章改成 `approval` 要等啟用之後（否則回 409 `NOT_ENABLED`）。
+
+| 端點 | 方法 | 說明 |
+|---|---|---|
+| `/admin/seal-request/api/state` | GET | 目前狀態：`enabled`、`auth_enabled`、每顆印章與簽名的 `mode`、`custodians`、`requesters` |
+| `/admin/seal-request/api/enabled` | PUT | 啟用 / 停用，內文 `{"enabled": true}` |
+| `/admin/seal-request/api/assets/{asset_id}` | PUT | 改一顆章：`mode`（`direct` 直接使用 / `approval` 僅限核准案件使用）、`custodians`（保管人）、`requesters`（可申請對象）；人員與群組寫成 `{"type": "user", "key": "使用者編號"}` 或 `{"type": "group", "key": "群組編號"}` |
+| `/admin/seal-request/api/subjects` | GET | 挑選保管人與可申請對象用的使用者、群組清單 |
+| `/admin/seal-request/api/flows` | GET / POST | 列出 / 新增用印流程：`name`、`description`、`enabled`、`applicants`（申請對象，空＝不限）、`assets`（適用的章，空＝全部受管制的章）、`stages`（每關 `name`、`rule` 為 `any` / `all` / `n`、`n`、`candidates`）、`watermark`（用印時附加浮水印，不附加就給 `{}`：`enabled`、`source` 為 `text` / `asset`；文字用 `text`（最多 100 字，可用 `{編號}` / `{number}`、`{日期}` / `{date}`）、`color`、`text_size_pt`；圖用 `asset_id`（資產庫裡種類是浮水印的）；共用 `opacity`、`rotation_deg`、`size_mm`、`gap_mm`。設定不正確回 400 `BAD_WATERMARK`） |
+| `/admin/seal-request/api/flows/{flow_id}` | PUT / DELETE | 修改（版本 +1，已送出的案件照舊）/ 刪除流程 |
+| `/admin/seal-request/api/simulate` | POST | 模擬一件申請（只讀：不建案件、不發通知）：`flow`（流程內容，可以是還沒儲存的）、`applicant`（申請者的使用者編號）、`assets`（要用的章，省略＝流程適用的全部）。回 `result.ok`、`result.items`（每項 `level` 為 `error` / `warn` / `info` / `ok`、`code`、`detail`，例如 `SIM_STAGE_SHORT` 某一關人數不足）、`result.stages`（每關合格的審核者）、`result.common_custodians` |
+| `/admin/seal-request/api/cases` | GET | 案件總覽（只有案件資料、不含文件），`stage.stuck` 表示合格的審核者不夠、需要改派 |
+| `/admin/seal-request/api/cases/{case_id}/reassign` | POST | 改派目前這一關的審核者，內文 `{"candidates": […], "reason": "…"}`，原因必填 |
+| `/admin/seal-request/api/cases/{case_id}/void` | POST | 作廢已完成的案件，內文 `{"reason": "…"}`，原因必填 |
+| `/admin/seal-request/api/retention` | PUT | 案件保留期限，內文 `{"days": 0}`（0 ＝ 不自動刪除，最多 36500） |
+
+```bash
+curl http://localhost:8765/admin/seal-request/api/state \
+  -H "Authorization: Bearer ADMIN_TOKEN" | jq
+```
+
+設成「僅限核准案件使用」的章，在用印與簽名、騎縫章、PDF 編輯器（含 `/tools/pdf-stamp/api/pdf-stamp` 等對外 API）一律回 403，資產圖檔網址也拿不到。
 
 ### 設定匯出清單
 

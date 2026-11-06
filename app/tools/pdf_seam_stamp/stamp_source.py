@@ -32,6 +32,10 @@ def load_asset(asset_id: str) -> bytes:
     # （`asset_access`）—— 只有騎縫章權限的人送簽名的編號進來，等於繞過那條規則。
     if not a or a.type != "stamp":
         raise ValueError("找不到這個印章資產")
+    from ...core import asset_access
+    if asset_access.is_controlled_asset(a):
+        # 用印申請：僅限核准案件使用的章，騎縫章（含 API）不能直接用
+        raise ValueError(asset_access.CONTROLLED_MESSAGE)
     path = asset_manager.file_path(a)
     if not path or not path.exists():
         raise ValueError("印章資產的檔案不存在")
