@@ -26,7 +26,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); version
 - Offline restore tool: a single HTML file that works by double-clicking, with no network and no need for this server; it checks the SHA-256 of its embedded code on start and includes a self-test. The tool page shows its SHA-256.
 - Key splitting uses Privy `shamir-secret-sharing` v0.0.3 (the version audited by Cure53 and Zellic), vendored unchanged; no home-made finite-field code.
 - With login enabled only administrators can use it by default (they can grant it to others); without login there is no restriction. The offline restore tool only requires sign-in to download.
-- Docs: an Encrypted Paper Backup section in the README and on the site, a compliance card and ISO/IEC 27001 A.8.13 / A.8.24 entries; the offline restore tool for each version is published on GitHub Releases with SHA-256 checksums.
+- Docs: an Encrypted Paper Backup section in the README and on the site, a compliance card and ISO/IEC 27001 A.8.13 / A.8.24 entries; the offline restore tool is kept in `paper-backup-offline/` in the repository (three languages, with SHA-256 checksums and download instructions; built by `tools/build_paper_backup_offline.py`).
 - The tool deliberately has no create or restore API (the server never touches secrets); only the offline tool download and the audit endpoint are exposed, see the API manual.
 
 ## [1.17.35] - 2026-11-09

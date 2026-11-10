@@ -21,3 +21,9 @@ queries:
 # 用的,data extension pack 不能放這個欄位 — 否則 init 會嘗試從 GHCR 下載,
 # 找不到就 fail (踩過此雷,v1.5.7 修)。
 
+
+# paper-backup-offline/ 是產生出來的離線還原程式：內容是 static/js/paper_backup/、
+# 內建的第三方檔與 app/web/templates/paper_backup_offline.html 以 Base64 包進同一個
+# HTML（tools/build_paper_backup_offline.py）。原始檔本來就在掃描範圍內，這裡不重複掃。
+paths-ignore:
+  - paper-backup-offline

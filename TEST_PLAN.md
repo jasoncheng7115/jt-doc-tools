@@ -660,7 +660,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **547 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **548 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -1030,6 +1030,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_panel_gap_hidden_siblings.py` | 兩張卡片中間夾了看不見的元素時，間距照樣要在 |
 | `test_paper_backup_core.py` | 加密紙本備份：格式 JTPB v1 的核心模組（瀏覽器端） |
 | `test_paper_backup_offline_browser.py` | 加密紙本備份：離線還原包（雙擊打開的單一 HTML）真瀏覽器測試 |
+| `test_paper_backup_offline_published.py` | 加密紙本備份：放在公開 repo `paper-backup-offline/` 的離線還原程式 |
 | `test_paper_backup_page_browser.py` | 加密紙本備份：真瀏覽器端到端 |
 | `test_paper_backup_tool.py` | 加密紙本備份：伺服器端只有頁面與不含秘密的稽核（建立 / 還原都在瀏覽器裡） |
 | `test_passwords.py` | Tests for app.core.passwords (scrypt hashing + policy). |
@@ -6367,7 +6368,8 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 - [ ] 內建的第三方檔案（shamir-secret-sharing 0.0.3、qrcode-generator 2.0.4）跟 `static/vendor/paper-backup-vendor.json` 的 SHA-256 一致。
 - [ ] 印出來的主文件與分片掃回來讀得齊、還原一字不差（三種密度）；離線還原程式用 `file://` 打開可以還原、改過一個字元就拒絕啟動。
 - [ ] 伺服器端沒有任何收明文 / 分片的端點；稽核只有備份 ID、門檻、份數。
-- 自動化：`tests/test_paper_backup_core.py`（AAD 綁定、檢查字權重兩處變異驗證過）、`tests/test_paper_backup_tool.py`、`tests/test_paper_backup_page_browser.py`、`tests/test_paper_backup_offline_browser.py`
+- [ ] 公開 repo 的 `paper-backup-offline/`：三種語言各一份、`SHA256SUMS` 與 `pack.json` 對得上；跟「用 `pack.json` 記的版本重產」逐位元組相同（模組、樣板、文字改了要跑 `tools/build_paper_backup_offline.py`）；資料夾 README 的下載指令與網址指到真的檔；README、合規頁、介紹站連到這個資料夾而不是 Releases。
+- 自動化：`tests/test_paper_backup_core.py`（AAD 綁定、檢查字權重兩處變異驗證過）、`tests/test_paper_backup_tool.py`、`tests/test_paper_backup_page_browser.py`、`tests/test_paper_backup_offline_browser.py`、`tests/test_paper_backup_offline_published.py`
 
 ### 6.143 v1.17.35 — 用印申請：多份用印文件、申請頁版面（**每次發版必過**）
 

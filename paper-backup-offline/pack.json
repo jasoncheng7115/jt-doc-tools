@@ -1,0 +1,17 @@
+{
+  "version": "1.17.36",
+  "files": {
+    "jtdt-paper-backup-offline-zh-Hant.html": {
+      "size": 4899210,
+      "sha256": "8087049adb229c8f7256e072e185111a57c9b6add532999d10234c66586da81d"
+    },
+    "jtdt-paper-backup-offline-en.html": {
+      "size": 4897239,
+      "sha256": "fe356460928fb21977006577b1154e2a29e300a5d00acf946f5822a5ed411560"
+    },
+    "jtdt-paper-backup-offline-ja.html": {
+      "size": 4902762,
+      "sha256": "f86dc5b7b6fc747ecafb405f9a9bfc33ed41c6c5e63870fb2d87253d897b4b26"
+    }
+  }
+}

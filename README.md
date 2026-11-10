@@ -193,7 +193,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 - **全部在瀏覽器裡** — 建立與還原都在瀏覽器裡做，主機看不到內容、金鑰與分片；稽核只記備份 ID、門檻與份數。需要 HTTPS 或在本機以 127.0.0.1 開啟。
 - **文字或檔案** — 直接打字、貼上或拖進檔案（最多 128 KB）；三種 QR 密度、A4 / Letter；每份分片一個 PDF，另印文字備援碼（每組含檢查字），QR 壞了也能手動輸入；每一頁頁邊印上產生者、IP、站台與時間的浮水印（不蓋到 QR）。
 - **還原** — 拖進掃描的 PDF 或照片（不分順序、可以個別移除），HTTPS 下也能用相機掃；讀到哪些區塊與分片、還缺什麼一目了然。
-- **離線還原程式** — 一個 HTML 檔，按兩下就能用、不需連網也不需要這台主機；打開時先核對內嵌程式的 SHA-256，附自我測試。建議跟紙本一起存放一份；每一版也放在 [GitHub Releases](https://github.com/jasoncheng7115/jt-doc-tools/releases)。
+- **離線還原程式** — 一個 HTML 檔，按兩下就能用、不需連網也不需要這台主機；打開時先核對內嵌程式的 SHA-256，附自我測試。建議跟紙本一起存放一份；原始碼庫的 [`paper-backup-offline/`](https://github.com/jasoncheng7115/jt-doc-tools/tree/main/paper-backup-offline) 也放了一份，可以用指令或瀏覽器下載（附 SHA-256，說明在該資料夾）。
 - **列印測試頁** — 第一次使用或換印表機時先印：三種密度的 QR、50 mm 尺規，以及一組公開示範備份；掃描時逐一比對並真的還原一次。
 
 分片使用 Privy `shamir-secret-sharing` v0.0.3（Cure53、Zellic 審計過的版本），原樣內建。啟用登入時預設只有管理員能用（由管理員另外開放）；未啟用登入時沒有限制。紙本能放多久取決於紙張、碳粉與存放環境，請定期檢查與演練還原。
