@@ -622,10 +622,10 @@
       {% if seal_request_enabled(request) %}
       <div class="sb-solo">
         <a class="sb-item sb-seal-link" href="/seal-request" data-name="用印申請 seal request stamp approval 用印 印章 審核 核准 簽核 公司章">
-          <span class="sb-item-icon">{{ icon('stamp', size=18) }}</span>
+          <span class="sb-item-icon">{{ icon('seal-request', size=18) }}</span>
           <span class="sb-item-text">
             <span class="sb-item-name">{{ tr('用印申請') }}<span class="tool-beta">Beta</span></span>
-            <span class="sb-item-desc">{{ tr('申請用公司章，經核准後由保管人用印') }}</span>
+            <span class="sb-item-desc">{{ tr('送出申請，核准後用印') }}</span>
           </span>
           {% set _sc = seal_review_count(request) %}
           {% if _sc %}<span class="sb-count" title="{{ tr('待我審核') }}">{{ _sc }}</span>{% endif %}

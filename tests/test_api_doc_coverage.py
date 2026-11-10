@@ -38,6 +38,9 @@ _NO_PUBLIC_API: dict[str, str] = {
     # 它的對外 API 是**全站層級**的 `POST /api/convert-to-pdf`（API.md 有寫），
     # 不在 `/tools/office-to-pdf/` 底下 —— 那條路在有這個工具之前就存在了。
     "office-to-pdf": "走全站的 POST /api/convert-to-pdf",
+    # 建立與還原刻意只在瀏覽器裡做（主機不碰明文、金鑰與分片；使用者 2026-11-09 選方案 C）——
+    # 對外的只有不含秘密的：GET /paper-backup/offline（離線還原包）與 POST /tools/paper-backup/audit。
+    "paper-backup": "加解密只在瀏覽器裡；伺服器沒有收秘密的端點（方案 C）",
 }
 
 

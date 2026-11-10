@@ -199,6 +199,39 @@ Jason Tools 文件工具箱 使用以下第三方開源套件。本程式遵守�
 - Copyright © Mozilla Foundation
 - 授權全文：`static/vendor/pdfjs/LICENSE`
 
+### shamir-secret-sharing (Privy)  · Apache-2.0 License
+- 專案：https://github.com/privy-io/shamir-secret-sharing
+- 用途：加密紙本備份的金鑰門檻分片（建立與還原都在瀏覽器裡；也內嵌在離線還原程式）
+- 版本：v0.0.3（commit `ba50fa75`，Cure53 與 Zellic 審計過的版本），原樣 vendored 在 `static/vendor/shamir-secret-sharing-0.0.3/`，SHA-256 列在 `static/vendor/paper-backup-vendor.json`
+- Copyright © Privy
+- 授權全文：`static/vendor/shamir-secret-sharing-0.0.3/LICENSE`
+
+### qrcode-generator  · MIT License
+- 專案：https://github.com/kazuhikoarase/qrcode-generator
+- 用途：加密紙本備份的 QR 產生（在瀏覽器裡）
+- 版本：v2.0.4，原樣 vendored 在 `static/vendor/qrcode-generator-2.0.4/`
+- Copyright © 2009 Kazuhiko Arase
+- 授權全文：`static/vendor/qrcode-generator-2.0.4/LICENSE`
+
+### jsQR  · Apache-2.0 License
+- 專案：https://github.com/cozmo/jsQR
+- 用途：電子發票處理與加密紙本備份在瀏覽器裡辨識 QR（也內嵌在加密紙本備份的離線還原程式）
+- vendored 在 `static/vendor/jsqr/`
+- Copyright © Cosmo Wolfe
+- 授權全文：`static/vendor/jsqr/LICENSE`
+
+### marked  · MIT License
+- 專案：https://github.com/markedjs/marked
+- 用途：Markdown 預覽
+- 版本：v14.1.3，vendored 在 `static/vendor/marked/marked.min.js`
+- Copyright © 2011-2024, Christopher Jeffrey
+
+### DOMPurify  · Apache-2.0 / MPL-2.0 License
+- 專案：https://github.com/cure53/DOMPurify
+- 用途：顯示 Markdown 預覽與對話框 HTML 前先清除危險標籤
+- 版本：v3.4.11，vendored 在 `static/vendor/marked/purify.min.js`
+- Copyright © Cure53 and other contributors
+
 ### Fabric.js  · MIT License
 - 專案：https://github.com/fabricjs/fabric.js
 - 用途：PDF 編輯器的物件疊加層 (canvas)

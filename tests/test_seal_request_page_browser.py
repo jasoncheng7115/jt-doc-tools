@@ -107,7 +107,8 @@ def site():
                     return m
 
         sample = _pdf(str(Path(_uploadable_dir()) / "seal-page.pdf"))
-        yield port, send, info, sample
+        sample2 = _pdf(str(Path(_uploadable_dir()) / "seal-annex.pdf"))
+        yield port, send, info, (sample, sample2)
     finally:
         if ws is not None:
             try:
@@ -124,7 +125,7 @@ def site():
 
 
 def test_apply_submit_and_approve(site):
-    port, send, info, sample = site
+    port, send, info, (sample, sample2) = site
 
     def ev(expr):
         r = send("Runtime.evaluate", {"expression": expr, "returnByValue": True, "awaitPromise": True})
@@ -155,21 +156,38 @@ def test_apply_submit_and_approve(site):
     ev("document.querySelector('#srFlows .sr-flow button').click()")
     assert wait("!document.getElementById('srEdit').hidden"), "沒有進到編輯畫面"
 
+    # 卡片之間要有間距（#srEdit 包了一層，站台的 .panel + .panel 接不上；使用者 2026-11-09 截圖：申請內容貼著上面）
+    GAP = """(() => {
+      const vis = [...document.querySelectorAll('#srCase .panel:not(.sr-actionbar)')].filter(e => e.offsetParent !== null);
+      let m = 999;
+      for (let i = 1; i < vis.length; i++) m = Math.min(m, vis[i].getBoundingClientRect().top - vis[i-1].getBoundingClientRect().bottom);
+      return vis.length > 1 ? m : -1;
+    })()"""
+    g = ev(GAP)
+    assert g >= 12, ("編輯畫面卡片之間沒有間距", g)
+
     doc = send("DOM.getDocument", {"depth": -1})["result"]
-    node = send("DOM.querySelector", {"nodeId": doc["root"]["nodeId"], "selector": "#srDocFile"})["result"]
-    send("DOM.setFileInputFiles", {"files": [sample], "nodeId": node["nodeId"]})
-    ev("document.getElementById('srDocFile').dispatchEvent(new Event('change', {bubbles: true}))")
-    assert wait("document.getElementById('srDocMsg').textContent.includes('2')"), "上傳後沒有顯示頁數"
+    # 用印文件：用共用的上傳框一次選兩份
+    assert ev("document.getElementById('srDocUp-input').multiple") is True, "用印文件要能一次選多份"
+    node = send("DOM.querySelector", {"nodeId": doc["root"]["nodeId"], "selector": "#srDocUp-input"})["result"]
+    send("DOM.setFileInputFiles", {"files": [sample, sample2], "nodeId": node["nodeId"]})
+    assert wait("document.querySelectorAll('#srDocList .sr-doc').length === 2", 60), \
+        ("兩份文件沒有都列出來", ev("document.querySelectorAll('#srDocList .sr-doc').length"),
+         ev("document.getElementById('srDocMsg').textContent"), ev("document.querySelector('#srDocUp .drop-zone-filename').textContent"))
     assert wait("!document.getElementById('srDocPanel').hidden && document.getElementById('srPageImg').naturalWidth > 0"), \
         "預覽圖沒有載出來"
+    assert ev("document.querySelectorAll('#srDocTabs .sr-doctab').length") == 2, "多份文件時預覽上方要能切換"
 
     ev("""(() => {
       document.getElementById('srFSubject').value = '年度維護報價';
       document.getElementById('srFPurpose').value = '報價用';
-      const row = document.querySelector('#srAssets .sr-asset');
-      row.querySelector('input[type=checkbox]').checked = true;
-      row.querySelector('input[type=number]').value = '1';
-      row.querySelector('select').value = 'br';
+      const cb = document.querySelector('#srAssets input[type=checkbox]');
+      cb.checked = true; cb.dispatchEvent(new Event('change', {bubbles: true}));
+    })()""")
+    # 勾了章：每一份文件各先放一處
+    assert wait("document.querySelectorAll('#srWishRows tr').length === 2"), "勾章後每一份文件要各有一處"
+    ev("""(() => {
+      document.querySelectorAll('#srWishRows input[type=number]').forEach(i => { i.value = '1'; i.dispatchEvent(new Event('change', {bubbles: true})); });
       document.getElementById('srSave').click();
     })()""")
     assert wait("document.querySelectorAll('#srPage .sr-box').length === 1"), "存檔後第 1 頁沒有畫出示意框"
@@ -187,6 +205,8 @@ def test_apply_submit_and_approve(site):
     ev("document.querySelector('#srRows tr').click()")
     assert wait("!document.getElementById('srReview').hidden"), "審核區沒有出現"
     assert wait("document.getElementById('srPageImg').naturalWidth > 0"), "審核者看不到文件預覽"
+    g = ev(GAP)
+    assert g >= 12, ("檢視畫面卡片之間沒有間距", g)
     ev("document.getElementById('srApprove').click()")
     assert wait("!!document.querySelector('#srCaseMeta .sr-state.awaiting_stamp')"), "核准後沒有變成待用印"
     assert ev("document.getElementById('srReview').hidden") is True
@@ -199,10 +219,11 @@ def test_apply_submit_and_approve(site):
     assert wait("!document.getElementById('srStamp').hidden"), "保管人的用印區沒有出現"
     assert wait("[...document.querySelectorAll('#srPage .sr-seal img')].some(i => i.naturalWidth > 0)"), \
         "預覽上沒有畫出實際的章圖"
-    assert ev("document.querySelectorAll('#srPlcRows tr').length") == 1, "申請者標的位置要帶進來"
+    assert ev("document.querySelectorAll('#srPlcRows tr').length") == 2, "申請者標的位置要帶進來（兩份各一處）"
     ev("document.getElementById('srStampGo').click()")
     assert wait("!!document.querySelector('.modal-ok')"), "用印前沒有確認視窗"
-    assert "第 1 頁" in ev("document.querySelector('.modal-card').textContent"), "確認視窗要列出蓋在哪幾頁"
+    card = ev("document.querySelector('.modal-card').textContent")
+    assert "第 1 頁" in card and "seal-page.pdf" in card and "seal-annex.pdf" in card, ("確認視窗要逐份列出蓋在哪幾頁", card)
     ev("document.querySelector('.modal-ok').click()")
     assert wait("!!document.querySelector('#srCaseMeta .sr-state.done') && !document.getElementById('srDone').hidden"), \
         ("用印後沒有變成已完成", ev("document.getElementById('srStampMsg').textContent"))
@@ -210,9 +231,45 @@ def test_apply_submit_and_approve(site):
     # 申請者：看得到下載連結、拿得到蓋好章的 PDF
     login(info["a"], f"http://127.0.0.1:{port}/seal-request#mine")
     assert wait("document.querySelectorAll('#srRows tr').length === 1")
-    ev("document.querySelector('#srRows tr').click()")
+    # 清單可以篩選、表頭可以排序（使用者 2026-11-09）
+    ev("(() => { const q = document.getElementById('srFq'); q.value = '不存在的字'; q.dispatchEvent(new Event('input')); })()")
+    assert ev("document.querySelectorAll('#srRows tr').length") == 0, "關鍵字篩選沒有作用"
+    assert not ev("document.getElementById('srEmpty').hidden"), "篩選後沒有結果時要說明"
+    assert "0 / 1" in ev("document.getElementById('srFCount').textContent")
+    ev("document.getElementById('srFClear').click()")
+    assert ev("document.querySelectorAll('#srRows tr').length") == 1, "清除篩選後要回到全部"
+    ev("(() => { const s = document.getElementById('srFState'); s.value = 'done'; s.dispatchEvent(new Event('change')); })()")
+    assert ev("document.querySelectorAll('#srRows tr').length") == 1, "狀態篩選「已完成」應該留下這一件"
+    ev("document.getElementById('srFClear').click()")
+    ev("document.querySelector('#srList th[data-sort=number]').click()")
+    assert ev("document.querySelector('#srList th[data-sort=number]').classList.contains('asc')"), "點表頭要變升冪"
+    ev("document.querySelector('#srList th[data-sort=number]').click()")
+    assert ev("document.querySelector('#srList th[data-sort=number]').getAttribute('aria-sort')") == "descending"
+    # 再開兩件草稿，排序與狀態篩選要對多筆真的有作用
+    for _ in range(2):
+        login(info["a"], f"http://127.0.0.1:{port}/seal-request#new")
+        assert wait("document.querySelectorAll('#srFlows .sr-flow button').length === 1")
+        ev("document.querySelector('#srFlows .sr-flow button').click()")
+        assert wait("!document.getElementById('srEdit').hidden")
+    login(info["a"], f"http://127.0.0.1:{port}/seal-request#mine")
+    assert wait("document.querySelectorAll('#srRows tr').length === 3")
+    nums = lambda: ev("[...document.querySelectorAll('#srRows tr td:first-child')].map(t => t.textContent)")
+    th = "document.querySelector('#srList th[data-sort=number]').click()"
+    ev(th)
+    assert nums() == sorted(nums()), ("編號升冪", nums())
+    ev(th)
+    assert nums() == sorted(nums(), reverse=True), ("編號降冪", nums())
+    ev("(() => { const s = document.getElementById('srFState'); s.value = 'draft'; s.dispatchEvent(new Event('change')); })()")
+    assert ev("document.querySelectorAll('#srRows tr').length") == 2, "狀態篩選「草稿」應該剩兩件"
+    assert "2 / 3" in ev("document.getElementById('srFCount').textContent")
+    ev("document.getElementById('srFClear').click()")
+    ev("document.querySelector('#srRows .sr-state.done').closest('tr').click()")
     assert wait("!document.getElementById('srDone').hidden"), "申請者看不到完成區"
     href = ev("document.getElementById('srResultDl').getAttribute('href')")
     st = ev("fetch(" + json.dumps(href) + ").then(r => r.status + ' ' + r.headers.get('content-type'))")
+    assert st == "200 application/zip", ("兩份時「全部下載」是 ZIP", st)
+    assert ev("document.querySelectorAll('#srResultList .sr-doc').length") == 2, "每一份要能各自下載"
+    href1 = ev("document.querySelector('#srResultList a').getAttribute('href')")
+    st = ev("fetch(" + json.dumps(href1) + ").then(r => r.status + ' ' + r.headers.get('content-type'))")
     assert st == "200 application/pdf", st
 

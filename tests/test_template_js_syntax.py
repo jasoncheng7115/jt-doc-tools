@@ -29,9 +29,11 @@ TEMPLATE_GLOBS = ("app/**/templates/**/*.html",)
 # 的話那一塊會被當成「還沒結束」，於是**這支語法檢查就少看了一整片檔案**
 # （CodeQL py/bad-tag-filter；判準與 `tools.source_text` 一致）。
 _SCRIPT_RE = re.compile(
-    r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script\b[^>]*>",
+    r"<script(?![^>]*\bsrc=)([^>]*)>(.*?)</script\b[^>]*>",
     re.DOTALL | re.IGNORECASE,
 )
+# 瀏覽器會執行的 type（沒寫 type 也算）；application/json、importmap、text/plain 是資料，不是 JS
+_EXEC_TYPE = re.compile(r"""\btype\s*=\s*["']?(?!text/javascript|module|application/javascript)[^"'\s>]""", re.I)
 # Tag a Jinja directive — used to skip mostly-Jinja blocks; node can't parse Jinja.
 _JINJA_RE = re.compile(r"\{%[-]?\s*\w|\{\{")
 
@@ -51,7 +53,7 @@ def _collect_templates() -> list[Path]:
 @pytest.mark.parametrize("template", _collect_templates(), ids=lambda p: str(p.relative_to(REPO_ROOT)))
 def test_inline_js_syntactically_valid(template: Path, tmp_path: Path):
     text = template.read_text(encoding="utf-8")
-    blocks = _SCRIPT_RE.findall(text)
+    blocks = [body for attrs, body in _SCRIPT_RE.findall(text) if not _EXEC_TYPE.search(attrs)]
     if not blocks:
         return  # no inline JS, nothing to check
     # Concat all inline scripts so reused vars across blocks don't trip the

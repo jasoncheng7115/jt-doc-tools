@@ -5,11 +5,53 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (962 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (965 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.36] - 2026-11-09
+
+### New tool: Encrypted Paper Backup (Beta)
+
+- Encrypt passwords, recovery keys and other critical data onto QR paper: content is encrypted with AES-256-GCM and the key is split with Shamir threshold sharing into N shares for different custodians; any T shares restore it (2 ≤ T ≤ N ≤ 16).
+- **Creating and restoring both happen in the browser**; the server never sees the content, the key or the shares and only records a non-secret audit entry (backup ID, threshold, number of shares). Requires HTTPS or local access at 127.0.0.1; plain http does not offer creation or restore.
+- The main document is printed as QR pages (three densities, A4 / Letter), up to 128 KB of content; each share is its own PDF with a QR code, a 16-group typed backup code (each group has a check character, so typos are flagged immediately) and a custodian sign-off box.
+- What to back up: type, paste text or drop a file in the same place (no switching); text or any file works. A strip at the top shows how the main document and the shares relate, with the numbers following your settings.
+- After creating, every PDF has preview thumbnails (click to enlarge), and "Download all (ZIP)" gets the main document and every share at once (packed in the browser).
+- Print test page: print it first (it contains no secrets) the first time or after changing printers — page 1 has three densities with 3 QR codes each, a 50 mm ruler and a log box; page 2 is a public demo backup (main document + 2 shares). Scanning it under Restore checks every code's content, reports how many were read per density and which are missing, and **actually restores the demo backup** (reconstructs the key, decrypts and checks the content).
+- Every printed page carries a watermark (who generated it, IP, site, time), placed only in the footer and left margin so it never covers a QR code.
+- Restore: drop in scanned PDFs or photos in any order; each loaded file gets its own row showing which blocks or shares it supplied, and a wrong file can be removed on its own (progress is recalculated); scan with the camera over HTTPS; type the backup code if a QR code is damaged.
+- Offline restore tool: a single HTML file that works by double-clicking, with no network and no need for this server; it checks the SHA-256 of its embedded code on start and includes a self-test. The tool page shows its SHA-256.
+- Key splitting uses Privy `shamir-secret-sharing` v0.0.3 (the version audited by Cure53 and Zellic), vendored unchanged; no home-made finite-field code.
+- With login enabled only administrators can use it by default (they can grant it to others); without login there is no restriction. The offline restore tool only requires sign-in to download.
+- Docs: an Encrypted Paper Backup section in the README and on the site, a compliance card and ISO/IEC 27001 A.8.13 / A.8.24 entries; the offline restore tool for each version is published on GitHub Releases with SHA-256 checksums.
+- The tool deliberately has no create or restore API (the server never touches secrets); only the offline tool download and the audit endpoint are exposed, see the API manual.
+
+## [1.17.35] - 2026-11-09
+
+### Seal requests: several documents per request
+
+- Documents to stamp now use a drop zone and you can add several at once (up to 20 per request). Each document is previewed, positioned, stamped and downloaded on its own; "Download all" returns a ZIP, and saving to the workspace stores one file per document.
+- Ticking a seal places it once on every document (bottom right of the last page); you can then change the document, page and position. Removing a document also removes the positions marked on it.
+- The custodian's placement table has a document column and every document needs at least one seal; the confirmation lists pages per document. Every document is checked against the approved version before stamping, and if any differs none is stamped; the request completes only when all documents are stamped.
+- Requests created before the upgrade (one document) preview, stamp and download as before; the database gains one column and existing data is untouched.
+- API: new `/documents`, `/documents/{doc_id}` and `/documents/{doc_id}/pages/{page}`; each placement takes `doc`; `/result` returns a ZIP for several documents and `?doc=` downloads one. The old `/document` and `/pages/{page}` remain.
+
+### Seal request page layout
+
+- The request form is split into four titled sections with icons (details, documents, seals and positions, reference attachments); seals are clickable chips, preferred positions are a table, and Save / Submit stay pinned at the bottom.
+- The view, review, stamping, result and history panels use the same title bar, and the panels are now spaced apart (the request details card used to touch the header above it).
+- Seal requests now have their own icon (a stamp with a check mark), so the sidebar, page titles and settings menu no longer look the same as the stamp and signature tool.
+- Request list: click a column header to sort (ascending, descending, back to the default newest-first), and filter by keyword (number, subject, flow, applicant), status or flow, with a count of matching requests.
+
+## [1.17.34] - 2026-11-09
+
+### Document translation: batch size follows the model's context length
+
+- When a document translation starts (after the model is loaded), the actual context length of the Ollama model is read and each batch uses at most 40% of it; if it cannot be read (not Ollama, behind a gateway) the admin setting applies.
+- Measured with an Ollama model limited to 4096 tokens (Chinese to English): the default 1,200 characters per batch is fine; from about 3,000 characters the prompt plus translation exceeds the context, the translation is cut off and the batch is split and retried, correct but much slower. Small-context models now get smaller batches up front.
 
 ## [1.17.33] - 2026-11-07
 

@@ -139,7 +139,13 @@ def _m3_watermark(conn: sqlite3.Connection) -> None:
     conn.execute("ALTER TABLE seal_case_versions ADD COLUMN watermark TEXT NOT NULL DEFAULT '{}'")
 
 
-_MIGRATIONS = [_m1_initial, _m2_stamping, _m3_watermark]
+def _m4_documents(conn: sqlite3.Connection) -> None:
+    """一件申請可以有多份用印文件（分開蓋、分開下載）。舊版本這一欄是 `[]`，讀的時候用
+    doc_name / doc_sha256 / doc_pages 補成一份（編號 `main`）。"""
+    conn.execute("ALTER TABLE seal_case_versions ADD COLUMN documents TEXT NOT NULL DEFAULT '[]'")
+
+
+_MIGRATIONS = [_m1_initial, _m2_stamping, _m3_watermark, _m4_documents]
 _INITED: set[str] = set()
 _INIT_LOCK = threading.Lock()
 
@@ -294,17 +300,19 @@ def _version_row(r: sqlite3.Row) -> dict:
             "doc_sha256": r["doc_sha256"], "doc_pages": r["doc_pages"], "assets": _l(r["assets"], []),
             "placements": _l(r["placements"], []), "stages": _l(r["stages"], []),
             "attachments": _l(r["attachments"], []), "fields": _l(r["fields"], {}),
-            "watermark": _l(r["watermark"], {}) or {}, "created_at": r["created_at"]}
+            "watermark": _l(r["watermark"], {}) or {}, "documents": _l(r["documents"], []) or [],
+            "created_at": r["created_at"]}
 
 
 def add_version(c: sqlite3.Connection, case_id: str, v: dict) -> None:
     """在呼叫端的交易裡寫入（跟狀態轉換一起成功或一起失敗）。"""
     c.execute(
         "INSERT INTO seal_case_versions(case_id, version, flow_version, doc_name, doc_sha256, doc_pages, assets, "
-        "placements, stages, attachments, fields, watermark, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "placements, stages, attachments, fields, watermark, documents, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (case_id, v["version"], v["flow_version"], v["doc_name"], v["doc_sha256"], v["doc_pages"], _j(v["assets"]),
          _j(v["placements"]), _j(v["stages"]), _j(v["attachments"]), _j(v["fields"]),
-         _j(v.get("watermark") or {}), time.time()))
+         _j(v.get("watermark") or {}), _j(v.get("documents") or []), time.time()))
 
 
 def get_version(case_id: str, version: int) -> Optional[dict]:

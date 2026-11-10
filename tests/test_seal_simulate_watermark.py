@@ -184,7 +184,7 @@ def test_text_watermark_is_frozen_and_applied_under_the_seal(world, sent):
         time.sleep(0.1)
     case = S.get_case(cid)
     assert case["state"] == "done", case.get("stamp_error")
-    out = S.version_dir(cid, case["version"]) / F.STAMPED_NAME
+    out = F.result_files({"auditor": False}, case)[0]["path"]
     with fitz.open(str(out)) as d:
         # 看畫素，不看 get_images（上完浮水印的頁面可能共用資源，列出來的圖不等於畫在這一頁的圖）
         def rgb(pg):

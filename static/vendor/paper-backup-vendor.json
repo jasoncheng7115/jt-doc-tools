@@ -1,0 +1,35 @@
+{
+  "_comment": "加密紙本備份內建的第三方檔案：npm 原樣、不改任何位元組（tests/test_paper_backup_core.py 會比對 SHA-256）。升級要換目錄名、重算雜湊、重跑交叉驗證。",
+  "packages": [
+    {
+      "name": "shamir-secret-sharing",
+      "version": "0.0.3",
+      "license": "Apache-2.0",
+      "source": "https://github.com/privy-io/shamir-secret-sharing",
+      "git_commit": "ba50fa75758f753459280a98c19e690626317bd8",
+      "npm_integrity": "sha512-GPIb+QZDyjwwKSlVXEjHoOaBeevmdWz2IM2tz07nQvd0L9eMfLhzEqr7imajjjXCAO/cWgzXCCj0yFNMx6+miQ==",
+      "audits": [
+        "Cure53 2023-04 (PVY-01-002 fixed and retested)",
+        "Zellic (v0.0.2; Low fix in 2023-08)"
+      ],
+      "files": {
+        "static/vendor/shamir-secret-sharing-0.0.3/index.js": "f2c1edf24cc08db39e12e969990924e84694ddc70d04bc13c2c0baed8a5b6444",
+        "static/vendor/shamir-secret-sharing-0.0.3/csprng.js": "72a97c39b95ef7d83c0b17becd0072ba36ae9b02df5a89bfc789c53cde358bd3",
+        "static/vendor/shamir-secret-sharing-0.0.3/package.json": "304335b7505c329a21b1b9dda2d0c9dabfe5bef5e56018fea2c921bca697dafe",
+        "static/vendor/shamir-secret-sharing-0.0.3/LICENSE": "c8e3e7049fce8e181ae7c80fb735652a916c99614dfb022cf0d516341559086a"
+      }
+    },
+    {
+      "name": "qrcode-generator",
+      "version": "2.0.4",
+      "license": "MIT",
+      "source": "https://github.com/kazuhikoarase/qrcode-generator",
+      "git_commit": "83b7e8fe3fddd3b0368dbafd6ce56995bd25e3c8",
+      "npm_integrity": "sha512-mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g==",
+      "files": {
+        "static/vendor/qrcode-generator-2.0.4/qrcode.mjs": "ea91d7118a5395289170da848b7c6758b996163bfbccf312591ab65a4911b7c0",
+        "static/vendor/qrcode-generator-2.0.4/LICENSE": "3a850fa5f08101db6f40676c2786e10bd2cd5fff7b12ffdf1e0c434d4e49d90c"
+      }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 [繁體中文](README.md) ｜ **English** ｜ [日本語](README_ja.md)
 
-# Jason Tools Document Toolbox v1.17.33
+# Jason Tools Document Toolbox v1.17.36
 
 > ### ⚠ Installed with git before 2026-09-13? Run one command before this upgrade
 >
@@ -25,7 +25,7 @@
 > `jtdt update` then works as usual. **Unaffected**: tarball installs, the Windows installer,
 > and anything installed after 2026-09-13. Fixed from v1.15.43 onwards.
 
-> An integrated PDF / Office document platform. 52 tools cover **form filling and stamping**, **watermarks**, **merge / split / rotate / reorder**, **format conversion**, **scan stitching**, **de-identification**, **word counts**, **annotation handling**, **diffing**, **sentence translation**, **list processing**, **e-invoice processing**, **VAT lookup**, **a page editor**, **encryption / decryption** and more.
+> An integrated PDF / Office document platform. 53 tools cover **form filling and stamping**, **watermarks**, **merge / split / rotate / reorder**, **format conversion**, **scan stitching**, **de-identification**, **word counts**, **annotation handling**, **diffing**, **sentence translation**, **list processing**, **e-invoice processing**, **VAT lookup**, **a page editor**, **encryption / decryption** and more.
 >
 > Enterprise features: **local / LDAP / AD multi-realm authentication**, **single sign-on** (OIDC + SAML, ready for M365 / Google / Keycloak), **RBAC roles and permissions**, **audit log**, **SIEM forwarding** (syslog / CEF / GELF), **font management**, **user workspace**, **seal requests (stamped by the custodian after approval)**, **background jobs with completion notices**, a **REST API** and **MCP (lets Claude Code / Codex / OpenCode call the non-LLM tools)**.
 >
@@ -95,7 +95,7 @@ Detailed installation notes are in **[INSTALL.md](INSTALL.md)** (required tools,
 
 ---
 
-## The 52 tools at a glance
+## The 53 tools at a glance
 
 ### Forms and stamps
 - **Auto-fill forms**; field detection plus template values
@@ -144,6 +144,7 @@ Detailed installation notes are in **[INSTALL.md](INSTALL.md)** (required tools,
 - **PDF encryption / decryption**
 - **Metadata clearing**
 - **Hidden content scan**
+- **Encrypted Paper Backup** — encrypt passwords, recovery keys and other critical data onto QR paper; the key is split with threshold sharing (Shamir) among several custodians and enough shares are needed to restore. **Creating and restoring both happen in the browser; the server never sees the content, the key or the shares.** Each share also carries a typed backup code for when the QR code is damaged, and an offline restore tool is included (a single HTML file that works by double-clicking, no network needed)
 - **Document compare / text compare**
 - **Sentence translation**
 - **Document translation** [needs OxOffice/LibreOffice]; translate a whole office document into another language, producing a file with **the same format and layout** (only the text changes). Supports.doc /.docx /.odt,.xls /.xlsx /.ods,.ppt /.pptx /.odp, and shows a preview of the first six pages
@@ -181,6 +182,21 @@ Official seals, such as the company seal or the representative's seal, can be se
 - **Retention** — closed requests are not deleted automatically by default; administrators can set a retention period in days according to company policy.
 
 Account login must be enabled first. Administrators enable the feature under "Settings → Seal requests"; custodians, flows and the retention period can be set up before enabling it; it cannot be disabled while any seal is still restricted. It is currently marked Beta. Seal requests are an internal approval process: the stamped seal is an image, not a digital signature.
+
+---
+
+## Encrypted Paper Backup (Beta)
+
+Server recovery keys, root certificate passwords, disk encryption recovery codes and other data that you only need when something goes wrong, and must never lose, are encrypted and printed as QR paper.
+
+- **Main document + shares** — the content is encrypted with AES-256-GCM into the "main document" (like a locked safe); the key is split with Shamir threshold sharing into N shares for different custodians, and any T of them restore it (2 ≤ T ≤ N ≤ 16). The main document alone, or fewer than T shares, reveals nothing.
+- **All in the browser** — creating and restoring both happen in the browser, so the server never sees the content, the key or the shares; the audit log records only the backup ID, threshold and number of shares. Requires HTTPS or local access at 127.0.0.1.
+- **Text or files** — type, paste or drop a file (up to 128 KB); three QR densities, A4 / Letter; each share is its own PDF and also carries a typed backup code (each group has a check character) for when a QR code is damaged; every page has a watermark in its margins with who generated it, the IP, the site and the time (it never covers a QR code).
+- **Restore** — drop in scanned PDFs or photos (any order, each removable), or scan with the camera over HTTPS; you can see which blocks and shares have been read and what is still missing.
+- **Offline restore tool** — a single HTML file that works by double-clicking, with no network and no need for this server; it checks the SHA-256 of its embedded code on start and includes a self-test. Keep a copy with the paper; every version is also on [GitHub Releases](https://github.com/jasoncheng7115/jt-doc-tools/releases).
+- **Print test page** — print it first the first time or after changing printers: QR codes in three densities, a 50 mm ruler and a public demo backup; scanning it checks every code and actually restores the demo.
+
+Key splitting uses Privy `shamir-secret-sharing` v0.0.3 (the version audited by Cure53 and Zellic), vendored unchanged. With login enabled only administrators can use it by default (they can grant it to others); without login there is no restriction. How long paper lasts depends on the paper, toner and storage conditions, so check it and rehearse restores regularly.
 
 ---
 

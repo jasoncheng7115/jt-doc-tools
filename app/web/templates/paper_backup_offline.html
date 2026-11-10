@@ -1,0 +1,176 @@
+{% import "components/paper_backup_msgs.html" as PBM with context %}<!doctype html>
+{# 加密紙本備份：離線還原包。這個檔案是「下載下來按兩下打開」用的，不經過本站（沒有站台樣式、沒有網路）。
+   程式內嵌在 #pbEmbed（Base64＋SHA-256），由最下面的啟動程式核對後用 Blob 網址載入。 #}
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>{{ tr('加密紙本備份：離線還原') }} · JTDT {{ version }}</title>
+<style>
+  :root { --fg:#0f172a; --muted:#64748b; --border:#d1d5db; --card:#fff; --bg:#f1f5f9; --primary:#2563eb; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.6 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+  main { max-width:920px; margin:0 auto; padding:20px 16px 60px; display:flex; flex-direction:column; gap:16px; }
+  h1 { font-size:22px; margin:0; }
+  h2 { font-size:16px; margin:0 0 10px; }
+  .panel { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .btn { display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; font:inherit; color:inherit; }
+  .btn-primary { background:var(--primary); border-color:var(--primary); color:#fff; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:10px; }
+  .drop { border:2px dashed var(--border); border-radius:10px; padding:26px; text-align:center; cursor:pointer; }
+  .drop.over { border-color:var(--primary); background:#eff6ff; }
+  .warn { border-left:4px solid #dc2626; background:#fef2f2; color:#991b1b; padding:10px 12px; border-radius:6px; }
+  .ok { border-left:4px solid #16a34a; background:#f0fdf4; color:#14532d; padding:10px 12px; border-radius:6px; }
+  .pb-ok { border-left:4px solid #16a34a; background:#f0fdf4; color:#14532d; padding:10px 12px; border-radius:6px; }
+  .pb-warn { border-left:4px solid #dc2626; background:#fef2f2; color:#991b1b; padding:10px 12px; border-radius:6px; }
+  .pb-test { margin-top:10px; display:flex; flex-direction:column; gap:2px; }
+  .pb-progress { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; }
+  .pb-meter { border:1px solid var(--border); border-radius:8px; padding:10px 12px; }
+  .pb-meter b { font-size:18px; }
+  .pb-bar { height:6px; border-radius:3px; background:#e5e7eb; margin-top:6px; overflow:hidden; }
+  .pb-bar > span { display:block; height:100%; background:var(--primary); width:0; }
+  .pb-note { font-size:12.5px; color:var(--muted); margin:4px 0 0; }
+  .pb-log { list-style:none; margin:8px 0 0; padding:0; font-size:12.5px; }
+  .pb-log .bad { color:#b91c1c; }
+  .pb-log .pb-src { display:flex; align-items:center; gap:10px; padding:8px 10px; margin-top:6px; border:1px solid var(--border); border-radius:8px; }
+  .pb-src-body { flex:1; min-width:0; }
+  .pb-src-name { font-weight:600; font-size:13px; overflow-wrap:anywhere; }
+  .pb-src-what { font-size:12.5px; color:var(--muted); }
+  .pb-src-what.bad { color:#b91c1c; }
+  .pb-src .btn { flex:none; padding:3px 10px; font-size:12.5px; }
+  .pb-codes { display:grid; grid-template-columns:repeat(4, 112px); gap:8px; }
+  @media (max-width:520px) { .pb-codes { grid-template-columns:repeat(2, 1fr); } }
+  .pb-codes label { display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .pb-codes input { width:100%; font:15px ui-monospace, Menlo, Consolas, monospace; text-transform:uppercase; text-align:center; letter-spacing:.08em; padding:4px; border:1px solid var(--border); border-radius:6px; }
+  .pb-codes input.good { border-color:#16a34a; background:#f0fdf4; }
+  .pb-codes input.bad { border-color:#dc2626; background:#fef2f2; }
+  .pb-gno { font-size:10.5px; color:var(--muted); }
+  textarea { width:100%; min-height:100px; font:13px ui-monospace, Menlo, Consolas, monospace; padding:8px; border:1px solid var(--border); border-radius:6px; }
+  table { border-collapse:collapse; font-size:12px; width:100%; }
+  td, th { border-bottom:1px solid #e5e7eb; padding:4px 6px; text-align:left; vertical-align:top; }
+  td code { word-break:break-all; }
+  details summary { cursor:pointer; }
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>{{ tr('加密紙本備份：離線還原') }}</h1>
+    <p class="muted">{{ tr('不需要連網、不需要 JTDT 主機；檔案只在這個瀏覽器裡讀取。') }} JTDT {{ version }} · JTPB v1</p>
+  </div>
+  <div class="warn" id="pbBoot" hidden></div>
+
+  <section class="panel">
+    <h2>{{ tr('1. 讀取主文件與分片') }}</h2>
+    <p class="pb-note">{{ tr('拖進掃描的 PDF 或照片，可以一次多個、不分順序。手機拍的照片請先傳到電腦。') }}</p>
+    <label class="drop" id="pbDrop">
+      <input type="file" id="pbFiles" multiple accept=".pdf,.png,.jpg,.jpeg,.webp" hidden>
+      {{ tr('拖曳檔案到此，或點選挑選') }}<br><span class="muted">{{ tr('PDF、PNG 或 JPG') }}</span>
+    </label>
+    <div class="pb-test" id="pbTestResult" hidden></div>
+    <ul class="pb-log" id="pbLog" aria-live="polite"></ul>
+  </section>
+
+  <section class="panel">
+    <h2>{{ tr('2. 手動輸入分片的文字備援碼') }}</h2>
+    <p class="pb-note">{{ tr('QR 掃不出來時，照分片紙上印的 16 組、每組 6 字輸入；每一組打完會立刻檢查，打錯的那一組會以紅色標示。也可以整段貼上。') }}</p>
+    <div class="pb-codes" id="pbCodes"></div>
+    <div class="actions">
+      <button type="button" class="btn" id="pbCodeAdd">{{ tr('加入這份分片') }}</button>
+      <button type="button" class="btn" id="pbCodeClear">{{ tr('清空') }}</button>
+      <span class="muted" id="pbCodeMsg" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>{{ tr('3. 進度') }}</h2>
+    <p id="pbProgId" class="muted"></p>
+    <div class="pb-progress">
+      <div class="pb-meter"><div>{{ tr('主文件區塊') }}</div><b id="pbProgMain">0 / ?</b><div class="pb-bar"><span id="pbBarMain"></span></div><p class="pb-note" id="pbProgMiss"></p></div>
+      <div class="pb-meter"><div>{{ tr('分片') }}</div><b id="pbProgShare">0 / ?</b><div class="pb-bar"><span id="pbBarShare"></span></div><p class="pb-note" id="pbProgShareNos"></p></div>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn btn-primary" id="pbRestoreGo" disabled>{{ tr('還原') }}</button>
+      <button type="button" class="btn" id="pbRestoreReset">{{ tr('全部重來') }}</button>
+      <span class="muted" id="pbRestoreMsg" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <section class="panel" id="pbResult" hidden>
+    <h2>{{ tr('4. 還原結果') }}</h2>
+    <p class="ok" id="pbResultMeta"></p>
+    <div id="pbResultTextBox" hidden><textarea id="pbResultText" readonly spellcheck="false"></textarea></div>
+    <div class="actions">
+      <button type="button" class="btn" id="pbResultShow">{{ tr('顯示內容') }}</button>
+      <button type="button" class="btn" id="pbResultCopy" hidden>{{ tr('複製') }}</button>
+      <button type="button" class="btn btn-primary" id="pbResultSave">{{ tr('下載') }}</button>
+      <button type="button" class="btn" id="pbResultClear">{{ tr('清除畫面上的資料') }}</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>{{ tr('自我測試與內容清單') }}</h2>
+    <div class="actions">
+      <button type="button" class="btn" id="pbSelfTest">{{ tr('執行自我測試') }}</button>
+      <span class="muted" id="pbSelfMsg" aria-live="polite"></span>
+    </div>
+    <details>
+      <summary>{{ tr('內嵌的程式與授權（SHA-256）') }}</summary>
+      <table>
+        <tr><th>{{ tr('檔案') }}</th><th>{{ tr('授權') }}</th><th>SHA-256</th></tr>
+        {% for name, f in manifest.items() %}<tr><td>{{ f.path }}</td><td>{{ f.license }}</td><td><code>{{ f.sha256 }}</code></td></tr>{% endfor %}
+      </table>
+      <p class="pb-note">{{ tr('shamir-secret-sharing（Privy）、jsQR、PDF.js 以 Apache-2.0 授權；完整授權條文見 JTDT 原始碼庫的 static/vendor 目錄。') }}</p>
+    </details>
+    <details>
+      <summary>{{ tr('格式摘要（JTPB v1）') }}</summary>
+      <p class="pb-note">{{ tr('內容以 AES-256-GCM 加密（標頭當作附加驗證資料），金鑰以 Shamir 門檻分片（GF(2^8)，Privy shamir-secret-sharing v0.0.3）拆成 N 份、任 T 份可重組。主文件與分片的 QR 內容是 Base45（RFC 9285），每筆記錄帶 CRC32；分片另印 Crockford Base32 文字備援碼，每 5 字一個檢查字。') }}</p>
+    </details>
+  </section>
+</main>
+
+<script type="application/json" id="pbText18n">{{ {'M': PBM.M}|tojson }}</script>
+<script type="application/json" id="pbEmbed">{{ files_json|safe }}</script>
+<script type="application/json" id="pbImports">{{ imports_json|safe }}</script>
+<script type="application/json" id="pbOrder">{{ order_json|safe }}</script>
+<script type="application/json" id="pbVector">{{ vector_json|safe }}</script>
+<script>
+// 啟動：核對每個內嵌檔的 SHA-256 → 依序做成 Blob 網址（import 改指到對方的網址）→ 載入介面模組。
+(function () {
+  var M = JSON.parse(document.getElementById('pbText18n').textContent).M;
+  function fail(msg) { var b = document.getElementById('pbBoot'); b.textContent = msg; b.hidden = false; }
+  if (!window.isSecureContext || !window.crypto || !crypto.subtle || typeof CompressionStream !== 'function') { fail(M.offNeedSecure); return; }
+  var files = JSON.parse(document.getElementById('pbEmbed').textContent);
+  var imports = JSON.parse(document.getElementById('pbImports').textContent);
+  var order = JSON.parse(document.getElementById('pbOrder').textContent);
+  function bytes(b64) { var s = atob(b64), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+  function hex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
+  (async function () {
+    var urls = {}, raw = {};
+    for (var name in files) {
+      raw[name] = bytes(files[name].b64);
+      if (hex(await crypto.subtle.digest('SHA-256', raw[name])) !== files[name].sha256) { fail(M.offBadPack.replace('{0}', name)); return; }
+    }
+    var dec = new TextDecoder('utf-8');
+    for (var i = 0; i < order.length; i++) {
+      var n = order[i], src = dec.decode(raw[n]), map = imports[n] || {};
+      for (var spec in map) {
+        var pats = ["'" + spec + "'", '"' + spec + '"'];
+        for (var k = 0; k < pats.length; k++) src = src.split(pats[k]).join(JSON.stringify(urls[map[spec]]));
+      }
+      urls[n] = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    }
+    window.__PB_OFFLINE = { pdf: urls.pdf, pdfworker: urls.pdfworker };
+    var js = document.createElement('script');
+    js.src = URL.createObjectURL(new Blob([raw.jsqr], { type: 'text/javascript' }));
+    js.onload = function () { import(urls.offline).catch(function (e) { fail(M.offBootFail.replace('{0}', e && e.message || e)); }); };
+    js.onerror = function () { fail(M.offBootFail.replace('{0}', 'jsQR')); };
+    document.head.appendChild(js);
+  })().catch(function (e) { fail(M.offBootFail.replace('{0}', e && e.message || e)); });
+})();
+</script>
+</body>
+</html>

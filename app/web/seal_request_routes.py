@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 import tempfile
 import uuid
@@ -70,9 +71,10 @@ def _public_case(user: dict, case: dict, *, full: bool = False) -> dict:
     out["roles"] = sorted(roles)
     out["documents"] = F.can_view_documents(user, case)
     if out["documents"]:
-        info = F.doc_info(case)
-        out["doc"] = ({"name": info["name"], "pages": info["pages"], "page_sizes": info["page_sizes"]}
-                      if info else None)
+        docs = F.documents(case)
+        out["docs"] = [{"id": d["id"], "name": d["name"], "pages": d["pages"], "page_sizes": d["page_sizes"]}
+                       for d in docs]
+        out["doc"] = out["docs"][0] if docs else None          # 舊欄位：第一份
         out["attachments"] = F.attachments(case)
     if st:
         out["stage"]["voters"] = st["voters"]
@@ -81,7 +83,7 @@ def _public_case(user: dict, case: dict, *, full: bool = False) -> dict:
         v = S.get_version(case["id"], ver)
         if v:
             vers.append({"version": ver, "doc_name": v["doc_name"], "doc_sha256": v["doc_sha256"],
-                         "doc_pages": v["doc_pages"], "created_at": v["created_at"],
+                         "doc_pages": v["doc_pages"], "documents": F.version_docs(v), "created_at": v["created_at"],
                          "stages": [{"name": s["name"], "rule": s["rule"], "n": s["n"]} for s in v["stages"]],
                          "assets": [{"asset_id": a["asset_id"], "name": a["name"], "type": a["type"]}
                                     for a in v["assets"]]})
@@ -247,8 +249,8 @@ def build_router(templates) -> APIRouter:
         _audit(request, user, "seal_req_delete_draft", case)
         return _ok({})
 
-    @router.post("/seal-request/api/cases/{case_id}/document")
-    async def put_document(request: Request, case_id: str, file: UploadFile = File(...)):
+    async def _upload_document(request: Request, case_id: str, file: UploadFile, fn):
+        """收一份用印文件（PDF 或辦公文件先轉成 PDF），交給 `fn(user, case, pdf, name)`。"""
         from ..core import office_convert
         from ..config import settings
         tmp: Optional[Path] = None
@@ -278,13 +280,35 @@ def build_router(templates) -> APIRouter:
                 pdf = conv
             else:
                 raise F.FlowError("NOT_PDF")
-            case = await asyncio.to_thread(F.put_document, user, case, pdf, Path(name).stem + ".pdf")
+            case = await asyncio.to_thread(fn, user, case, pdf, Path(name).stem + ".pdf")
         except F.FlowError as e:
             return _err(e)
         finally:
             for p in (tmp, conv):
                 if p is not None:
                     Path(p).unlink(missing_ok=True)
+        return _ok({"case": _public_case(user, case, full=True)})
+
+    @router.post("/seal-request/api/cases/{case_id}/documents")
+    async def add_document(request: Request, case_id: str, file: UploadFile = File(...)):
+        """加一份用印文件（可以有多份，各自蓋、各自下載）。"""
+        return await _upload_document(request, case_id, file, F.add_document)
+
+    @router.post("/seal-request/api/cases/{case_id}/document")
+    async def put_document(request: Request, case_id: str, file: UploadFile = File(...)):
+        """舊介面：把用印文件整份換成這一份。"""
+        return await _upload_document(request, case_id, file, F.put_document)
+
+    @router.delete("/seal-request/api/cases/{case_id}/documents/{doc_id}")
+    async def remove_document(request: Request, case_id: str, doc_id: str):
+        try:
+            user = guard(request)
+            case = _case_for(user, case_id)
+            if not F._DOC_ID.match(doc_id):
+                raise F.FlowError("NOT_FOUND", 404)
+            case = await asyncio.to_thread(F.remove_document, user, case, doc_id)
+        except F.FlowError as e:
+            return _err(e)
         return _ok({"case": _public_case(user, case, full=True)})
 
     def _version_arg(case: dict, version: Optional[int]) -> Optional[int]:
@@ -294,37 +318,45 @@ def build_router(templates) -> APIRouter:
             raise F.FlowError("NOT_FOUND", 404)
         return int(version)
 
-    @router.get("/seal-request/api/cases/{case_id}/document")
-    async def get_document(request: Request, case_id: str, version: Optional[int] = None):
+    def _pick_doc(case: dict, doc_id: Optional[str], version: Optional[int]) -> dict:
+        if doc_id is not None and not F._DOC_ID.match(doc_id):
+            raise F.FlowError("NOT_FOUND", 404)
+        return F.document(case, doc_id, _version_arg(case, version))
+
+    async def _send_document(request: Request, case_id: str, doc_id: Optional[str], version: Optional[int]):
         from ..core.http_utils import content_disposition
         try:
             user = guard(request)
             case = _case_for(user, case_id, documents=True)
-            ver = _version_arg(case, version)
-            info = F.doc_info(case, ver)
-            if info is None:
-                raise F.FlowError("NO_DOCUMENT", 404)
+            info = _pick_doc(case, doc_id, version)
         except F.FlowError as e:
             return _err(e)
-        _audit(request, user, "seal_req_download", case, what="document", of_version=ver)
+        _audit(request, user, "seal_req_download", case, what="document", document=info["id"], of_version=version)
         return FileResponse(str(info["path"]), media_type="application/pdf",
                             headers={**_NO_STORE, "Content-Disposition": content_disposition(info["name"]),
                                      "X-Content-Type-Options": "nosniff"})
 
-    @router.get("/seal-request/api/cases/{case_id}/pages/{page}")
-    async def page_png(request: Request, case_id: str, page: int, version: Optional[int] = None):
+    @router.get("/seal-request/api/cases/{case_id}/document")
+    async def get_document(request: Request, case_id: str, version: Optional[int] = None):
+        """舊介面：第一份用印文件。"""
+        return await _send_document(request, case_id, None, version)
+
+    @router.get("/seal-request/api/cases/{case_id}/documents/{doc_id}")
+    async def get_document_by_id(request: Request, case_id: str, doc_id: str, version: Optional[int] = None):
+        return await _send_document(request, case_id, doc_id, version)
+
+    async def _send_page(request: Request, case_id: str, doc_id: Optional[str], page: int, version: Optional[int]):
         try:
             user = guard(request)
             case = _case_for(user, case_id, documents=True)
-            ver = _version_arg(case, version)
-            info = F.doc_info(case, ver)
-            if info is None or not 1 <= page <= info["pages"]:
+            info = _pick_doc(case, doc_id, version)
+            if not 1 <= page <= info["pages"]:
                 raise F.FlowError("NOT_FOUND", 404)
         except F.FlowError as e:
             return _err(e)
 
         def render() -> bytes:
-            cache = info["dir"] / "previews" / f"p{page}.png"
+            cache = info["dir"] / "previews" / f"{info['id']}-p{page}.png"
             if cache.exists():
                 return cache.read_bytes()
             import fitz
@@ -337,6 +369,15 @@ def build_router(templates) -> APIRouter:
             return png
 
         return Response(await asyncio.to_thread(render), media_type="image/png", headers=_NO_STORE)
+
+    @router.get("/seal-request/api/cases/{case_id}/pages/{page}")
+    async def page_png(request: Request, case_id: str, page: int, version: Optional[int] = None):
+        """舊介面：第一份用印文件的某一頁。"""
+        return await _send_page(request, case_id, None, page, version)
+
+    @router.get("/seal-request/api/cases/{case_id}/documents/{doc_id}/pages/{page}")
+    async def doc_page_png(request: Request, case_id: str, doc_id: str, page: int, version: Optional[int] = None):
+        return await _send_page(request, case_id, doc_id, page, version)
 
     @router.post("/seal-request/api/cases/{case_id}/attachments")
     async def add_attachment(request: Request, case_id: str, file: UploadFile = File(...)):
@@ -468,22 +509,49 @@ def build_router(templates) -> APIRouter:
         return await _case_action(request, case_id, F.custodian_return, "seal_req_custodian_return")
 
     @router.get("/seal-request/api/cases/{case_id}/result")
-    async def result(request: Request, case_id: str):
+    async def result(request: Request, case_id: str, doc: Optional[str] = None):
+        """用印後的 PDF。`doc` 指定哪一份；沒指定時只有一份就給 PDF、多份就打包成 ZIP。"""
+        import tempfile
+        import zipfile
+        from starlette.background import BackgroundTask
         from ..core.http_utils import content_disposition
         try:
             user = guard(request)
             case = _case_for(user, case_id, documents=True)
-            path, name = F.result_path(user, case)
+            if doc is not None and not F._DOC_ID.match(doc):
+                raise F.FlowError("NOT_FOUND", 404)
+            files = F.result_files(user, case)
+            if doc is not None:
+                files = [f for f in files if f["id"] == doc]
+                if not files:
+                    raise F.FlowError("NOT_FOUND", 404)
         except F.FlowError as e:
             return _err(e)
         F.note_download(user, case)
-        _audit(request, user, "seal_req_download", case, what="result")
-        return FileResponse(str(path), media_type="application/pdf",
-                            headers={**_NO_STORE, "Content-Disposition": content_disposition(name),
-                                     "X-Content-Type-Options": "nosniff"})
+        _audit(request, user, "seal_req_download", case, what="result",
+               documents=[f["id"] for f in files])
+        if len(files) == 1:
+            return FileResponse(str(files[0]["path"]), media_type="application/pdf",
+                                headers={**_NO_STORE, "Content-Disposition": content_disposition(files[0]["name"]),
+                                         "X-Content-Type-Options": "nosniff"})
+
+        def build() -> str:
+            fd, tmp = tempfile.mkstemp(prefix="sealreq_zip_", suffix=".zip")
+            os.close(fd)
+            with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
+                for f in files:
+                    z.write(f["path"], f["name"])
+            return tmp
+
+        tmp = await asyncio.to_thread(build)
+        return FileResponse(tmp, media_type="application/zip",
+                            headers={**_NO_STORE, "Content-Disposition": content_disposition(f"{case['number']}_用印.zip"),
+                                     "X-Content-Type-Options": "nosniff"},
+                            background=BackgroundTask(lambda: Path(tmp).unlink(missing_ok=True)))
 
     @router.post("/seal-request/api/cases/{case_id}/result/workspace")
     async def result_to_workspace(request: Request, case_id: str):
+        """申請者把用印後的 PDF（每一份）存到自己的工作區。"""
         from ..core import workspace
         try:
             user = guard(request)
@@ -491,18 +559,20 @@ def build_router(templates) -> APIRouter:
             F._require_applicant(user, case)
             if not workspace.is_enabled():
                 raise F.FlowError("WORKSPACE_OFF", 409)
-            path, name = F.result_path(user, case)
-            try:
-                meta = await asyncio.to_thread(workspace.save_file, request, path, name, "seal-request")
-            except workspace.WorkspaceError:
-                # 工作區滿了之類：案件本身不受影響，照樣可以從案件頁下載。細節只進日誌，不回給畫面
-                import logging
-                logging.getLogger(__name__).warning("seal-request: save result to workspace failed", exc_info=True)
-                raise F.FlowError("WORKSPACE_FAILED", 409)
+            ids = []
+            for f in F.result_files(user, case):
+                try:
+                    meta = await asyncio.to_thread(workspace.save_file, request, f["path"], f["name"], "seal-request")
+                except workspace.WorkspaceError:
+                    # 工作區滿了之類：案件本身不受影響，照樣可以從案件頁下載。細節只進日誌，不回給畫面
+                    import logging
+                    logging.getLogger(__name__).warning("seal-request: save result to workspace failed", exc_info=True)
+                    raise F.FlowError("WORKSPACE_FAILED", 409)
+                ids.append(meta.get("file_id") if isinstance(meta, dict) else None)
         except F.FlowError as e:
             return _err(e)
         F.note_download(user, case)
-        _audit(request, user, "seal_req_download", case, what="workspace")
-        return _ok({"file_id": meta.get("file_id") if isinstance(meta, dict) else None})
+        _audit(request, user, "seal_req_download", case, what="workspace", count=len(ids))
+        return _ok({"file_id": ids[0] if ids else None, "file_ids": ids})
 
     return router

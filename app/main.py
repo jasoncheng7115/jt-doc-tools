@@ -28,7 +28,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.17.33"
+VERSION = "1.17.36"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -460,6 +460,7 @@ _TOOL_ALIASES = {
     "pdf-annotations-strip":   "strip remove delete clean annotations comments markup 註解 批註 移除 刪除 清除 清除註解 移除註解 校稿後清除",
     "pdf-annotations-flatten": "flatten bake burn annotations comments markup permanent lock final 平面化 扁平化 燒入 鎖定 定稿 收件方無法移除",
     "doc-diff":           "diff compare comparison difference changes contract audit review pdf word excel powerpoint odf odt ods odp office document 差異 比對 比較 合約審閱 變更 改版 文件 PDF Word Excel PowerPoint ODF",
+    "paper-backup":       "paper backup encrypted qr shamir secret sharing threshold key split recovery offline disaster root password master key 加密紙本備份 紙本備份 加密 備份 紙本 金鑰 密碼 復原 還原 分片 門檻 保管人 災難復原 離線 QR",
     "text-diff":          "text diff compare paste plain text snippet log code clipboard quick 文字 文本 差異 比對 比較 純文字 貼上 片段 紀錄 程式碼 剪貼簿",
     "aes-zip":            "zip aes encrypt archive password email attachment winzip 7zip keka archive utility 加密 壓縮檔 密碼保護 AES 寄信 附件 打包",
     "pdf-nup":            "nup n-up multiple pages per sheet imposition 2up 4up 6up 8up tile tiled layout grid imposition 多頁合併 多合一 拼貼 省紙 N合一 2合1 4合1 講義 草稿 版面",
@@ -607,7 +608,7 @@ templates.env.globals["nav_settings"] = [
      "url": "/admin/mfp",
      "keywords": "mfp multifunction printer copier scanner shared device member group scan escl airprint mopria "
                  "事務機 多功能事務機 影印機 複合機 共用 成員 群組 掃描 排隊"},
-    {"icon": "stamp", "name": "用印申請", "description": "哪些印章僅限核准案件使用、誰可以申請、誰是保管人（預設不啟用）",
+    {"icon": "seal-request", "name": "用印申請", "description": "哪些印章僅限核准案件使用、誰可以申請、誰是保管人（預設不啟用）",
      "url": "/admin/seal-request", "beta": True,
      "keywords": "seal stamp approval request workflow custodian controlled company seal signature "
                  "用印申請 用印 印章 公司章 大小章 負責人章 核准 審核 簽核 保管人 管制 流程"},
@@ -967,6 +968,9 @@ app.include_router(_build_workspace_router(templates))
 from .web.seal_request_routes import build_router as _build_seal_request_router  # noqa: E402
 
 app.include_router(_build_seal_request_router(templates))
+# 加密紙本備份的離線還原包：要登入但不跟工具權限（不含秘密；出事時每位保管人都要拿得到）
+from .web.paper_backup_routes import build_router as _build_paper_backup_router  # noqa: E402
+app.include_router(_build_paper_backup_router())
 
 # 上傳的 PDF 有沒有開啟密碼（共用上傳元件用；解密本身在 PDF 密碼解除工具底下）
 from .web.pdf_password_routes import router as _pdf_password_router  # noqa: E402
@@ -1454,8 +1458,12 @@ async def _security_headers(request: Request, call_next):
         "form-action 'self'"
     ))
     h.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    # 相機只開給「加密紙本備份」（還原時掃 QR，影像只在瀏覽器裡解）；其他頁一律關。
+    # 路徑讀 scope（Host 標頭污染不到，見 CLAUDE.md BADHOST 那條）。
+    _path = (getattr(request, "scope", None) or {}).get("path", "") or ""
+    _camera = "camera=(self)" if _path.startswith("/tools/paper-backup") else "camera=()"
     h.setdefault("Permissions-Policy",
-                 "camera=(), microphone=(), geolocation=(), interest-cohort=()")
+                 _camera + ", microphone=(), geolocation=(), interest-cohort=()")
     # 動態 HTML 頁不快取（可能含敏感內容；清 ZAP「Re-examine Cache-control」Info）。
     # 靜態資產（CSS/JS/字型/圖）content-type 非 text/html → 不受影響，維持可快取。
     # JSON（API 回應）也不快取：內容是「這個帳號」的資料（清單、作業、設定），

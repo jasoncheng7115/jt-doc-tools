@@ -122,7 +122,7 @@ def test_other_seal_cannot_be_swapped_in(world):
 def test_changed_document_or_seal_blocks_stamping(world):
     w = world
     cid = _approved(w)
-    d = S.version_dir(cid, 1) / F.DOC_NAME
+    d = F.documents(S.get_case(cid), 1)[0]["path"]
     d.write_bytes(_pdf(3))
     r = _stamp(w, cid)
     assert r.status_code == 409 and r.json()["code"] == "DOC_CHANGED"

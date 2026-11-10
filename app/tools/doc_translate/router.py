@@ -97,6 +97,34 @@ _SEG_RE = re.compile(r"^\s*⟦\s*(\d+)\s*⟧\s?(.*)$")
 _BYTE_TOKEN_RE = re.compile(r"<0x[0-9A-Fa-f]{2}>")
 
 
+#: 一批原文最多佔上下文長度的多少（字數對 token）。實測（2026-11-09，推論機的 gemma4:26b 建 4096 的版本、
+#: 中文→英文）：中文原文約 1 字 ≈ 1 token、譯文跟原文差不多，**提示＋輸出**要一起放得下。
+#: 2,240 字用掉 3,976 token 剛好擠進 4096；3,029 字起輸出被截斷、整批解析失敗再對切重跑。
+#: 取 0.4 留給指令（約 350 token）與譯文偏長的語言。
+CONTEXT_CHAR_RATIO = 0.4
+
+
+def _context_char_cap(client, model: str, char_cap: int) -> int:
+    """依模型實際的上下文長度夾小一批的字數。讀不到（不是 Ollama、經過閘道、出錯）就照設定。
+
+    上下文不夠時 Ollama 不會報錯，只會把輸出切斷：那一批對不上段數、對切重跑，結果正確但慢很多。
+    先夾小就不用白跑那一次。
+    """
+    try:
+        probe = client.context_probe(model) or {}
+    except Exception:  # noqa: BLE001 — 讀不到上下文不影響翻譯本身
+        return char_cap
+    eff = probe.get("effective")
+    if not isinstance(eff, int) or isinstance(eff, bool) or eff <= 0:
+        return char_cap
+    cap = max(200, int(eff * CONTEXT_CHAR_RATIO))
+    if cap < char_cap:
+        import logging
+        logging.getLogger(__name__).info("文件翻譯：模型上下文 %d，一批字數 %d → %d", eff, char_cap, cap)
+        return cap
+    return char_cap
+
+
 def _make_batches(indexes: list[int], items: list,
                   seg_cap: int = BATCH_MAX_SEGMENTS,
                   char_cap: int = BATCH_MAX_CHARS) -> list[list[int]]:
@@ -312,6 +340,9 @@ def _run_job(job, upload_id: str, meta: dict, source_lang: str,
 
     job.message = f"準備中…（共 {total} 段）"
     _warmup_llm(client, model)
+    # **預熱之後才讀上下文**：模型載入後 `/api/ps` 才看得到實際大小（沒載入時只看得到模型自己的參數，
+    # 多半是空的 → 等於沒判斷）
+    char_cap = _context_char_cap(client, model, char_cap)
 
     out: dict[int, str] = {}
     done = 0

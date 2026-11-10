@@ -1332,6 +1332,33 @@ curl -X POST http://localhost:8765/tools/pdf-hidden-scan/api/pdf-hidden-scan \
 
 回應 JSON：各類隱藏內容的偵測結果。
 
+### 加密紙本備份
+
+**刻意沒有建立與還原的 API**：加密、金鑰分片、產生 PDF、讀 QR、還原全部在瀏覽器裡做，主機看不到內容、金鑰與分片（不會有任何端點收秘密）。對外只有下面這些不含秘密的端點。
+
+```text
+GET  /paper-backup/offline
+GET  /paper-backup/offline.json
+POST /tools/paper-backup/audit
+```
+
+- `GET /paper-backup/offline`：下載離線還原程式（一個 HTML 檔，按兩下就能用、不需連網）。要登入（啟用登入時），但不需要這支工具的權限；同一版本、同一語言的內容固定，回應標頭 `X-JTDT-SHA256` 是它的 SHA-256。語言跟著介面語言。
+- `GET /paper-backup/offline.json`：離線還原程式的 `filename`、`size`、`sha256`。
+- `POST /tools/paper-backup/audit`：瀏覽器建立 / 還原完成後記一筆稽核（`paper_backup_create` / `paper_backup_restore`）。只收這些欄位，多送任何欄位（例如標題、內容、分片）回 400：
+
+| 欄位 | 說明 |
+|---|---|
+| `action` | `create` / `restore` |
+| `backup_id` | 備份 ID（16 個小寫十六進位字元） |
+| `t` / `n` | 門檻與份數（2 ≤ t ≤ n ≤ 16） |
+| `mode` / `density` / `blocks` | 只在 `create`：`paper`（固定）、`low` / `medium` / `high`、主文件區塊數（1～2000） |
+| `ok` | 只在 `restore`：是否還原成功 |
+
+```bash
+curl -OJ http://localhost:8765/paper-backup/offline \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
 ---
 
 ## 6. 表單與簽章 API
@@ -2645,9 +2672,12 @@ PUT /tools/mfp-fetch/api/settings     # {"allow_user_devices": false}
 | `/seal-request/api/flows/{flow_id}/assets` | GET | 這個流程裡我能申請的章（只有名稱、種類、尺寸，沒有原始圖檔） |
 | `/seal-request/api/cases` | GET | 案件清單：`box=mine`（我的申請）、`review`（待我審核）、`stamp`（待我用印）、`handled`（我已處理）、`all`（管理員與稽核員） |
 | `/seal-request/api/cases` | POST | 建立草稿，內文 `{"flow_id": 1}` |
-| `/seal-request/api/cases/{case_id}` | GET / PUT / DELETE | 讀取；修改主旨、用途（`subject`、`purpose` 必填）、收件對象、文件類別、希望完成日期、補充說明、申請的章（`assets`）與希望位置（`placements`：`asset_id`、`page`、`position` 為 `br` / `bl` / `tr` / `tl` / `center` / `custodian`）；刪除只限從未送出的草稿 |
-| `/seal-request/api/cases/{case_id}/document` | POST / GET | 上傳用印文件（PDF，或可以轉成 PDF 的辦公文件；有開啟密碼或數位簽章的 PDF 會被擋）；下載 PDF（`version` 指定版本） |
-| `/seal-request/api/cases/{case_id}/pages/{page}` | GET | 某一頁的預覽圖（PNG） |
+| `/seal-request/api/cases/{case_id}` | GET / PUT / DELETE | 讀取；修改主旨、用途（`subject`、`purpose` 必填）、收件對象、文件類別、希望完成日期、補充說明、申請的章（`assets`）與希望位置（`placements`：`asset_id`、`doc`（哪一份文件，省略＝第一份）、`page`、`position` 為 `br` / `bl` / `tr` / `tl` / `center` / `custodian`）；刪除只限從未送出的草稿 |
+| `/seal-request/api/cases/{case_id}/documents` | POST | 加一份用印文件（PDF，或可以轉成 PDF 的辦公文件；有開啟密碼或數位簽章的 PDF 會被擋）。一件最多 20 份，超過回 400 `TOO_MANY_DOCS`；回傳的 `case.docs` 是目前的文件清單（`id`、`name`、`pages`、`page_sizes`） |
+| `/seal-request/api/cases/{case_id}/documents/{doc_id}` | GET / DELETE | 下載某一份（`version` 指定版本）；移除某一份（只限草稿與補件中，標在這份上的希望位置一起拿掉） |
+| `/seal-request/api/cases/{case_id}/documents/{doc_id}/pages/{page}` | GET | 某一份某一頁的預覽圖（PNG） |
+| `/seal-request/api/cases/{case_id}/document` | POST / GET | 舊寫法：上傳會換掉全部文件、只留這一份；下載第一份 |
+| `/seal-request/api/cases/{case_id}/pages/{page}` | GET | 舊寫法：第一份某一頁的預覽圖 |
 | `/seal-request/api/cases/{case_id}/attachments` | POST | 加入參考附件（不會被蓋章） |
 | `/seal-request/api/cases/{case_id}/attachments/{att_id}` | GET / DELETE | 下載 / 移除參考附件 |
 | `/seal-request/api/cases/{case_id}/submit` | POST | 送出（補件後重送也是這支，會成為新版本、從第一關重審） |
@@ -2657,10 +2687,10 @@ PUT /tools/mfp-fetch/api/settings     # {"allow_user_devices": false}
 | `/seal-request/api/cases/{case_id}/withdraw` | POST | 申請者撤回 |
 | `/seal-request/api/cases/{case_id}/comment` | POST | 留言，內文 `{"text": "…"}`（不改變審核狀態） |
 | `/seal-request/api/cases/{case_id}/assets/{asset_id}/image` | GET | 核准的章圖（只給這件案件的保管人，只在待用印、用印中、用印失敗時） |
-| `/seal-request/api/cases/{case_id}/stamp` | POST | 保管人確認用印：`placements`（每處 `asset_id`、`page`、`x_mm`、`y_mm`、`width_mm`、`height_mm`、`rotation_deg`，只能用核准的章、每顆至少一處）、`exec_id`（這次按下的編號，32 位十六進位；重送同一個編號不會蓋兩次）。文件或章圖跟核准時不同回 409 `DOC_CHANGED` / `ASSET_CHANGED` |
+| `/seal-request/api/cases/{case_id}/stamp` | POST | 保管人確認用印：`placements`（每處 `asset_id`、`doc`、`page`、`x_mm`、`y_mm`、`width_mm`、`height_mm`、`rotation_deg`，只能用核准的章、每顆至少一處、每一份文件至少一處，否則回 400 `SEAL_NOT_USED` / `DOC_NOT_STAMPED`）、`exec_id`（這次按下的編號，32 位十六進位；重送同一個編號不會蓋兩次）。任何一份文件或章圖跟核准時不同回 409 `DOC_CHANGED` / `ASSET_CHANGED`；全部蓋好才算完成，有一份失敗就全部不算 |
 | `/seal-request/api/cases/{case_id}/custodian-return` | POST | 保管人退回申請者補件，`comment` 必填 |
-| `/seal-request/api/cases/{case_id}/result` | GET | 下載用印後的 PDF（作廢後只有稽核員拿得到） |
-| `/seal-request/api/cases/{case_id}/result/workspace` | POST | 申請者把用印後的 PDF 存到自己的工作區 |
+| `/seal-request/api/cases/{case_id}/result` | GET | 下載用印後的 PDF（作廢後只有稽核員拿得到）；多份時不帶參數回 ZIP、`doc=<doc_id>` 只下載那一份 |
+| `/seal-request/api/cases/{case_id}/result/workspace` | POST | 申請者把用印後的 PDF 存到自己的工作區（多份時每份各存一個檔，回 `file_ids`） |
 
 ```bash
 curl http://localhost:8765/seal-request/api/cases?box=review \

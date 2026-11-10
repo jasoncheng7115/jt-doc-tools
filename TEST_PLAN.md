@@ -641,7 +641,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - **`app/core/auth_db.py`**：`_m1_initial`、`_m2_username_source_unique`、`_m3_rename_pdf_diff_to_doc_diff`、`_m4_grant_image_to_pdf`、`_m5_grant_translate_doc`、`_m6_totp_columns`、`_m7_audit_seed_column`、`_m8_sso_sources`、`_m9_role_seed_snapshot`、`_m10_role_default_for_new`、`_m11_group_sync_cache`、`_m12_unprovision_mirrored_users`、`_m13_grant_pdf_to_slides`、`_m14_user_email`、`_m15_directory_presence`、`_m16_session_last_seen`、`_m17_directory_account_state`、`_m18_grant_transit_proof_and_border`、`_m19_grant_pdf_bookmark`、`_m20_grant_seam_stamp`、`_m21_grant_page_size`、`_m22_grant_office_convert`、`_m23_canon_ou_subject_keys`、`_m24_index_group_members_user`、`_m25_grant_doc_translate`、`_m26_grant_doc_straighten`、`_m27_grant_meeting_summary`、`_m28_grant_meeting_transcribe`、`_m29_grant_official_doc`
 - **`app/core/audit_db.py`**：`_m1_initial`
 - **`app/core/job_store.py`**：`_m1_initial`、`_m2_metrics`、`_m3_started_at`
-- **`app/core/seal_store.py`**：`_m1_initial`（v1.17.29：用印申請的流程、案件、版本、票、事件，全新建立）、`_m2_stamping`（v1.17.30：`seal_cases` 加用印相關欄位（ADD COLUMN），第 2 版的案件都還在、新欄位是預設值：`tests/test_seal_stamp.py::test_migration_from_v1_keeps_cases`）、`_m3_watermark`（v1.17.32：`seal_flows` 與 `seal_case_versions` 各加 `watermark`（ADD COLUMN），第 3 版的流程與版本都還在、浮水印預設 `{}`：`tests/test_seal_simulate_watermark.py::test_migration_v2_to_v3_keeps_flows_and_versions`）
+- **`app/core/seal_store.py`**：`_m1_initial`（v1.17.29：用印申請的流程、案件、版本、票、事件，全新建立）、`_m2_stamping`（v1.17.30：`seal_cases` 加用印相關欄位（ADD COLUMN），第 2 版的案件都還在、新欄位是預設值：`tests/test_seal_stamp.py::test_migration_from_v1_keeps_cases`）、`_m3_watermark`（v1.17.32：`seal_flows` 與 `seal_case_versions` 各加 `watermark`（ADD COLUMN），第 3 版的流程與版本都還在、浮水印預設 `{}`：`tests/test_seal_simulate_watermark.py::test_migration_v2_to_v3_keeps_flows_and_versions`）、`_m4_documents`（v1.17.35：`seal_case_versions` 加 `documents`（ADD COLUMN），第 3 版的版本都還在、`documents` 預設 `[]`，舊案件的單一文件當成一份：`tests/test_seal_multi_documents.py::test_migration_v3_to_v4_keeps_versions`）
 - **`app/core/mfp_store.py`**：`_m1_initial`、`_m2_shared_and_scans`（v1.16.87：只新增 `mfp_members`、`mfp_scans` 兩張表，不動 `mfp_connections`；v1 的事務機升上來都還在：`tests/test_mfp_shared_and_scan.py::test_migration_from_v1_keeps_existing_connections`）、`_m3_job_kind_and_items`（v1.16.89：`mfp_scans` 加 `kind`、`items` 兩欄（ADD COLUMN），舊紀錄都還在、一律是掃描：`tests/test_mfp_shared_and_scan.py::test_migration_from_v2_keeps_existing_scans`）、`_m4_prefs`（v1.17.5：只新增 `mfp_prefs`（記住的設定，FK cascade），v3 的事務機都還在、刪事務機時設定一起刪：`tests/test_mfp_prefs_and_ownership.py::test_migration_from_v3_keeps_connections_and_adds_prefs`）
 - **`app/core/kb/store.py`**（知識庫；在子資料夾裡，上面那條自動比對不會掃到，這裡手動列）：
   - [ ] **`_m2_gov_imports`**：只新增 `kb_gov_items`、`kb_gov_versions` 兩張表，不重建既有的表；
@@ -660,7 +660,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **540 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **547 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -780,6 +780,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_doc_straighten_page_strip_e2e.py` | 掃描修正：**多頁 / 多檔的每一頁都要看得到**，而且模式切回去要真的切回去 |
 | `test_doc_straighten_quad_overlay_e2e.py` | 掃描修正的四邊形疊圖：**在真的瀏覽器裡真的畫得出來** |
 | `test_doc_translate.py` | 文件翻譯：產出**同格式、同版面**的檔案 |
+| `test_doc_translate_context_cap.py` | 文件翻譯依模型的上下文長度夾小一批的字數（2026-11-09 在推論機實測 4096 之後） |
 | `test_doc_translate_spreadsheet_view.py` | 試算表翻譯的兩件事：預覽要看得到東西、產出要開在內容的開頭 |
 | `test_docs_english_pages.py` | 介紹站與 API 手冊的英文版（GitHub Pages） |
 | `test_docs_lang_switch_is_restricted.py` | 介紹站的語言下拉只能跳到**同目錄的 `.html`** |
@@ -1027,6 +1028,10 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_oxoffice_msi_selection.py` | Windows 安裝時要真的挑得到 OxOffice 的 **64 位元** MSI |
 | `test_pages_boot_in_a_browser.py` | 每一頁都要在**真的瀏覽器**裡開得起來，而且主控台不可以有錯誤 |
 | `test_panel_gap_hidden_siblings.py` | 兩張卡片中間夾了看不見的元素時，間距照樣要在 |
+| `test_paper_backup_core.py` | 加密紙本備份：格式 JTPB v1 的核心模組（瀏覽器端） |
+| `test_paper_backup_offline_browser.py` | 加密紙本備份：離線還原包（雙擊打開的單一 HTML）真瀏覽器測試 |
+| `test_paper_backup_page_browser.py` | 加密紙本備份：真瀏覽器端到端 |
+| `test_paper_backup_tool.py` | 加密紙本備份：伺服器端只有頁面與不含秘密的稽核（建立 / 還原都在瀏覽器裡） |
 | `test_passwords.py` | Tests for app.core.passwords (scrypt hashing + policy). |
 | `test_path_traversal_audit.py` | Audit every tool router for unsafe path expressions. |
 | `test_pdf_annotations.py` | Tests for the pdf-annotations tool. |
@@ -1105,9 +1110,11 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_scheduled_export.py` | Scheduled settings export (v1.12.54). |
 | `test_script_line_endings.py` | Windows 批次檔一律 CRLF、Unix 腳本一律 LF |
 | `test_seal_flow.py` | 用印申請第 2 版：流程範本、申請、審核（規格第 4～7、14 節） |
+| `test_seal_multi_documents.py` | 用印申請：一件申請多份用印文件（分開蓋、分開下載；使用者 2026-11-09） |
 | `test_seal_policy.py` | 用印申請第 1 版：功能開關、每顆章的管制，以及所有用印入口一致擋下受管制的章 |
 | `test_seal_policy_entry_points.py` | 結構檢查：讀資產庫給使用者用的每一個函式，都要經過用印申請的管制判斷 |
 | `test_seal_request_admin_browser.py` | 設定 → 用印申請（真瀏覽器）：啟用、把章改成管制、用印工具看不到、還有管制的章時不能停用 |
+| `test_seal_request_icon_distinct.py` | 用印申請與「用印與簽名」工具的圖示要分得開（使用者 2026-11-09：兩個都在側欄，圖示不能一樣） |
 | `test_seal_request_page_browser.py` | 用印申請頁（真瀏覽器）：申請者建立 → 上傳 → 選章與位置 → 送出；審核者在「待我審核」核准 |
 | `test_seal_request_url_ids.py` | 用印申請頁：接進網址的編號一律先經過 `seg()`（驗證＋編碼） |
 | `test_seal_simulate_watermark.py` | 用印申請：沒啟用時先準備設定、流程模擬、流程附加浮水印（v1.17.32，使用者 2026-11-06） |
@@ -2233,6 +2240,32 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
       **不可以顯示成「沒有差異」**
 - [ ] Office 檔（.docx / .xlsx）在頁面模式下看到的是**轉檔後的版面**
 
+#### 加密紙本備份 (paper-backup) 🆕 v1.17.36
+- [ ] 啟用登入時一般使用者看不到、打 `/tools/paper-backup/` 被擋；管理員看得到；管理員在權限設定個別開放後才看得到。未啟用登入（單機）照常可用
+- [ ] 用 http（不是 HTTPS、也不是 127.0.0.1）開：顯示紅框說明，建立與還原都不出現，只給離線還原程式下載
+- [ ] 頁首「主文件＋分片 × N＝還原」說明，改份數 / 門檻時數字跟著變；要備份的內容同一處可以打字、貼文字、拖檔（拖檔後顯示檔名與「改用文字」）
+- [ ] 建立完每份 PDF 有預覽縮圖、點了放大；「全部下載（ZIP）」打開有主文件＋全部分片；每一頁頁尾與左邊界有浮水印（帳號、IP、站台、時間），沒有蓋到任何 QR
+- [ ] 建立（文字）：門檻 2 / 份數 3、密度中、A4 → 下載主文件 PDF＋3 份分片 PDF；主文件封面有備份 ID、門檻、區塊數、頁數，區塊頁每頁 12 個 QR、每個有「區塊 k / n」、四角定位記號；分片一頁：QR、16 組文字備援碼（4 組一行、有組號）、保管人簽收欄
+- [ ] 建立（檔案）：任選一個 50 KB 的檔可以；128 KB 以上被擋並說明；畫面上沒有「存成電子檔」（這支工具只做紙本）
+- [ ] 低密度 128 KB 隨機檔：說明超過 50 頁、建議提高密度或把內容縮小（不自動改）
+- [ ] HTTPS 下用「用相機掃描」對準螢幕上開著的 PDF 或印出的紙，讀到的自動加入、收齊後相機自動關
+- [ ] 一份分片故意不給、改手打它的文字備援碼：打錯一個字那一組立刻標紅；整段貼上自動分到 16 格；加入後可以還原
+- [ ] 混進另一組備份的分片 → 那一列寫「另一組備份，沒有算進來」；同一張掃兩次不重複計數
+- [ ] 讀進來的檔案一個一列（讀到主文件第幾塊、第幾份分片、問題）；按「移除」拿掉傳錯的那個 → 進度重算；原本跟它衝突而沒算進來的檔案自動恢復；手動輸入的分片、相機掃描也各一列可以移除
+- [ ] 還原成功後內容預設不顯示，按「顯示內容」才出現；「清除畫面上的資料」後畫面上看不到內容
+- [ ] 稽核紀錄有 `paper_backup_create` / `paper_backup_restore`（備份 ID、門檻、份數），**沒有標題、檔名、內容**
+- [ ] 下載離線還原程式 → 斷網、按兩下打開（Windows / macOS / Linux 的 Chrome、Edge、Firefox；macOS Safari）：自我測試通過；拖進上面那組的 PDF 與照片可以還原；工具頁顯示的 SHA-256 跟下載檔的 `sha256sum` 一樣
+- 瀏覽器：以 Chrome 為準（使用者 2026-11-10：「測過 chrome 夠了」）；網站頁面與離線還原程式（`file://`、斷網）都由自動化的真 Chrome 測試涵蓋。
+- 列印驗收以**匯出的 PDF 畫成圖片再掃回來**為準（使用者 2026-11-10：「不用驗，你有匯出 pdf 能掃回來就算」）：`test_printed_main_document_scans_back_completely`、`test_print_test_page_fits_one_page_scans_back_and_has_a_true_50mm_ruler`、`test_scanning_survives_real_world_damage`。實體列印與實拍不列為發版門檻。
+- [ ] 鍵盤操作：Tab 可以走到每個欄位與選擇卡、空白鍵選卡片、Enter 按「建立備份」；深色主題下文字與卡片看得清楚
+- [ ] **列印測試頁**：「列印前先試印 → 產生列印測試頁」→ 兩頁（A4 / Letter 都試）：第 1 頁大字「測試資料／不含機密」、三種密度各 3 個 QR、50 mm 尺規、紀錄欄、浮水印；第 2 頁示範備份（主文件＋2 份分片＋分片 2 的備援碼）。**用尺量**尺規剛好 50 mm；把它（或印出後的掃描檔）拖進「還原備份」→ 三種密度各 3 / 3、「還原驗證：成功」；故意遮住一個 → 顯示缺第幾個；第 2 份分片改用手打備援碼 → 一樣還原成功；正式備份的進度不受影響
+- 自動化（對照規格 05-acceptance）：
+  - `tests/test_paper_backup_core.py` —— F01 多行 Unicode 與全零檔案、F05 / C10 3 of 5 全部組合與 5 of 16 抽樣、F09 / F10 / C08 衝突與畸形資料、C03 竄改 nonce / 版本 / 標頭 / 密文 / tag、C05 亂數失敗不退回其他來源＋不准 `Math.random`、C06 每組新的 ID / nonce / 金鑰、C09 不猜組合、跨實作交叉驗證、固定測試向量、內建第三方檔案雜湊、P01 PDF 印出再掃回、P06 / P07 轉 90 / 180 度、歪 3 度、污漬、模糊、整頁遺失、浮水印不碰 QR、ZIP
+  - 列印測試頁（P03）：`test_print_test_page_fits_one_page_scans_back_and_has_a_true_50mm_ruler`（A4 / Letter 兩頁、9 個 QR 掃回、尺規 50 mm、第 2 頁示範備份掃回後真的還原出預期文字）、`pb_core_test.mjs` 的比對邏輯（缺、內容不符、重複、示範只有一份分片不算通過、示範主文件被改 → 還原驗證失敗）、瀏覽器測試的「產生 → 放回還原頁 → 全部正確、還原驗證成功、不算進正式備份」
+  - `tests/test_paper_backup_tool.py` —— 稽核白名單、相機只對這頁開、只給管理員、沒有收秘密的端點、S17 不經 MCP
+  - `tests/test_paper_backup_page_browser.py` —— 建立→下載→放回還原、預覽、ZIP、拖檔、S13 網路請求不含秘密且只連本站、S14 瀏覽器儲存區沒有殘留、手機 390 寬不溢出、P08 http 連線顯示紅框
+  - `tests/test_paper_backup_offline_browser.py` —— 離線包 `file://` 還原（PDF＋照片）、自我測試、竄改拒絕啟動、位元組固定
+
 ### 2.6 設定 (admin)
 
 #### 資產管理
@@ -2383,6 +2416,8 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
       用 Claude Code、Codex、OpenCode 各接一次（設定頁的範例照貼），走「上傳兩份 PDF → 合併 → 壓縮 → 下載到本機」，
       下載的檔案打開來頁數對、雜湊跟工具回的一致；`/mcp` 的 `tools/list` 只有固定的工具（`tests/test_mcp_server.py`、`tests/test_mcp_admin.py`）
 
+- [ ] **加密紙本備份的離線還原程式**（v1.17.36）：`/paper-backup/offline` 下載一個 HTML（附件、檔名帶版本與語言），`/paper-backup/offline.json` 回同一份的檔名、大小、SHA-256；啟用登入時要登入、但不需要工具權限；同一版本同一語言下載兩次位元組相同
+
 ### 2.7b 介紹站（GitHub Pages）
 - [ ] **資料保護與合規頁**（v1.16.71 上線、v1.16.74 改版）：首頁稽核那一節最下面有「資料保護與合規」說明框與按鈕、每一頁頁尾有連結。
       點進 `compliance.html`：頁首一句話（文件留在自己的伺服器）＋說明框寫明認證驗的是組織、本頁不是法律意見；
@@ -2532,7 +2567,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] Windows **沒有 `sudo`**：文件裡的指令要分平台寫
       （Linux/macOS `sudo jtdt update`；Windows 先開系統管理員 PowerShell）。
 
-## 4. API 覆蓋檢查 🆕（v1.8.55 起完整列出，現 52 個工具）
+## 4. API 覆蓋檢查 🆕（v1.8.55 起完整列出，現 53 個工具）
 
 每個工具至少 1 個 `/api/<tool-id>` endpoint（路徑：`/tools/<tool-id>/api/<tool-id>` 或 `/tools/<tool-id>/convert`）。發版前 curl 抽測：
 
@@ -2811,10 +2846,17 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `GET|POST /admin/seal-request/api/flows`、`PUT|DELETE /admin/seal-request/api/flows/{flow_id}`（v1.17.29）— 名稱、關卡（1～10 關、每關要有審核者、至少 N 人的 N 在 1～50）不合法 → 400 且沒存；未啟用 → 409；修改版本 +1；寫稽核 `seal_flow_change`
 - [ ] `GET /admin/seal-request/api/cases`、`POST /admin/seal-request/api/cases/{case_id}/reassign`（v1.17.29）— 總覽不含文件；改派原因必填、新審核者人數不夠 → 409；寫事件 `reassign` 與稽核 `seal_req_reassign`
 
+### 加密紙本備份（`paper-backup`）🆕 v1.17.36
+- [ ] `POST /tools/paper-backup/audit` — 只收 `action`、`backup_id`（16 個小寫十六進位）、`t`、`n`、`mode`、`density`、`blocks`、`ok`；多送任何欄位（標題、內容、分片）→ 400 而且沒有寫稽核；`t`/`n`/`blocks` 超出範圍、型別不對 → 400；成功寫 `paper_backup_create` / `paper_backup_restore`
+- [ ] `GET /paper-backup/offline` — 附件下載單一 HTML、標頭 `X-JTDT-SHA256`；不需工具權限、要登入（啟用登入時）；內容是固定的（同版同語言位元組相同）
+- [ ] `GET /paper-backup/offline.json` — `filename`、`size`、`sha256` 跟實際下載的那一份一致
+- 刻意**沒有**建立與還原的端點（主機不碰明文、金鑰與分片）：`tests/test_paper_backup_tool.py::test_server_has_no_endpoint_that_takes_secrets`
+
 ### 用印申請（使用者，`/seal-request/api/*`）🆕 v1.17.29
 - [ ] `GET /seal-request/api/home`、`GET /seal-request/api/flows/{flow_id}/assets` — 只列我能用的流程、我能申請的受管制章（沒有圖檔網址）
 - [ ] `GET|POST /seal-request/api/cases`、`GET|PUT|DELETE /seal-request/api/cases/{case_id}` — 清單 `mine` / `review` / `handled` / `all`（只有管理員、稽核員）；草稿以外不能刪；不是申請者不能改
 - [ ] `POST|GET /seal-request/api/cases/{case_id}/document`、`GET /seal-request/api/cases/{case_id}/pages/{page}` — 有開啟密碼、數位簽章、不是 PDF 也轉不了的檔被擋；下載是 attachment
+- [ ] `POST /seal-request/api/cases/{case_id}/documents`、`GET|DELETE /seal-request/api/cases/{case_id}/documents/{doc_id}`、`GET /seal-request/api/cases/{case_id}/documents/{doc_id}/pages/{page}` — 一件最多 20 份（第 21 份 400 `TOO_MANY_DOCS`）；移除一份連同標在上面的位置；別人的案件 / 不存在的 doc_id 404；`GET …/result` 多份時是 ZIP、`?doc=` 是單份 PDF
 - [ ] `POST /seal-request/api/cases/{case_id}/attachments`、`GET|DELETE /seal-request/api/cases/{case_id}/attachments/{att_id}` — 一律下載、`nosniff`；送出後不能改
 - [ ] `POST /seal-request/api/cases/{case_id}/submit` — 必填欄位、文件、章都要有；合格審核者不夠 → 409 `INSUFFICIENT_APPROVERS`
 - [ ] `POST /seal-request/api/cases/{case_id}/approve` — 只有輪到的審核者；申請者不能核准；同一人不能重複計票；狀態被別人改過回 409
@@ -3220,7 +3262,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 目前沒有自動化測試碰過，跑 `python tools/report_endpoint_test_coverage.py`，
 那份是**提示不是判決**。
 
-共 **322 支**（工具首頁不列，§2 已逐支驗收）。
+共 **325 支**（工具首頁不列，§2 已逐支驗收）。
 
 **全站（認證 / 帳號 / 工作區 / 介面語言）**
 
@@ -6318,6 +6360,34 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > **最高原則：加 i18n 不可以改壞現有功能。** 所以每一個階段的第一條驗收都是
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
+
+### 6.144 v1.17.36 — 加密紙本備份（**每次發版必過**）
+
+- [ ] 格式 JTPB v1 的固定測試向量永遠解得開（`app/tools/paper_backup/vectors-v1.json`，**不可重產覆蓋**）；跨實作交叉驗證（Python 獨立解碼器 ↔ 瀏覽器模組）兩個方向都過。
+- [ ] 內建的第三方檔案（shamir-secret-sharing 0.0.3、qrcode-generator 2.0.4）跟 `static/vendor/paper-backup-vendor.json` 的 SHA-256 一致。
+- [ ] 印出來的主文件與分片掃回來讀得齊、還原一字不差（三種密度）；離線還原程式用 `file://` 打開可以還原、改過一個字元就拒絕啟動。
+- [ ] 伺服器端沒有任何收明文 / 分片的端點；稽核只有備份 ID、門檻、份數。
+- 自動化：`tests/test_paper_backup_core.py`（AAD 綁定、檢查字權重兩處變異驗證過）、`tests/test_paper_backup_tool.py`、`tests/test_paper_backup_page_browser.py`、`tests/test_paper_backup_offline_browser.py`
+
+### 6.143 v1.17.35 — 用印申請：多份用印文件、申請頁版面（**每次發版必過**）
+
+- [ ] 申請頁分成「1. 申請內容／2. 用印文件／3. 申請的章與希望位置／4. 參考附件」四塊、每塊有圖示標題；儲存與送出在底部固定一排。
+- [ ] 用印文件用拖放框，一次拖進 2 份（PDF＋Word 各一）都列出來、各自可預覽與移除；預覽上方可以切換文件；第 21 份被擋。
+- [ ] 勾一顆章：每一份文件各先放一處（最後一頁右下）；可以改文件、頁、位置、加一處、移除。移除某份文件，標在上面的位置一起消失。
+- [ ] 保管人用印：每處有「文件」欄；某份文件一處都沒有時按確認用印會被擋並列出是哪一份；確認視窗逐份列出蓋在哪幾頁。
+- [ ] 完成後：每份各自下載（檔名「原檔名_用印.pdf」，同名自動加編號），「全部下載」是 ZIP；存到工作區每份各一個檔。
+- [ ] 送出後換掉任何一份文件（直接改檔）再用印：409 文件已變更，一份都沒蓋。
+- [ ] 升級前已完成 / 待用印的單一文件案件：照常預覽、用印、下載單一 PDF。
+- [ ] 案件畫面每張卡片之間都有間距（編輯與檢視兩種畫面；「申請內容」不可貼著上方標頭）。
+- [ ] 側欄、用印申請頁標題、設定 → 用印申請的圖示是「印章＋打勾」，跟「用印與簽名」工具的印章圖示不同（`tests/test_seal_request_icon_distinct.py`，側欄那處變異驗證過）。
+- [ ] 案件清單：點表頭排序（升冪 → 降冪 → 回到更新時間新到舊），箭頭跟著變；關鍵字、狀態、流程篩選可以疊加，顯示「顯示 N / M 件」，沒有符合時有說明，「清除篩選」回到全部。
+- 自動化：`tests/test_seal_multi_documents.py`（每份至少一處、逐份雜湊核對變異驗證過）、`tests/test_seal_request_page_browser.py`（兩份文件跑完申請、審核、用印、下載；卡片間距實量；清單三件的排序與篩選，排序方向變異驗證過）
+
+### 6.142 v1.17.34 — 文件翻譯依模型的上下文長度調整每批字數（**每次發版必過**）
+
+- [ ] LLM 接 Ollama、模型的上下文 4096（例如在設定頁建一個 4096 的版本）、管理設定每批 3,000 字：翻一份中文文件，服務記錄出現「一批字數 3000 → 1638」，結果每一段都有譯文、沒有大量對切重跑。
+- [ ] 模型上下文 131072（或經過閘道）：每批字數照管理設定，不變。
+- 自動化：`tests/test_doc_translate_context_cap.py`（接線與「預熱之後才讀」變異驗證過）
 
 ### 6.141 v1.17.32 — 用印申請：先準備設定、流程模擬、浮水印；無格線表單的填寫位置（**每次發版必過**）
 

@@ -54,7 +54,8 @@ def _granted_tool_ids(conn) -> set[str]:
 def test_every_registered_tool_reaches_a_fresh_install(legacy_install):
     """全新安裝一定要每支工具都有人拿得到（這是基準線，壞了先看這一條）。"""
     auth_db, _, _ = legacy_install
-    missing = _registered_tool_ids() - _granted_tool_ids(auth_db.conn())
+    from app.core.roles import ADMIN_ONLY_TOOL_IDS        # 刻意只給管理員的（理由寫在 roles.py）
+    missing = _registered_tool_ids() - _granted_tool_ids(auth_db.conn()) - set(ADMIN_ONLY_TOOL_IDS)
     assert not missing, f"全新安裝就有工具沒人拿得到：{sorted(missing)}"
 
 
@@ -87,7 +88,8 @@ def test_every_registered_tool_reaches_a_legacy_install(legacy_install):
     conn.commit()
     roles.seed_builtin_roles()
 
-    missing = tools - _granted_tool_ids(conn)
+    from app.core.roles import ADMIN_ONLY_TOOL_IDS        # 刻意只給管理員的（理由寫在 roles.py）
+    missing = tools - _granted_tool_ids(conn) - set(ADMIN_ONLY_TOOL_IDS)
     assert not missing, (
         f"這些工具在既有客戶升級後沒有任何角色拿得到：{sorted(missing)}\n"
         "新工具要嘛在 v1.12.53 之後的 seed 差集裡，要嘛需要一條 backfill "

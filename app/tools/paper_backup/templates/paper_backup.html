@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% import "components/paper_backup_msgs.html" as PBM with context %}
+{% block title %}{{ tr('加密紙本備份') }} · {{ app_name }}{% endblock %}
+{% block head %}
+{# 內建的分片函式庫裡有一個 bare import，用 importmap 指到同一目錄（檔案本身不改一個位元組） #}
+<script type="importmap" nonce="{{ request.state.csp_nonce }}">{"imports": {"shamir-secret-sharing/csprng": "/static/vendor/shamir-secret-sharing-0.0.3/csprng.js"}}</script>
+<style nonce="{{ request.state.csp_nonce }}">
+  #pbTool:not([hidden]) { display:flex; flex-direction:column; gap:16px; }
+  #pbCreate:not([hidden]), #pbRestore:not([hidden]) { display:flex; flex-direction:column; gap:16px; }
+  #pbTool .panel + .panel { margin-top:0; }
+  .pb-how { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .pb-how-item { flex:1 1 200px; display:flex; align-items:center; gap:10px; min-width:0; }
+  .pb-how-item .muted { font-size:12.5px; line-height:1.45; }
+  .pb-how-ic { flex:none; width:44px; height:44px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:var(--bg, #eef2ff); color:var(--primary, #2563eb); }
+  .pb-how-op { flex:none; font-size:22px; font-weight:700; color:var(--text-muted, #94a3b8); }
+  @media (max-width:640px) { .pb-how-op { display:none; } .pb-how-item { flex-basis:100%; } }
+  .pb-tabs { display:flex; gap:8px; flex-wrap:wrap; }
+  .pb-tab { display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border:1px solid var(--border, #d1d5db); border-radius:999px; background:var(--card, #fff); cursor:pointer; font-size:13px; }
+  .pb-tab.active { background:var(--primary, #2563eb); border-color:var(--primary, #2563eb); color:#fff; }
+  #pbSettings .form-row { align-items:flex-start; margin:12px 0; }
+  #pbSettings .form-row > label { padding-top:7px; }
+  #pbSettings .pb-f { flex:1 1 300px; min-width:0; display:flex; flex-direction:column; gap:4px; }
+  /* 站上 `.form-row .field` 會 flex 撐開；這裡欄位是直向排，要關掉，不然輸入框會被撐高、下拉撐滿整列 */
+  #pbSettings .pb-f > .field, #pbSettings .pb-f > .jt-select-wrap { flex:none; }
+  #pbSettings .pb-f > .jt-select-wrap, #pbSettings .pb-f .jt-select-trigger { width:220px; max-width:100%; }
+  #pbSettings .pb-wide { width:100%; max-width:440px; box-sizing:border-box; height:33px; }
+  #pbSettings .option-card { width:190px; min-width:0; box-sizing:border-box; }
+  #pbSettings .option-card .opt-desc { white-space:normal; overflow-wrap:anywhere; }
+  #pbSettings .pb-f > .muted { font-size:12.5px; line-height:1.5; }
+  @media (max-width:520px) { #pbSettings .option-card { width:calc(50% - 5px); } }
+  #pbText { width:100%; min-height:140px; box-sizing:border-box; font-family:ui-monospace, Menlo, Consolas, monospace; display:block; }
+  #pbText.drop-hover { outline:2px dashed var(--primary, #2563eb); outline-offset:-2px; background:#eff6ff; }
+  .pb-drop { display:flex; align-items:center; gap:10px; min-height:38px; padding:6px 12px; margin:0 0 8px; box-sizing:border-box;
+             border:1.5px dashed var(--border, #cbd5e1); border-radius:6px; background:var(--bg, #f8fafc); cursor:pointer; font-size:13px; color:var(--text-muted, #475569); }
+  .pb-drop:hover { border-color:var(--primary, #2563eb); }
+  .pb-drop.is-dragover { border-style:solid; border-color:#16a34a; background:#dcfce7; }
+  .pb-drop.has-file { border-style:solid; border-color:#16a34a; background:#f0fdf4; cursor:default; }
+  .pb-drop svg { flex:none; color:var(--primary, #2563eb); }
+  .pb-drop-text { flex:1; min-width:0; overflow-wrap:anywhere; }
+  .pb-drop-text b { color:var(--primary, #1e40af); }
+  .pb-drop-hint { color:var(--text-muted, #94a3b8); font-size:12px; margin-left:8px; }
+  .pb-drop .btn { flex:none; }
+  .pb-note { font-size:12.5px; color:var(--text-muted, #64748b); margin:4px 0 0; }
+  .pb-warn { border-left:4px solid #dc2626; background:#fef2f2; color:#991b1b; padding:10px 12px; border-radius:6px; font-size:13px; }
+  .pb-ok { border-left:4px solid #16a34a; background:#f0fdf4; color:#14532d; padding:10px 12px; border-radius:6px; font-size:13px; }
+  .pb-id { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:15px; font-weight:700; letter-spacing:.04em; }
+  .pb-files { list-style:none; margin:8px 0 0; padding:0; display:flex; flex-direction:column; gap:6px; }
+  .pb-files li { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border, #e5e7eb); border-radius:8px; }
+  .pb-thumbs { flex:1 1 100%; display:flex; flex-wrap:wrap; gap:8px; }
+  .pb-thumbs img { width:120px; height:auto; border:1px solid var(--border, #e5e7eb); border-radius:4px; background:#fff; cursor:zoom-in; box-shadow:0 1px 2px rgba(0,0,0,.06); }
+  .pb-thumbs .pb-more { align-self:center; font-size:12px; color:var(--text-muted, #64748b); }
+  #pbOfflineInfo { display:block; flex:1 1 100%; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:12px; overflow-wrap:anywhere; word-break:break-all; }
+  .pb-log li { overflow-wrap:anywhere; }
+  .pb-log .pb-src { display:flex; align-items:center; gap:10px; padding:8px 10px; margin-top:6px; border:1px solid var(--border, #e5e7eb); border-radius:8px; }
+  .pb-src-body { flex:1; min-width:0; }
+  .pb-src-name { font-weight:600; font-size:13px; overflow-wrap:anywhere; }
+  .pb-src-what { font-size:12.5px; color:var(--text-muted, #64748b); }
+  .pb-src-what.bad { color:#b91c1c; }
+  .pb-src .btn { flex:none; }
+  @media (max-width:640px) { .pb-drop-hint { display:block; margin-left:0; } }
+  .pb-files li .pb-fname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+  .pb-steps { margin:8px 0 0 18px; padding:0; font-size:13px; line-height:1.7; }
+  .pb-progress { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; }
+  .pb-meter { border:1px solid var(--border, #e5e7eb); border-radius:8px; padding:10px 12px; }
+  .pb-meter b { font-size:18px; }
+  .pb-bar { height:6px; border-radius:3px; background:var(--border, #e5e7eb); margin-top:6px; overflow:hidden; }
+  .pb-bar > span { display:block; height:100%; background:var(--primary, #2563eb); width:0; }
+  .pb-test { margin-top:10px; display:flex; flex-direction:column; gap:2px; }
+  .pb-log { list-style:none; margin:8px 0 0; padding:0; font-size:12.5px; }
+  .pb-log li { padding:2px 0; }
+  .pb-log .bad { color:#b91c1c; }
+  .pb-codes { display:grid; grid-template-columns:repeat(4, 112px); gap:8px; }
+  @media (max-width:520px) { .pb-codes { grid-template-columns:repeat(2, 1fr); } }
+  .pb-codes label { display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .pb-codes input { width:100%; box-sizing:border-box; font-family:ui-monospace, Menlo, Consolas, monospace; text-transform:uppercase; text-align:center; letter-spacing:.08em; padding:4px; }
+  .pb-codes input.good { border-color:#16a34a; background:#f0fdf4; }
+  .pb-codes input.bad { border-color:#dc2626; background:#fef2f2; }
+  .pb-codes .pb-gno { font-size:10.5px; color:var(--text-muted, #64748b); }
+  .pb-cam { position:relative; max-width:640px; }
+  .pb-cam video { width:100%; border-radius:8px; background:#000; }
+  #pbResultText { width:100%; min-height:100px; font-family:ui-monospace, Menlo, Consolas, monospace; }
+  .pb-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:10px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>{{ icon('paper-backup', size=22) }} {{ tr('加密紙本備份') }}<span class="tool-beta" title="{{ tr('試用中：功能還可能調整') }}">Beta</span></h1>
+<p class="muted">{{ tr('把密碼、金鑰等重要資料加密後印成 QR 紙本，金鑰拆成多份交給不同保管人，湊滿份數才能還原。全程在瀏覽器裡處理，主機看不到內容、金鑰與分片。') }}</p>
+
+<div class="panel pb-warn" id="pbInsecure" hidden>
+  {{ tr('目前的連線不是 HTTPS，瀏覽器不提供加解密功能，這個頁面不能建立或還原。請改用 HTTPS 開啟本站，或在本機以 127.0.0.1 開啟。') }}
+  {{ tr('要還原的話，也可以下載離線還原程式，在電腦上直接打開使用。') }}
+  <a href="/paper-backup/offline">{{ tr('下載離線還原程式') }}</a>
+</div>
+
+<div id="pbTool">
+  <div class="panel pb-how" aria-label="{{ tr('運作方式') }}">
+    <div class="pb-how-item">
+      <span class="pb-how-ic">{{ icon('lock', size=26) }}</span>
+      <div><b>{{ tr('主文件') }}</b><div class="muted">{{ tr('加密內容，像上鎖的保險箱') }}</div></div>
+    </div>
+    <span class="pb-how-op" aria-hidden="true">+</span>
+    <div class="pb-how-item">
+      <span class="pb-how-ic">{{ icon('id-card', size=26) }}</span>
+      <div><b id="pbHowShares"></b><div class="muted" id="pbHowSharesDesc"></div></div>
+    </div>
+    <span class="pb-how-op" aria-hidden="true">=</span>
+    <div class="pb-how-item">
+      <span class="pb-how-ic">{{ icon('unlock', size=26) }}</span>
+      <div><b>{{ tr('還原') }}</b><div class="muted" id="pbHowRestore"></div></div>
+    </div>
+  </div>
+  <div class="pb-tabs" role="tablist">
+    <button type="button" class="pb-tab active" data-tab="create" role="tab">{{ icon('plus', size=14) }} <span>{{ tr('建立備份') }}</span></button>
+    <button type="button" class="pb-tab" data-tab="restore" role="tab">{{ icon('reset', size=14) }} <span>{{ tr('還原備份') }}</span></button>
+  </div>
+
+  <!-- 建立 -->
+  <section id="pbCreate">
+    <div class="panel">
+      <h2>{{ icon('edit', size=18) }} {{ tr('1. 要備份的內容') }}</h2>
+      <label class="pb-drop" id="pbDrop" for="pbFileInput">
+        <input type="file" id="pbFileInput" hidden>
+        {{ icon('upload', size=16) }}
+        <span class="pb-drop-text" id="pbDropText"><b>{{ tr('點此挑選') }}</b>{{ tr('或拖曳檔案到此') }}<span class="pb-drop-hint">{{ tr('最多 128 KB') }}</span></span>
+        <button type="button" class="btn btn-small" id="pbFileClear" hidden>{{ icon('close', size=14) }} <span>{{ tr('改用文字') }}</span></button>
+      </label>
+      <textarea class="field" id="pbText" maxlength="131072" spellcheck="false" autocomplete="off" placeholder="{{ tr('直接輸入或貼上要備份的文字，或把檔案拖進來（例如：主機的復原金鑰、根憑證密碼、加密磁碟的還原碼）') }}"></textarea>
+      <p class="pb-note">{{ tr('內容只在這個瀏覽器裡加密，不會上傳到主機。') }}</p>
+    </div>
+
+    <div class="panel">
+      <h2>{{ icon('gear', size=18) }} {{ tr('2. 設定') }}</h2>
+      <div id="pbSettings">
+        <div class="form-row">
+          <label for="pbLabel">{{ tr('印在紙上的標題') }}</label>
+          <div class="pb-f">
+            <input class="field pb-wide" id="pbLabel" maxlength="60" autocomplete="off" placeholder="{{ tr('例如：機房伺服器復原金鑰') }}">
+            <div class="muted">{{ tr('標題會以明文印在每一張紙上，不要寫秘密本身。') }}</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <label for="pbN">{{ tr('分片份數') }}</label>
+          <div class="pb-f">
+            <select class="field" id="pbN"></select>
+            <div class="muted">{{ tr('金鑰拆成幾份、交給幾位保管人') }}</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <label for="pbT">{{ tr('還原需要') }}</label>
+          <div class="pb-f">
+            <select class="field" id="pbT"></select>
+            <div class="muted">{{ tr('湊到這麼多份（任哪幾份都可以）才能還原；少一份都看不到內容') }}</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>{{ tr('QR 密度') }}</label>
+          <div class="pb-f">
+            <div class="option-cards">
+              <label class="option-card">
+                <span class="opt-ic">{{ icon('qr', size=22) }}</span>
+                <span class="opt-label">{{ tr('低') }}</span>
+                <span class="opt-desc">{{ tr('最好掃，頁數較多') }}</span>
+                <input type="radio" name="pbDensity" value="low">
+              </label>
+              <label class="option-card">
+                <span class="opt-ic">{{ icon('qr', size=22) }}</span>
+                <span class="opt-label">{{ tr('中（建議）') }}</span>
+                <span class="opt-desc">{{ tr('一般印表機與手機都穩') }}</span>
+                <input type="radio" name="pbDensity" value="medium" checked>
+              </label>
+              <label class="option-card">
+                <span class="opt-ic">{{ icon('qr', size=22) }}</span>
+                <span class="opt-label">{{ tr('高') }}</span>
+                <span class="opt-desc">{{ tr('頁數最少，要清晰的列印') }}</span>
+                <input type="radio" name="pbDensity" value="high">
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <label for="pbPaper">{{ tr('紙張') }}</label>
+          <div class="pb-f">
+            <select class="field" id="pbPaper">
+              <option value="a4" selected>A4</option>
+              <option value="letter">Letter</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="pb-actions">
+        <button type="button" class="btn btn-primary" id="pbMake">{{ icon('paper-backup', size=14) }} <span>{{ tr('建立備份') }}</span></button>
+        <span class="muted" id="pbMakeMsg" aria-live="polite"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>{{ icon('printer', size=18) }} {{ tr('列印前先試印') }}</h2>
+      <p class="pb-note">{{ tr('第一次使用、或換了印表機與紙張時，先印一張測試頁（不含任何秘密）：量量看尺規是不是剛好 50 mm，再到「還原備份」掃描，確認三種密度的 QR 都讀得到。') }}</p>
+      <div class="pb-actions">
+        <button type="button" class="btn" id="pbTestMake">{{ icon('printer', size=14) }} <span>{{ tr('產生列印測試頁') }}</span></button>
+        <span class="muted" id="pbTestMsg" aria-live="polite"></span>
+      </div>
+      <ul class="pb-files" id="pbTestFiles"></ul>
+    </div>
+
+    <div class="panel" id="pbMade" hidden>
+      <h2>{{ icon('check', size=18) }} {{ tr('3. 下載並列印') }}</h2>
+      <p>{{ tr('備份 ID') }}：<span class="pb-id" id="pbMadeId"></span></p>
+      <div class="pb-actions">
+        <a class="btn btn-primary" id="pbZip" href="#">{{ icon('download', size=14) }} <span>{{ tr('全部下載（ZIP）') }}</span></a>
+      </div>
+      <p class="pb-note">{{ tr('主文件和全部分片都在這一包裡：交付時要拆開給不同保管人，交付後把這個 ZIP 刪掉。') }}</p>
+      <ul class="pb-files" id="pbMadeFiles"></ul>
+      <ol class="pb-steps">
+        <li>{{ tr('用信任的印表機以「實際大小」單面列印，不要縮放、不要省墨模式。') }}</li>
+        <li>{{ tr('列印後到「還原備份」掃描一次，確認每一張都讀得出來。') }}</li>
+        <li>{{ tr('每一份分片交給不同保管人、分開存放；分片不要跟主文件放在一起。') }}</li>
+        <li>{{ tr('下載的 PDF 檔與印表機佇列都要刪掉；失敗、卡紙的紙張依機密文件銷毀。') }}</li>
+      </ol>
+      <div class="pb-actions">
+        <button type="button" class="btn" id="pbClear">{{ icon('trash', size=14) }} <span>{{ tr('清除畫面上的資料') }}</span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 還原 -->
+  <section id="pbRestore" hidden>
+    <div class="panel">
+      <h2>{{ icon('upload', size=18) }} {{ tr('1. 讀取主文件與分片') }}</h2>
+      <p class="pb-note">{{ tr('拖進掃描的 PDF 或照片，可以一次多個、不分順序；檔案只在這個瀏覽器裡讀取，不會上傳。') }}</p>
+      {% with upload_id='pbScanUp', accept='.pdf,.png,.jpg,.jpeg,.webp', multiple=True, hint=tr('PDF、PNG 或 JPG') %}
+        {% include "components/file_upload.html" %}
+      {% endwith %}
+      <div class="pb-actions">
+        <button type="button" class="btn" id="pbCamOn">{{ icon('qr', size=14) }} <span>{{ tr('用相機掃描') }}</span></button>
+        <button type="button" class="btn" id="pbCamOff" hidden>{{ icon('close', size=14) }} <span>{{ tr('關閉相機') }}</span></button>
+        <span class="muted" id="pbCamMsg" aria-live="polite"></span>
+      </div>
+      <div class="pb-cam" id="pbCamBox" hidden><video id="pbVideo" playsinline muted></video></div>
+      <div class="pb-test" id="pbTestResult" hidden></div>
+      <ul class="pb-log" id="pbLog" aria-live="polite"></ul>
+    </div>
+
+    <div class="panel">
+      <h2>{{ icon('edit', size=18) }} {{ tr('2. 手動輸入分片的文字備援碼') }}</h2>
+      <p class="pb-note">{{ tr('QR 掃不出來時，照分片紙上印的 16 組、每組 6 字輸入；每一組打完會立刻檢查，打錯的那一組會以紅色標示。也可以整段貼上。') }}</p>
+      <div class="pb-codes" id="pbCodes"></div>
+      <div class="pb-actions">
+        <button type="button" class="btn btn-small" id="pbCodeAdd">{{ icon('plus', size=14) }} <span>{{ tr('加入這份分片') }}</span></button>
+        <button type="button" class="btn btn-small" id="pbCodeClear">{{ icon('close', size=14) }} <span>{{ tr('清空') }}</span></button>
+        <span class="muted" id="pbCodeMsg" aria-live="polite"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>{{ icon('list', size=18) }} {{ tr('3. 進度') }}</h2>
+      <p id="pbProgId" class="muted"></p>
+      <div class="pb-progress">
+        <div class="pb-meter"><div>{{ tr('主文件區塊') }}</div><b id="pbProgMain">0 / ?</b><div class="pb-bar"><span id="pbBarMain"></span></div><p class="pb-note" id="pbProgMiss"></p></div>
+        <div class="pb-meter"><div>{{ tr('分片') }}</div><b id="pbProgShare">0 / ?</b><div class="pb-bar"><span id="pbBarShare"></span></div><p class="pb-note" id="pbProgShareNos"></p></div>
+      </div>
+      <div class="pb-actions">
+        <button type="button" class="btn btn-primary" id="pbRestoreGo" disabled>{{ icon('reset', size=14) }} <span>{{ tr('還原') }}</span></button>
+        <button type="button" class="btn" id="pbRestoreReset">{{ icon('trash', size=14) }} <span>{{ tr('全部重來') }}</span></button>
+        <span class="muted" id="pbRestoreMsg" aria-live="polite"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>{{ icon('download', size=18) }} {{ tr('離線還原程式') }}</h2>
+      <p class="pb-note">{{ tr('一個 HTML 檔，在電腦上直接打開就能還原，不需要連網、也不需要這台主機。建議跟紙本一起保管一份（例如隨身碟），並記下 SHA-256 以便日後核對。') }}</p>
+      <div class="pb-actions">
+        <a class="btn" href="/paper-backup/offline" id="pbOfflineDl">{{ icon('download', size=14) }} <span>{{ tr('下載離線還原程式') }}</span></a>
+        <span class="muted" id="pbOfflineInfo"></span>
+      </div>
+    </div>
+
+    <div class="panel" id="pbResult" hidden>
+      <h2>{{ icon('check', size=18) }} {{ tr('4. 還原結果') }}</h2>
+      <p class="pb-ok" id="pbResultMeta"></p>
+      <div id="pbResultTextBox" hidden>
+        <textarea class="field" id="pbResultText" readonly spellcheck="false"></textarea>
+      </div>
+      <div class="pb-actions">
+        <button type="button" class="btn" id="pbResultShow">{{ icon('eye', size=14) }} <span>{{ tr('顯示內容') }}</span></button>
+        <button type="button" class="btn" id="pbResultCopy" hidden>{{ icon('copy', size=14) }} <span>{{ tr('複製') }}</span></button>
+        <button type="button" class="btn btn-primary" id="pbResultSave">{{ icon('download', size=14) }} <span>{{ tr('下載') }}</span></button>
+        <button type="button" class="btn" id="pbResultClear">{{ icon('trash', size=14) }} <span>{{ tr('清除畫面上的資料') }}</span></button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<template id="pbIcons"><span data-pb-ic="download">{{ icon('download', size=14) }}</span><span data-pb-ic="trash">{{ icon('trash', size=14) }}</span></template>
+
+{# 給模組用的文字（介面語言）。PDF 版面上的字也從這裡來。 #}
+<script type="application/json" id="pbText18n" nonce="{{ request.state.csp_nonce }}">{{ {
+  'L': {
+    'mainTitle': tr('加密紙本備份 · 主文件'),
+    'fieldId': tr('備份 ID：{0}'),
+    'fieldThreshold': tr('需要分片：{1} 份中任 {0} 份'),
+    'fieldBlocks': tr('主文件：{0} 個區塊，共 {1} 頁（含本頁）'),
+    'fieldFormat': tr('格式：JTPB v1 · QR 密度：{0}'),
+    'density_low': tr('低'), 'density_medium': tr('中'), 'density_high': tr('高'),
+    'fieldCreated': tr('建立日期：{0}'),
+    'pageOf': tr('第 {0} / {1} 頁'),
+    'mainHelp': [tr('還原時需要：這份主文件的全部頁面，加上門檻份數的分片。'),
+                 tr('用本站「加密紙本備份 → 還原備份」掃描，或用離線還原程式（不需連網）。'),
+                 tr('區塊不分順序，缺任何一塊都無法還原；請保留全部頁面。')],
+    'mainWarn': [tr('主文件是加密過的，單獨拿到看不到內容；但不要跟分片放在一起。'),
+                 tr('不要折到、釘到或塗寫 QR；用實際大小列印、不要縮放。')],
+    'mainHeader': tr('主文件 · 備份 ID {0} · JTPB v1 · 第 {1} / {2} 頁'),
+    'blockLabel': tr('區塊 {0} / {1}'),
+    'shareTitle': tr('加密紙本備份 · 分片 {0} / {1}'),
+    'codeTitle': tr('文字備援碼（QR 讀不出來時手動輸入）'),
+    'shareHelp': [tr('這是金鑰的一份分片。單獨一份無法還原，也看不出任何內容。'),
+                  tr('還原時需要主文件，加上門檻份數的不同分片。')],
+    'shareWarn': [tr('請妥善保管，不要跟主文件或其他分片放在一起；不要拍照上傳或用雲端掃描。')],
+    'signCustodian': tr('保管人'), 'signDate': tr('交付日期'), 'signName': tr('簽名'),
+    'watermark': tr('產生資訊：{0} · IP {1} · 站台 {2} · {3}'),
+    'testBanner': tr('測試資料／不含機密 · 加密紙本備份列印測試頁'),
+    'testHelp': [tr('用「實際大小」單面列印這一頁；量下方尺規，應該剛好 50 mm。建立日期：{0}'),
+                 tr('印好後到「加密紙本備份 → 還原備份」掃描兩頁：三種密度共 9 個 QR 都要讀得到，第 2 頁的示範備份要還原成功。')],
+    'testQrLabel': tr('{0}密度（{1} mm）· {2} / {3}'),
+    'testRuler': tr('← 這段應該剛好 50 mm；量起來不是的話，列印時有被縮放'),
+    'testDemoHelp': [tr('第 2 頁：還原驗證。下面是一組公開的示範備份（主文件 1 個 QR、分片 2 份，需要 2 份），不是秘密。'),
+                     tr('掃描時會真的重組金鑰並解密，解出的文字對了才算通過；也可以不掃第 2 份分片，改手打下面的備援碼，測手動輸入。')],
+    'testDemoMain': tr('示範主文件 1 / 1'),
+    'testDemoShare': tr('示範分片 {0} / {1}'),
+    'testDemoCode': tr('示範分片 2 的文字備援碼（測手動輸入用）'),
+    'testFields': [tr('印表機型號'), tr('紙張'), tr('列印設定（實際大小、單面）'), tr('量到的尺規長度'), tr('掃描方式與結果'), tr('日期與簽名')],
+    'anonymous': tr('（未登入）'),
+  },
+  'M': PBM.M,
+  'ctx': pb_ctx,
+}|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/vendor/jsqr/jsQR.js" nonce="{{ request.state.csp_nonce }}"></script>
+<script src="/static/js/file_upload.js" nonce="{{ request.state.csp_nonce }}"></script>
+<script src="/static/js/custom_select.js" nonce="{{ request.state.csp_nonce }}"></script>
+<script src="/static/js/lightbox.js" nonce="{{ request.state.csp_nonce }}"></script>
+<script type="module" src="/static/js/paper_backup/pb_page.mjs" nonce="{{ request.state.csp_nonce }}"></script>
+{% endblock %}

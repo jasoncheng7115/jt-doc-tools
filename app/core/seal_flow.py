@@ -72,6 +72,7 @@ MESSAGES = {
     "ENCRYPTED": "這份 PDF 有開啟密碼，請先用「PDF 密碼解除」解開再上傳",
     "SIGNED": "這份 PDF 已有數位簽章，用印會讓簽章失效，不能送用印申請",
     "TOO_MANY_PAGES": "文件頁數太多",
+    "TOO_MANY_DOCS": "一件申請最多 20 份用印文件",
     "NO_ASSETS": "請至少選一顆要用的章",
     "ASSET_NOT_ALLOWED": "這顆章你不能申請，或不適用這個流程",
     "BAD_PLACEMENT": "用印位置的設定不正確",
@@ -517,7 +518,7 @@ def _ensure_pending(case: dict) -> Path:
         prev = S.version_dir(case["id"], int(case["version"])) if case["version"] else None
         if prev is not None and prev.exists():
             # 只帶送審的東西（文件、附件、說明）；預覽快取與用印後的 PDF 不帶
-            shutil.copytree(prev, pd, ignore=shutil.ignore_patterns("previews", "stamped.pdf"))
+            shutil.copytree(prev, pd, ignore=shutil.ignore_patterns("previews", "stamped.pdf", STAMPED_DIR))
         else:
             pd.mkdir(parents=True, exist_ok=True)
     return pd
@@ -546,22 +547,6 @@ def check_pdf(path: Path) -> int:
         doc.close()
 
 
-def doc_info(case: dict, version: Optional[int] = None) -> Optional[dict]:
-    """某一版（預設：編輯中那份，沒有就最新正式版）的文件資訊。"""
-    if version is None:
-        d = pending_dir(case)
-        if not (d / DOC_NAME).exists() and case["version"]:
-            d = S.version_dir(case["id"], case["version"])
-    else:
-        d = S.version_dir(case["id"], version)
-    p = d / DOC_NAME
-    if not p.exists():
-        return None
-    meta = _read_meta(d)
-    return {"path": p, "dir": d, "name": meta.get("doc_name") or DOC_NAME, "pages": int(meta.get("pages") or 0),
-            "page_sizes": meta.get("page_sizes") or []}
-
-
 def _read_meta(d: Path) -> dict:
     import json
     try:
@@ -575,25 +560,166 @@ def _write_meta(d: Path, meta: dict) -> None:
     atomic_json.write_json(d / "meta.json", meta, mode=0o600)
 
 
-def put_document(user: dict, case: dict, src_pdf: Path, doc_name: str) -> dict:
-    """把（已轉好的）PDF 放進編輯中那份。只有申請者、只有草稿或待補件。"""
+#: 一件申請最多幾份用印文件（分開蓋、分開下載）
+MAX_DOCS = 20
+DOCS_DIR = "docs"
+STAMPED_DIR = "stamped"
+#: 舊資料（只有一份 `document.pdf`）那一份的編號
+LEGACY_DOC_ID = "main"
+_DOC_ID = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+
+
+def _doc_entries(d: Path) -> list[dict]:
+    """這個目錄（某一版或編輯中那份）的文件清單。舊資料只有 `document.pdf` → 當成一份（`main`）。"""
+    meta = _read_meta(d)
+    docs = meta.get("docs")
+    if isinstance(docs, list) and "docs" in meta:
+        return [dict(x) for x in docs if isinstance(x, dict) and _DOC_ID.match(str(x.get("id") or ""))]
+    if (d / DOC_NAME).exists():
+        return [{"id": LEGACY_DOC_ID, "name": meta.get("doc_name") or DOC_NAME, "pages": int(meta.get("pages") or 0),
+                 "page_sizes": meta.get("page_sizes") or [], "file": DOC_NAME}]
+    return []
+
+
+def _doc_path(d: Path, entry: dict) -> Path:
+    f = entry.get("file") or f"{DOCS_DIR}/{entry['id']}.pdf"
+    if f not in (DOC_NAME, f"{DOCS_DIR}/{entry['id']}.pdf"):       # 只認這兩種，不讓 meta 指到別處
+        f = f"{DOCS_DIR}/{entry['id']}.pdf"
+    return d / f
+
+
+def _docs_dir(case: dict, version: Optional[int] = None) -> Path:
+    """某一版的目錄；沒指定＝編輯中那份（已經建立的話），否則最新正式版。"""
+    if version is not None:
+        return S.version_dir(case["id"], version)
+    pd = pending_dir(case)
+    if pd.exists() or not case["version"]:
+        return pd
+    return S.version_dir(case["id"], case["version"])
+
+
+def documents(case: dict, version: Optional[int] = None) -> list[dict]:
+    """用印文件清單：每份 `{id, name, pages, page_sizes, path, dir}`（檔案不在的不列）。"""
+    d = _docs_dir(case, version)
+    out = []
+    for e in _doc_entries(d):
+        path = _doc_path(d, e)
+        if path.exists():
+            out.append({"id": e["id"], "name": e.get("name") or DOC_NAME, "pages": int(e.get("pages") or 0),
+                        "page_sizes": e.get("page_sizes") or [], "path": path, "dir": d})
+    return out
+
+
+def document(case: dict, doc_id: Optional[str], version: Optional[int] = None) -> dict:
+    """一份文件；`doc_id` 沒給＝第一份。找不到丟 NOT_FOUND。"""
+    docs = documents(case, version)
+    if not docs:
+        raise FlowError("NO_DOCUMENT", 404)
+    if doc_id is None:
+        return docs[0]
+    for d in docs:
+        if d["id"] == doc_id:
+            return d
+    raise FlowError("NOT_FOUND", 404)
+
+
+def doc_info(case: dict, version: Optional[int] = None) -> Optional[dict]:
+    """第一份文件（舊介面相容）。"""
+    docs = documents(case, version)
+    return docs[0] if docs else None
+
+
+def version_docs(version: Optional[dict]) -> list[dict]:
+    """某一版送出時凍結的文件清單 `[{id, name, sha256, pages}]`；舊版本用 doc_* 補成一份。"""
+    if not version:
+        return []
+    docs = version.get("documents") or []
+    if docs:
+        return docs
+    return [{"id": LEGACY_DOC_ID, "name": version.get("doc_name") or DOC_NAME,
+             "sha256": version.get("doc_sha256") or "", "pages": int(version.get("doc_pages") or 0)}]
+
+
+def _materialize_docs(meta: dict, pd: Path) -> list[dict]:
+    """把舊格式（只有 document.pdf）轉成清單寫進 meta（檔案不搬，`file` 指回 document.pdf）。"""
+    if "docs" not in meta:
+        meta["docs"] = [{k: v for k, v in e.items()} for e in _doc_entries(pd)]
+    return meta["docs"]
+
+
+def _pdf_sizes(src_pdf: Path) -> list:
+    import fitz
+    with fitz.open(str(src_pdf)) as doc:
+        return [[round(p.rect.width * 25.4 / 72, 2), round(p.rect.height * 25.4 / 72, 2)] for p in doc]
+
+
+def _editable_by(user: dict, case: dict) -> None:
     _require_applicant(user, case)
     if case["state"] not in EDITABLE:
         raise FlowError("BAD_STATE", 409)
+
+
+def add_document(user: dict, case: dict, src_pdf: Path, doc_name: str) -> dict:
+    """加一份（已轉好的）PDF 到編輯中那份（排在最後）。只有申請者、只有草稿或待補件。"""
+    import secrets
+    _editable_by(user, case)
     if src_pdf.stat().st_size > MAX_DOC_BYTES:
         raise FlowError("DOC_TOO_LARGE")
     pages = check_pdf(src_pdf)
-    import fitz
-    with fitz.open(str(src_pdf)) as doc:
-        sizes = [[round(p.rect.width * 25.4 / 72, 2), round(p.rect.height * 25.4 / 72, 2)] for p in doc]
+    sizes = _pdf_sizes(src_pdf)
     pd = _ensure_pending(case)
-    shutil.copyfile(src_pdf, pd / DOC_NAME)
-    shutil.rmtree(pd / "previews", ignore_errors=True)
     meta = _read_meta(pd)
-    meta.update({"doc_name": _safe_name(doc_name or DOC_NAME, ".pdf"), "pages": pages, "page_sizes": sizes})
+    docs = _materialize_docs(meta, pd)
+    if len(docs) >= MAX_DOCS:
+        raise FlowError("TOO_MANY_DOCS")
+    taken = {d["id"] for d in docs}
+    did = secrets.token_hex(4)
+    while did in taken or did == LEGACY_DOC_ID:
+        did = secrets.token_hex(4)
+    (pd / DOCS_DIR).mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src_pdf, pd / DOCS_DIR / f"{did}.pdf")
+    docs.append({"id": did, "name": _safe_name(doc_name or DOC_NAME, ".pdf"), "pages": pages, "page_sizes": sizes})
     _write_meta(pd, meta)
-    # 頁數變了，超出範圍的位置作廢
-    keep = [p for p in case["placements"] if 1 <= int(p.get("page", 0)) <= pages]
+    return S.get_case(case["id"]) or case
+
+
+def remove_document(user: dict, case: dict, doc_id: str) -> dict:
+    """移除一份文件，連同標在那一份上的位置。"""
+    _editable_by(user, case)
+    pd = _ensure_pending(case)
+    meta = _read_meta(pd)
+    docs = _materialize_docs(meta, pd)
+    hit = next((d for d in docs if d.get("id") == doc_id), None)
+    if hit is None:
+        raise FlowError("NOT_FOUND", 404)
+    first = docs[0]["id"] if docs else None
+    path = _doc_path(pd, hit)
+    meta["docs"] = [d for d in docs if d is not hit]
+    _write_meta(pd, meta)
+    path.unlink(missing_ok=True)
+    shutil.rmtree(pd / "previews", ignore_errors=True)
+    keep = [p for p in case["placements"] if (p.get("doc") or first) != doc_id]
+    if keep != case["placements"]:
+        case = S.update_case(case["id"], case["rev"], placements=keep) or S.get_case(case["id"])
+    return S.get_case(case["id"]) or case
+
+
+def put_document(user: dict, case: dict, src_pdf: Path, doc_name: str) -> dict:
+    """舊介面（`POST /document`）：把文件**整份換成這一份**；位置保留頁數範圍內的、改指向新文件。"""
+    _editable_by(user, case)
+    if src_pdf.stat().st_size > MAX_DOC_BYTES:
+        raise FlowError("DOC_TOO_LARGE")
+    pages = check_pdf(src_pdf)
+    pd = _ensure_pending(case)
+    meta = _read_meta(pd)
+    for d in _materialize_docs(meta, pd):
+        _doc_path(pd, d).unlink(missing_ok=True)
+    meta["docs"] = []
+    _write_meta(pd, meta)
+    shutil.rmtree(pd / "previews", ignore_errors=True)
+    case = add_document(user, S.get_case(case["id"]) or case, src_pdf, doc_name)
+    new_id = documents(case)[-1]["id"]
+    keep = [{**p, "doc": new_id} for p in case["placements"] if 1 <= int(p.get("page", 0)) <= pages]
     if keep != case["placements"]:
         case = S.update_case(case["id"], case["rev"], placements=keep) or S.get_case(case["id"])
     return case
@@ -729,18 +855,23 @@ def update_draft(user: dict, case: dict, body: Any) -> dict:
 
 
 def _clean_placements(case: dict, raw: Any, assets: list[str]) -> list[dict]:
+    """申請者標的希望位置。每處要指定哪一份文件（`doc`，沒給＝第一份）、第幾頁、哪個位置。"""
     from .asset_manager import asset_manager
-    info = doc_info(case)
-    pages = info["pages"] if info else 0
-    sizes = info["page_sizes"] if info else []
+    docs = {d["id"]: d for d in documents(case)}
+    first = next(iter(docs), None)
     if not isinstance(raw, list) or len(raw) > 200:
         raise FlowError("BAD_PLACEMENT")
     out = []
     for p in raw:
         if not isinstance(p, dict) or p.get("asset_id") not in assets or p.get("position") not in POSITIONS:
             raise FlowError("BAD_PLACEMENT")
+        did = p.get("doc") or first
+        doc = docs.get(did) if isinstance(did, str) else None
+        if doc is None:
+            raise FlowError("BAD_PLACEMENT")
+        pages, sizes = doc["pages"], doc["page_sizes"]
         page = p.get("page")
-        if not isinstance(page, int) or isinstance(page, bool) or not 1 <= page <= max(pages, 1) or not pages:
+        if not isinstance(page, int) or isinstance(page, bool) or not 1 <= page <= pages:
             raise FlowError("BAD_PLACEMENT")
         a = asset_manager.get(p["asset_id"])
         w = float(a.preset.width_mm) if a else 40.0
@@ -751,7 +882,7 @@ def _clean_placements(case: dict, raw: Any, assets: list[str]) -> list[dict]:
              "center": (pw - w) / 2, "custodian": (pw - w) / 2}[pos]
         y = {"br": ph - MARGIN_MM - h, "bl": ph - MARGIN_MM - h, "tr": MARGIN_MM, "tl": MARGIN_MM,
              "center": (ph - h) / 2, "custodian": (ph - h) / 2}[pos]
-        out.append({"asset_id": p["asset_id"], "page": page, "position": pos,
+        out.append({"asset_id": p["asset_id"], "doc": did, "page": page, "position": pos,
                     "x_mm": round(max(0.0, x), 1), "y_mm": round(max(0.0, y), 1),
                     "width_mm": round(w, 1), "height_mm": round(h, 1)})
     return out
@@ -796,15 +927,16 @@ def submit(user: dict, case: dict) -> dict:
         raise FlowError("FLOW_NOT_FOUND", 404)
     # 退回後沒改任何東西就重送：編輯中那份還沒建立，先從上一版複製（文件、附件照舊）
     pd = _ensure_pending(case) if case["version"] else pending_dir(case)
-    info = doc_info(case)
-    if info is None or not (pd / DOC_NAME).exists():
+    docs = documents(case)
+    if not docs:
         raise FlowError("NO_DOCUMENT")
     if not case["assets"]:
         raise FlowError("NO_ASSETS")
     allowed = {a.id for a in requestable_assets(user["id"], flow)}
     if any(a not in allowed for a in case["assets"]):
         raise FlowError("ASSET_NOT_ALLOWED")
-    check_pdf(pd / DOC_NAME)
+    for d in docs:
+        check_pdf(d["path"])
     stages = _freeze_stages(flow, user["id"])
     assets = []
     for aid in case["assets"]:
@@ -813,9 +945,11 @@ def submit(user: dict, case: dict) -> dict:
                        "sha256": sha256_file(asset_manager.file_path(a))})
     meta = _read_meta(pd)
     new_v = int(case["version"]) + 1
-    ver = {"version": new_v, "flow_version": flow["version"], "doc_name": meta.get("doc_name") or DOC_NAME,
-           "doc_sha256": sha256_file(pd / DOC_NAME), "doc_pages": info["pages"], "assets": assets,
-           "placements": case["placements"], "stages": stages, "attachments": meta.get("attachments") or [],
+    vdocs = [{"id": d["id"], "name": d["name"], "sha256": sha256_file(d["path"]), "pages": d["pages"]} for d in docs]
+    ver = {"version": new_v, "flow_version": flow["version"], "doc_name": vdocs[0]["name"],
+           "doc_sha256": vdocs[0]["sha256"], "doc_pages": vdocs[0]["pages"], "documents": vdocs, "assets": assets,
+           "placements": [{**pl, "doc": pl.get("doc") or vdocs[0]["id"]} for pl in case["placements"]],
+           "stages": stages, "attachments": meta.get("attachments") or [],
            "fields": {k: case.get(k) or "" for k in S.CASE_FIELDS},
            "watermark": flow.get("watermark") or {}}
     c = S.conn()
@@ -1115,6 +1249,7 @@ MESSAGES.update({
     "ASSET_CHANGED": "印章圖在核准之後被換過，不能用印，請退回申請者重送",
     "ASSET_MISSING": "核准的章已經不在資產庫裡，不能用印",
     "SEAL_NOT_USED": "每一顆核准的章至少要蓋一處",
+    "DOC_NOT_STAMPED": "每一份用印文件至少要蓋一處",
     "WATERMARK_MISSING": "流程設定的浮水印圖已經從資產庫刪除，無法用印；請管理員修改流程後請申請者重新送出",
     "NOT_DONE": "這件申請還沒有用印完成",
     "VOIDED": "這件申請已作廢，不能取件",
@@ -1179,41 +1314,51 @@ def custodian_return(user: dict, case: dict, comment: str) -> dict:
 
 
 def _clean_final(case: dict, version: dict, raw: Any) -> list[dict]:
+    """保管人確定的位置。每處指定文件（`doc`，沒給＝第一份）、頁、座標；每顆核准的章、每份文件都至少一處。"""
     if not isinstance(raw, list) or not raw or len(raw) > MAX_FINAL_PLACEMENTS:
         raise FlowError("BAD_PLACEMENT")
     allowed = {a["asset_id"] for a in version["assets"]}
-    info = doc_info(case, int(case["version"]))
-    sizes = info["page_sizes"] if info else []
+    vdocs = {d["id"]: d for d in version_docs(version)}
+    sizes = {d["id"]: d["page_sizes"] for d in documents(case, int(case["version"]))}
+    first = next(iter(vdocs), None)
     out = []
     for p in raw:
         if not isinstance(p, dict) or p.get("asset_id") not in allowed:
             raise FlowError("BAD_PLACEMENT")
+        did = p.get("doc") or first
+        if not isinstance(did, str) or did not in vdocs:
+            raise FlowError("BAD_PLACEMENT")
         page = p.get("page")
-        if not isinstance(page, int) or isinstance(page, bool) or not 1 <= page <= version["doc_pages"]:
+        if not isinstance(page, int) or isinstance(page, bool) or not 1 <= page <= int(vdocs[did]["pages"]):
             raise FlowError("BAD_PLACEMENT")
         try:
             x, y, w, h = (float(p[k]) for k in ("x_mm", "y_mm", "width_mm", "height_mm"))
             rot = float(p.get("rotation_deg") or 0.0)
         except (KeyError, TypeError, ValueError):
             raise FlowError("BAD_PLACEMENT")
-        pw, ph = sizes[page - 1] if page - 1 < len(sizes) else (210.0, 297.0)
+        ds = sizes.get(did) or []
+        pw, ph = ds[page - 1] if page - 1 < len(ds) else (210.0, 297.0)
         if not (MIN_SEAL_MM <= w <= MAX_SEAL_MM and MIN_SEAL_MM <= h <= MAX_SEAL_MM and -180 <= rot <= 180):
             raise FlowError("BAD_PLACEMENT")
         # 章至少要有一半在紙上（騎縫那種跨出頁面一半的位置可以）
         if not (-w / 2 <= x <= pw - w / 2 and -h / 2 <= y <= ph - h / 2):
             raise FlowError("BAD_PLACEMENT")
-        out.append({"asset_id": p["asset_id"], "page": page, "x_mm": round(x, 2), "y_mm": round(y, 2),
+        out.append({"asset_id": p["asset_id"], "doc": did, "page": page, "x_mm": round(x, 2), "y_mm": round(y, 2),
                     "width_mm": round(w, 2), "height_mm": round(h, 2), "rotation_deg": round(rot, 2)})
     if allowed - {p["asset_id"] for p in out}:
         raise FlowError("SEAL_NOT_USED")
+    if set(vdocs) - {p["doc"] for p in out}:
+        raise FlowError("DOC_NOT_STAMPED")
     return out
 
 
 def _verify_hashes(case: dict, version: dict) -> None:
     from .asset_manager import asset_manager
-    d = S.version_dir(case["id"], int(case["version"]))
-    if not (d / DOC_NAME).exists() or sha256_file(d / DOC_NAME) != version["doc_sha256"]:
-        raise FlowError("DOC_CHANGED", 409)
+    paths = {d["id"]: d["path"] for d in documents(case, int(case["version"]))}
+    for vd in version_docs(version):
+        path = paths.get(vd["id"])
+        if path is None or not path.exists() or sha256_file(path) != vd["sha256"]:
+            raise FlowError("DOC_CHANGED", 409)
     for a in version["assets"]:
         asset = asset_manager.get(a["asset_id"])
         if asset is None or not asset_manager.file_path(asset).exists():
@@ -1256,70 +1401,90 @@ def start_stamp(user: dict, case: dict, placements: Any, exec_id: Any) -> tuple[
     return S.get_case(case["id"]), True
 
 
+def _stamp_one(src: Path, workdir: Path, placements: list[dict], wm: dict, case: dict) -> Path:
+    """一份文件：浮水印 → 一處一處蓋章 → 驗證。回產好的檔（在 workdir 裡）。"""
+    import fitz
+    from ..tools.pdf_stamp import service
+    from .asset_manager import asset_manager
+    workdir.mkdir(parents=True, exist_ok=True)
+    cur = workdir / "work.pdf"
+    shutil.copyfile(src, cur)
+    # 浮水印先上（章要蓋在浮水印上面）；圖數基準取上完浮水印之後，下面的驗證才量得到章
+    if wm.get("enabled"):
+        from ..tools.pdf_watermark import service as wm_service
+        png = None
+        if wm.get("source") == "asset":
+            wa = asset_manager.get(wm.get("asset_id") or "")
+            if wa is None:
+                raise FlowError("WATERMARK_MISSING")
+            png = asset_manager.file_path(wa)
+        wmd = workdir / "watermarked.pdf"
+        wm_service.apply_watermark(cur, wmd, png, wm_service.WatermarkParams(
+            mode="tile", opacity=wm["opacity"], rotation_deg=wm["rotation_deg"],
+            tile_size_mm=wm["size_mm"], gap_mm=wm["gap_mm"],
+            text=watermark_text(wm, case) if wm.get("source") == "text" else "",
+            text_color=wm.get("color") or "#cc0000", text_size_pt=wm.get("text_size_pt") or 36))
+        cur.unlink(missing_ok=True)
+        cur = wmd
+    with fitz.open(str(cur)) as doc:
+        pages = doc.page_count
+        before = [len(doc[i].get_images(full=True)) for i in range(pages)]
+    for k, p in enumerate(placements):
+        a = asset_manager.get(p["asset_id"])
+        if a is None:
+            raise FlowError("ASSET_MISSING")
+        nxt = workdir / f"step{k:03d}.pdf"
+        service.stamp(cur, nxt, asset_manager.file_path(a), service.StampParams(
+            x_mm=p["x_mm"], y_mm=p["y_mm"], width_mm=p["width_mm"], height_mm=p["height_mm"],
+            rotation_deg=p["rotation_deg"], pages=[p["page"] - 1]))
+        cur.unlink(missing_ok=True)
+        cur = nxt
+    # 驗證：打得開、頁數一樣、每一頁多出來的圖數 ≥ 那一頁要蓋的處數
+    want: dict[int, int] = {}
+    for p in placements:
+        want[p["page"] - 1] = want.get(p["page"] - 1, 0) + 1
+    with fitz.open(str(cur)) as out:
+        if out.page_count != pages:
+            raise RuntimeError("page count changed")
+        for i, n in want.items():
+            if len(out[i].get_images(full=True)) - before[i] < 1 or n < 1:
+                raise RuntimeError(f"page {i + 1} has no stamp")
+    return cur
+
+
 def run_stamp(case_id: str) -> dict:
-    """產檔（同步；呼叫端放到背景執行緒）。先存好成果、驗證過，才改成完成、才通知。"""
+    """產檔（同步；呼叫端放到背景執行緒）。每份文件各自蓋、各自驗證；**全部成功**才一起放進
+    `stamped/`、改成完成、通知（不會出現「三份蓋好兩份」的完成狀態）。"""
     import tempfile
     from . import seal_notify
-    from .asset_manager import asset_manager
     case = S.get_case(case_id)
     if case is None or case["state"] != "stamping":
         return case
     d = S.version_dir(case_id, int(case["version"]))
     tmpdir = Path(tempfile.mkdtemp(prefix="sealstamp_"))
+    docs = documents(case, int(case["version"]))
+    first = docs[0]["id"] if docs else None
+    digests: dict[str, str] = {}
     try:
-        import fitz
-        from ..tools.pdf_stamp import service
-        src = d / DOC_NAME
-        cur = tmpdir / "work.pdf"
-        shutil.copyfile(src, cur)
-        # 浮水印先上（章要蓋在浮水印上面）；圖數基準取上完浮水印之後，下面的驗證才量得到章
         ver = S.get_version(case_id, int(case["version"])) or {}
         wm = ver.get("watermark") or {}
-        if wm.get("enabled"):
-            from ..tools.pdf_watermark import service as wm_service
-            png = None
-            if wm.get("source") == "asset":
-                wa = asset_manager.get(wm.get("asset_id") or "")
-                if wa is None:
-                    raise FlowError("WATERMARK_MISSING")
-                png = asset_manager.file_path(wa)
-            wmd = tmpdir / "watermarked.pdf"
-            wm_service.apply_watermark(cur, wmd, png, wm_service.WatermarkParams(
-                mode="tile", opacity=wm["opacity"], rotation_deg=wm["rotation_deg"],
-                tile_size_mm=wm["size_mm"], gap_mm=wm["gap_mm"],
-                text=watermark_text(wm, case) if wm.get("source") == "text" else "",
-                text_color=wm.get("color") or "#cc0000", text_size_pt=wm.get("text_size_pt") or 36))
-            cur.unlink(missing_ok=True)
-            cur = wmd
-        with fitz.open(str(cur)) as doc:
-            pages = doc.page_count
-            before = [len(doc[i].get_images(full=True)) for i in range(pages)]
-        for k, p in enumerate(case["final_placements"]):
-            a = asset_manager.get(p["asset_id"])
-            if a is None:
-                raise FlowError("ASSET_MISSING")
-            nxt = tmpdir / f"step{k:03d}.pdf"
-            service.stamp(cur, nxt, asset_manager.file_path(a), service.StampParams(
-                x_mm=p["x_mm"], y_mm=p["y_mm"], width_mm=p["width_mm"], height_mm=p["height_mm"],
-                rotation_deg=p["rotation_deg"], pages=[p["page"] - 1]))
-            cur.unlink(missing_ok=True)
-            cur = nxt
-        # 驗證：打得開、頁數一樣、每一頁多出來的圖數 ≥ 那一頁要蓋的處數
-        want: dict[int, int] = {}
-        for p in case["final_placements"]:
-            want[p["page"] - 1] = want.get(p["page"] - 1, 0) + 1
-        with fitz.open(str(cur)) as out:
-            if out.page_count != pages:
-                raise RuntimeError("page count changed")
-            for i, n in want.items():
-                if len(out[i].get_images(full=True)) - before[i] < 1 or n < 1:
-                    raise RuntimeError(f"page {i + 1} has no stamp")
-        final = d / STAMPED_NAME
-        shutil.move(str(cur), final)
-        digest = sha256_file(final)
+        made: list[tuple[str, Path]] = []
+        for i, doc in enumerate(docs):
+            plcs = [p for p in case["final_placements"] if (p.get("doc") or first) == doc["id"]]
+            made.append((doc["id"], _stamp_one(doc["path"], tmpdir / f"d{i:02d}", plcs, wm, case)))
+        if not made:
+            raise RuntimeError("no document")
+        out_dir = d / STAMPED_DIR
+        shutil.rmtree(out_dir, ignore_errors=True)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for did, path in made:
+            dest = out_dir / f"{did}.pdf"
+            shutil.move(str(path), dest)
+            digests[did] = sha256_file(dest)
     except Exception as e:  # noqa: BLE001
         import logging
         logging.getLogger(__name__).warning("用印申請 %s 產檔失敗：%s", case_id, e)
+        shutil.rmtree(d / STAMPED_DIR, ignore_errors=True)
         out = S.update_case(case_id, case["rev"], state="stamp_failed", stamp_error=str(e)[:300]) \
             or S.get_case(case_id)
         c = S.conn()
@@ -1331,6 +1496,8 @@ def run_stamp(case_id: str) -> dict:
         return out
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+    # 一份文件時照舊存雜湊字串（舊資料、舊 API 相容）；多份時存 {文件編號: 雜湊}
+    digest = next(iter(digests.values())) if len(digests) == 1 else S._j(digests)
     now = time.time()
     c = S.conn()
     from . import db
@@ -1340,42 +1507,66 @@ def run_stamp(case_id: str) -> dict:
                       (digest, now, now, now, case_id, case["stamp_exec"])).rowcount
         if n:
             S.add_event(c, case_id, "done", actor_id=case.get("stamped_by"), actor_label=case.get("stamped_by_label") or "",
-                        version=case["version"], detail={"sha256": digest, "placements": len(case["final_placements"])})
+                        version=case["version"], detail={"sha256": digests, "placements": len(case["final_placements"]),
+                                                         "documents": len(digests)})
     out = S.get_case(case_id)
     if n:
-        _record_stamp_history(out, d / DOC_NAME, d / STAMPED_NAME)
+        for doc in docs:
+            _record_stamp_history(out, doc, d / STAMPED_DIR / f"{doc['id']}.pdf")
         seal_notify.notify("done", out, [out["applicant_id"]])
     return out
 
 
-def _record_stamp_history(case: dict, src: Path, stamped: Path) -> None:
-    """跟用印工具一樣記進「用印簽名歷史」，標明來自用印申請。失敗不影響案件。"""
+def _record_stamp_history(case: dict, doc: dict, stamped: Path) -> None:
+    """跟用印工具一樣記進「用印簽名歷史」（每份文件一筆），標明來自用印申請。失敗不影響案件。"""
     try:
         from .history_manager import stamp_history
         v = S.get_version(case["id"], case["version"])
-        stamp_history.save(original_path=src, filled_path=stamped, preview_path=None,
-                           original_filename=v["doc_name"] if v else DOC_NAME,
+        first = documents(case, int(case["version"]))[0]["id"]
+        stamp_history.save(original_path=doc["path"], filled_path=stamped, preview_path=None,
+                           original_filename=doc["name"],
                            username=case.get("stamped_by_label") or "",
-                           extra={"via": "seal-request", "case": case["number"],
+                           extra={"via": "seal-request", "case": case["number"], "document": doc["id"],
                                   "assets": [a["asset_id"] for a in (v["assets"] if v else [])],
-                                  "placements": case["final_placements"]})
+                                  "placements": [p for p in case["final_placements"]
+                                                 if (p.get("doc") or first) == doc["id"]]})
     except Exception:  # noqa: BLE001
         import logging
         logging.getLogger(__name__).exception("seal-request: stamp_history.save failed")
 
 
-def result_path(user: dict, case: dict) -> tuple[Path, str]:
-    """用印後的 PDF。作廢的只有稽核員拿得到。"""
+def result_files(user: dict, case: dict) -> list[dict]:
+    """用印後的 PDF（每份文件一個）：`[{id, name, path}]`。作廢的只有稽核員拿得到。"""
     if case["state"] == "void" and not user.get("auditor"):
         raise FlowError("VOIDED", 404)
     if case["state"] not in ("done", "void"):
         raise FlowError("NOT_DONE", 404)
-    p = S.version_dir(case["id"], int(case["version"])) / STAMPED_NAME
-    if not p.exists():
+    d = S.version_dir(case["id"], int(case["version"]))
+    out, used = [], set()
+    for doc in documents(case, int(case["version"])):
+        p = d / STAMPED_DIR / f"{doc['id']}.pdf"
+        if not p.exists() and doc["id"] == LEGACY_DOC_ID and (d / STAMPED_NAME).exists():
+            p = d / STAMPED_NAME                      # v1.17.30～33 完成的舊案件
+        if not p.exists():
+            raise FlowError("NOT_DONE", 404)
+        name = f"{Path(doc['name']).stem}_用印.pdf"
+        k = 2
+        while name in used:                            # 同名文件：檔名加序號，不互相蓋掉
+            name = f"{Path(doc['name']).stem}_用印 ({k}).pdf"
+            k += 1
+        used.add(name)
+        out.append({"id": doc["id"], "name": name, "path": p})
+    if not out:
         raise FlowError("NOT_DONE", 404)
-    v = S.get_version(case["id"], case["version"])
-    stem = Path(v["doc_name"] if v else "document.pdf").stem
-    return p, f"{stem}_用印.pdf"
+    return out
+
+
+def result_path(user: dict, case: dict, doc_id: Optional[str] = None) -> tuple[Path, str]:
+    """一份用印後的 PDF（`doc_id` 沒給＝第一份）。"""
+    for f in result_files(user, case):
+        if doc_id is None or f["id"] == doc_id:
+            return f["path"], f["name"]
+    raise FlowError("NOT_FOUND", 404)
 
 
 def note_download(user: dict, case: dict) -> None:

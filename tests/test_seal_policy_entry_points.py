@@ -29,6 +29,7 @@ ALLOWED = {
     ("app/web/seal_request_routes.py", "_public_case"): "案件頁顯示章的名稱",
     ("app/core/seal_flow.py", "_verify_hashes"): "用印前核對章圖雜湊跟核准時一樣",
     ("app/core/seal_flow.py", "run_stamp"): "核准案件的用印本身（start_stamp 已驗保管人、核准的章、雜湊）",
+    ("app/core/seal_flow.py", "_stamp_one"): "run_stamp 拆出來的單份文件用印（同上）",
     ("app/core/seal_flow.py", "clean_watermark"): "流程的浮水印只收種類是浮水印的資產（不是印章或簽名）",
     ("app/core/seal_flow.py", "simulate"): "管理員模擬：只讀章的名稱與管制設定，不碰圖檔",
     ("app/web/seal_request_routes.py", "seal_image"):

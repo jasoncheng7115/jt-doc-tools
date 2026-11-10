@@ -18,6 +18,12 @@ _TPL_DIRS += [str(p.relative_to(_ROOT)) for p in (_ROOT / "app/tools").glob("*/t
 
 _HTML = [p for d in _TPL_DIRS for p in (_ROOT / d).rglob("*.html")]
 
+#: 不是由本站當網頁送出的樣板（下載下來在 file:// 打開，沒有 CSP）—— 不可以帶 nonce：
+#: 每次請求的 nonce 不同，會讓同一版本的檔案位元組每次都不一樣，公開的 SHA-256 就沒辦法核對。
+_NOT_A_SERVED_PAGE = {
+    "paper_backup_offline.html": "加密紙本備份的離線還原包：以附件下載、雙擊打開",
+}
+
 _SCRIPT_OPEN = re.compile(r"<script\b([^>]*)>")
 _STYLE_OPEN = re.compile(r"<style\b([^>]*)>")
 # 獨立的 inline style="..." 屬性（前面不是 - 或字母 → 不含 data-*-style;
@@ -42,6 +48,8 @@ _INLINE_HANDLER = re.compile(r"<[a-zA-Z][^>]*?\son[a-z]+\s*=", re.I | re.S)
 @pytest.mark.parametrize("path", _HTML, ids=lambda p: str(p.relative_to(_ROOT)))
 def test_inline_scripts_have_nonce(path):
     """可執行 inline <script>（無 src、非 JSON 資料）必須帶 nonce。"""
+    if path.name in _NOT_A_SERVED_PAGE:
+        return
     s = path.read_text(encoding="utf-8")
     for m in _SCRIPT_OPEN.finditer(s):
         attrs = m.group(1)
@@ -65,6 +73,8 @@ def test_no_nonce_script_inside_raw(path):
 @pytest.mark.parametrize("path", _HTML, ids=lambda p: str(p.relative_to(_ROOT)))
 def test_style_blocks_have_nonce(path):
     """每個 <style> 區塊必須帶 nonce（strict CSP style-src 'nonce-…'）。"""
+    if path.name in _NOT_A_SERVED_PAGE:
+        return
     s = path.read_text(encoding="utf-8")
     for m in _STYLE_OPEN.finditer(s):
         assert "nonce=" in m.group(1), (

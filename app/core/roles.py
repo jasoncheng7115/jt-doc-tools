@@ -52,6 +52,13 @@ _NON_ADMIN_TOOL_IDS = [
 ]
 
 
+#: 刻意不放進任何內建角色、只有管理員能用（由管理員在權限設定個別開放）的工具。一定要寫理由。
+#: 未啟用登入（單機）時沒有權限檢查，不受影響。
+ADMIN_ONLY_TOOL_IDS: dict[str, str] = {
+    "paper-backup": "加密紙本備份處理重要秘密（使用者 2026-11-09：預設不給所有人，單機版不受此限）",
+}
+
+
 SEED_ROLES: list[dict] = [
     {
         "id": "admin",

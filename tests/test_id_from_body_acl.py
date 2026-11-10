@@ -48,6 +48,8 @@ ACL_PATTERNS = (
     # 用印申請：`_case_for` 呼叫 `seal_flow.can_view`（申請者 / 審核者 / 保管人 / 稽核員），
     # 狀態轉換的端點經 `_case_action` 走同一個 `_case_for`；行為由 test_seal_flow 的「誰看得到什麼」驗
     r"\b_case_for\(", r"\b_case_action\(",
+    # 用印文件的上傳 / 下載 / 預覽共用這三個，裡面第一件事就是 `_case_for`（v1.17.35 一件申請多份文件）
+    r"\b_upload_document\(", r"\b_send_document\(", r"\b_send_page\(",
     r"\brequire_admin\b", r"\b_require_admin\b",
     r"\b_require_tool\(",
     r"Depends\(require_login\)",   # router 參數層級的登入閘

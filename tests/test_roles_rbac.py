@@ -109,14 +109,18 @@ def test_every_granted_tool_id_exists():
             assert t in known, f"角色 {r['id']} 授權了不存在的工具 {t}"
 
 
+from app.core.roles import ADMIN_ONLY_TOOL_IDS as _ADMIN_ONLY_BY_DESIGN  # 刻意只給管理員的工具（理由寫在 roles.py）
+
+
 def test_every_non_admin_tool_is_granted_to_someone():
-    """每個工具至少要在一個非 admin 角色裡，否則只有管理員看得到。"""
+    """每個工具至少要在一個非 admin 角色裡，否則只有管理員看得到（刻意的列在 _ADMIN_ONLY_BY_DESIGN）。"""
     granted = set()
     for r in SEED_ROLES:
         if r["id"] == "admin":
             continue
         granted |= set(r["tools"])
-    missing = sorted(_known_tool_ids() - granted)
+    missing = sorted(_known_tool_ids() - granted - set(_ADMIN_ONLY_BY_DESIGN))
+    assert not (set(_ADMIN_ONLY_BY_DESIGN) & granted), "列在 _ADMIN_ONLY_BY_DESIGN 的工具不可以出現在一般角色裡"
     # pdf-fill / pdf-stamp 在 finance / sales 裡，所以這裡應為空
     assert not missing, f"這些工具沒有任何非 admin 角色可用：{missing}"
 

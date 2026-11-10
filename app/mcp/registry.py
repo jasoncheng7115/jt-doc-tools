@@ -345,6 +345,8 @@ CLASSIFIED: dict[str, str] = {
     "official-doc": "excluded", "translate-doc": "excluded", "doc-translate": "excluded",
     "meeting-summary": "excluded", "meeting-transcribe": "excluded", "mfp-fetch": "excluded",
     "pdf-editor": "excluded", "pdf-fill": "excluded",
+    # 加密紙本備份處理的就是秘密，而且建立 / 還原都只在瀏覽器裡（主機不碰秘密）—— 永遠不經 AI
+    "paper-backup": "excluded",
     "pdf-stamp": "sensitive", "pdf-seam-stamp": "sensitive",
     # 已開放的放最後：蓋過上面「之後開放」的歸類
     **{t.tool_id: "open" for t in TOOLS},
