@@ -198,6 +198,7 @@
             <a class="nav-ep" href="#統編查詢批次">統編查詢（批次）</a>
             <a class="nav-ep" href="#電子發票掃描">電子發票掃描</a>
             <a class="nav-ep" href="#電子發票後端狀態">電子發票後端狀態</a>
+            <a class="nav-ep" href="#送件前檢核">送件前檢核</a>
             <a class="nav-ep" href="#送件前檢核--自家公司主檔">送件前檢核 — 自家公司主檔</a>
             <a class="nav-ep" href="#乘車證明整理">乘車證明整理</a>
           </div>
@@ -234,8 +235,14 @@
             <a class="nav-ep" href="#列出自己的作業我的作業">列出自己的作業（「我的作業」）</a>
           </div>
         </div>
-        <div class="nav-group nav-group-flat">
-          <a class="nav-ch" href="#10b-mcpai-客戶端">10b. MCP（AI 客戶端）</a>
+        <div class="nav-group">
+          <div class="nav-group-head" role="button" tabindex="0" aria-expanded="true">
+            <button class="toc-toggle" type="button" tabindex="-1" aria-hidden="true"></button>
+            <span class="nav-ch nav-ch-toggle">10b. MCP（AI 客戶端）</span>
+          </div>
+          <div class="nav-children">
+            <a class="nav-ep" href="#ai-用印v11738">AI 用印（v1.17.38）</a>
+          </div>
         </div>
         <div class="nav-group">
           <div class="nav-group-head" role="button" tabindex="0" aria-expanded="true">
@@ -543,7 +550,7 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
 <h4 id="pdf-旋轉">PDF 旋轉</h4>
 <p>旋轉指定頁面。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-rotate/api/pdf-rotate</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>angle</code></td><td>int</td><td>✓</td><td><code>90</code> / <code>180</code> / <code>270</code></td></tr><tr><td><code>pages</code></td><td>str</td><td></td><td>套用頁碼，例 <code>1,3-5</code>；空白 = 全部</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>angle</code></td><td>int</td><td></td><td><code>90</code>（預設）/ <code>180</code> / <code>270</code>，順時針</td></tr><tr><td><code>mode</code></td><td>str</td><td></td><td>給了就取代 <code>angle</code>：<code>rotate-90</code> / <code>rotate-180</code> / <code>rotate-270</code> / <code>flip-h</code>（左右翻轉）/ <code>flip-v</code>（上下翻轉）</td></tr><tr><td><code>pages</code></td><td>str</td><td></td><td>套用頁碼，例 <code>1,3-5</code>；<code>all</code> 或空白 = 全部</td></tr><tr><td><code>per_page</code></td><td>str</td><td></td><td>逐頁設定（JSON 物件，頁碼從 1 起），例 <code>{&quot;2&quot;: &quot;flip-h&quot;, &quot;5&quot;: &quot;none&quot;}</code>；<code>none</code> = 這頁不動。優先於 <code>mode</code> / <code>pages</code></td></tr></tbody></table></div>
 <pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-rotate/api/pdf-rotate</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@scan.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;angle=90&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;pages=1-4&quot;</span> \
@@ -555,7 +562,7 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
 <h4 id="pdf-加頁碼">PDF 加頁碼</h4>
 <p>在頁面指定位置加頁碼。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-pageno/api/pdf-pageno</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>position</code></td><td>str</td><td></td><td><code>bottom-center</code>（預設）/ <code>bottom-right</code> / <code>bottom-left</code> / <code>top-*</code></td></tr><tr><td><code>fmt</code></td><td>str</td><td></td><td>格式樣板：<code>{n}</code> 是目前頁碼、<code>{N}</code> 是總頁數（<code>{total}</code> 同 <code>{N}</code>），例 <code>第 {n} 頁</code> / <code>{n} / {N}</code></td></tr><tr><td><code>start</code></td><td>int</td><td></td><td>起始頁碼，預設 <code>1</code></td></tr><tr><td><code>font_size</code></td><td>float</td><td></td><td>字級，預設 <code>10</code></td></tr><tr><td><code>margin_mm</code></td><td>float</td><td></td><td>邊距（mm）</td></tr><tr><td><code>color</code></td><td>str</td><td></td><td>文字顏色 hex，例 <code>#000000</code></td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>position</code></td><td>str</td><td></td><td><code>br</code>（右下，預設）/ <code>bc</code>（下方置中）/ <code>bl</code> / <code>tl</code> / <code>tc</code> / <code>tr</code>（t = 上、b = 下、l / c / r = 左 / 中 / 右）</td></tr><tr><td><code>fmt</code></td><td>str</td><td></td><td>格式樣板：<code>{n}</code> 是目前頁碼、<code>{N}</code> 是總頁數（<code>{total}</code> 同 <code>{N}</code>），例 <code>第 {n} 頁</code> / <code>{n} / {N}</code></td></tr><tr><td><code>start</code></td><td>int</td><td></td><td>起始頁碼，預設 <code>1</code></td></tr><tr><td><code>from_page</code> / <code>to_page</code></td><td>int</td><td></td><td>只在這個範圍裡編頁碼（1 起；<code>to_page=0</code> 到最後一頁，預設全部）；<code>{N}</code> 只算範圍內的頁數</td></tr><tr><td><code>font_size</code></td><td>float</td><td></td><td>字級，預設 <code>11</code></td></tr><tr><td><code>margin_mm</code></td><td>float</td><td></td><td>邊距（mm）</td></tr><tr><td><code>color</code></td><td>str</td><td></td><td>文字顏色 hex，例 <code>#000000</code></td></tr></tbody></table></div>
 <pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-pageno/api/pdf-pageno</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@report.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;position=bottom-center&quot;</span> \
@@ -581,7 +588,7 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
 <h4 id="pdf-書籤與目錄">PDF 書籤與目錄</h4>
 <p>替 PDF 加書籤（閱讀器左側的導覽）與可點的目錄頁。<strong>傳多個檔案會自動串接，並以檔名建立第一層書籤</strong>，子文件原有的書籤降一層保留。收 PDF 與文書檔（文書檔會先自動轉成 PDF）。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-bookmark/api/pdf-bookmark</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>files</code></td><td>file[]</td><td>✓</td><td>一或多個 PDF / 文書檔。多檔時依順序串接</td></tr><tr><td><code>bookmarks</code></td><td>str</td><td></td><td>自己指定書籤（JSON 陣列，每筆 <code>{&quot;title&quot;,&quot;page&quot;,&quot;level&quot;}</code>）。給了就取代自動產生的</td></tr><tr><td><code>auto</code></td><td>bool</td><td></td><td>依字級自動偵測標題，預設 <code>false</code>（只在沒有 <code>bookmarks</code> 且單檔時有作用）</td></tr><tr><td><code>toc_page</code></td><td>bool</td><td></td><td>插入目錄頁，預設 <code>false</code>。<strong>網頁介面的預設是勾起來的</strong>，API 維持 <code>false</code> 是為了不讓既有的自動化呼叫突然多出一頁</td></tr><tr><td><code>toc_at</code></td><td>int</td><td></td><td>目錄插在第幾頁之前，預設 <code>1</code>（最前面）。<strong>有封面就填 <code>2</code></strong></td></tr><tr><td><code>toc_title</code></td><td>str</td><td></td><td>目錄頁標題，預設 <code>目錄</code></td></tr><tr><td><code>toc_max_level</code></td><td>int</td><td></td><td>目錄列到第幾層（1~3），預設 <code>3</code></td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>files</code></td><td>file[]</td><td>✓</td><td>一或多個 PDF / 文書檔。多檔時依順序串接</td></tr><tr><td><code>bookmarks</code></td><td>str</td><td></td><td>自己指定書籤（JSON 陣列，每筆 <code>{&quot;title&quot;,&quot;page&quot;,&quot;level&quot;}</code>）。給了就取代自動產生的</td></tr><tr><td><code>auto</code></td><td>bool</td><td></td><td>依字級自動偵測標題，預設 <code>false</code>（只在沒有 <code>bookmarks</code> 且單檔時有作用）</td></tr><tr><td><code>toc_page</code></td><td>bool</td><td></td><td>插入目錄頁，預設 <code>false</code>。<strong>網頁介面的預設是勾起來的</strong>，API 維持 <code>false</code> 是為了不讓既有的自動化呼叫突然多出一頁</td></tr><tr><td><code>toc_at</code></td><td>int</td><td></td><td>目錄插在第幾頁之前，預設 <code>1</code>（最前面）。<strong>有封面就填 <code>2</code></strong></td></tr><tr><td><code>toc_title</code></td><td>str</td><td></td><td>目錄頁標題，預設 <code>目錄</code></td></tr><tr><td><code>toc_max_level</code></td><td>int</td><td></td><td>目錄列到第幾層（1~3），預設 <code>3</code></td></tr><tr><td><code>toc_dots</code></td><td>bool</td><td></td><td>標題與頁碼之間畫引導點，預設 <code>true</code></td></tr></tbody></table></div>
 <p>書籤的<strong>層級必須從 1 開始且一次只能加一層</strong>（1→3 會被自動修成 1→2），<strong>頁碼超出總頁數會被夾到最後一頁</strong> —— 兩者都會自動修正，不會失敗。插入目錄頁之後頁碼會自動往後移，不需要自己算 —— <strong><code>toc_at</code> 之前的書籤不會被動到</strong>（指向封面的那一筆仍然是第 1 頁）。</p>
 <pre><code class="lang-bash"><span class="hl-cmt"># 多檔串接 + 以檔名建書籤 + 產生目錄頁</span>
 curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-bookmark/api/pdf-bookmark</span> \
@@ -617,7 +624,7 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
 <h4 id="掃描修正">掃描修正</h4>
 <p>把拍歪、掃歪的文件裁掉黑邊、拉正、去除不勻的底色。手機翻拍時會抓出紙張的 四個角做透視校正。<strong>完全不用 AI 也不用 GPU</strong>（傳統影像處理，CPU 約 0.8 秒/頁 @200 dpi）。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/doc-straighten/api/doc-straighten</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF、圖片（含手機拍的 HEIC）或文書檔</td></tr><tr><td><code>dpi</code></td><td>int</td><td></td><td>處理解析度，150 / 200（預設）/ 300</td></tr><tr><td><code>binarize</code></td><td>bool</td><td></td><td>轉成黑白。<strong>預設關閉</strong> —— 實測會讓中文的細筆畫消失、文字辨識率明顯下降；它的用途是縮小檔案</td></tr><tr><td><code>detect_quad</code></td><td>bool</td><td></td><td>偵測紙張邊界做透視校正（預設開）。抓不到時自動退回只做拉正</td></tr><tr><td><code>enhance</code></td><td>bool</td><td></td><td>清晰化：壓平不勻的底色與陰影（<strong>預設開</strong>）。實測手機翻拍的單邊硬陰影，文字辨識率 0.472 → 0.982；已經很平的掃描件開著也是零變動</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF、圖片（含手機拍的 HEIC）或文書檔</td></tr><tr><td><code>dpi</code></td><td>int</td><td></td><td>處理解析度，150 / 200（預設）/ 300</td></tr><tr><td><code>binarize</code></td><td>bool</td><td></td><td>轉成黑白。<strong>預設關閉</strong> —— 實測會讓中文的細筆畫消失、文字辨識率明顯下降；它的用途是縮小檔案</td></tr><tr><td><code>detect_quad</code></td><td>bool</td><td></td><td>偵測紙張邊界做透視校正（預設開）。抓不到時自動退回只做拉正</td></tr><tr><td><code>enhance</code></td><td>bool</td><td></td><td>清晰化：壓平不勻的底色與陰影（<strong>預設開</strong>）。實測手機翻拍的單邊硬陰影，文字辨識率 0.472 → 0.982；已經很平的掃描件開著也是零變動</td></tr><tr><td><code>size_w</code> / <code>size_h</code> / <code>size_unit</code></td><td>str</td><td></td><td>輸出每頁的尺寸，<code>size_unit</code> 是 <code>px</code>（預設）或 <code>mm</code>；沒填或不合法 = 照拉正後的大小</td></tr></tbody></table></div>
 <pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/doc-straighten/api/doc-straighten</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@scan.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;dpi=200&quot;</span> \
@@ -645,7 +652,8 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
 <h4 id="pdf-多頁合一n-up">PDF 多頁合一（N-up）</h4>
 <p>把多頁縮排到單頁（2-up / 4-up 等）。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-nup/api/pdf-nup</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>cols</code></td><td>int</td><td>✓</td><td>每頁欄數</td></tr><tr><td><code>rows</code></td><td>int</td><td>✓</td><td>每頁列數</td></tr><tr><td><code>paper</code></td><td>str</td><td></td><td>紙張，<code>A4</code>（預設）/ <code>A3</code> / <code>Letter</code> ...</td></tr><tr><td><code>orientation</code></td><td>str</td><td></td><td><code>portrait</code> / <code>landscape</code></td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>cols</code></td><td>int</td><td></td><td>每頁欄數，預設 <code>2</code></td></tr><tr><td><code>rows</code></td><td>int</td><td></td><td>每頁列數，預設 <code>1</code>（<code>cols × rows</code> 最多 64）</td></tr><tr><td><code>paper</code></td><td>str</td><td></td><td><code>a4</code>（預設）/ <code>a3</code> / <code>a5</code> / <code>b4</code> / <code>b5</code> / <code>letter</code> / <code>legal</code> / <code>custom</code></td></tr><tr><td><code>paper_w_mm</code> / <code>paper_h_mm</code></td><td>float</td><td></td><td><code>paper=custom</code> 時的寬高（mm）</td></tr><tr><td><code>orientation</code></td><td>str</td><td></td><td><code>auto</code>（預設）/ <code>portrait</code> / <code>landscape</code></td></tr><tr><td><code>margin_mm</code></td><td>float</td><td></td><td>四邊邊距（mm），預設 <code>10</code></td></tr><tr><td><code>gap_mm</code></td><td>float</td><td></td><td>格子之間的間距（mm），預設 <code>5</code></td></tr><tr><td><code>direction</code></td><td>str</td><td></td><td><code>ltr</code>（先左右再上下，預設）/ <code>ttb</code>（先上下再左右）</td></tr><tr><td><code>reverse</code></td><td>bool</td><td></td><td>倒序排列，預設 <code>false</code></td></tr><tr><td><code>auto_rotate</code></td><td>bool</td><td></td><td>自動旋轉原頁以塞滿格子，預設 <code>true</code></td></tr><tr><td><code>page_align</code></td><td>str</td><td></td><td>原頁在格子裡的位置：<code>center</code>（預設）/ <code>left-top</code></td></tr><tr><td><code>show_border</code> / <code>border_width_pt</code> / <code>border_color</code></td><td>bool / float / str</td><td></td><td>格子框線，預設不畫、<code>0.5</code> pt、<code>#94a3b8</code></td></tr><tr><td><code>show_page_num</code> / <code>page_num_format</code> / <code>page_num_size_pt</code></td><td>bool / str / float</td><td></td><td>在格子裡印原頁碼（<code>{n}</code> 原頁碼、<code>{t}</code> 總頁數），預設不印、<code>{n}</code>、<code>8</code> pt</td></tr><tr><td><code>pad_blanks</code></td><td>bool</td><td></td><td>最後一張不足時補空白格，預設 <code>true</code></td></tr><tr><td><code>show_crop_marks</code> / <code>crop_mark_len_mm</code></td><td>bool / float</td><td></td><td>裁切標記，預設不畫、<code>4</code> mm</td></tr></tbody></table></div>
+<p>數值會夾在合理範圍內；邊距與間距不會大到把格子擠沒。</p>
 <pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-nup/api/pdf-nup</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@slides.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;cols=2&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;rows=2&quot;</span> \
@@ -1000,12 +1008,18 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
 <h4 id="pdf-表單填寫">PDF 表單填寫</h4>
 <p>自動辨識表單欄位並填入公司主檔資料。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-fill/api/pdf-fill</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>待填的 PDF 表單</td></tr><tr><td><code>company_id</code></td><td>str</td><td></td><td>公司主檔 ID（admin 端建立）</td></tr><tr><td><code>font_id</code></td><td>str</td><td></td><td>填寫字型 ID</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>待填的表單（PDF 或辦公文件）</td></tr><tr><td><code>company_id</code></td><td>str</td><td></td><td>公司主檔 ID（管理員建立；清單見下方）；空白 = 目前選用的那一家。<strong>指定的公司不存在回 400</strong>，不會改用別家公司的資料</td></tr><tr><td><code>font_id</code></td><td>str</td><td></td><td>填寫字型 ID，預設 <code>auto</code></td></tr></tbody></table></div>
 <pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-fill/api/pdf-fill</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@vendor_form.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;company_id=acme&quot;</span> \
   <span class="hl-flag">--output</span> filled.pdf</code></pre>
 <p>回應：填好的 PDF。</p>
+<p><strong>列出可以用的公司</strong>（只有編號與名稱，不含任何欄位資料）：</p>
+<pre><code class="lang-text"><span class="hl-method">GET</span> /tools/pdf-fill/api/companies</code></pre>
+<pre><code class="lang-bash">curl <span class="hl-flag">-s</span> <span class="hl-url">http://localhost:8765/tools/pdf-fill/api/companies</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> | jq
+<span class="hl-cmt"># → {&quot;companies&quot;: [{&quot;id&quot;: &quot;acme&quot;, &quot;name&quot;: &quot;範例股份有限公司&quot;, &quot;is_active&quot;: true}, ...]}</span></code></pre>
+<p><code>is_active</code> 是沒指定 <code>company_id</code> 時會用的那一家。</p>
       </section>
       <section class="doc-section" data-sec="pdf-用印--簽名" data-title="PDF 用印 / 簽名" hidden>
 <div class="doc-crumb">6. 表單與簽章 API</div>
@@ -1044,7 +1058,7 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
 <h4 id="pdf-浮水印">PDF 浮水印</h4>
 <p>加文字浮水印。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-watermark/api/pdf-watermark</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>text</code></td><td>str</td><td>✓</td><td>浮水印文字</td></tr><tr><td><code>opacity</code></td><td>float</td><td></td><td>透明度 0–1，預設 <code>0.15</code></td></tr><tr><td><code>rotation_deg</code></td><td>float</td><td></td><td>旋轉角度，預設 <code>45</code></td></tr><tr><td><code>mode</code></td><td>str</td><td></td><td><code>tile</code>（平鋪）/ <code>center</code>（置中）</td></tr><tr><td><code>text_color</code></td><td>str</td><td></td><td>文字顏色 hex</td></tr><tr><td><code>text_size_pt</code></td><td>float</td><td></td><td>字級（pt）</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>text</code></td><td>str</td><td>✓</td><td>浮水印文字</td></tr><tr><td><code>opacity</code></td><td>float</td><td></td><td>不透明度 0.05–1，預設 <code>0.25</code></td></tr><tr><td><code>rotation_deg</code></td><td>float</td><td></td><td>旋轉角度，預設 <code>30</code></td></tr><tr><td><code>mode</code></td><td>str</td><td></td><td><code>tile</code>（平鋪，預設）/ <code>single</code>（單一個）</td></tr><tr><td><code>page_mode</code></td><td>str</td><td></td><td><code>all</code>（每一頁，預設）/ <code>first</code>（只有第一頁）/ <code>last</code>（只有最後一頁）</td></tr><tr><td><code>text_color</code></td><td>str</td><td></td><td>文字顏色 hex</td></tr><tr><td><code>text_size_pt</code></td><td>float</td><td></td><td>字級（pt）</td></tr></tbody></table></div>
 <pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-watermark/api/pdf-watermark</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@document.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;text=機密&quot;</span> \
@@ -1064,6 +1078,7 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
   <span class="hl-flag">-F</span> <span class="hl-str">&#x27;model={&quot;version&quot;:1,&quot;pages&quot;:[{&quot;page&quot;:0,&quot;objects&quot;:[{&quot;id&quot;:&quot;o1&quot;,&quot;type&quot;:&quot;text&quot;,&quot;x&quot;:100,&quot;y&quot;:200,&quot;w&quot;:120,&quot;h&quot;:20,&quot;text&quot;:&quot;已蓋章&quot;,&quot;font_size&quot;:14,&quot;color&quot;:&quot;#cc0000&quot;}]}]}&#x27;</span> \
   <span class="hl-flag">--output</span> edited.pdf</code></pre>
 <p>回應：套用 overlay 後的 PDF。模型格式詳見 web UI 的 pdf-editor。</p>
+<p><strong>經 MCP（AI）呼叫時不收圖片</strong>：<code>type</code> 是 <code>image</code> 或帶 <code>asset_id</code> / <code>existing_src</code> 的物件回 400。圖片可以是資產庫裡的印章、簽名，AI 用印另有規則，不可以從編輯器繞過。一般 API 呼叫不受影響。</p>
 <p>座標與尺寸的單位是 pt（左上角為原點）。轉過的物件另外帶 <code>angle</code>（順時針角度）與 <code>quad</code>（轉完之後的四個角 <code>[[x,y],…]</code>，依序左上、右上、右下、左下）；文字、圖片、矩形、橢圓、白底、螢光筆都適用。圖片可帶 <code>opacity</code>（<code>0</code>~<code>1</code>）。</p>
 <hr>
       </section>
@@ -1072,7 +1087,7 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
 <h4 id="pdf-加密">PDF 加密</h4>
 <p>加使用者 / 擁有者密碼並設定權限。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-encrypt/api/pdf-encrypt</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>user_pw</code></td><td>str</td><td></td><td>開啟密碼</td></tr><tr><td><code>owner_pw</code></td><td>str</td><td></td><td>權限密碼</td></tr><tr><td><code>algorithm</code></td><td>str</td><td></td><td>加密演算法，例 <code>AES-256</code></td></tr><tr><td><code>allow_print</code></td><td>bool</td><td></td><td>允許列印</td></tr><tr><td><code>allow_copy</code></td><td>bool</td><td></td><td>允許複製內容</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF</td></tr><tr><td><code>user_pw</code></td><td>str</td><td></td><td>開啟密碼</td></tr><tr><td><code>owner_pw</code></td><td>str</td><td></td><td>權限密碼</td></tr><tr><td><code>algorithm</code></td><td>str</td><td></td><td><code>aes-256</code>（預設）/ <code>aes-128</code> / <code>rc4-128</code></td></tr><tr><td><code>allow_print</code></td><td>bool</td><td></td><td>允許列印，預設 <code>true</code></td></tr><tr><td><code>allow_print_hq</code></td><td>bool</td><td></td><td>允許高品質列印，預設 <code>false</code></td></tr><tr><td><code>allow_copy</code></td><td>bool</td><td></td><td>允許複製內容，預設 <code>false</code></td></tr><tr><td><code>allow_modify</code></td><td>bool</td><td></td><td>允許修改內容，預設 <code>false</code></td></tr><tr><td><code>allow_annotate</code></td><td>bool</td><td></td><td>允許加註解，預設 <code>false</code></td></tr><tr><td><code>allow_form</code></td><td>bool</td><td></td><td>允許填寫表單，預設 <code>false</code></td></tr><tr><td><code>allow_assemble</code></td><td>bool</td><td></td><td>允許插入、刪除、旋轉頁面，預設 <code>false</code></td></tr><tr><td><code>allow_accessibility</code></td><td>bool</td><td></td><td>允許螢幕報讀等無障礙工具讀取文字，預設 <code>true</code></td></tr></tbody></table></div>
 <pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-encrypt/api/pdf-encrypt</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@document.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;user_pw=open123&quot;</span> \
@@ -1085,19 +1100,28 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
 <h4 id="pdf-解密">PDF 解密</h4>
 <p>用密碼移除 PDF 加密。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/pdf-decrypt/api/pdf-decrypt</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>加密的 PDF</td></tr><tr><td><code>password</code></td><td>str</td><td>✓</td><td>開啟密碼</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>加密的 PDF</td></tr><tr><td><code>password</code></td><td>str</td><td></td><td>開啟密碼；只有權限限制、沒有開啟密碼的 PDF 可以留空</td></tr><tr><td><code>use_filename_as_password</code></td><td>bool</td><td></td><td>設為 true 時，用不含副檔名的檔名當密碼試</td></tr><tr><td><code>thsr_mode</code></td><td>bool</td><td></td><td>設為 true 時啟用高鐵模式：台灣高鐵電子車票 PDF 的開啟密碼是出發日期，日期範圍內每一天都試</td></tr><tr><td><code>thsr_date_from</code> / <code>thsr_date_to</code></td><td>str</td><td>高鐵模式必填</td><td>日期範圍，<code>YYYY-MM-DD</code>；顛倒會自動對調，最多 800 天</td></tr><tr><td><code>thsr_date_format</code></td><td>str</td><td></td><td>密碼的日期寫法，預設 <code>YYYYMMDD</code>（高鐵）；只能含 Y、M、D 與 <code>-</code> <code>/</code> <code>.</code> <code>_</code> 空白</td></tr></tbody></table></div>
+<p>密碼依序試：高鐵模式的日期 → 檔名 → <code>password</code>。</p>
 <pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-decrypt/api/pdf-decrypt</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@encrypted.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;password=open123&quot;</span> \
-  <span class="hl-flag">--output</span> decrypted.pdf</code></pre>
-<p>回應：解密後的 PDF。</p>
+  <span class="hl-flag">--output</span> decrypted.pdf
+
+<span class="hl-cmt"># 高鐵模式：在 2026-08-01 到 2026-10-31 之間找出發日期</span>
+curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/pdf-decrypt/api/pdf-decrypt</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@thsr-ticket.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;thsr_mode=true&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;thsr_date_from=2026-08-01&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;thsr_date_to=2026-10-31&quot;</span> \
+  <span class="hl-flag">-OJ</span></code></pre>
+<p>回應：解密後的 PDF。高鐵模式解開的檔名是出發日期（例如 <code>20261108.pdf</code>，日期格式裡的 <code>/</code> <code>.</code> 換成 <code>_</code>），其他是 <code>&lt;原檔名&gt;_decrypted.pdf</code>。密碼都不對回 400；高鐵模式會說試了幾天。</p>
       </section>
       <section class="doc-section" data-sec="文件去識別化" data-title="文件去識別化" hidden>
 <div class="doc-crumb">7. 安全與隱私 API</div>
 <h4 id="文件去識別化">文件去識別化</h4>
 <p>對 Word / PDF 文件偵測並遮蔽個資（regex / 可選 LLM）。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /tools/doc-deident/api/doc-deident</code></pre>
-<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF / Word 文件</td></tr><tr><td><code>types</code></td><td>str</td><td></td><td>要偵測的 PII 類型 CSV（身分證 / 電話 / email / 地址 ...），空白 = 預設集</td></tr><tr><td><code>mode</code></td><td>str</td><td></td><td><code>mask</code>（遮罩，預設）/ <code>redact</code>（真刪）/ <code>replace</code>（換成假值）</td></tr><tr><td><code>replacements</code></td><td>str</td><td></td><td>僅 <code>replace</code>：JSON 物件 <code>{&quot;原值&quot;: &quot;指定的新值&quot;}</code>。沒指定的一律自動產生</td></tr><tr><td><code>valid_checksum</code></td><td>str</td><td></td><td>僅 <code>replace</code>：<code>1</code> = 產生可通過檢查碼的假值（見下方說明）</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>file</code></td><td>file</td><td>✓</td><td>PDF / Word 文件</td></tr><tr><td><code>types</code></td><td>str</td><td></td><td>要偵測的 PII 類型 CSV（身分證 / 電話 / email / 地址 ...），空白 = 預設集</td></tr><tr><td><code>mode</code></td><td>str</td><td></td><td><code>mask</code>（遮罩，預設）/ <code>redact</code>（真刪）/ <code>replace</code>（換成假值）</td></tr><tr><td><code>replacements</code></td><td>str</td><td></td><td>僅 <code>replace</code>：JSON 物件 <code>{&quot;原值&quot;: &quot;指定的新值&quot;}</code>。沒指定的一律自動產生</td></tr><tr><td><code>valid_checksum</code></td><td>str</td><td></td><td>僅 <code>replace</code>：<code>1</code> 或 <code>true</code> = 產生可通過檢查碼的假值（見下方說明）</td></tr><tr><td><code>custom</code></td><td>str</td><td></td><td>自訂偵測規則，一行一條（格式見表格下方）</td></tr></tbody></table></div>
+<p><code>custom</code> 每一行是「標籤、<code>|</code>、regex」，例如 <code>代號|PROJ-\d+</code>；沒有 <code>|</code> 的整行當 regex。「重複裡面又有重複」的寫法（例如 <code>(a+)+</code>）會被拒絕（400）。</p>
 <pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/doc-deident/api/doc-deident</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
   <span class="hl-flag">-F</span> <span class="hl-str">&quot;file=@contract.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;mode=mask&quot;</span> \
@@ -1176,6 +1200,7 @@ curl <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: B
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Content-Type: application/json&quot;</span> \
   <span class="hl-flag">-d</span> <span class="hl-str">&#x27;{&quot;text&quot;:&quot;banana\napple\napple\ncherry&quot;,&quot;ops&quot;:[{&quot;op&quot;:&quot;dedup&quot;},{&quot;op&quot;:&quot;sort&quot;}]}&#x27;</span></code></pre>
 <p>回應 JSON：<code>{&quot;lines&quot;: [...], &quot;count&quot;: N, &quot;original_count&quot;: M, ...}</code>。</p>
+<p><strong>自訂正規式的限制</strong>（清單處理的 <code>filter</code> 加 <code>&quot;regex&quot;: true</code>、文字去識別化的 <code>custom_regex</code>、文件去識別化的 <code>custom</code>）：「重複裡面又有重複」（例如 <code>(a+)+</code>、<code>(\d+)*</code>）這種可能非常慢的寫法回 400；其他的放在專用的處理執行緒跑，同時太多件回 503，請稍後再試。</p>
       </section>
       <section class="doc-section" data-sec="文件翻譯" data-title="文件翻譯" hidden>
 <div class="doc-crumb">8. 文字與比對 API</div>
@@ -1414,6 +1439,23 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span c
 <pre><code class="lang-bash">curl <span class="hl-url">http://localhost:8765/tools/einvoice-scan/api/backend-status</span> \
   <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> | jq</code></pre>
 <p>回應 JSON：<code>{&quot;available&quot;: true/false, ...}</code>。</p>
+      </section>
+      <section class="doc-section" data-sec="送件前檢核" data-title="送件前檢核" hidden>
+<div class="doc-crumb">9. 商務查詢 API</div>
+<h4 id="送件前檢核">送件前檢核</h4>
+<p>一次建案件、上傳檔案、開始檢核（背景作業）。案件會出現在工具頁的案件清單，跟網頁做的一樣。</p>
+<pre><code class="lang-text"><span class="hl-method">POST</span> /tools/submission-check/api/submission-check</code></pre>
+<div class="table-wrap"><table><thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead><tbody><tr><td><code>files</code></td><td>file[]</td><td>✓</td><td>要送出的文件，PDF / 辦公文件 / 圖片，一次最多 50 個、合計 200 MB</td></tr><tr><td><code>case_name</code></td><td>str</td><td></td><td>案件名稱</td></tr><tr><td><code>main_entity_name</code></td><td>str</td><td></td><td>送件的公司或個人名稱（每份文件都會比對）</td></tr><tr><td><code>main_entity_identifier</code></td><td>str</td><td></td><td>它的統一編號或身分證字號</td></tr><tr><td><code>counterparty_name</code></td><td>str</td><td></td><td>送件對象</td></tr><tr><td><code>case_number</code></td><td>str</td><td></td><td>案號</td></tr><tr><td><code>deadline</code></td><td>str</td><td></td><td>截止日，<code>YYYY-MM-DD</code></td></tr><tr><td><code>allow_llm</code></td><td>bool</td><td></td><td>預設 <code>true</code>（站台設定了 LLM 才會用）；<code>false</code> 時不跑 LLM 文字、LLM 視覺兩層，報告裡標成略過</td></tr></tbody></table></div>
+<pre><code class="lang-bash">curl <span class="hl-flag">-X</span> <span class="hl-method">POST</span> <span class="hl-url">http://localhost:8765/tools/submission-check/api/submission-check</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@quote.pdf&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;files=@contract.pdf&quot;</span> \
+  <span class="hl-flag">-F</span> <span class="hl-str">&quot;main_entity_name=範例股份有限公司&quot;</span> <span class="hl-flag">-F</span> <span class="hl-str">&quot;allow_llm=false&quot;</span> | jq
+<span class="hl-cmt"># → {&quot;job_id&quot;: &quot;...&quot;, &quot;case_id&quot;: &quot;...&quot;, &quot;version&quot;: &quot;v1&quot;, &quot;result_url&quot;: &quot;/tools/submission-check/result/.../v1&quot;, ...}</span>
+
+<span class="hl-cmt"># 做完之後讀報告</span>
+curl <span class="hl-flag">-s</span> <span class="hl-url">http://localhost:8765/tools/submission-check/result/$CASE/v1</span> \
+  <span class="hl-flag">-H</span> <span class="hl-str">&quot;Authorization: Bearer YOUR_TOKEN&quot;</span> | jq <span class="hl-str">&#x27;.summary&#x27;</span></code></pre>
+<p>回應：<code>job_id</code>、<code>case_id</code>、<code>version</code>、<code>result_url</code>（報告）、<code>case_url</code>（工具頁的案件畫面）。用第 10 章的 job API 等作業做完，再讀 <code>result_url</code>；報告是 JSON（<code>summary</code> 有分數、各層狀態，另有每份文件與跨文件的發現）。</p>
       </section>
       <section class="doc-section" data-sec="送件前檢核--自家公司主檔" data-title="送件前檢核 — 自家公司主檔" hidden>
 <div class="doc-crumb">9. 商務查詢 API</div>
@@ -1715,25 +1757,26 @@ curl <span class="hl-flag">-X</span> <span class="hl-method">DELETE</span> <span
 <p>回應裡的 <code>view_ok</code> 是 <code>view_url</code> 那一頁現在還打不打得開：<code>view_url</code> 有值但 <code>view_ok</code> 是 <code>false</code>，代表資料已過保留期被清掉。判斷要不要給「開啟」請用 <code>view_ok</code>，<strong>不可以用 <code>has_result</code> 代替</strong>（逐句翻譯沒有下載檔，但「開啟」打得開）。</p>
 <hr>
       </section>
-      <section class="doc-section" data-sec="10b-mcpai-客戶端" data-title="10b. MCP（AI 客戶端）" hidden>
-<h3 id="10b-mcpai-客戶端">10b. MCP（AI 客戶端）</h3>
+      <section class="doc-section" data-sec="ai-用印v11738" data-title="AI 用印（v1.17.38）" hidden>
+<div class="doc-crumb">10b. MCP（AI 客戶端）</div>
 <p>讓 Claude Code、Codex CLI、OpenCode 這類 AI 客戶端透過 MCP（Model Context Protocol）呼叫本站<strong>不用 LLM</strong> 的工具。 <strong>預設關閉</strong>，管理員在「設定 → MCP（AI 連接）」打開。</p>
 <pre><code class="lang-text"><span class="hl-method">POST</span> /mcp                   <span class="hl-cmt"># JSON-RPC 2.0（Streamable HTTP，只回 JSON、無狀態）</span>
 <span class="hl-method">GET</span>  /mcp                   <span class="hl-cmt"># 405（不提供 SSE）</span>
 <span class="hl-method">POST</span> /mcp/files/upload      <span class="hl-cmt"># 用一次性票證上傳檔案進工作區</span>
 <span class="hl-method">GET</span>  /mcp/files/download    <span class="hl-cmt"># 用一次性票證下載工作區的檔案</span></code></pre>
 <p><strong>認證</strong>：<code>Authorization: Bearer &lt;API Token&gt;</code>。這張 Token 要在設定頁另外勾「允許 MCP」；站台啟用認證時， Token 要綁定使用者（「API Token」頁的「綁定使用者」欄，或 <code>POST /admin/api/tokens/owner</code>），權限照那位使用者（沒有某支工具的權限就看不到、也叫不動）。有帶 <code>Origin</code> 標頭時要是站台網址那個來源。 協定版本支援 <code>2025-11-25</code>、<code>2025-06-18</code>、<code>2025-03-26</code>、<code>2024-11-05</code>。</p>
+<p><strong>允許 MCP 的 Token 只能經 MCP 使用</strong>（v1.17.38 起）：拿它直接呼叫一般 API 回 403 <code>MCP_TOKEN_REST_DENIED</code>。 AI 客戶端讀得到自己設定裡的 Token，同一張如果也能直接打 API，MCP 這一層的限制（AI 用印、PDF 編輯器不收圖片、沒開放的工具）就沒有作用。 要寫程式呼叫 API，請另外建一張沒有允許 MCP 的 Token。</p>
 <p><strong>工具清單只有固定 9 個</strong>（不管開放多少支本站工具都不會變多，不會佔滿模型的上下文）：</p>
 <div class="table-wrap"><table><thead><tr><th>MCP 工具</th><th>作用</th></tr></thead><tbody><tr><td><code>jtdt_catalog</code></td><td>列出可以執行的工具（名稱、分類、一行說明）</td></tr><tr><td><code>jtdt_describe</code></td><td>一支工具的參數、輸入檔與範例</td></tr><tr><td><code>jtdt_run</code></td><td>執行：<code>tool</code>、<code>files</code>（工作區檔案編號）、<code>params</code>；結果存進工作區。超過約 45 秒回 <code>job_id</code></td></tr><tr><td><code>job_status</code></td><td>等待 / 取得 <code>jtdt_run</code> 的結果</td></tr><tr><td><code>workspace_list</code></td><td>列出自己工作區的檔案</td></tr><tr><td><code>workspace_upload_url</code></td><td>取得一次性上傳指令（<code>curl</code>），讓 AI 自己上傳本機檔案</td></tr><tr><td><code>workspace_upload_inline</code></td><td>256 KB 以下的小檔直接用 Base64 上傳（給不能執行指令的客戶端）</td></tr><tr><td><code>workspace_download_url</code></td><td>取得一次性下載指令（<code>curl</code>）</td></tr><tr><td><code>workspace_read_text</code></td><td>分頁讀工作區裡的文字檔</td></tr></tbody></table></div>
-<p>目前開放的工具（共 28 支）：</p>
+<p>目前開放的工具（共 46 支）：</p>
 <ul>
-<li>文件轉換：<code>office_to_pdf</code>（辦公文件轉 PDF）、<code>document_to_images</code>（辦公文件轉圖片）、<code>image_to_pdf</code>（圖片轉 PDF）、<code>pdf_to_markdown</code>（PDF 轉 Markdown）、<code>markdown_to_document</code>（Markdown 轉辦公文件）、<code>office_convert</code>（辦公文件格式互轉）</li>
-<li>PDF 編修：<code>pdf_merge</code>（檔案合併）、<code>pdf_split</code>（頁面分拆）、<code>pdf_compress</code>（PDF 壓縮）、<code>pdf_rotate</code>（頁面轉向）、<code>pdf_page_numbers</code>（插入頁碼）、<code>pdf_watermark</code>（浮水印）、<code>pdf_flatten_annotations</code>（註解平面化）、<code>pdf_remove_annotations</code>（註解清除）、<code>pdf_encrypt</code>（PDF 密碼保護）、<code>pdf_decrypt</code>（PDF 密碼解除）、<code>pdf_n_up</code>（多頁合併）、<code>pdf_clean_metadata</code>（中繼資料清除）、<code>pdf_reorder_pages</code>（頁面整理）、<code>pdf_page_size</code>（頁面尺寸統一）、<code>pdf_bookmarks</code>（書籤與目錄）</li>
-<li>擷取與統計：<code>pdf_extract_text</code>（擷取文字）、<code>document_word_count</code>（字數統計）、<code>pdf_extract_images</code>（擷取圖片）、<code>pdf_ocr</code>（OCR 文字辨識）</li>
-<li>比對：<code>text_diff</code>（文字差異比對）、<code>document_diff</code>（文件差異比對）</li>
-<li>查詢：<code>vat_lookup</code>（統編查詢）</li>
+<li>文件轉換：<code>office_to_pdf</code>（辦公文件轉 PDF）、<code>document_to_images</code>（辦公文件轉圖片）、<code>image_to_pdf</code>（圖片轉 PDF）、<code>pdf_to_markdown</code>（PDF 轉 Markdown）、<code>markdown_to_document</code>（Markdown 轉辦公文件）、<code>office_convert</code>（辦公文件格式互轉）、<code>pdf_to_office</code>（PDF 轉文書檔）、<code>pdf_to_slides</code>（PDF 轉簡報）</li>
+<li>PDF 編修：<code>pdf_merge</code>（檔案合併）、<code>pdf_split</code>（頁面分拆）、<code>pdf_compress</code>（PDF 壓縮）、<code>pdf_rotate</code>（頁面轉向）、<code>pdf_page_numbers</code>（插入頁碼）、<code>pdf_watermark</code>（浮水印）、<code>pdf_flatten_annotations</code>（註解平面化）、<code>pdf_remove_annotations</code>（註解清除）、<code>pdf_encrypt</code>（PDF 密碼保護）、<code>pdf_decrypt</code>（PDF 密碼解除）、<code>pdf_n_up</code>（多頁合併）、<code>pdf_clean_metadata</code>（中繼資料清除）、<code>pdf_reorder_pages</code>（頁面整理）、<code>pdf_page_size</code>（頁面尺寸統一）、<code>pdf_bookmarks</code>（書籤與目錄）、<code>document_straighten</code>（掃描修正）、<code>pdf_add_border</code>（頁面加框）、<code>scan_merge</code>（掃描拼合）、<code>document_deidentify</code>（文件去識別化）、<code>pdf_fill_form</code>（表單自動填寫）、<code>pdf_edit</code>（PDF 編輯器）</li>
+<li>擷取與統計：<code>pdf_extract_text</code>（擷取文字）、<code>document_word_count</code>（字數統計）、<code>pdf_extract_images</code>（擷取圖片）、<code>pdf_ocr</code>（OCR 文字辨識）、<code>pdf_extract_attachments</code>（PDF 附件萃取）、<code>pdf_hidden_content_scan</code>（隱藏內容掃描）、<code>text_list_process</code>（清單處理）、<code>transit_proof_parse</code>（乘車證明整理）、<code>pdf_list_annotations</code>（註解整理）、<code>einvoice_scan</code>（電子發票處理）、<code>text_deidentify</code>（文字去識別化）、<code>meeting_transcribe</code>（會議錄音轉逐字稿）</li>
+<li>比對：<code>text_diff</code>（文字差異比對）、<code>document_diff</code>（文件差異比對）、<code>submission_check</code>（送件前檢核）</li>
+<li>查詢：<code>vat_lookup</code>（統編查詢）、<code>pdf_fill_companies</code>（表單自動填寫：公司清單）</li>
 </ul>
-<p>PDF 密碼解除（<code>pdf_decrypt</code>）預設不開放，要管理員另外勾選。辦公文件格式互轉與 OCR 文字辨識在伺服器端是背景作業，<code>jtdt_run</code> 會等到做完；等太久會先回作業編號，AI 用 <code>job_status</code> 查。設定頁點工具卡片可以看每一支給 AI 的用法、參數與回傳值。</p>
+<p>PDF 密碼解除（<code>pdf_decrypt</code>，也支援高鐵模式）、表單自動填寫（<code>pdf_fill_companies</code>、<code>pdf_fill_form</code>，填進去的是公司資料）、會議錄音轉逐字稿（<code>meeting_transcribe</code>，檔案大、處理久）預設不開放，要管理員另外勾選。有 LLM 選項的工具（文件 / 文字去識別化、註解整理、電子發票處理、送件前檢核、表單自動填寫等）經 MCP 一律不使用 LLM。PDF 編輯器（<code>pdf_edit</code>）經 MCP 只能放文字與圖形，不收圖片、印章、簽名。用印、騎縫章、以 LLM 為核心的工具（公文撰擬、逐句翻譯、文件翻譯、會議摘要）、事務機與加密紙本備份不經 MCP 開放。辦公文件格式互轉與 OCR 文字辨識在伺服器端是背景作業，<code>jtdt_run</code> 會等到做完；等太久會先回作業編號，AI 用 <code>job_status</code> 查。設定頁點工具卡片可以看每一支給 AI 的用法、參數與回傳值。</p>
 <p>執行時在伺服器內部用<strong>同一張 Token</strong> 呼叫各工具原本的 API，檢查、權限、稽核都跟 REST 一樣（稽核標「經由 MCP」）。</p>
 <p><strong>檔案大小上限</strong>：<code>jtdt_catalog</code> 與 <code>workspace_list</code> 的回應都帶 <code>limits</code>（<code>upload_max_mb</code>、<code>audio_video_max_mb</code>、<code>inline_max_kb</code>、<code>workspace_quota_mb</code>、<code>workspace_free_mb</code>、<code>retention_hours</code>、<code>ticket_minutes</code>），AI 上傳前就看得到； 值跟實際檢查用同一份設定（工作區單檔上限與全站請求上限取小的），<code>null</code> 是本站沒設上限，前面若有反向代理可能更小。</p>
 <p><strong>檔案傳輸（檔案內容不經過模型）</strong>：<code>workspace_upload_url</code> / <code>workspace_download_url</code> 回一張一次性票證與 <code>curl</code> 指令。 票證放在標頭 <code>X-JTDT-Ticket</code>（不放網址）、15 分鐘有效、只能用在一個檔；上傳<strong>存好才算用掉</strong>（斷線可以重傳， 成功後再送回 <code>409</code> 與原本的檔案編號）；可以帶 <code>sha256</code>，不符回 <code>422</code>；比申報的大小大回 <code>413</code>；預設綁發出時的來源 IP。 網址用設定的站台網址組；<strong>站台網址沒填時用這次呼叫連進來的網址</strong>（<code>Host</code> 標頭＋反向代理的 <code>X-Forwarded-Proto</code>，<code>Host</code> 格式不對就不發）。網址是 HTTP 時要管理員另外允許。<code>Origin</code> 檢查一律只認設定的站台網址，不跟著 <code>Host</code>。</p>
@@ -1756,7 +1799,31 @@ bearer_token_env_var = <span class="hl-str">&quot;JTDT_TOKEN&quot;</span></code>
   <span class="hl-key">&quot;oauth&quot;</span>: <span class="hl-bool">false</span>, <span class="hl-key">&quot;headers&quot;</span>: {<span class="hl-key">&quot;Authorization&quot;</span>: <span class="hl-str">&quot;Bearer {env:JTDT_TOKEN}&quot;</span>}}}}</code></pre>
 <p>上面是 OpenCode 的 <code>opencode.json</code>。Claude Desktop 用 <code>mcp-remote</code> 轉接（只能用 256 KB 以下的小檔）。</p>
 <p><strong>限制與稽核</strong>：每張 Token 每分鐘的呼叫數、同時執行的作業數有上限（設定頁可調）；每一次執行寫 <code>mcp_call</code> 稽核 （工具、Token 名稱、使用者、來源 IP、輸入與輸出的檔案編號），上傳 / 下載寫 <code>mcp_upload</code> / <code>mcp_download</code>，不記文件內容與票證。</p>
-<p><strong>管理端點</strong>（管理員，session）：<code>GET /admin/mcp</code>（設定頁）、<code>POST /admin/mcp/save</code>（總開關、站台網址、開放的工具、 限流、票證設定）、<code>POST /admin/mcp/token</code>（<code>{&quot;preview&quot;: &quot;&lt;遮罩&gt;&quot;, &quot;allowed&quot;: true}</code>，打開 / 關閉某張 Token 連 MCP）。</p>
+<p><strong>管理端點</strong>（管理員，session）：<code>GET /admin/mcp</code>（設定頁）、<code>POST /admin/mcp/save</code>（總開關、站台網址、開放的工具、 限流、票證設定、<code>allow_stamp</code>）、<code>POST /admin/mcp/token</code>（<code>{&quot;preview&quot;: &quot;&lt;遮罩&gt;&quot;, &quot;allowed&quot;: true}</code>，打開 / 關閉某張 Token 連 MCP； <code>{&quot;preview&quot;: &quot;&lt;遮罩&gt;&quot;, &quot;stamp&quot;: true}</code>，打開 / 關閉這張 Token 經 AI 用印，要先綁使用者、允許 MCP）。</p>
+<h4 id="ai-用印v11738">AI 用印（v1.17.38）</h4>
+<p>AI 經 MCP 用資產庫裡<strong>事先開放 AI 使用</strong>的章蓋章。<strong>預設關閉</strong>，以下條件缺一個就拒絕（AI 的工具清單裡也看不到）：</p>
+<ol>
+<li>站台啟用帳號登入</li>
+<li>「設定 → MCP」打開「允許 AI 用印」</li>
+<li>那張 API Token 綁定使用者，而且在 Token 清單勾「用印」（改綁給別人、關掉 MCP 時自動收回）</li>
+<li>使用者有「用印與簽名」（騎縫章要「騎縫章」）的工具權限</li>
+<li>那顆章在「設定 → 用印申請」開放 AI 使用（使用模式要是「直接使用」），使用者在可以用的對象裡，今天還沒到上限</li>
+</ol>
+<p>   （每日上限算「處」：一次蓋 4 處算 4；檢查與扣用量在同一個交易裡，蓋章失敗會退回）</p>
+<p>不收上傳的圖片、不收文字產生的章；章的圖檔不給 AI。「僅限核准案件使用」的章 AI 一律不能用。</p>
+<p>MCP 工具（條件齊了才看得到，不在上面「開放的工具」逐支開關）：<code>stamp_list</code>（可以用的章）、<code>pdf_stamp</code>（用印與簽名）、 <code>pdf_seam_stamp</code>（騎縫章）、<code>stamp_request_status</code>（查待確認的那一件）。</p>
+<p>對應的端點是 <strong>MCP 轉呼叫用的</strong>：只收經 MCP 來的呼叫（拿允許 MCP 的 Token 直接打會被上面那條擋下，回 403），網頁登入也不能用這幾支蓋章。 AI 一律經 MCP 的 <code>jtdt_run</code> 呼叫上面四個 MCP 工具；下面列出來是為了說明參數與回應：</p>
+<pre><code class="lang-text"><span class="hl-method">GET</span>  /api/ai-stamp/seals?tool=pdf-stamp        <span class="hl-cmt"># 或 tool=pdf-seam-stamp</span>
+<span class="hl-method">POST</span> /tools/pdf-stamp/api/ai-stamp             <span class="hl-cmt"># file + placements_json</span>
+<span class="hl-method">POST</span> /tools/pdf-seam-stamp/api/ai-seam-stamp   <span class="hl-cmt"># file + asset_id + 騎縫章設定</span>
+<span class="hl-method">GET</span>  /api/ai-stamp/requests/{request_id}</code></pre>
+<p><code>placements_json</code> 是陣列，每一處 <code>{&quot;asset_id&quot;, &quot;page&quot;（0 起）, &quot;x_mm&quot;, &quot;y_mm&quot;, &quot;width_mm&quot;, &quot;height_mm&quot;, &quot;rotation_deg&quot;}</code>， 位置與大小沒給就用那顆章在資產庫設好的；只收這幾個欄位。一件最多 50 處；數值不收 NaN、無限大，寬高要大於 0、不超過 2000 mm，角度在 ±360 之間。騎縫章的設定欄位同 <code>/api/pdf-seam-stamp</code>（<code>mode</code>、<code>group</code>、<code>edge</code>、 <code>size_mm</code>、<code>offset_mm</code>、<code>pos_mm</code>、<code>angle_deg</code>、<code>opacity</code>、<code>jitter_pos</code>、<code>jitter_angle</code>、<code>seed</code>），但只收 <code>asset_id</code>， 不收 <code>stamp</code>、<code>text</code>、<code>shape</code>、<code>color</code>。</p>
+<p>MCP 的 <code>jtdt_run</code> 範例（<code>files</code> 是先用 <code>/mcp/files/upload</code> 傳上去的工作區檔案編號）：</p>
+<pre><code class="lang-json">{<span class="hl-key">&quot;tool&quot;</span>: <span class="hl-str">&quot;pdf_stamp&quot;</span>, <span class="hl-key">&quot;files&quot;</span>: [<span class="hl-str">&quot;&lt;file_id&gt;&quot;</span>],
+ <span class="hl-key">&quot;params&quot;</span>: {<span class="hl-key">&quot;placements_json&quot;</span>: <span class="hl-str">&quot;[{\&quot;asset_id\&quot;: \&quot;&lt;seal id&gt;\&quot;, \&quot;page\&quot;: 0}]&quot;</span>}}</code></pre>
+<p>回應：不需要確認的章直接回蓋好的 PDF（標頭 <code>X-JTDT-AI-Stamp</code> 是這一次的編號）；需要確認的章回 <strong>202</strong> <code>{&quot;status&quot;: &quot;pending&quot;, &quot;request_id&quot;, &quot;expires_at&quot;}</code>，Token 綁定的本人在網頁「AI 用印確認」頁（<code>/ai-stamp</code>）按核准後， <code>GET /api/ai-stamp/requests/{request_id}</code> 的 <code>status</code> 變成 <code>approved</code> 並帶 <code>file.file_id</code>（存在本人的工作區）。 核准與退回只能用網頁登入（<code>POST /ai-stamp/api/{request_id}/approve</code>、<code>POST /ai-stamp/api/{request_id}/reject</code>），帶 API Token 的請求一律 403； 24 小時沒處理變成 <code>expired</code>、檔案刪除。按核准時再檢查一次條件（章的 AI 授權與對象、工具權限、AI 用印與 MCP 開關、帳號啟用）， 有任何一項已經不成立就回 409 <code>NO_LONGER_ALLOWED</code>，這件變成 <code>void</code>、檔案刪除。每人同時待確認最多 20 件、待確認區最多 500 MB（超過回 429 <code>TOO_MANY_PENDING</code>）。 通知只寫章名、Token 名稱與時間，不寫 AI 送來的檔名。確認頁另外用 <code>GET /ai-stamp/api/pending</code>、<code>GET /ai-stamp/api/{request_id}/preview/{page}</code>。</p>
+<p>錯誤：條件不符 403（訊息帶代碼，例如 <code>MCP_OFF</code>、<code>STAMP_OFF</code>、<code>TOKEN_NOT_MCP</code>、<code>TOKEN_NOT_ALLOWED</code>、<code>NOT_VIA_MCP</code>、<code>ASSET_NOT_ALLOWED</code>）、超過每日上限 429。 原本的 <code>/api/pdf-stamp</code>、<code>/api/pdf-seam-stamp</code> 不收經 MCP 來的呼叫（403）。</p>
+<p>每一次寫稽核 <code>ai_stamp</code>（核准 / 退回 / 逾時寫 <code>ai_stamp_decision</code>）：使用者、Token 名稱、章、頁、原檔與成品的 SHA-256、 是否經確認、確認者；不含章的圖。產出的 PDF 文件資訊裡有一筆不顯示的 <code>JTDTAIStamp</code>（編號與時間）。 管理員：<code>GET /admin/mcp/ai-stamp</code>（紀錄頁）、<code>GET /admin/mcp/ai-stamp.json</code>、<code>GET /admin/mcp/ai-stamp.csv</code> （篩選 <code>asset_id</code>、<code>user_id</code>、<code>since</code>、<code>until</code>，日期 <code>YYYY-MM-DD</code>）；每顆章的 AI 設定是 <code>PUT /admin/seal-request/api/assets/{asset_id}</code> 的 <code>ai</code>（<code>enabled</code>、<code>subjects</code>、<code>confirm</code>、<code>daily_limit</code>）。</p>
 <hr>
       </section>
       <section class="doc-section" data-sec="列出資產" data-title="列出資產" hidden>

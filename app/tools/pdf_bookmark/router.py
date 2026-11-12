@@ -358,8 +358,12 @@ async def api(request: Request,
               toc_page: bool = Form(False),
               toc_title: str = Form("目錄"),
               toc_max_level: int = Form(3),
-              auto: bool = Form(False)):
+              auto: bool = Form(False),
+              toc_dots: bool = Form(True),
+              toc_at: int = Form(1)):
     """單次呼叫：上傳一或多個檔案 → 直接回加好書籤的 PDF。
+
+    `toc_at`：目錄頁插在第幾頁（1 起，預設第 1 頁）；`toc_dots`：標題與頁碼之間畫引導點。
 
     * 多檔 → 串接並以檔名建第一層書籤
     * `auto=true` → 自動偵測標題
@@ -392,7 +396,7 @@ async def api(request: Request,
             with fitz.open(str(src)) as doc:
                 items = BC.auto_detect(doc)
         _write_result(src, out, items, toc_page=toc_page, toc_title=toc_title,
-                      toc_max_level=toc_max_level, toc_dots=True)
+                      toc_max_level=toc_max_level, toc_dots=toc_dots, toc_at=toc_at)
         return FileResponse(str(out), media_type="application/pdf",
                             filename="bookmarked.pdf")
     finally:

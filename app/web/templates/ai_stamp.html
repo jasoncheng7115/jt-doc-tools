@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}{{ tr('AI 用印確認') }} · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('ai-stamp', size=22) }} {{ tr('AI 用印確認') }}</h1>
+<p class="muted">{{ tr('AI 經 MCP 送出、需要你確認的用印。看過預覽再核准，蓋好的檔案才會存進你的工作區；{0} 小時內沒有處理會自動作廢、檔案刪除。').replace('{0}', confirm_hours|string) }}</p>
+
+<section class="panel">
+  <h2>{{ icon('clock', size=18) }} {{ tr('待確認') }}</h2>
+  <p class="muted" id="asEmpty" hidden>{{ tr('目前沒有待確認的 AI 用印。') }}</p>
+  <p class="muted" id="asError" hidden></p>
+  <div id="asList" class="as-list"></div>
+</section>
+
+<style nonce="{{ request.state.csp_nonce }}">
+  .as-list { display:flex; flex-direction:column; gap:14px; }
+  .as-card { border:1px solid var(--border, #e5e7eb); border-radius:10px; padding:14px 16px; background:var(--card, #fff); }
+  .as-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+  .as-head b { font-size:15px; word-break:break-all; }
+  .as-tag { font-size:12px; padding:1px 8px; border-radius:999px; background:#eef2ff; color:#3730a3; }
+  .as-meta { display:grid; grid-template-columns:max-content 1fr; gap:4px 12px; font-size:13px; margin:0 0 10px; }
+  .as-meta dt { color:var(--muted, #6b7280); }
+  .as-meta dd { margin:0; word-break:break-all; }
+  .as-pages { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .as-pages figure { margin:0; text-align:center; font-size:12px; color:var(--muted, #6b7280); }
+  .as-pages img { display:block; max-width:180px; max-height:240px; border:1px solid var(--border, #e5e7eb); border-radius:4px; background:#fff; }
+  .as-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  @media (max-width: 600px) { .as-pages img { max-width:140px; } }
+</style>
+<template id="asIcons">
+  <span data-icon="check">{{ icon('check', size=14) }}</span>
+  <span data-icon="close">{{ icon('close', size=14) }}</span>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ request.state.csp_nonce }}">
+(function () {
+  const $ = id => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const ICONS = $('asIcons').content;
+  const TOOLS = { 'pdf-stamp': tr('用印與簽名'), 'pdf-seam-stamp': tr('騎縫章') };
+  function iconBtn(cls, name, label) {
+    const b = el('button', cls); b.type = 'button';
+    const svg = ICONS.querySelector('[data-icon="' + name + '"] svg');
+    if (svg) b.append(svg.cloneNode(true));
+    b.append(el('span', null, label));
+    return b;
+  }
+  function row(dl, k, v) { dl.append(el('dt', null, k), el('dd', null, v)); }
+
+  function card(it) {
+    const c = el('article', 'as-card'); c.id = 'req-' + it.request_id;
+    const h = el('div', 'as-head');
+    h.append(el('b', null, it.filename || tr('（沒有檔名）')), el('span', 'as-tag', TOOLS[it.tool] || it.tool));
+    c.append(h);
+    const dl = el('dl', 'as-meta');
+    row(dl, tr('章'), it.assets.map(a => a.name + (a.count > 1 ? ' × ' + a.count : '')).join('、'));
+    row(dl, tr('頁'), it.tool === 'pdf-seam-stamp' ? tr('騎縫（全部頁面）')
+                                                 : it.pages.map(p => p + 1).join('、'));
+    row(dl, 'Token', it.token || '—');
+    row(dl, tr('來源 IP'), it.ip || '—');
+    row(dl, tr('送出時間'), jtTime.dt(it.created_at));
+    row(dl, tr('自動作廢'), jtTime.dt(it.expires_at));
+    c.append(dl);
+    const pages = el('div', 'as-pages');
+    it.pages.slice(0, 6).forEach(p => {
+      const f = el('figure');
+      const img = el('img'); img.loading = 'lazy'; img.alt = tr('第 {0} 頁').replace('{0}', p + 1);
+      img.src = '/ai-stamp/api/' + it.request_id + '/preview/' + p;
+      f.append(img, el('figcaption', null, img.alt));
+      pages.append(f);
+    });
+    if (it.pages.length > 6) pages.append(el('span', 'muted', tr('另有 {0} 頁').replace('{0}', it.pages.length - 6)));
+    c.append(pages);
+    const act = el('div', 'as-actions');
+    const ok = iconBtn('btn btn-primary', 'check', tr('核准'));
+    const no = iconBtn('btn', 'close', tr('退回'));
+    ok.addEventListener('click', () => decide(it, 'approve', ok, no));
+    no.addEventListener('click', () => decide(it, 'reject', ok, no));
+    act.append(ok, no);
+    c.append(act);
+    return c;
+  }
+
+  async function decide(it, what, ok, no) {
+    const msg = what === 'approve'
+      ? tr('核准後，蓋好章的「{0}」會存進你的工作區，AI 也拿得到這份檔案。確定核准？').replace('{0}', it.filename)
+      : tr('退回後這件作廢、檔案刪除，AI 拿不到。確定退回？');
+    if (!(await showConfirm(msg, { title: what === 'approve' ? tr('核准 AI 用印') : tr('退回 AI 用印'),
+                                   kind: what === 'approve' ? '' : 'danger',
+                                   okText: what === 'approve' ? tr('核准') : tr('退回') }))) return;
+    ok.disabled = no.disabled = true;
+    try {
+      const r = await fetch('/ai-stamp/api/' + it.request_id + '/' + what, { method: 'POST' });
+      if (!r.ok) { await showAlert(await friendlyServerError(r, tr('處理失敗'))); ok.disabled = no.disabled = false; return; }
+      await load();
+    } catch (e) {
+      ok.disabled = no.disabled = false;
+      await showAlert(tr('處理失敗'));
+    }
+  }
+
+  async function load() {
+    const list = $('asList');
+    $('asError').hidden = true;
+    try {
+      const r = await fetch('/ai-stamp/api/pending', { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) throw new Error(await friendlyServerError(r, tr('讀取失敗')));
+      const data = await r.json();
+      list.replaceChildren(...data.items.map(card));
+      $('asEmpty').hidden = data.items.length > 0;
+      const want = (location.hash.match(/req=([0-9a-f]{32})/) || [])[1];
+      if (want && $('req-' + want)) $('req-' + want).scrollIntoView({ block: 'start' });
+    } catch (e) {
+      $('asError').textContent = e.message || tr('讀取失敗');
+      $('asError').hidden = false;
+    }
+  }
+  load();
+})();
+</script>
+{% endblock %}

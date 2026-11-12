@@ -632,6 +632,19 @@
         </a>
       </div>
       {% endif %}
+      {% if ai_stamp_enabled(request) %}
+      <div class="sb-solo">
+        <a class="sb-item sb-ai-stamp-link" href="/ai-stamp" data-name="AI 用印確認 ai stamp confirm mcp 用印 印章 確認 核准">
+          <span class="sb-item-icon">{{ icon('ai-stamp', size=18) }}</span>
+          <span class="sb-item-text">
+            <span class="sb-item-name">{{ tr('AI 用印確認') }}</span>
+            <span class="sb-item-desc">{{ tr('AI 送出的用印，看過再核准') }}</span>
+          </span>
+          {% set _ac = ai_stamp_count(request) %}
+          {% if _ac %}<span class="sb-count" title="{{ tr('待我確認') }}">{{ _ac }}</span>{% endif %}
+        </a>
+      </div>
+      {% endif %}
       {% if workspace_enabled(request) %}
       <div class="sb-solo">
         <a class="sb-item sb-workspace-link" href="/workspace" data-name="我的工作區 workspace 工作區 我的檔案 saved files 暫存">

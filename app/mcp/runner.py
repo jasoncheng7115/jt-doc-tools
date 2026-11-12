@@ -51,6 +51,8 @@ class Ctx:
     ip: str
     #: 這次呼叫連進來的網址（`https://主機[:埠]`）；站台網址沒填時，傳檔連結用它（v1.17.6）
     base: str = ""
+    #: 這張 Token 有沒有勾「允許用印」（AI 用印的工具只在這時候看得到，v1.17.38）
+    stamp: bool = False
 
     @property
     def user_label(self) -> str:
@@ -187,8 +189,17 @@ def _form(tool: registry.McpTool, params: dict) -> dict:
 
 async def _execute(tool: registry.McpTool, params: dict, inputs: list[dict], ctx: Ctx) -> dict:
     async with _client(ctx) as client:
-        if tool.body == "json":
-            resp = await client.post(tool.path, json={**params, **tool.force})
+        if tool.method == "GET":
+            from urllib.parse import quote
+            path, query = tool.path, {}
+            for k, v in params.items():
+                if "{" + k + "}" in path:
+                    path = path.replace("{" + k + "}", quote(str(v), safe=""))
+                elif v is not None:
+                    query[k] = ("true" if v else "false") if isinstance(v, bool) else str(v)
+            resp = await client.get(path, params=query)
+        elif tool.body == "json":
+            resp = await client.post(tool.path, json={**registry.to_api(tool, params), **tool.force})
         else:
             handles = []
             try:
@@ -212,6 +223,20 @@ async def _execute(tool: registry.McpTool, params: dict, inputs: list[dict], ctx
             return _json_result(_strip(resp.json(), tool.json_strip))
         if tool.output == "job":
             return await _follow_job(client, resp, stem, tool, ctx)
+        if tool.output == "job_json":
+            return await _follow_job_json(client, resp, tool)
+        if tool.output == "transcript":
+            return _transcript_result(resp.json(), stem, tool, ctx)
+        if tool.output == "stamp":
+            rid = resp.headers.get("X-JTDT-AI-Stamp") or ""
+            if resp.status_code == 202:
+                info = resp.json()
+                return {"status": "pending", "request_id": info.get("request_id"),
+                        "expires_at": info.get("expires_at"),
+                        "note": "The owner of this token has to approve it on the web page (AI stamp confirmation); "
+                                "until then the file is not available. Check later with stamp_request_status."}
+            name = _filename(resp, f"{stem}-{tool.name}.pdf")
+            return {"status": "done", "request_id": rid or None, "files": [_save(ctx, resp.content, name, tool)]}
         if tool.output == "text":
             return _text_result(resp.json(), stem, tool, ctx)
         if tool.output == "image_two_step":
@@ -239,9 +264,8 @@ JOB_POLL_S = 1.0
 _JOB_DONE = {"done", "error", "cancelled", "interrupted"}
 
 
-async def _follow_job(client, resp, stem: str, tool: registry.McpTool, ctx: Ctx) -> dict:
-    """原本的 API 回 `{"job_id"}`（辦公文件轉換、OCR）：照 API 文件輪詢 `/api/jobs/{id}`，做完再下載。
-    同一張 Token、同一個行程；作業本身的權限與歸屬由原本的作業端點把關。"""
+async def _wait_job(client, resp, tool: registry.McpTool) -> tuple[str, dict]:
+    """原本的 API 回 `{"job_id"}`：照 API 文件輪詢 `/api/jobs/{id}` 到做完，回 (作業編號, 作業內容)。"""
     info = resp.json() if resp.content else {}
     jid = str((info or {}).get("job_id") or "")
     if not re.fullmatch(r"[0-9a-f]{8,64}", jid):
@@ -257,10 +281,31 @@ async def _follow_job(client, resp, stem: str, tool: registry.McpTool, ctx: Ctx)
         await asyncio.sleep(JOB_POLL_S)
     if status != "done":
         raise RunError(f"{tool.name} {status}: {_short(job.get('error') or job.get('message') or status)}", "TOOL_ERROR")
+    return jid, job
+
+
+async def _follow_job(client, resp, stem: str, tool: registry.McpTool, ctx: Ctx) -> dict:
+    """背景作業（辦公文件轉換、OCR）：做完再下載結果檔。
+    同一張 Token、同一個行程；作業本身的權限與歸屬由原本的作業端點把關。"""
+    jid, _job = await _wait_job(client, resp, tool)
     dl = await client.get(f"/api/jobs/{jid}/download")
     if dl.status_code >= 400:
         raise RunError(f"{tool.name} failed (HTTP {dl.status_code}): {_error_detail(dl)}")
     return {"files": _save_files(dl, f"{stem}-{tool.name}{tool.keep[0]}", tool, ctx, keep=tool.keep)}
+
+
+async def _follow_job_json(client, resp, tool: registry.McpTool) -> dict:
+    """背景作業的結果是一份 JSON 報告（送件前檢核）：作業的 `meta.result_url` 指到報告，
+    只接受同一支工具底下的網址（作業內容來自伺服器，但不讓它指到別的地方）。"""
+    _jid, job = await _wait_job(client, resp, tool)
+    url = str((job.get("meta") or {}).get("result_url") or "")
+    if not (url.startswith(f"/tools/{tool.tool_id}/") and re.fullmatch(r"[A-Za-z0-9/_.-]{1,200}", url)
+            and ".." not in url):
+        raise RunError(f"{tool.name}: unexpected response", "TOOL_ERROR")
+    got = await client.get(url)
+    if got.status_code >= 400:
+        raise RunError(f"{tool.name} failed (HTTP {got.status_code}): {_error_detail(got)}")
+    return _json_result(_strip(got.json(), tool.json_strip))
 
 
 def _strip(obj: Any, keys: tuple) -> Any:
@@ -302,6 +347,35 @@ def _json_result(obj: Any) -> dict:
         return {"result": obj}
     return {"result_truncated": text[:JSON_MAX], "truncated": True,
             "note": f"result was {len(text)} characters; only the first {JSON_MAX} are shown"}
+
+
+def _clock(ms: Any) -> str:
+    try:
+        sec = int(ms) // 1000
+    except (TypeError, ValueError):
+        return "--:--"
+    h, rem = divmod(sec, 3600)
+    return f"{h}:{rem // 60:02d}:{rem % 60:02d}" if h else f"{rem // 60:02d}:{rem % 60:02d}"
+
+
+def _transcript_result(obj: Any, stem: str, tool: registry.McpTool, ctx: Ctx) -> dict:
+    """逐字稿：完整結果存 .json、可閱讀的逐字稿存 .txt，回前一段文字（其餘用 workspace_read_text 分頁讀）。"""
+    segs = obj.get("segments") if isinstance(obj, dict) else None
+    if not isinstance(segs, list):
+        raise RunError(f"{tool.name}: unexpected response")
+    lines = []
+    for sg in segs:
+        if not isinstance(sg, dict):
+            continue
+        who = str(sg.get("speaker_name") or sg.get("speaker") or "").strip()
+        lines.append(f"[{_clock(sg.get('start_ms'))}] {who + ': ' if who else ''}{sg.get('text') or ''}")
+    text = "\n".join(lines)
+    txt = _save(ctx, text.encode("utf-8"), f"{stem}.txt", tool)
+    full = _save(ctx, json.dumps(obj, ensure_ascii=False, indent=1).encode("utf-8"), f"{stem}.json", tool)
+    speakers = sorted({str(sg.get("speaker")) for sg in segs if isinstance(sg, dict) and sg.get("speaker")})
+    return {"files": [txt, full], "segments": len(lines), "speakers": speakers, "total_chars": len(text),
+            "note": DATA_NOTE, "text": text[:TEXT_PAGE],
+            "next_offset": TEXT_PAGE if len(text) > TEXT_PAGE else None}
 
 
 def _text_result(obj: Any, stem: str, tool: registry.McpTool, ctx: Ctx) -> dict:

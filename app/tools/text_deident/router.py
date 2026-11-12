@@ -1,6 +1,7 @@
 """Endpoints for 文字去識別化."""
 from __future__ import annotations
 
+import asyncio
 import io
 import re
 import tempfile
@@ -10,6 +11,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from ...config import settings
+from ...core import user_regex as _user_regex
 from ...core.http_utils import content_disposition
 from ..doc_deident import patterns as P
 
@@ -100,10 +102,22 @@ def _parse_custom_regexes(custom_text: str) -> list[tuple[str, re.Pattern]]:
         if not label or not rx:
             continue
         try:
-            out.append((label, re.compile(rx)))
-        except re.error:
+            out.append((label, _user_regex.compile_user(rx)))
+        except ValueError as e:
+            # 原本寫錯就略過；但「可能非常慢」要講出來，不可以默默略過（使用者會以為沒找到）
+            if "非常慢" in str(e) or "太長" in str(e) or "太複雜" in str(e):
+                raise HTTPException(400, f"自訂 regex「{label[:40]}」：{e}")
             continue
     return out
+
+
+async def _run_user(fn, custom_regexes, *args):
+    if not custom_regexes:
+        return await asyncio.to_thread(fn, *args)
+    try:
+        return await _user_regex.run(fn, *args)
+    except _user_regex.RegexBusy:
+        raise HTTPException(503, "自訂正規式的處理忙碌中，請稍後再試")
 
 
 def _detect_findings(text: str, selected_ids: set[str],
@@ -551,7 +565,8 @@ async def detect(request: Request):
                        or P.default_ids_for(_doc_lang(body, request)))
     custom_text = str(body.get("custom_regex") or "")
     custom_regexes = _parse_custom_regexes(custom_text)
-    findings = _detect_findings(text, selected_ids, custom_regexes)
+    # 自訂 regex 可能很慢：放到執行緒跑，不可以卡住整個站的事件迴圈
+    findings = await _run_user(_detect_findings, custom_regexes, text, selected_ids, custom_regexes)
     llm_augment = bool(body.get("llm_augment"))
     llm_warning = ""
     if llm_augment:
@@ -633,8 +648,9 @@ async def api_text_deident(request: Request):
                        or P.default_ids_for(_doc_lang(body, request)))
     custom_text = str(body.get("custom_regex") or "")
     custom_regexes = _parse_custom_regexes(custom_text)
-    findings = _detect_findings(text, selected_ids, custom_regexes)
-    new_text = _apply_to_text(text, findings, mode)
+    # 自訂 regex 可能很慢：放到執行緒跑，不可以卡住整個站的事件迴圈
+    findings = await _run_user(_detect_findings, custom_regexes, text, selected_ids, custom_regexes)
+    new_text = await asyncio.to_thread(_apply_to_text, text, findings, mode)
     return {
         "ok": True,
         "mode": mode,

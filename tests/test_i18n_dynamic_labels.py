@@ -493,6 +493,7 @@ _OPTION_RAW_OK = {
     ("admin_uploads.html", "u"): "使用者名稱",
     ("admin_uploads.html", "t"): "工具 id（ASCII）",
     ("admin_history.html", "u"): "使用者名稱",
+    ("admin_ai_stamp_log.html", "s.name"): "資產庫裡印章 / 簽名的名稱（管理員自己取的）",
     ("admin_audit.html", "e"): "事件代號（ASCII）",
     ("llm_settings.html", "settings.model"): "模型名稱",
     ("llm_settings.html", "_v"): "模型名稱",

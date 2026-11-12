@@ -96,6 +96,16 @@
         <label class="mcp-switch"><input type="checkbox" id="mcp-http" {% if cfg.ticket_allow_http %}checked{% endif %} aria-label="{{ tr('允許 HTTP 傳檔') }}"><span></span></label>
       </div>
     </div>
+    <div class="mcp-tile mcp-tile-wide">
+      <div class="mcp-tile-top">
+        <div class="mcp-tile-l"><b>{{ icon('ai-stamp', size=15) }} {{ tr('允許 AI 用印') }}</b>
+          <span>{{ tr('AI 只能用「設定 → 用印申請」裡開放 AI 使用的章，而且 Token 要另外勾「允許用印」。需要確認的章，由 Token 綁定的本人在「AI 用印確認」頁核准後才生效。「僅限核准案件使用」的章 AI 一律不能用。') }}</span>
+          {% if not auth_enabled %}<span class="mcp-warn">{{ tr('要先啟用帳號登入才能使用（要分得出是誰用印）。') }}</span>{% endif %}
+          <a class="mcp-limits-link" href="/admin/seal-request">{{ tr('前往「用印申請」設定每顆章') }}</a>
+          <a class="mcp-limits-link" href="/admin/mcp/ai-stamp">{{ tr('查看 AI 用印紀錄') }}</a></div>
+        <label class="mcp-switch"><input type="checkbox" id="mcp-stamp" {% if cfg.allow_stamp %}checked{% endif %} {% if not auth_enabled %}disabled{% endif %} aria-label="{{ tr('允許 AI 用印') }}"><span></span></label>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -150,7 +160,7 @@
 {# ---- Token ---- #}
 <div class="panel mcp-card">
   <h2>{{ icon('lock', size=18) }} {{ tr('可以連 MCP 的 Token') }}</h2>
-  <p class="muted mcp-lead">{{ tr('核發與綁定使用者在「API Token」頁。建議給 AI 專用一張 Token，不要跟其他程式共用。') }}
+  <p class="muted mcp-lead">{{ tr('核發與綁定使用者在「API Token」頁。允許 MCP 的 Token 只能經由 MCP 使用，不能再直接呼叫 API；要寫程式呼叫 API，請另外建一張沒有允許 MCP 的 Token。') }}
     <a href="/admin/api-tokens">{{ tr('前往 API Token') }}</a></p>
   {% if tokens %}
   <div class="mcp-tokens">
@@ -163,8 +173,16 @@
         {% if auth_enabled %}{% if t.owner %}<span class="mcp-pill is-user">{{ icon('user', size=12) }} {{ t.owner }}</span>
         {% else %}<span class="mcp-pill is-warn">{{ tr('尚未綁定（不能連）') }}</span>{% endif %}{% endif %}
         <span class="mcp-pill {{ 'is-ok' if t.mcp else 'is-off' }} mcp-token-state">{{ tr('允許 MCP') if t.mcp else tr('不允許') }}</span>
+        {% if t.stamp %}<span class="mcp-pill is-stamp mcp-token-stamp-state">{{ icon('ai-stamp', size=12) }} {{ tr('允許用印') }}</span>{% endif %}
       </div>
-      <label class="mcp-switch"><input type="checkbox" class="mcp-token-cb" data-preview="{{ t.token_preview }}" {% if t.mcp %}checked{% endif %} aria-label="{{ tr('允許 MCP') }}：{{ t.label }}"><span></span></label>
+      <div class="mcp-token-sws">
+        <div class="mcp-token-sw"><small>MCP</small>
+          <label class="mcp-switch"><input type="checkbox" class="mcp-token-cb" data-preview="{{ t.token_preview }}" {% if t.mcp %}checked{% endif %} aria-label="{{ tr('允許 MCP') }}：{{ t.label }}"><span></span></label></div>
+        {% if auth_enabled %}
+        <div class="mcp-token-sw"><small>{{ tr('用印') }}</small>
+          <label class="mcp-switch"><input type="checkbox" class="mcp-token-stamp" data-preview="{{ t.token_preview }}" {% if t.stamp %}checked{% endif %} {% if not t.owner or not t.mcp %}disabled{% endif %} aria-label="{{ tr('允許用印') }}：{{ t.label }}"><span></span></label></div>
+        {% endif %}
+      </div>
     </div>
     {% endfor %}
   </div>
@@ -270,6 +288,12 @@
   .mcp-input-wide { width: 100%; max-width: 560px; box-sizing: border-box; }
   .mcp-num { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #475569; }
   .mcp-num input { width: 110px; }
+  .mcp-token-sws { display: flex; gap: 12px; align-items: center; flex: none; }
+  .mcp-token-sw { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .mcp-token-sw small { font-size: 11px; color: #64748b; }
+  .mcp-pill.is-stamp { background: #fff7ed; color: #9a3412; }
+  .mcp-warn { color: #b91c1c; font-size: 12px; }
+  .mcp-switch input:disabled + span { opacity: .45; cursor: not-allowed; }
   .mcp-switch { position: relative; width: 42px; height: 24px; flex: none; cursor: pointer; }
   .mcp-switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
   .mcp-switch span { position: absolute; inset: 0; border-radius: 999px; background: #cbd5e1; transition: background .15s; pointer-events: none; }
@@ -491,6 +515,7 @@
       max_concurrent: parseInt(document.getElementById('mcp-conc').value, 10),
       ticket_bind_ip: document.getElementById('mcp-bindip').checked,
       ticket_allow_http: document.getElementById('mcp-http').checked,
+      allow_stamp: document.getElementById('mcp-stamp').checked,
       tools: toolCbs.filter(function (c) { return c.checked; }).map(function (c) { return c.value; }),
     };
     const r = await fetch('/admin/mcp/save', {method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -513,8 +538,23 @@
       const row = cb.closest('.mcp-token');
       row.classList.toggle('is-on', cb.checked);
       pill(row.querySelector('.mcp-token-state'), cb.checked, tr('允許 MCP'), tr('不允許'));
+      // 不能連 MCP 就一併收回用印（伺服器端也會收回）；能連了、而且已綁定使用者才可以勾用印
+      const st = row.querySelector('.mcp-token-stamp');
+      if (st) {
+        if (!cb.checked) { st.checked = false; const sp = row.querySelector('.mcp-token-stamp-state'); if (sp) sp.remove(); }
+        st.disabled = !cb.checked || !!row.querySelector('.mcp-pill.is-warn');
+      }
       document.getElementById('mcp-token-count').textContent =
         String(document.querySelectorAll('.mcp-token-cb:checked').length);
+      say(tstatus, true, tr('已儲存'));
+    });
+  });
+
+  document.querySelectorAll('.mcp-token-stamp').forEach(function (cb) {
+    cb.addEventListener('change', async function () {
+      const r = await fetch('/admin/mcp/token', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                                                 body: JSON.stringify({preview: cb.dataset.preview, stamp: cb.checked})});
+      if (!r.ok) { cb.checked = !cb.checked; say(tstatus, false, await window.friendlyServerError(r, tr('失敗'))); return; }
       say(tstatus, true, tr('已儲存'));
     });
   });

@@ -141,8 +141,14 @@ async def api_pdf_encrypt(
     algorithm: str = Form("aes-256"),
     allow_print: bool = Form(True),
     allow_copy: bool = Form(False),
+    allow_modify: bool = Form(False),
+    allow_annotate: bool = Form(False),
+    allow_form: bool = Form(False),
+    allow_accessibility: bool = Form(True),
+    allow_assemble: bool = Form(False),
+    allow_print_hq: bool = Form(False),
 ):
-    """單次上傳 PDF + 密碼，回傳加密 PDF。預設允許列印，禁止複製。"""
+    """單次上傳 PDF + 密碼，回傳加密 PDF。預設允許列印與無障礙讀取，其他禁止；權限項目跟網頁一樣。"""
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF")
     if not user_pw and not owner_pw:
@@ -160,9 +166,12 @@ async def api_pdf_encrypt(
     src.write_bytes(data)
     out = settings.temp_dir / f"enc_{uid}_out.pdf"
     stem = Path(file.filename or "document.pdf").stem
-    permissions = PERMISSION_FLAGS["accessibility"]
-    if allow_print: permissions |= PERMISSION_FLAGS["print"]
-    if allow_copy:  permissions |= PERMISSION_FLAGS["copy"]
+    permissions = 0
+    for flag, on in (("print", allow_print), ("copy", allow_copy), ("modify", allow_modify),
+                     ("annotate", allow_annotate), ("form", allow_form), ("accessibility", allow_accessibility),
+                     ("assemble", allow_assemble), ("print_hq", allow_print_hq)):
+        if on:
+            permissions |= PERMISSION_FLAGS[flag]
     import asyncio as _asyncio
     def _do():
         with fitz.open(str(src)) as doc:

@@ -660,7 +660,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **548 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **555 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -682,6 +682,9 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_admin_picker_css.py` | admin 角色/群組 picker 的長名稱不可溢出重疊（2026-06-30 客戶回報） |
 | `test_admin_privacy_boundary.py` | 管理員的隱私界線要是**一份**政策（F10，v1.15.28） |
 | `test_admin_users_table.py` | 使用者清單的欄位索引與排序型別要對得起來 |
+| `test_ai_stamp.py` | AI 用印（v1.17.38）：AI 經 MCP 蓋資產庫裡經 AI 授權的章 |
+| `test_ai_stamp_hardening.py` | AI 用印與 MCP 的資安盤點（v1.17.38，使用者 2026-11-12「安全 權限 資料不外洩 等等問題 都要完全考慮好」） |
+| `test_ai_stamp_pages_browser.py` | AI 用印的三個畫面（真瀏覽器）：設定 → 用印申請的「AI 使用」欄、設定 → MCP 的兩個開關、本人的「AI 用印確認」頁 |
 | `test_api_doc_contract.py` | API 文件契約回歸測試 |
 | `test_api_doc_coverage.py` | 每個工具的 API 都要在 `github/API.md` 與 `TEST_PLAN.md` §4 出現 |
 | `test_api_doc_examples_run.py` | 照 `github/API.md` 的 curl 範例實際呼叫 —— 抓「照文件呼叫卻壞」 |
@@ -689,6 +692,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_api_gate_and_csrf_edges.py` | API token 閘與 CSRF 豁免的邊界 |
 | `test_api_json_not_cached_by_proxy.py` | API 的 JSON 不可以被前面的快取代理存起來（v1.17.6） |
 | `test_api_page_builder.py` | `github/build-api-page.py` 產出的 api.html 不可以毀損 |
+| `test_api_parity_web_options.py` | 對外 API 要做得到網頁做得到的事（v1.17.37） |
 | `test_api_token_on_tool_paths.py` | API 手冊教人用 token 呼叫的工具路徑，在**啟用認證**的機器上也要通（v1.16.26） |
 | `test_api_token_owner.py` | API Token 綁定使用者（v1.17.6） |
 | `test_api_token_owner_browser.py` | API Token 頁的「綁定使用者」—— 在真的瀏覽器裡跑一次（v1.17.6） |
@@ -895,6 +899,8 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_mcp_cross_user.py` | MCP：一個人的 Token 拿不到另一個人的檔案與作業（v1.17.6） |
 | `test_mcp_server.py` | MCP 伺服器（v1.17.1）：傳輸、認證授權、上下文大小、執行工具、一次性傳輸票證 |
 | `test_mcp_tools_batch2.py` | MCP 第二批工具（v1.17.4）：每一支都經 `jtdt_run` 真的跑一次，走原本的 API、結果存進工作區 |
+| `test_mcp_tools_batch3.py` | MCP 第三批工具（v1.17.37）：原本「之後開放」的 9 支＋有 LLM 選項的 5 支，每一支都經 `jtdt_run` 真的跑一次 |
+| `test_mcp_tools_batch4.py` | MCP 第四批（v1.17.37）：表單自動填寫、PDF 編輯器（不含圖片）、會議錄音轉逐字稿 |
 | `test_meeting_chart_style_has_one_source.py` | 圖的配色只有一份 —— 前端畫圖、伺服器畫匯出用的圖，顏色必須同源 |
 | `test_meeting_glossary_parse_is_linear.py` | 「專有名詞或會議背景」的解析不可以是平方級（v1.16.59，CodeQL #200～#203、#199） |
 | `test_meeting_insight.py` | 會議分析的確定性部分（切視窗、解析、引用驗證、合併、發言者統計） |
@@ -1042,6 +1048,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_pdf_bookmark.py` | 書籤與目錄 |
 | `test_pdf_border.py` | 頁面加框（pdf-border） |
 | `test_pdf_compress.py` | Tests for the pdf-compress tool, focused on transparency preservation. |
+| `test_pdf_decrypt_thsr_api.py` | PDF 密碼解除：對外 API 的高鐵模式（v1.17.37） |
 | `test_pdf_editor_draft_survives_reload.py` | PDF 編輯器：**斷線 / 誤關分頁之後編輯內容要救得回來** |
 | `test_pdf_editor_font_subset.py` | PDF 編輯器寫進去的中文：字形要看得見、檔案不可以是十幾 MB |
 | `test_pdf_editor_rotation_browser.py` | PDF 編輯器（真瀏覽器）：畫面上轉過的物件，按存檔之後產出的 PDF 也是轉過的 |
@@ -2585,11 +2592,12 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `/tools/pdf-nup/api/pdf-nup` — POST file + n → PDF
 - [ ] `/tools/pdf-merge/api/pdf-merge` — POST files[] → PDF
 - [ ] `/tools/pdf-encrypt/api/pdf-encrypt` — POST file + password → PDF
-- [ ] `/tools/pdf-decrypt/api/pdf-decrypt` — POST file + password → PDF
+- [ ] `/tools/pdf-decrypt/api/pdf-decrypt` — POST file + password → PDF；`thsr_mode=true`＋`thsr_date_from` / `thsr_date_to`（高鐵模式，回傳檔名是出發日期）、`use_filename_as_password=true` 也可以（v1.17.37）
 - [ ] `/tools/pdf-border/api/pdf-border` — POST file + 框線設定 → PDF
 - [ ] `/tools/doc-straighten/api/doc-straighten` — POST file + dpi / binarize / detect_quad / **enhance**（清晰化，預設開）→ 拉正後的 PDF；回應標頭帶 `X-Straighten-Pages` 與 **`X-Straighten-Worst-Residual`**（殘留歪斜，驗收指標）
 - [ ] `/tools/pdf-bookmark/api/pdf-bookmark` — POST files[] + 書籤設定 → PDF（書籤 / 目錄頁）
-- [ ] `/tools/pdf-seam-stamp/api/pdf-seam-stamp` — POST file + 章來源 → PDF（切片蓋在連續頁）
+- [ ] `/tools/pdf-seam-stamp/api/pdf-seam-stamp` — POST file + 章來源 → PDF（切片蓋在連續頁）；經 MCP 呼叫 403（v1.17.38）
+- [ ] `/tools/pdf-seam-stamp/api/ai-seam-stamp` — AI 用印（v1.17.38）：只收經 AI 授權的印章 `asset_id`，不收 stamp / text；條件不符 403；需要確認回 202 `request_id`，否則回 PDF＋`X-JTDT-AI-Stamp`
 - [ ] `/tools/pdf-page-size/api/pdf-page-size` — POST file + paper → PDF（統一尺寸）
 
 ### 內容擷取
@@ -2611,12 +2619,14 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `/tools/pdf-metadata/api/pdf-metadata` — POST file + clear_* flags → cleaned PDF
 
 ### 用印 / 簽名 / 浮水印 / 表單
-- [ ] `/tools/pdf-stamp/api/pdf-stamp` — POST file + stamp_image → PDF
+- [ ] `/tools/pdf-stamp/api/pdf-stamp` — POST file + stamp_image → PDF；經 MCP 呼叫 403（v1.17.38）
+- [ ] `/tools/pdf-stamp/api/ai-stamp` — AI 用印（v1.17.38）：`placements_json` 每處都要有經 AI 授權的 `asset_id`，不收 png_b64 / kind / 其他欄位；混一顆不行的整件 403、沒蓋一半；超過每日上限 429；需要確認回 202，否則回 PDF（第一頁沒蓋、指定頁有蓋、帶回查註記）
   - [ ] 改用 `asset_id`（不上傳圖、不給位置）→ 章蓋在資產庫設好的位置；給了位置就照給的蓋；`stamp_image` 與 `asset_id` 同時給、兩個都沒給、id 不存在或是浮水印 → 400
   - [ ] 蓋完到管理區的「用印簽名歷史」看得到這一筆（原檔與成品都打得開、成品有章、記著呼叫的帳號）；被退回的呼叫不留歷史
   - [ ] 啟用認證時稽核記錄的檔名是被蓋章的 PDF（就算呼叫端先送印章圖）
 - [ ] `/tools/pdf-watermark/api/pdf-watermark` — POST file + text → PDF
-- [ ] `/tools/pdf-fill/api/pdf-fill` — POST file + company_id → PDF
+- [ ] `/tools/pdf-fill/api/pdf-fill` — POST file + company_id → PDF；`company_id` 不存在回 400（不可以改用別家公司的資料，v1.17.37）
+- [ ] `/tools/pdf-fill/api/companies` — GET 公司清單，只有 `id` / `name` / `is_active`，不含欄位資料（v1.17.37）
 
 ### 註解
 - [ ] `/tools/pdf-annotations/api/pdf-annotations` — POST file → JSON
@@ -2656,7 +2666,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 ### 文件處理
 - [ ] `/tools/doc-deident/api/doc-deident` — POST file → de-identified
 - [ ] `/tools/doc-diff/api/doc-diff` — POST file_a + file_b → JSON
-- [ ] `/tools/pdf-editor/api/pdf-editor` — POST file + edits json → PDF
+- [ ] `/tools/pdf-editor/api/pdf-editor` — POST file + edits json → PDF；經 MCP 呼叫（帶程序內的 MCP 標記）時有圖片物件回 400，一般呼叫照舊；偽造的標記不算（v1.17.37）
 - [ ] `/tools/pdf-ocr/api/pdf-ocr` — POST file + langs → `{job_id}` (async)
 
 ### 查詢 / 分析 / 檢核
@@ -3142,7 +3152,8 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 - [ ] `/admin/mcp`：頁面列出開放的工具、Token（只顯示遮罩）、四家客戶端的設定範例
 - [ ] `/admin/mcp/save`：總開關、站台網址（只收 http / https）、開放的工具（只留登記表裡有的）、限流與同時數（夾在範圍內）、票證設定；寫稽核（對象 `mcp`）
-- [ ] `/admin/mcp/token`：用遮罩辨認 Token、打開 / 關閉「允許 MCP」；稽核只記 Token 名稱，不記 Token
+- [ ] `/admin/mcp/token`：用遮罩辨認 Token、打開 / 關閉「允許 MCP」；稽核只記 Token 名稱，不記 Token；`stamp` 打開 / 關閉「用印」（沒綁使用者或沒允許 MCP 回 400；關掉 MCP 一併收回）
+- [ ] `/admin/mcp/ai-stamp`：AI 用印紀錄頁（v1.17.38），依章與日期篩選；`/admin/mcp/ai-stamp.json` 回同一份；`/admin/mcp/ai-stamp.csv` 匯出（= + - @ 開頭的格子前加單引號、寫稽核 `export`）
 
 #### 通知設定（`/admin/notify/*`）
 
@@ -3263,7 +3274,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 目前沒有自動化測試碰過，跑 `python tools/report_endpoint_test_coverage.py`，
 那份是**提示不是判決**。
 
-共 **325 支**（工具首頁不列，§2 已逐支驗收）。
+共 **326 支**（工具首頁不列，§2 已逐支驗收）。
 
 **全站（認證 / 帳號 / 工作區 / 介面語言）**
 
@@ -3306,6 +3317,13 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `POST /me/2fa/verify`
 - [ ] `POST /me/email`
 - [ ] `GET /my-jobs`
+- [ ] `GET /ai-stamp` — AI 用印確認頁（v1.17.38）：只在「允許 AI 用印」打開且啟用登入時出現在側欄（帶待確認件數）；列出本人待確認的 AI 用印、預覽、核准 / 退回
+- [ ] `GET /ai-stamp/api/pending` — 本人的待確認清單（別人看不到）；帶 API Token 的請求 403
+- [ ] `GET /ai-stamp/api/{request_id}/preview/{page}` — 待確認那一件的頁面預覽（只有本人；處理過的 410）
+- [ ] `POST /ai-stamp/api/{request_id}/approve` — 本人核准：存進本人工作區、待確認區的檔案刪掉；帶 API Token 403；別人 404；處理過的 409；工作區存不下 409 而且維持待確認
+- [ ] `POST /ai-stamp/api/{request_id}/reject` — 本人退回：作廢、檔案刪除
+- [ ] `GET /api/ai-stamp/seals` — AI 用印：這張 Token 的使用者經 AI 可以用的章（不回圖檔）；條件不符 403
+- [ ] `GET /api/ai-stamp/requests/{request_id}` — AI 用印某一件的狀態；只有本人；核准後帶 `file.file_id`
 - [ ] `GET /seal-request` — 用印申請頁（v1.17.29）：功能沒啟用時說明「尚未啟用」；啟用後側欄出現「用印申請」與待我審核件數
 - [ ] `GET /setup-admin`
 - [ ] `POST /setup-admin`
@@ -3844,6 +3862,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `GET /tools/submission-check/page-preview/{case_id}/{file_id}/{page}`
 - [ ] `GET /tools/submission-check/result/{case_id}/{version}`
 - [ ] `POST /tools/submission-check/run/{case_id}`
+- [ ] `POST /tools/submission-check/api/submission-check` — 對外 API（v1.17.37）：一次建案件＋上傳＋開始檢核，回 `job_id` / `case_id` / `version` / `result_url`；做完 `GET /api/jobs/{job_id}` 的 `meta.result_url` 是報告；`allow_llm=false` 時 L5 / L6 標「這次不使用 LLM」而且真的沒呼叫 LLM；案件出現在工具頁的清單
 - [ ] `GET /tools/submission-check/self-entities`
 - [ ] `POST /tools/submission-check/upload`
 
@@ -6361,6 +6380,46 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > **最高原則：加 i18n 不可以改壞現有功能。** 所以每一個階段的第一條驗收都是
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
+
+### 6.147 v1.17.38 — AI 用印（**每次發版必過**）
+
+- [ ] 條件逐一拿掉都被拒（403）而且 AI 的工具清單看不到：未啟用登入、「允許 AI 用印」關、Token 沒勾「用印」、沒有工具權限、那顆章沒開 AI 使用、使用者不在對象裡、章是「僅限核准案件使用」（就算設定檔裡 AI 旗標殘留也不行）。
+- [ ] 只收資產庫裡開放 AI 使用的章：沒有 `asset_id`、不存在的章、`png_b64`、`kind`、其他欄位都拒絕；用到一顆不行的整件拒絕、紀錄裡沒有；騎縫章只收經 AI 授權的印章（簽名不行）。
+- [ ] 需要確認：回 202 與編號，AI 拿不到檔案；帶 Token 的核准 403、別的帳號 404；本人在「AI 用印確認」頁看預覽並核准後才存進工作區、AI 用 `stamp_request_status` 拿到檔案；不能核准兩次；退回作廢刪檔；24 小時沒處理作廢刪檔。
+- [ ] 每日上限：超過回 429。
+- [ ] 稽核 `ai_stamp` 有 Token 名稱、章、頁、原檔與成品的 SHA-256，不含章的圖；產出的 PDF 有 `JTDTAIStamp` 註記。
+- [ ] 原本的 `/api/pdf-stamp`、`/api/pdf-seam-stamp` 經 MCP 呼叫 403；Token 改綁給別人時「用印」收回。
+- [ ] 設定 → 用印申請：直接使用的章有「AI 使用」一欄（允許、對象、需要本人確認、每人每日上限）；受管制的章寫「受管制的章 AI 不能用」；改成受管制時先問並一併關閉 AI 使用。設定 → MCP：「允許 AI 用印」開關（未啟用登入時停用並說明）、每張 Token 的「用印」開關（沒綁使用者或沒允許 MCP 時停用）、連到 AI 用印紀錄。
+- [ ] 側欄「AI 用印確認」只在打開 AI 用印且啟用登入時出現，帶待確認件數；圖示跟「用印與簽名」「用印申請」不同。
+- 自動化：`tests/test_ai_stamp.py`（MCP 總開關、Token 不能核准、受管制的章、原本 API 擋 MCP 四處變異驗證過）
+- [ ] **資安盤點（同版）**：允許 MCP 的 Token 直接呼叫任何一般 API 都 403 `MCP_TOKEN_REST_DENIED`（含偽造的經 MCP 標頭），沒勾 MCP 的 Token 照常；AI 用印另外要 MCP 總開關、Token 的 MCP 旗標與經 MCP 轉呼叫（`ai_stamp.require` 自己也擋）。
+- [ ] 核准時再檢查：送出後收回章的 AI 使用、改掉對象、拿掉工具權限、關掉 AI 用印 → 核准回 409 `NO_LONGER_ALLOWED`、狀態 `void`、檔案刪除；紀錄頁顯示「條件改變作廢」。
+- [ ] 每日上限算處數（一件 4 處對上限 3 → 429、不扣用量）；16 條同時送出、上限 5 → 剛好 5 件成功；頁碼不存在、不是 PDF 失敗都退回用量；一件超過 50 處 400；NaN、無限大、0 寬、超過 2000 mm、角度超過 ±360、頁碼非整數都 400；騎縫章數值 NaN 400；MCP 參數 NaN / inf 拒絕。
+- [ ] 每人待確認 20 件、500 MB 上限（429 `TOO_MANY_PENDING`、退回用量）；`stamp_ai_*` 與騎縫章暫存檔用完就刪。
+- [ ] 通知主旨與內文不含 AI 送來的檔名；AI 用印紀錄 CSV 對 `=`、`+`、`-`、`@`、tab、換行、前置空白開頭的格子加單引號。
+- [ ] 設定 → 用印申請：關掉某顆章的「需要本人確認」先跳警告（AI 會拿到章的圖），按取消維持打勾；每日上限欄寫「處，0 不限」。設定 → MCP 的 Token 區寫明「允許 MCP 的 Token 只能經由 MCP 使用」。
+- [ ] 自訂正規式（清單處理 `filter` + `regex`、文字去識別化 `custom_regex`、文件去識別化 `custom`）：`(a+)+$` 這類「重複裡面又有重複」回 400；一般寫法照常；專用執行緒池滿了回 503、做完名額還回來。
+- 自動化：`tests/test_ai_stamp_hardening.py`（擋 REST、`require` 第二道、核准重新檢查、處數、退回用量、待確認上限、通知、NaN、暫存檔、正規式，各自變異驗證過）、`tests/test_csv_injection.py`（前置空白）、`tests/test_ai_stamp_pages_browser.py`（改成經 MCP 的路徑建立待確認件）
+
+### 6.146 v1.17.37 — MCP 補齊工具、對外 API 補上網頁有的選項（**每次發版必過**）
+
+- [ ] MCP 新開放 14 支，每一支經 `jtdt_run` 實際跑通、結果類型對：PDF 轉文書檔（docx）、PDF 轉簡報（odp，需 Impress）、掃描修正、頁面加框、PDF 附件萃取（工作區不收的種類略過；沒有附件回 NOT_FOUND）、隱藏內容掃描、掃描拼合（結果不叫 `scan-merge.pdf`）、清單處理、乘車證明整理、註解整理（不回 `upload_id`）、電子發票處理（不回 `buffer`）、文件去識別化（redact 真的拿掉文字）、文字去識別化、送件前檢核（回 JSON 報告）。
+- [ ] 歸類表只剩「不開放」與「另有規則」兩類；用印、騎縫章維持不開放。
+- [ ] 第四批：表單自動填寫（`pdf_fill_companies` 只回編號與名稱、`pdf_fill_form` 填好回 PDF、公司不存在回錯誤）、PDF 編輯器（`pdf_edit` 畫文字與框；圖片、帶 `asset_id` / `existing_src` 的物件在 MCP 端就拒絕）、會議錄音轉逐字稿（`meeting_transcribe` 存 .txt 與 .json、回前一段文字與發言者）；這三種（表單兩支、逐字稿）與 PDF 密碼解除預設不開放。
+- [ ] 有 LLM 選項的工具經 MCP 一律不呼叫 LLM：送件前檢核就算站台有 LLM、模型是 vision，L5 / L6 也標「這次不使用 LLM」、LLM 函式一次都沒被呼叫；網頁流程有 LLM 時照常跑 L5（`allow_llm` 預設開）。
+- [ ] 新參數型別：清單處理的 `ops` 是 JSON 字串（不是 JSON 或不是陣列 → MCP 端就拒絕）；文字去識別化的 `types` 是逗號字串（格式不對拒絕；空的用預設集）；頁面轉向的 `per_page` 是 JSON 物件、原樣送給表單型 API。
+- [ ] 對外 API 補上的選項都有作用：頁面轉向 `mode`（含左右 / 上下翻轉）與 `per_page`、插入頁碼 `from_page` / `to_page`（`{N}` 只算範圍內）、浮水印 `page_mode`、PDF 密碼保護 6 種權限（預設跟原本一樣只有列印＋無障礙）、書籤 `toc_at` / `toc_dots`、掃描修正 `size_w` / `size_h` / `size_unit`、文件去識別化 `custom`、多頁合併的邊距 / 間距 / 方向 / 框線 / 原頁碼 / 裁切標記 / 自訂紙張（過大的邊距與間距夾回去、不會 500）；頁面尺寸統一的 `align` / `keep_same` / 自訂尺寸；文件去識別化的 `valid_checksum` 收 `true`。
+- [ ] 結構檢查：網頁端點收的欄位要嘛 API 也收、要嘛列在理由清單；MCP 參數跟 API 欄位對得上；理由清單沒有過期的欄位。
+- 自動化：`tests/test_mcp_tools_batch3.py`（LLM 開關變異驗證過）、`tests/test_mcp_tools_batch4.py`（編輯器 API 那一層的圖片檢查變異驗證過）、`tests/test_api_parity_web_options.py`（拿掉 MCP 一個參數的變異驗證過）、`tests/test_mcp_server.py::test_every_loaded_tool_is_classified`
+
+### 6.145 v1.17.37 — PDF 密碼解除：API 與 MCP 的高鐵模式（**每次發版必過**）
+
+- [ ] `POST /tools/pdf-decrypt/api/pdf-decrypt` 帶 `thsr_mode=true` 與日期範圍：範圍內有出發日期 → 200、檔名是那個日期（`YYYY/MM/DD` 格式時 `/` 換成 `_`）、檔案打開不需密碼；範圍內沒有 → 400 並說試了幾天。
+- [ ] 範圍超過 800 天、日期不是 `YYYY-MM-DD`、日期格式含 Y M D 與分隔以外的字元、只給一端 → 400；網頁的 `/submit` 一樣擋。
+- [ ] 原本只帶 `password` 的呼叫照常；`use_filename_as_password=true` 用檔名當密碼。
+- [ ] MCP `pdf_decrypt` 帶 `thsr_mode` 與日期範圍做得出來、結果檔名是日期；參數格式不對（日期用 `/`、格式含 `%`、布林給字串）在 MCP 端就拒絕。
+- [ ] 網頁高鐵模式一次丟兩張票：ZIP 裡是兩個日期檔名。
+- 自動化：`tests/test_pdf_decrypt_thsr_api.py`（API 忽略高鐵模式的變異驗證過）、`tests/test_mcp_tools_batch2.py::test_decrypt_thsr_mode`
 
 ### 6.144 v1.17.36 — 加密紙本備份（**每次發版必過**）
 

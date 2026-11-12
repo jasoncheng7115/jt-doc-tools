@@ -478,8 +478,10 @@ POST /tools/pdf-rotate/api/pdf-rotate
 | 參數 | 類型 | 必填 | 說明 |
 |---|---|---|---|
 | `file` | file | ✓ | PDF |
-| `angle` | int | ✓ | `90` / `180` / `270` |
-| `pages` | str | | 套用頁碼，例 `1,3-5`；空白 = 全部 |
+| `angle` | int | | `90`（預設）/ `180` / `270`，順時針 |
+| `mode` | str | | 給了就取代 `angle`：`rotate-90` / `rotate-180` / `rotate-270` / `flip-h`（左右翻轉）/ `flip-v`（上下翻轉） |
+| `pages` | str | | 套用頁碼，例 `1,3-5`；`all` 或空白 = 全部 |
+| `per_page` | str | | 逐頁設定（JSON 物件，頁碼從 1 起），例 `{"2": "flip-h", "5": "none"}`；`none` = 這頁不動。優先於 `mode` / `pages` |
 
 ```bash
 curl -X POST http://localhost:8765/tools/pdf-rotate/api/pdf-rotate \
@@ -501,10 +503,11 @@ POST /tools/pdf-pageno/api/pdf-pageno
 | 參數 | 類型 | 必填 | 說明 |
 |---|---|---|---|
 | `file` | file | ✓ | PDF |
-| `position` | str | | `bottom-center`（預設）/ `bottom-right` / `bottom-left` / `top-*` |
+| `position` | str | | `br`（右下，預設）/ `bc`（下方置中）/ `bl` / `tl` / `tc` / `tr`（t = 上、b = 下、l / c / r = 左 / 中 / 右） |
 | `fmt` | str | | 格式樣板：`{n}` 是目前頁碼、`{N}` 是總頁數（`{total}` 同 `{N}`），例 `第 {n} 頁` / `{n} / {N}` |
 | `start` | int | | 起始頁碼，預設 `1` |
-| `font_size` | float | | 字級，預設 `10` |
+| `from_page` / `to_page` | int | | 只在這個範圍裡編頁碼（1 起；`to_page=0` 到最後一頁，預設全部）；`{N}` 只算範圍內的頁數 |
+| `font_size` | float | | 字級，預設 `11` |
 | `margin_mm` | float | | 邊距（mm） |
 | `color` | str | | 文字顏色 hex，例 `#000000` |
 
@@ -573,6 +576,7 @@ POST /tools/pdf-bookmark/api/pdf-bookmark
 | `toc_at` | int | | 目錄插在第幾頁之前，預設 `1`（最前面）。**有封面就填 `2`** |
 | `toc_title` | str | | 目錄頁標題，預設 `目錄` |
 | `toc_max_level` | int | | 目錄列到第幾層（1~3），預設 `3` |
+| `toc_dots` | bool | | 標題與頁碼之間畫引導點，預設 `true` |
 
 書籤的**層級必須從 1 開始且一次只能加一層**（1→3 會被自動修成 1→2），**頁碼超出總頁數會被夾到最後一頁** —— 兩者都會自動修正，不會失敗。插入目錄頁之後頁碼會自動往後移，不需要自己算 —— **`toc_at` 之前的書籤不會被動到**（指向封面的那一筆仍然是第 1 頁）。
 
@@ -650,6 +654,7 @@ POST /tools/doc-straighten/api/doc-straighten
 | `binarize` | bool | | 轉成黑白。**預設關閉** —— 實測會讓中文的細筆畫消失、文字辨識率明顯下降；它的用途是縮小檔案 |
 | `detect_quad` | bool | | 偵測紙張邊界做透視校正（預設開）。抓不到時自動退回只做拉正 |
 | `enhance` | bool | | 清晰化：壓平不勻的底色與陰影（**預設開**）。實測手機翻拍的單邊硬陰影，文字辨識率 0.472 → 0.982；已經很平的掃描件開著也是零變動 |
+| `size_w` / `size_h` / `size_unit` | str | | 輸出每頁的尺寸，`size_unit` 是 `px`（預設）或 `mm`；沒填或不合法 = 照拉正後的大小 |
 
 ```bash
 curl -X POST http://localhost:8765/tools/doc-straighten/api/doc-straighten \
@@ -707,10 +712,23 @@ POST /tools/pdf-nup/api/pdf-nup
 | 參數 | 類型 | 必填 | 說明 |
 |---|---|---|---|
 | `file` | file | ✓ | PDF |
-| `cols` | int | ✓ | 每頁欄數 |
-| `rows` | int | ✓ | 每頁列數 |
-| `paper` | str | | 紙張，`A4`（預設）/ `A3` / `Letter` ... |
-| `orientation` | str | | `portrait` / `landscape` |
+| `cols` | int | | 每頁欄數，預設 `2` |
+| `rows` | int | | 每頁列數，預設 `1`（`cols × rows` 最多 64） |
+| `paper` | str | | `a4`（預設）/ `a3` / `a5` / `b4` / `b5` / `letter` / `legal` / `custom` |
+| `paper_w_mm` / `paper_h_mm` | float | | `paper=custom` 時的寬高（mm） |
+| `orientation` | str | | `auto`（預設）/ `portrait` / `landscape` |
+| `margin_mm` | float | | 四邊邊距（mm），預設 `10` |
+| `gap_mm` | float | | 格子之間的間距（mm），預設 `5` |
+| `direction` | str | | `ltr`（先左右再上下，預設）/ `ttb`（先上下再左右） |
+| `reverse` | bool | | 倒序排列，預設 `false` |
+| `auto_rotate` | bool | | 自動旋轉原頁以塞滿格子，預設 `true` |
+| `page_align` | str | | 原頁在格子裡的位置：`center`（預設）/ `left-top` |
+| `show_border` / `border_width_pt` / `border_color` | bool / float / str | | 格子框線，預設不畫、`0.5` pt、`#94a3b8` |
+| `show_page_num` / `page_num_format` / `page_num_size_pt` | bool / str / float | | 在格子裡印原頁碼（`{n}` 原頁碼、`{t}` 總頁數），預設不印、`{n}`、`8` pt |
+| `pad_blanks` | bool | | 最後一張不足時補空白格，預設 `true` |
+| `show_crop_marks` / `crop_mark_len_mm` | bool / float | | 裁切標記，預設不畫、`4` mm |
+
+數值會夾在合理範圍內；邊距與間距不會大到把格子擠沒。
 
 ```bash
 curl -X POST http://localhost:8765/tools/pdf-nup/api/pdf-nup \
@@ -1373,9 +1391,9 @@ POST /tools/pdf-fill/api/pdf-fill
 
 | 參數 | 類型 | 必填 | 說明 |
 |---|---|---|---|
-| `file` | file | ✓ | 待填的 PDF 表單 |
-| `company_id` | str | | 公司主檔 ID（admin 端建立） |
-| `font_id` | str | | 填寫字型 ID |
+| `file` | file | ✓ | 待填的表單（PDF 或辦公文件） |
+| `company_id` | str | | 公司主檔 ID（管理員建立；清單見下方）；空白 = 目前選用的那一家。**指定的公司不存在回 400**，不會改用別家公司的資料 |
+| `font_id` | str | | 填寫字型 ID，預設 `auto` |
 
 ```bash
 curl -X POST http://localhost:8765/tools/pdf-fill/api/pdf-fill \
@@ -1385,6 +1403,20 @@ curl -X POST http://localhost:8765/tools/pdf-fill/api/pdf-fill \
 ```
 
 回應：填好的 PDF。
+
+**列出可以用的公司**（只有編號與名稱，不含任何欄位資料）：
+
+```text
+GET /tools/pdf-fill/api/companies
+```
+
+```bash
+curl -s http://localhost:8765/tools/pdf-fill/api/companies \
+  -H "Authorization: Bearer YOUR_TOKEN" | jq
+# → {"companies": [{"id": "acme", "name": "範例股份有限公司", "is_active": true}, ...]}
+```
+
+`is_active` 是沒指定 `company_id` 時會用的那一家。
 
 ### PDF 用印 / 簽名
 
@@ -1465,9 +1497,10 @@ POST /tools/pdf-watermark/api/pdf-watermark
 |---|---|---|---|
 | `file` | file | ✓ | PDF |
 | `text` | str | ✓ | 浮水印文字 |
-| `opacity` | float | | 透明度 0–1，預設 `0.15` |
-| `rotation_deg` | float | | 旋轉角度，預設 `45` |
-| `mode` | str | | `tile`（平鋪）/ `center`（置中） |
+| `opacity` | float | | 不透明度 0.05–1，預設 `0.25` |
+| `rotation_deg` | float | | 旋轉角度，預設 `30` |
+| `mode` | str | | `tile`（平鋪，預設）/ `single`（單一個） |
+| `page_mode` | str | | `all`（每一頁，預設）/ `first`（只有第一頁）/ `last`（只有最後一頁） |
 | `text_color` | str | | 文字顏色 hex |
 | `text_size_pt` | float | | 字級（pt） |
 
@@ -1504,6 +1537,8 @@ curl -X POST http://localhost:8765/tools/pdf-editor/api/pdf-editor \
 
 回應：套用 overlay 後的 PDF。模型格式詳見 web UI 的 pdf-editor。
 
+**經 MCP（AI）呼叫時不收圖片**：`type` 是 `image` 或帶 `asset_id` / `existing_src` 的物件回 400。圖片可以是資產庫裡的印章、簽名，AI 用印另有規則，不可以從編輯器繞過。一般 API 呼叫不受影響。
+
 座標與尺寸的單位是 pt（左上角為原點）。轉過的物件另外帶 `angle`（順時針角度）與 `quad`（轉完之後的四個角 `[[x,y],…]`，依序左上、右上、右下、左下）；文字、圖片、矩形、橢圓、白底、螢光筆都適用。圖片可帶 `opacity`（`0`~`1`）。
 
 ---
@@ -1523,9 +1558,15 @@ POST /tools/pdf-encrypt/api/pdf-encrypt
 | `file` | file | ✓ | PDF |
 | `user_pw` | str | | 開啟密碼 |
 | `owner_pw` | str | | 權限密碼 |
-| `algorithm` | str | | 加密演算法，例 `AES-256` |
-| `allow_print` | bool | | 允許列印 |
-| `allow_copy` | bool | | 允許複製內容 |
+| `algorithm` | str | | `aes-256`（預設）/ `aes-128` / `rc4-128` |
+| `allow_print` | bool | | 允許列印，預設 `true` |
+| `allow_print_hq` | bool | | 允許高品質列印，預設 `false` |
+| `allow_copy` | bool | | 允許複製內容，預設 `false` |
+| `allow_modify` | bool | | 允許修改內容，預設 `false` |
+| `allow_annotate` | bool | | 允許加註解，預設 `false` |
+| `allow_form` | bool | | 允許填寫表單，預設 `false` |
+| `allow_assemble` | bool | | 允許插入、刪除、旋轉頁面，預設 `false` |
+| `allow_accessibility` | bool | | 允許螢幕報讀等無障礙工具讀取文字，預設 `true` |
 
 ```bash
 curl -X POST http://localhost:8765/tools/pdf-encrypt/api/pdf-encrypt \
@@ -1548,16 +1589,29 @@ POST /tools/pdf-decrypt/api/pdf-decrypt
 | 參數 | 類型 | 必填 | 說明 |
 |---|---|---|---|
 | `file` | file | ✓ | 加密的 PDF |
-| `password` | str | ✓ | 開啟密碼 |
+| `password` | str | | 開啟密碼；只有權限限制、沒有開啟密碼的 PDF 可以留空 |
+| `use_filename_as_password` | bool | | 設為 true 時，用不含副檔名的檔名當密碼試 |
+| `thsr_mode` | bool | | 設為 true 時啟用高鐵模式：台灣高鐵電子車票 PDF 的開啟密碼是出發日期，日期範圍內每一天都試 |
+| `thsr_date_from` / `thsr_date_to` | str | 高鐵模式必填 | 日期範圍，`YYYY-MM-DD`；顛倒會自動對調，最多 800 天 |
+| `thsr_date_format` | str | | 密碼的日期寫法，預設 `YYYYMMDD`（高鐵）；只能含 Y、M、D 與 `-` `/` `.` `_` 空白 |
+
+密碼依序試：高鐵模式的日期 → 檔名 → `password`。
 
 ```bash
 curl -X POST http://localhost:8765/tools/pdf-decrypt/api/pdf-decrypt \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -F "file=@encrypted.pdf" -F "password=open123" \
   --output decrypted.pdf
+
+# 高鐵模式：在 2026-08-01 到 2026-10-31 之間找出發日期
+curl -X POST http://localhost:8765/tools/pdf-decrypt/api/pdf-decrypt \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "file=@thsr-ticket.pdf" -F "thsr_mode=true" \
+  -F "thsr_date_from=2026-08-01" -F "thsr_date_to=2026-10-31" \
+  -OJ
 ```
 
-回應：解密後的 PDF。
+回應：解密後的 PDF。高鐵模式解開的檔名是出發日期（例如 `20261108.pdf`，日期格式裡的 `/` `.` 換成 `_`），其他是 `<原檔名>_decrypted.pdf`。密碼都不對回 400；高鐵模式會說試了幾天。
 
 ### 文件去識別化
 
@@ -1573,7 +1627,10 @@ POST /tools/doc-deident/api/doc-deident
 | `types` | str | | 要偵測的 PII 類型 CSV（身分證 / 電話 / email / 地址 ...），空白 = 預設集 |
 | `mode` | str | | `mask`（遮罩，預設）/ `redact`（真刪）/ `replace`（換成假值） |
 | `replacements` | str | | 僅 `replace`：JSON 物件 `{"原值": "指定的新值"}`。沒指定的一律自動產生 |
-| `valid_checksum` | str | | 僅 `replace`：`1` = 產生可通過檢查碼的假值（見下方說明） |
+| `valid_checksum` | str | | 僅 `replace`：`1` 或 `true` = 產生可通過檢查碼的假值（見下方說明） |
+| `custom` | str | | 自訂偵測規則，一行一條（格式見表格下方） |
+
+`custom` 每一行是「標籤、`|`、regex」，例如 `代號|PROJ-\d+`；沒有 `|` 的整行當 regex。「重複裡面又有重複」的寫法（例如 `(a+)+`）會被拒絕（400）。
 
 ```bash
 curl -X POST http://localhost:8765/tools/doc-deident/api/doc-deident \
@@ -1739,6 +1796,8 @@ curl -X POST http://localhost:8765/tools/text-list/api/text-list \
 ```
 
 回應 JSON：`{"lines": [...], "count": N, "original_count": M, ...}`。
+
+**自訂正規式的限制**（清單處理的 `filter` 加 `"regex": true`、文字去識別化的 `custom_regex`、文件去識別化的 `custom`）：「重複裡面又有重複」（例如 `(a+)+`、`(\d+)*`）這種可能非常慢的寫法回 400；其他的放在專用的處理執行緒跑，同時太多件回 503，請稍後再試。
 
 ### 文件翻譯
 
@@ -2219,6 +2278,39 @@ curl http://localhost:8765/tools/einvoice-scan/api/backend-status \
 ```
 
 回應 JSON：`{"available": true/false, ...}`。
+
+### 送件前檢核
+
+一次建案件、上傳檔案、開始檢核（背景作業）。案件會出現在工具頁的案件清單，跟網頁做的一樣。
+
+```text
+POST /tools/submission-check/api/submission-check
+```
+
+| 參數 | 類型 | 必填 | 說明 |
+|---|---|---|---|
+| `files` | file[] | ✓ | 要送出的文件，PDF / 辦公文件 / 圖片，一次最多 50 個、合計 200 MB |
+| `case_name` | str | | 案件名稱 |
+| `main_entity_name` | str | | 送件的公司或個人名稱（每份文件都會比對） |
+| `main_entity_identifier` | str | | 它的統一編號或身分證字號 |
+| `counterparty_name` | str | | 送件對象 |
+| `case_number` | str | | 案號 |
+| `deadline` | str | | 截止日，`YYYY-MM-DD` |
+| `allow_llm` | bool | | 預設 `true`（站台設定了 LLM 才會用）；`false` 時不跑 LLM 文字、LLM 視覺兩層，報告裡標成略過 |
+
+```bash
+curl -X POST http://localhost:8765/tools/submission-check/api/submission-check \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "files=@quote.pdf" -F "files=@contract.pdf" \
+  -F "main_entity_name=範例股份有限公司" -F "allow_llm=false" | jq
+# → {"job_id": "...", "case_id": "...", "version": "v1", "result_url": "/tools/submission-check/result/.../v1", ...}
+
+# 做完之後讀報告
+curl -s http://localhost:8765/tools/submission-check/result/$CASE/v1 \
+  -H "Authorization: Bearer YOUR_TOKEN" | jq '.summary'
+```
+
+回應：`job_id`、`case_id`、`version`、`result_url`（報告）、`case_url`（工具頁的案件畫面）。用第 10 章的 job API 等作業做完，再讀 `result_url`；報告是 JSON（`summary` 有分數、各層狀態，另有每份文件與跨文件的發現）。
 
 ### 送件前檢核 — 自家公司主檔
 
@@ -2812,6 +2904,10 @@ GET  /mcp/files/download    # 用一次性票證下載工作區的檔案
 Token 要綁定使用者（「API Token」頁的「綁定使用者」欄，或 `POST /admin/api/tokens/owner`），權限照那位使用者（沒有某支工具的權限就看不到、也叫不動）。有帶 `Origin` 標頭時要是站台網址那個來源。
 協定版本支援 `2025-11-25`、`2025-06-18`、`2025-03-26`、`2024-11-05`。
 
+**允許 MCP 的 Token 只能經 MCP 使用**（v1.17.38 起）：拿它直接呼叫一般 API 回 403 `MCP_TOKEN_REST_DENIED`。
+AI 客戶端讀得到自己設定裡的 Token，同一張如果也能直接打 API，MCP 這一層的限制（AI 用印、PDF 編輯器不收圖片、沒開放的工具）就沒有作用。
+要寫程式呼叫 API，請另外建一張沒有允許 MCP 的 Token。
+
 **工具清單只有固定 9 個**（不管開放多少支本站工具都不會變多，不會佔滿模型的上下文）：
 
 | MCP 工具 | 作用 |
@@ -2826,15 +2922,15 @@ Token 要綁定使用者（「API Token」頁的「綁定使用者」欄，或 `
 | `workspace_download_url` | 取得一次性下載指令（`curl`） |
 | `workspace_read_text` | 分頁讀工作區裡的文字檔 |
 
-目前開放的工具（共 28 支）：
+目前開放的工具（共 46 支）：
 
-* 文件轉換：`office_to_pdf`（辦公文件轉 PDF）、`document_to_images`（辦公文件轉圖片）、`image_to_pdf`（圖片轉 PDF）、`pdf_to_markdown`（PDF 轉 Markdown）、`markdown_to_document`（Markdown 轉辦公文件）、`office_convert`（辦公文件格式互轉）
-* PDF 編修：`pdf_merge`（檔案合併）、`pdf_split`（頁面分拆）、`pdf_compress`（PDF 壓縮）、`pdf_rotate`（頁面轉向）、`pdf_page_numbers`（插入頁碼）、`pdf_watermark`（浮水印）、`pdf_flatten_annotations`（註解平面化）、`pdf_remove_annotations`（註解清除）、`pdf_encrypt`（PDF 密碼保護）、`pdf_decrypt`（PDF 密碼解除）、`pdf_n_up`（多頁合併）、`pdf_clean_metadata`（中繼資料清除）、`pdf_reorder_pages`（頁面整理）、`pdf_page_size`（頁面尺寸統一）、`pdf_bookmarks`（書籤與目錄）
-* 擷取與統計：`pdf_extract_text`（擷取文字）、`document_word_count`（字數統計）、`pdf_extract_images`（擷取圖片）、`pdf_ocr`（OCR 文字辨識）
-* 比對：`text_diff`（文字差異比對）、`document_diff`（文件差異比對）
-* 查詢：`vat_lookup`（統編查詢）
+* 文件轉換：`office_to_pdf`（辦公文件轉 PDF）、`document_to_images`（辦公文件轉圖片）、`image_to_pdf`（圖片轉 PDF）、`pdf_to_markdown`（PDF 轉 Markdown）、`markdown_to_document`（Markdown 轉辦公文件）、`office_convert`（辦公文件格式互轉）、`pdf_to_office`（PDF 轉文書檔）、`pdf_to_slides`（PDF 轉簡報）
+* PDF 編修：`pdf_merge`（檔案合併）、`pdf_split`（頁面分拆）、`pdf_compress`（PDF 壓縮）、`pdf_rotate`（頁面轉向）、`pdf_page_numbers`（插入頁碼）、`pdf_watermark`（浮水印）、`pdf_flatten_annotations`（註解平面化）、`pdf_remove_annotations`（註解清除）、`pdf_encrypt`（PDF 密碼保護）、`pdf_decrypt`（PDF 密碼解除）、`pdf_n_up`（多頁合併）、`pdf_clean_metadata`（中繼資料清除）、`pdf_reorder_pages`（頁面整理）、`pdf_page_size`（頁面尺寸統一）、`pdf_bookmarks`（書籤與目錄）、`document_straighten`（掃描修正）、`pdf_add_border`（頁面加框）、`scan_merge`（掃描拼合）、`document_deidentify`（文件去識別化）、`pdf_fill_form`（表單自動填寫）、`pdf_edit`（PDF 編輯器）
+* 擷取與統計：`pdf_extract_text`（擷取文字）、`document_word_count`（字數統計）、`pdf_extract_images`（擷取圖片）、`pdf_ocr`（OCR 文字辨識）、`pdf_extract_attachments`（PDF 附件萃取）、`pdf_hidden_content_scan`（隱藏內容掃描）、`text_list_process`（清單處理）、`transit_proof_parse`（乘車證明整理）、`pdf_list_annotations`（註解整理）、`einvoice_scan`（電子發票處理）、`text_deidentify`（文字去識別化）、`meeting_transcribe`（會議錄音轉逐字稿）
+* 比對：`text_diff`（文字差異比對）、`document_diff`（文件差異比對）、`submission_check`（送件前檢核）
+* 查詢：`vat_lookup`（統編查詢）、`pdf_fill_companies`（表單自動填寫：公司清單）
 
-PDF 密碼解除（`pdf_decrypt`）預設不開放，要管理員另外勾選。辦公文件格式互轉與 OCR 文字辨識在伺服器端是背景作業，`jtdt_run` 會等到做完；等太久會先回作業編號，AI 用 `job_status` 查。設定頁點工具卡片可以看每一支給 AI 的用法、參數與回傳值。
+PDF 密碼解除（`pdf_decrypt`，也支援高鐵模式）、表單自動填寫（`pdf_fill_companies`、`pdf_fill_form`，填進去的是公司資料）、會議錄音轉逐字稿（`meeting_transcribe`，檔案大、處理久）預設不開放，要管理員另外勾選。有 LLM 選項的工具（文件 / 文字去識別化、註解整理、電子發票處理、送件前檢核、表單自動填寫等）經 MCP 一律不使用 LLM。PDF 編輯器（`pdf_edit`）經 MCP 只能放文字與圖形，不收圖片、印章、簽名。用印、騎縫章、以 LLM 為核心的工具（公文撰擬、逐句翻譯、文件翻譯、會議摘要）、事務機與加密紙本備份不經 MCP 開放。辦公文件格式互轉與 OCR 文字辨識在伺服器端是背景作業，`jtdt_run` 會等到做完；等太久會先回作業編號，AI 用 `job_status` 查。設定頁點工具卡片可以看每一支給 AI 的用法、參數與回傳值。
 
 執行時在伺服器內部用**同一張 Token** 呼叫各工具原本的 API，檢查、權限、稽核都跟 REST 一樣（稽核標「經由 MCP」）。
 
@@ -2882,7 +2978,63 @@ bearer_token_env_var = "JTDT_TOKEN"
 （工具、Token 名稱、使用者、來源 IP、輸入與輸出的檔案編號），上傳 / 下載寫 `mcp_upload` / `mcp_download`，不記文件內容與票證。
 
 **管理端點**（管理員，session）：`GET /admin/mcp`（設定頁）、`POST /admin/mcp/save`（總開關、站台網址、開放的工具、
-限流、票證設定）、`POST /admin/mcp/token`（`{"preview": "<遮罩>", "allowed": true}`，打開 / 關閉某張 Token 連 MCP）。
+限流、票證設定、`allow_stamp`）、`POST /admin/mcp/token`（`{"preview": "<遮罩>", "allowed": true}`，打開 / 關閉某張 Token 連 MCP；
+`{"preview": "<遮罩>", "stamp": true}`，打開 / 關閉這張 Token 經 AI 用印，要先綁使用者、允許 MCP）。
+
+### AI 用印（v1.17.38）
+
+AI 經 MCP 用資產庫裡**事先開放 AI 使用**的章蓋章。**預設關閉**，以下條件缺一個就拒絕（AI 的工具清單裡也看不到）：
+
+1. 站台啟用帳號登入
+2. 「設定 → MCP」打開「允許 AI 用印」
+3. 那張 API Token 綁定使用者，而且在 Token 清單勾「用印」（改綁給別人、關掉 MCP 時自動收回）
+4. 使用者有「用印與簽名」（騎縫章要「騎縫章」）的工具權限
+5. 那顆章在「設定 → 用印申請」開放 AI 使用（使用模式要是「直接使用」），使用者在可以用的對象裡，今天還沒到上限
+   （每日上限算「處」：一次蓋 4 處算 4；檢查與扣用量在同一個交易裡，蓋章失敗會退回）
+
+不收上傳的圖片、不收文字產生的章；章的圖檔不給 AI。「僅限核准案件使用」的章 AI 一律不能用。
+
+MCP 工具（條件齊了才看得到，不在上面「開放的工具」逐支開關）：`stamp_list`（可以用的章）、`pdf_stamp`（用印與簽名）、
+`pdf_seam_stamp`（騎縫章）、`stamp_request_status`（查待確認的那一件）。
+
+對應的端點是 **MCP 轉呼叫用的**：只收經 MCP 來的呼叫（拿允許 MCP 的 Token 直接打會被上面那條擋下，回 403），網頁登入也不能用這幾支蓋章。
+AI 一律經 MCP 的 `jtdt_run` 呼叫上面四個 MCP 工具；下面列出來是為了說明參數與回應：
+
+```text
+GET  /api/ai-stamp/seals?tool=pdf-stamp        # 或 tool=pdf-seam-stamp
+POST /tools/pdf-stamp/api/ai-stamp             # file + placements_json
+POST /tools/pdf-seam-stamp/api/ai-seam-stamp   # file + asset_id + 騎縫章設定
+GET  /api/ai-stamp/requests/{request_id}
+```
+
+`placements_json` 是陣列，每一處 `{"asset_id", "page"（0 起）, "x_mm", "y_mm", "width_mm", "height_mm", "rotation_deg"}`，
+位置與大小沒給就用那顆章在資產庫設好的；只收這幾個欄位。一件最多 50 處；數值不收 NaN、無限大，寬高要大於 0、不超過 2000 mm，角度在 ±360 之間。騎縫章的設定欄位同 `/api/pdf-seam-stamp`（`mode`、`group`、`edge`、
+`size_mm`、`offset_mm`、`pos_mm`、`angle_deg`、`opacity`、`jitter_pos`、`jitter_angle`、`seed`），但只收 `asset_id`，
+不收 `stamp`、`text`、`shape`、`color`。
+
+MCP 的 `jtdt_run` 範例（`files` 是先用 `/mcp/files/upload` 傳上去的工作區檔案編號）：
+
+```json
+{"tool": "pdf_stamp", "files": ["<file_id>"],
+ "params": {"placements_json": "[{\"asset_id\": \"<seal id>\", \"page\": 0}]"}}
+```
+
+回應：不需要確認的章直接回蓋好的 PDF（標頭 `X-JTDT-AI-Stamp` 是這一次的編號）；需要確認的章回 **202**
+`{"status": "pending", "request_id", "expires_at"}`，Token 綁定的本人在網頁「AI 用印確認」頁（`/ai-stamp`）按核准後，
+`GET /api/ai-stamp/requests/{request_id}` 的 `status` 變成 `approved` 並帶 `file.file_id`（存在本人的工作區）。
+核准與退回只能用網頁登入（`POST /ai-stamp/api/{request_id}/approve`、`POST /ai-stamp/api/{request_id}/reject`），帶 API Token 的請求一律 403；
+24 小時沒處理變成 `expired`、檔案刪除。按核准時再檢查一次條件（章的 AI 授權與對象、工具權限、AI 用印與 MCP 開關、帳號啟用），
+有任何一項已經不成立就回 409 `NO_LONGER_ALLOWED`，這件變成 `void`、檔案刪除。每人同時待確認最多 20 件、待確認區最多 500 MB（超過回 429 `TOO_MANY_PENDING`）。
+通知只寫章名、Token 名稱與時間，不寫 AI 送來的檔名。確認頁另外用 `GET /ai-stamp/api/pending`、`GET /ai-stamp/api/{request_id}/preview/{page}`。
+
+錯誤：條件不符 403（訊息帶代碼，例如 `MCP_OFF`、`STAMP_OFF`、`TOKEN_NOT_MCP`、`TOKEN_NOT_ALLOWED`、`NOT_VIA_MCP`、`ASSET_NOT_ALLOWED`）、超過每日上限 429。
+原本的 `/api/pdf-stamp`、`/api/pdf-seam-stamp` 不收經 MCP 來的呼叫（403）。
+
+每一次寫稽核 `ai_stamp`（核准 / 退回 / 逾時寫 `ai_stamp_decision`）：使用者、Token 名稱、章、頁、原檔與成品的 SHA-256、
+是否經確認、確認者；不含章的圖。產出的 PDF 文件資訊裡有一筆不顯示的 `JTDTAIStamp`（編號與時間）。
+管理員：`GET /admin/mcp/ai-stamp`（紀錄頁）、`GET /admin/mcp/ai-stamp.json`、`GET /admin/mcp/ai-stamp.csv`
+（篩選 `asset_id`、`user_id`、`since`、`until`，日期 `YYYY-MM-DD`）；每顆章的 AI 設定是
+`PUT /admin/seal-request/api/assets/{asset_id}` 的 `ai`（`enabled`、`subjects`、`confirm`、`daily_limit`）。
 
 ---
 

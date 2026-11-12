@@ -2173,6 +2173,17 @@ async def download(upload_id: str, request: Request):
 
 
 # ---- 對外 API：upload PDF + 編輯 model JSON → 平面化後直接回 PDF ----
+def mcp_model_has_image(model_obj) -> bool:
+    """編輯模型裡有沒有圖片（含資產庫的印章 / 簽名、從原檔取出的圖）。MCP 那一層與 API 共用。"""
+    pages = model_obj.get("pages") if isinstance(model_obj, dict) else None
+    for pg in pages if isinstance(pages, list) else []:
+        for obj in (pg.get("objects") or []) if isinstance(pg, dict) else []:
+            if isinstance(obj, dict) and (obj.get("type") == "image" or obj.get("asset_id")
+                                          or obj.get("existing_src")):
+                return True
+    return False
+
+
 @router.post("/api/pdf-editor", include_in_schema=True)
 async def api_pdf_editor(
     request: Request,
@@ -2194,6 +2205,12 @@ async def api_pdf_editor(
         model_obj = _json.loads(model or "{}")
     except Exception as exc:
         raise HTTPException(400, f"model JSON 解析失敗：{exc}")
+    if not isinstance(model_obj, dict):
+        raise HTTPException(400, "model 必須是 JSON 物件")
+    # 經 MCP（AI）來的請求不收圖片：圖片可以是資產庫裡的印章 / 簽名，AI 用印另有規則
+    # （MCP 規劃第 12 節：每顆章的 AI 授權、人工確認），不可以從編輯器這條路繞過去。
+    if getattr(request.state, "api_via_mcp", False) and mcp_model_has_image(model_obj):
+        raise HTTPException(400, "經 MCP 不能放圖片、印章或簽名")
     upload_id = uuid.uuid4().hex
     from ...core import upload_owner as _uo
     _uo.record(upload_id, request)

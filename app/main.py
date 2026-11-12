@@ -28,7 +28,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.17.36"
+VERSION = "1.17.38"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -349,6 +349,32 @@ def _tpl_seal_review_count(request=None) -> int:
         return 0
 
 
+def _tpl_ai_stamp_enabled(request=None) -> bool:
+    """Jinja global：側欄的「AI 用印確認」只在 AI 用印開啟、而且啟用登入時出現（預設關閉）。"""
+    try:
+        from .core import auth_settings
+        from .mcp import settings as _ms
+        return bool(_ms.get().get("allow_stamp")) and auth_settings.is_enabled()
+    except Exception:
+        return False
+
+
+def _tpl_ai_stamp_count(request=None) -> int:
+    """側欄的「AI 用印待我確認」件數；算不出來就不顯示。"""
+    try:
+        if not _tpl_ai_stamp_enabled(request):
+            return 0
+        u = getattr(getattr(request, "state", None), "user", None)
+        if not u or not u.get("user_id"):
+            return 0
+        from .core import ai_stamp
+        return ai_stamp.pending_count(int(u["user_id"]))
+    except Exception:
+        return 0
+
+
+templates.env.globals["ai_stamp_enabled"] = _tpl_ai_stamp_enabled
+templates.env.globals["ai_stamp_count"] = _tpl_ai_stamp_count
 templates.env.globals["seal_request_enabled"] = _tpl_seal_request_enabled
 templates.env.globals["seal_review_count"] = _tpl_seal_review_count
 
@@ -968,6 +994,10 @@ app.include_router(_build_workspace_router(templates))
 from .web.seal_request_routes import build_router as _build_seal_request_router  # noqa: E402
 
 app.include_router(_build_seal_request_router(templates))
+# AI 用印（v1.17.38）：AI 查可用的章與狀態、本人確認頁；預設關閉（設定 → MCP）
+from .web.ai_stamp_routes import build_router as _build_ai_stamp_router  # noqa: E402
+
+app.include_router(_build_ai_stamp_router(templates))
 # 加密紙本備份的離線還原包：要登入但不跟工具權限（不含秘密；出事時每位保管人都要拿得到）
 from .web.paper_backup_routes import build_router as _build_paper_backup_router  # noqa: E402
 app.include_router(_build_paper_backup_router())
@@ -1819,6 +1849,8 @@ async def _api_token_gate(request: Request, call_next):
     # 稽核記錄要寫得出「這筆是用哪一張 Token 呼叫的」（`tool_invoke` 與
     # `file_download` 都會帶上）。只放名稱，不放 Token 本身。
     request.state.api_token_label = token_row.get("label") or ""
+    # AI 用印（v1.17.38）：這張 Token 有沒有勾「允許用印」
+    request.state.api_token_stamp = bool(token_row.get("stamp"))
     # MCP 在行程內轉呼叫時帶程序內的密值（`app.mcp.runner.VIA_SECRET`），稽核標成「經由 MCP」；外部偽造不了
     _via = request.headers.get("X-JTDT-Via-MCP") or ""
     if _via:
@@ -1826,6 +1858,17 @@ async def _api_token_gate(request: Request, call_next):
 
         from .mcp import runner as _mcp_runner
         request.state.api_via_mcp = _hmac.compare_digest(_via, _mcp_runner.VIA_SECRET)
+    # **允許 MCP 的 Token 只能經 MCP 使用**（v1.17.38 資安盤點）：AI 客戶端拿得到自己設定裡的 Token，
+    # 如果它也能直接打一般 API，就繞過 MCP 那一層的限制（AI 用印的條件與本人確認、PDF 編輯器不收圖片、
+    # 不開放的工具）。MCP 在行程內轉呼叫時帶程序內密值，外部帶不出來 → 一律拒絕。
+    # 要寫腳本呼叫 REST 的，另外建一張不勾「允許 MCP」的 Token。
+    request.state.api_token_mcp = bool(token_row.get("mcp"))
+    if request.state.api_token_mcp and not getattr(request.state, "api_via_mcp", False):
+        return _JSONResponse(
+            {"error": "forbidden", "code": "MCP_TOKEN_REST_DENIED",
+             "detail": "這張 Token 已允許 MCP，只能經由 MCP 使用；要直接呼叫 API 請另外建一張沒有允許 MCP 的 Token"},
+            status_code=403,
+        )
     # When auth is on, attach the token's owning user to request.state.user
     # so downstream perm checks (if any) are scoped to that user. Tokens
     # without an owner are treated as having no permission when auth is on

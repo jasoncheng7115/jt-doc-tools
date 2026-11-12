@@ -250,6 +250,15 @@ async def upload_files(
 
     回 {"case_id": "...", "files": [...]}.
     """
+    return await _ingest(request, files, case_id=case_id, case_name=case_name,
+                         main_entity_name=main_entity_name, main_entity_identifier=main_entity_identifier,
+                         counterparty_name=counterparty_name, case_number=case_number, deadline=deadline)
+
+
+async def _ingest(request: Request, files: list, *, case_id=None, case_name=None, main_entity_name=None,
+                  main_entity_identifier=None, counterparty_name=None, case_number=None,
+                  deadline=None) -> dict:
+    """建 / 取案件、寫檔、設 ground truth —— 網頁的上傳與對外 API 共用。"""
     if not files:
         raise HTTPException(400, "請至少上傳一個檔案")
     if len(files) > 50:
@@ -365,14 +374,20 @@ async def run_check(case_id: str, request: Request):
     _check_case_acl(case, request, write=True)
     if not case.get("files"):
         raise HTTPException(400, "case 內沒有檔案，請先上傳")
+    job, version = _start_run(case)
+    return {"job_id": job.id, "case_id": case_id, "version": version}
 
+
+def _start_run(case: dict, *, allow_llm: bool = True):
+    """開一個新版本、背景跑檢核；回 (作業, 版本)。`allow_llm=False` 時 L5 / L6 不呼叫 LLM（MCP 一律如此）。"""
+    case_id = case["case_id"]
     version = _cm.new_version(case)
     case["status"] = "running"
     _cm.save_case(case)
 
     def _run(job: "_jm.Job") -> None:
         try:
-            report = _build_report_l1(case, version, job)
+            report = _build_report_l1(case, version, job, allow_llm=allow_llm)
             _cm.save_version_report(case_id, version, report)
             # update case status
             cur = _cm.load_case(case_id)
@@ -408,7 +423,37 @@ async def run_check(case_id: str, request: Request):
     case["current_job_id"] = job.id
     case["current_job_started"] = time.time()
     _cm.save_case(case)
-    return {"job_id": job.id, "case_id": case_id, "version": version}
+    return job, version
+
+
+@router.post("/api/submission-check", include_in_schema=True)
+async def api_submission_check(
+    request: Request,
+    files: list[UploadFile] = File(...),
+    case_name: Optional[str] = Form(None),
+    main_entity_name: Optional[str] = Form(None),
+    main_entity_identifier: Optional[str] = Form(None),
+    counterparty_name: Optional[str] = Form(None),
+    case_number: Optional[str] = Form(None),
+    deadline: Optional[str] = Form(None),
+    allow_llm: str = Form("true"),
+):
+    """對外 API：一次建案件、上傳、開始檢核，回 `job_id`。
+
+    跟網頁同一套流程（案件會出現在工具頁的案件清單）；作業做完後
+    `GET /api/jobs/{job_id}` 的 `meta.result_url` 是報告（JSON）。
+    `allow_llm=false` 時不跑 LLM 那兩層（L5 文字、L6 視覺），結果裡標成略過。
+    """
+    info = await _ingest(request, files, case_name=case_name, main_entity_name=main_entity_name,
+                         main_entity_identifier=main_entity_identifier, counterparty_name=counterparty_name,
+                         case_number=case_number, deadline=deadline)
+    case = _cm.load_case(info["case_id"])
+    use_llm = str(allow_llm).strip().lower() not in ("0", "false", "off", "no")
+    job, version = _start_run(case, allow_llm=use_llm)
+    result_url = f"/tools/submission-check/result/{case['case_id']}/{version}"
+    job.meta["result_url"] = result_url
+    return {"job_id": job.id, "case_id": case["case_id"], "version": version, "result_url": result_url,
+            "case_url": f"/tools/submission-check/case/{case['case_id']}"}
 
 
 @router.get("/result/{case_id}/{version}")
@@ -643,7 +688,7 @@ def _check_case_acl(case: dict, request: Request, write: bool = False) -> None:
         raise HTTPException(404, "case 不存在")
 
 
-def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
+def _build_report_l1(case: dict, version: str, job: "_jm.Job", allow_llm: bool = True) -> dict:
     """跑 L1 規則檢查 + 文字層身分一致性彙總成 report.
 
     Sprint 1：L1 only
@@ -830,7 +875,8 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
             _llm_server_error = _ls.server_problem("submission-check")
     except Exception:
         pass
-    if _l3.llm_available():
+    use_llm_text = allow_llm and _l3.llm_available()
+    if use_llm_text:
         _set_layer_status(job, "L5", "running")
         try:
             job.progress = 0.60
@@ -874,7 +920,7 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
 
     # L5: LLM 文字 — 修改範本痕跡推論
     l3_residue_count = 0
-    if _l3.llm_available():
+    if use_llm_text:
         try:
             job.progress = 0.70
             job.message = f"L5 LLM 文字 ({_llm_model_name})：範本痕跡推論中..."
@@ -918,6 +964,8 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
 
     if l3_used:
         _set_layer_status(job, "L5", "done", "LLM 文字分析完成")
+    elif not allow_llm:
+        _set_layer_status(job, "L5", "skipped", "這次不使用 LLM")
     elif _llm_server_error:
         _set_layer_status(job, "L5", "error", _llm_server_error)
     else:
@@ -926,7 +974,7 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
     # L6: LLM 視覺 — 對每檔渲染後送 vision LLM
     l4_used = False
     # 重新處理 findings_per_file 中由 L4 vision 加的 findings 標記為 layer="L6"
-    if _l4.vision_available():
+    if allow_llm and _l4.vision_available():
         _set_layer_status(job, "L6", "running")
         try:
             gt_main = ((case.get("ground_truth") or {}).get("main_entity") or {}).get("name") or ""
@@ -952,6 +1000,8 @@ def _build_report_l1(case: dict, version: str, job: "_jm.Job") -> dict:
             _set_layer_status(job, "L6", "done", f"{vision_calls} 檔視覺分析")
         except Exception:
             _set_layer_status(job, "L6", "error", "vision 階段異常")
+    elif not allow_llm:
+        _set_layer_status(job, "L6", "skipped", "這次不使用 LLM")
     else:
         try:
             from app.core.llm_settings import llm_settings

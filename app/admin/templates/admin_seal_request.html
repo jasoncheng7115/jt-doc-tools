@@ -47,7 +47,7 @@
   <h2>{{ icon('stamp', size=18) }} {{ tr('印章與簽名') }}</h2>
   <p class="muted" id="srDisabledHint">{{ tr('還沒啟用：保管人、可申請對象、用印流程與保留期限可以先設定好；使用模式要啟用之後才能改成「僅限核准案件使用」。') }}</p>
   <div class="sr-table-wrap"><table class="sr-table">
-    <thead><tr><th></th><th>{{ tr('名稱') }}</th><th>{{ tr('種類') }}</th><th>{{ tr('使用模式') }}</th><th>{{ tr('保管人') }}</th><th>{{ tr('可申請對象') }}</th></tr></thead>
+    <thead><tr><th></th><th>{{ tr('名稱') }}</th><th>{{ tr('種類') }}</th><th>{{ tr('使用模式') }}</th><th>{{ tr('保管人') }}</th><th>{{ tr('可申請對象') }}</th><th>{{ tr('AI 使用') }}</th></tr></thead>
     <tbody id="srRows"></tbody>
   </table></div>
   <p class="muted" id="srEmpty" hidden>{{ tr('資產庫裡還沒有印章或簽名。') }}</p>
@@ -248,6 +248,9 @@
   .form-row .sr-asset-pick { width:auto; display:inline-flex; gap:6px; align-items:center; padding:4px 10px 4px 6px;
     border:1px solid var(--border, #e5e7eb); border-radius:8px; color:inherit; cursor:pointer; }
   .sr-asset-pick img { width:32px; height:32px; object-fit:contain; background:#fff; border-radius:4px; }
+  .sr-ai-cell { min-width: 190px; }
+  .sr-ai-line { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-size: 13px; }
+  .sr-ai-limit { width: 72px; padding: 2px 6px; }
 </style>
 <template id="srIcons">
   <span data-icon="user">{{ icon('user', size=14) }}</span>
@@ -319,8 +322,15 @@
       });
       sel.disabled = !state.enabled;   // 一改就生效：沒啟用時沒有人申請得了
       sel.addEventListener('change', async () => {
+        const body = { mode: sel.value };
+        if (sel.value === 'approval' && a.ai && a.ai.enabled) {
+          // 受管制的章 AI 一律不能用：改成受管制時一併關閉 AI 使用（伺服器端也會擋）
+          if (!(await showConfirm(tr('改成「僅限核准案件使用」後，這顆章會一併關閉 AI 使用。確定？'),
+                                  { title: tr('使用模式'), okText: tr('確定') }))) { render(); return; }
+          body.ai = { enabled: false };
+        }
         sel.disabled = true;
-        const res = await api('PUT', '/assets/' + encodeURIComponent(a.id), { mode: sel.value });
+        const res = await api('PUT', '/assets/' + encodeURIComponent(a.id), body);
         if (!res.ok) { showAlert(res.message); } else { state = res; }
         render();
       });
@@ -346,7 +356,69 @@
         td.append(box, b);
         return td;
       };
-      tr_.append(tdImg, tdName, tdType, tdMode, cell('custodians', a.custodians), cell('requesters', a.requesters));
+      // AI 使用（v1.17.38）：受管制的章一律不能經 AI 用；直接使用的章逐顆開放、指定對象、要不要本人確認、每日上限
+      const aiCell = () => {
+        const td = el('td', 'sr-ai-cell');
+        if (a.mode === 'approval') { td.append(el('span', 'muted', tr('受管制的章 AI 不能用'))); return td; }
+        const ai = a.ai || {};
+        const put = async patch => {
+          const res = await api('PUT', '/assets/' + encodeURIComponent(a.id), { ai: patch });
+          if (!res.ok) { showAlert(res.message); } else { state = res; }
+          render();
+        };
+        const line = (cb, text) => { const l = el('label', 'sr-ai-line'); l.append(cb, el('span', null, text)); return l; };
+        const on = el('input'); on.type = 'checkbox'; on.checked = !!ai.enabled;
+        on.addEventListener('change', () => { on.disabled = true; put({ enabled: on.checked }); });
+        td.append(line(on, tr('允許 AI 使用')));
+        const box = el('div', 'sr-chips sr-cell-chips');
+        const subs = ai.subjects || [];
+        if (subs.length) {
+          subs.forEach(sj => {
+            const gone = sj.exists === false;
+            const c = el('span', 'sr-chip' + (sj.type !== 'user' ? ' sr-chip-group' : '') + (gone ? ' sr-chip-gone' : ''),
+                         (sj.type === 'group' ? tr('群組') + '：' : sj.type === 'ou' ? tr('組織單位') + '：' : '')
+                         + (sj.name || sj.key) + (gone ? ' ' + tr('（已不存在）') : ''));
+            c.dataset.i18n = 'skip';
+            box.append(c);
+          });
+        } else {
+          box.append(el('span', 'sr-chip sr-chip-none', tr('未設定')));
+        }
+        const who = iconBtn('user', tr('設定'));
+        who.addEventListener('click', () => pick({
+          title: tr('AI 可以用的對象：{0}').replace('{0}', a.name),
+          hint: tr('可以經 AI（MCP）用這顆章的人；沒有設定就沒有人能用。還要 Token 勾「允許用印」。'),
+          selected: subs,
+          onSave: async list => {
+            const res = await api('PUT', '/assets/' + encodeURIComponent(a.id), { ai: { subjects: list } });
+            if (!res.ok) return res.message;
+            state = res; render();
+            return null;
+          },
+        }));
+        td.append(box, who);
+        const cf = el('input'); cf.type = 'checkbox'; cf.checked = ai.confirm !== false;
+        cf.addEventListener('change', async () => {
+          // 不需要確認＝AI 蓋完當下就拿到檔案，也就拿到了章的圖（跟寄出去的用印文件一樣，可以被擷取再利用）
+          if (!cf.checked && !(await showConfirm(
+                tr('關掉之後，AI 蓋完章當下就拿得到檔案，也就拿得到這顆章的圖（跟寄出去的用印文件一樣，可以被擷取再利用）。重要的章建議維持需要本人確認。確定關掉？'),
+                { title: tr('不需要本人確認'), kind: 'danger', okText: tr('關掉') }))) { cf.checked = true; return; }
+          cf.disabled = true; put({ confirm: cf.checked });
+        });
+        td.append(line(cf, tr('需要本人確認')));
+        const lim = el('input', 'field sr-ai-limit'); lim.type = 'number'; lim.min = '0'; lim.max = '1000';
+        lim.value = String(ai.daily_limit || 0);
+        lim.setAttribute('aria-label', tr('每人每日最多蓋幾處（0 不限）'));
+        lim.addEventListener('change', () => {
+          const n = parseInt(lim.value, 10);
+          if (!(n >= 0 && n <= 1000)) { showAlert(tr('每日上限要是 0 到 1000 的整數')); render(); return; }
+          put({ daily_limit: n });
+        });
+        const ll = el('label', 'sr-ai-line'); ll.append(el('span', null, tr('每人每日上限')), lim, el('small', 'muted', tr('處，0 不限')));
+        td.append(ll);
+        return td;
+      };
+      tr_.append(tdImg, tdName, tdType, tdMode, cell('custodians', a.custodians), cell('requesters', a.requesters), aiCell());
       return tr_;
     }));
     $('srEmpty').hidden = state.assets.length > 0;

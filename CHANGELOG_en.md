@@ -5,9 +5,59 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (965 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (967 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
+
+---
+
+## [1.17.38] - 2026-11-12
+
+### New: AI stamping (MCP)
+
+- AI clients (Claude Code, Codex CLI, OpenCode) can stamp with approved seals from the asset library through MCP: stamps and signatures (`pdf_stamp`) and seam stamps (`pdf_seam_stamp`), after listing the usable seals with `stamp_list`. **Off by default**; if any condition is missing it cannot be used and the AI does not even see the tools: account sign-in enabled, “Allow AI stamping” on under Settings → MCP, the token bound to a user and with “Stamping” ticked, the user has the tool permission, and the seal is opened to AI under Settings → Seal requests with the user among those allowed.
+- Only seals opened to AI are accepted; uploaded images and text-generated seals are not, and the AI never gets the seal images. Seals restricted to approved requests can never be used by AI (restricting a seal also turns off its AI use). A request that includes any disallowed seal is refused as a whole.
+- **Owner confirmation**: each seal can require the owner's confirmation (on by default for stamps and signatures). The stamped file waits in a confirmation area the AI cannot reach; the token's owner reviews the preview on the new AI stamp confirmation page (sidebar, with a pending count) and approves it, then it goes to the workspace and the AI gets it with `stamp_request_status`. Approval only works when signed in on the web; requests carrying an API token cannot approve. Unhandled requests expire after 24 hours and their files are deleted; the owner is notified through their own notification channels.
+- Each seal can have a daily limit per person. Every stamp is audited (`ai_stamp` / `ai_stamp_decision`: user, token name, seals, pages, SHA-256 of input and output, confirmation and who confirmed), the output PDF carries a hidden note for tracing, and administrators can filter and export the AI stamping log (Settings → MCP → View the AI stamping log).
+- Re-binding a token to someone else or turning off its MCP access revokes stamping. The existing `/api/pdf-stamp` and `/api/pdf-seam-stamp` refuse calls coming through MCP.
+- New APIs: `POST /tools/pdf-stamp/api/ai-stamp`, `POST /tools/pdf-seam-stamp/api/ai-seam-stamp`, `GET /api/ai-stamp/seals`, `GET /api/ai-stamp/requests/{id}`; new database `ai_stamp.sqlite` (backed up daily).
+- Docs: API manual, an AI stamping section on the compliance page, test plan and security test plan.
+
+### Behaviour change: tokens allowed for MCP work only through MCP
+
+- An API token allowed for MCP (Settings → MCP) **can no longer call the regular API directly** (403 `MCP_TOKEN_REST_DENIED`). AI clients can read the token from their own configuration; if the same token could call the API directly, the limits enforced by the MCP layer (AI stamping conditions and owner confirmation, no images in the PDF editor, tools not opened to MCP) would not hold. **If a script uses the same token to call the API, create a separate token without MCP.**
+
+### Hardening of AI stamping and custom regular expressions
+
+- AI stamping accepts only calls that come through MCP, and needs both the MCP switch and the token's MCP access; the AI stamping endpoints above are used by MCP.
+- Conditions are checked again when the owner approves: if the seal's AI use, the allowed people or the tool permission were removed, AI stamping or MCP was turned off, or the account was disabled, the request is voided and its files deleted (shown as “Voided (conditions changed)”).
+- The daily limit now counts placements (4 placements count as 4); checking and reserving happen in one transaction, so concurrent requests cannot exceed it together, and failed stamping gives the usage back. At most 50 placements per AI request; positions and sizes reject NaN, infinity, zero and values over 2000 mm.
+- At most 20 pending requests and 500 MB of pending files per person; temporary files are deleted after use.
+- Notifications no longer include the file name chosen by the AI (name and preview are only on the signed-in confirmation page); the AI stamping log CSV uses the shared formula protection (including leading spaces, tabs and line breaks).
+- Turning off “Requires the owner's confirmation” for a seal now warns that the AI then receives the stamped file, and with it the seal image.
+- Custom regular expressions in List tools, Text de-identification and Document de-identification: patterns with nested repetition (such as `(a+)+`), which can be extremely slow, are refused, and the rest run in a dedicated worker so a stuck one cannot slow other tools; Document de-identification no longer scans on the main thread. MCP parameters reject NaN and infinity.
+
+---
+
+## [1.17.37] - 2026-11-10
+
+### MCP: more tools
+
+- 17 more tools are available to AI agents (46 MCP tools in total): PDF to Word, PDF to slides, Scan cleanup, Page borders, PDF attachments, Hidden content scan, Scan merge, List tools, Travel receipts, Annotation report, e-Invoice processing, Document redaction, Text redaction, Pre-submission check, Auto-fill forms (list the companies, then fill), PDF editor (text and shapes only; no images, stamps or signatures) and Meeting recording to transcript (a readable transcript plus the full result). Every tool that does not use an LLM is now open; tools with an LLM option never use it through MCP (the two LLM layers of Pre-submission check are marked as skipped). Auto-fill forms and Meeting recording to transcript are off by default like Remove PDF password; an administrator has to select them. Stamping, seam stamps, LLM-centred tools (Official document drafting, Sentence translation, Document translation, Meeting summary), multifunction printers and encrypted paper backup stay closed. If an administrator has saved a tool list in Settings → MCP, the new tools have to be ticked there.
+- Options that the web pages had but the public API lacked are now in the API and MCP: mirroring and per-page settings for rotation, page-number ranges, first / last page watermarks, six more PDF permissions, TOC position and dot leaders for bookmarks, output size for Scan cleanup, custom rules for Document redaction, margins / gaps / direction / borders / page numbers / crop marks / custom paper for N-up, and alignment / custom size for page size. Page size and bookmarks also accept office documents.
+- Pre-submission check has a single-call public API, `POST /tools/submission-check/api/submission-check` (creates the case, uploads, starts the check; `allow_llm=false` skips the LLM layers); the case also appears on the tool page.
+- New check: every field a web page accepts is either accepted by the public API or listed with a reason (previews, file names, LLM, page state), and MCP parameters must match the API.
+- Auto-fill forms has a new `GET /tools/pdf-fill/api/companies` (company ids and names only).
+
+### Fixed
+
+- The Auto-fill forms API silently used the first company's data when given an unknown `company_id`; it now returns 400.
+- The PDF editor API refuses images when called through MCP (stamps and signatures from the asset library cannot bypass the AI stamping rules through the editor).
+
+### Improved
+
+- PDF password removal: the public API and MCP now support Taiwan High Speed Rail mode (THSR e-ticket PDFs use the travel date as the open password; every date in a range is tried) and "file name as password", as the web page already did; files opened in THSR mode are named after the travel date. New parameters `thsr_mode`, `thsr_date_from`, `thsr_date_to`, `thsr_date_format` and `use_filename_as_password`; calls that only send `password` work as before.
+- The THSR date range is limited to 800 days (the page's timeline is at most 14 months, so it is unaffected) to keep oversized ranges from tying up the server.
 
 ---
 

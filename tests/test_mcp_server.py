@@ -327,15 +327,14 @@ def test_the_api_audit_is_marked_as_mcp(admin_session, monkeypatch):
             assert not err, res
             inv = [kw for ev, kw in seen if ev == "tool_invoke" and kw.get("target") == "pdf-merge"]
             assert inv and inv[-1]["details"]["via"] == "mcp" and inv[-1]["details"]["token"] == "audit-mcp", inv
-            # 外部自己帶這個標頭：標不成 MCP
+            # 外部自己帶這個標頭：標不成 MCP；而且允許 MCP 的 Token 只能經 MCP 用，直接打一般 API 一律 403
             seen.clear()
             r = c.post("/tools/pdf-merge/api/pdf-merge",
                        headers={"Authorization": f"Bearer {tok.token}", runner.VIA_HEADER: "guess"},
                        files=[("files", ("a.pdf", _make_pdf(1), "application/pdf")),
                               ("files", ("b.pdf", _make_pdf(1), "application/pdf"))])
-            assert r.status_code == 200
-            inv = [kw for ev, kw in seen if ev == "tool_invoke" and kw.get("target") == "pdf-merge"]
-            assert inv and inv[-1]["details"]["via"] == "api_token"
+            assert r.status_code == 403 and r.json()["code"] == "MCP_TOKEN_REST_DENIED"
+            assert not [kw for ev, kw in seen if ev == "tool_invoke" and kw.get("target") == "pdf-merge"]
     finally:
         at.api_tokens.revoke(tok.token)
         ms.save({"enabled": False})
@@ -490,7 +489,8 @@ def test_every_loaded_tool_is_classified():
     assert not missing, f"這些工具沒有在 app/mcp/registry.py 的 CLASSIFIED 歸類：{missing}"
     assert set(registry.CLASSIFIED) <= loaded | {"aes-zip"}, "歸類表有不存在的工具代號"
     for t in registry.TOOLS:
-        assert t.tool_id in loaded and registry.CLASSIFIED[t.tool_id] == "open"
+        # AI 用印（用印與簽名、騎縫章）維持「另有規則」：條件與確認流程在 core.ai_stamp
+        assert t.tool_id in loaded and registry.CLASSIFIED[t.tool_id] == ("sensitive" if t.stamp else "open")
         assert t.summary.isascii() and len(t.summary) <= 120
         for k, spec in t.params.items():
             assert spec.get("type") in ("string", "integer", "number", "boolean"), (t.name, k)

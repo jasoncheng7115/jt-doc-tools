@@ -64,6 +64,9 @@ MANAGED: tuple[dict, ...] = (
      "impact": "用印申請的流程、案件與核准紀錄遺失（案件檔案在 seal_cases 目錄，不受影響但對不上案件）",
      "impact_en": "seal request flows, requests and approval records are lost (the files in seal_cases "
                   "remain but can no longer be matched to requests)"},
+    {"file": "ai_stamp.sqlite", "label": "AI 用印", "backup": True,
+     "impact": "AI 用印的待確認清單與紀錄遺失（已核准的檔案在工作區，不受影響）",
+     "impact_en": "the AI stamping queue and records are lost (approved files are in the workspaces)"},
     {"file": "vat_db.sqlite", "label": "統編資料庫", "backup": False,
      "impact": "統一編號查詢失效；可從官方來源重新下載（檔案大，不納入備份）",
      "impact_en": "VAT lookup unavailable; re-downloadable from the official "

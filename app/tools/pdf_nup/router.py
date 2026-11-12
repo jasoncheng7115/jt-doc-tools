@@ -6,6 +6,8 @@ get different UUIDs.
 """
 from __future__ import annotations
 
+import re
+
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -417,8 +419,37 @@ async def api_pdf_nup(request: Request,
                        cols: int = Form(2),
                        rows: int = Form(1),
                        paper: str = Form("a4"),
-                       orientation: str = Form("auto")):
-    """單次上傳 PDF + 拼版設定（cols × rows / 紙張），回 imposed PDF。"""
+                       orientation: str = Form("auto"),
+                       paper_w_mm: float = Form(210.0),
+                       paper_h_mm: float = Form(297.0),
+                       margin_mm: float = Form(10.0),
+                       gap_mm: float = Form(5.0),
+                       direction: str = Form("ltr"),
+                       reverse: bool = Form(False),
+                       auto_rotate: bool = Form(True),
+                       page_align: str = Form("center"),
+                       show_border: bool = Form(False),
+                       border_width_pt: float = Form(0.5),
+                       border_color: str = Form("#94a3b8"),
+                       show_page_num: bool = Form(False),
+                       page_num_format: str = Form("{n}"),
+                       page_num_size_pt: float = Form(8.0),
+                       pad_blanks: bool = Form(True),
+                       show_crop_marks: bool = Form(False),
+                       crop_mark_len_mm: float = Form(4.0)):
+    """單次上傳 PDF + 拼版設定，回 imposed PDF。選項跟網頁一樣（數值夾在合理範圍內）：
+
+    紙張 `paper`（含 `custom` ＋ `paper_w_mm` / `paper_h_mm`）、`orientation`、四邊同寬的 `margin_mm`、
+    格子間距 `gap_mm`、排列方向 `direction`（ltr 先左右 / ttb 先上下）、`reverse`、`auto_rotate`、
+    `page_align`（center / left-top）、框線、原頁碼（`{n}` 原頁碼、`{t}` 總頁數）、補空白格、裁切標記。
+    """
+    if direction not in ("ltr", "ttb"):
+        raise HTTPException(400, "direction 必須是 ltr / ttb")
+    if page_align not in ("center", "left-top"):
+        raise HTTPException(400, "page_align 必須是 center / left-top")
+    if not re.fullmatch(r"#[0-9A-Fa-f]{6}", border_color or ""):
+        raise HTTPException(400, "border_color 必須是 #RRGGBB")
+    clamp = lambda v, lo, hi: max(lo, min(hi, float(v)))
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF")
     data = await file.read()
@@ -431,9 +462,22 @@ async def api_pdf_nup(request: Request,
     _uo.record(upload_id, request)
     target = _src_path(upload_id, 0)
     target.write_bytes(data)
+    # 邊距與間距不可以把格子擠到沒有：上限跟著紙張短邊走
+    pw, ph = ((paper_w_mm, paper_h_mm) if (paper or "").lower() == "custom"
+              else PAPER_SIZES_MM.get((paper or "a4").lower(), (210.0, 297.0)))
+    short = min(clamp(pw, 20, 2000), clamp(ph, 20, 2000))
+    m = clamp(margin_mm, 0, max(0.0, short / 2 - 10))
+    g = clamp(gap_mm, 0, max(0.0, (short - 2 * m) / (2 * max(cols, rows)) ))
     opts = NupOptions(
         upload_id=upload_id, cols=cols, rows=rows,
         paper=paper, orientation=orientation, file_count=1,
+        paper_w_mm=clamp(paper_w_mm, 20, 2000), paper_h_mm=clamp(paper_h_mm, 20, 2000),
+        margin_top_mm=m, margin_right_mm=m, margin_bottom_mm=m, margin_left_mm=m,
+        gap_x_mm=g, gap_y_mm=g, direction=direction, reverse=reverse, auto_rotate=auto_rotate,
+        page_align=page_align, show_border=show_border, border_width_pt=clamp(border_width_pt, 0.1, 10),
+        border_color=border_color, show_page_num=show_page_num, page_num_format=(page_num_format or "{n}")[:40],
+        page_num_size_pt=clamp(page_num_size_pt, 4, 48), pad_blanks=pad_blanks,
+        show_crop_marks=show_crop_marks, crop_mark_len_mm=clamp(crop_mark_len_mm, 0, 20),
     )
     import asyncio as _asyncio
     out_path = await _asyncio.to_thread(impose, upload_id, opts, preview_only=False)

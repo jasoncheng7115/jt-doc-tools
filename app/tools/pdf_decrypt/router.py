@@ -18,6 +18,52 @@ from ...core.job_manager import job_manager
 
 router = APIRouter()
 
+#: 高鐵模式一次最多試幾天。畫面的時間軸最多 14 個月（約 427 天）；這裡留空間，
+#: 只擋「從西元 1 年試到 9999 年」這種會把 CPU 吃滿的請求。
+THSR_MAX_DAYS = 800
+
+_TRUE = ("1", "true", "on", "yes")
+
+
+def _flag(v) -> bool:
+    return str(v).lower() in _TRUE
+
+
+def thsr_candidates(date_from: str, date_to: str, date_format: str) -> list[str]:
+    """高鐵模式：日期範圍內每一天照 `date_format` 排出來的字串（台灣高鐵電子車票 PDF 的密碼＝出發日期）。
+
+    日期格式只收 Y / M / D 與 `- / . _` 空白（避免塞進其他 strftime 指令）；起訖顛倒會自動對調。
+    """
+    from datetime import date as _date, timedelta as _td
+    try:
+        d_from = _date.fromisoformat(date_from) if date_from else None
+        d_to = _date.fromisoformat(date_to) if date_to else None
+    except ValueError:
+        raise HTTPException(400, "高鐵模式：日期格式錯誤（需 YYYY-MM-DD）")
+    if not d_from or not d_to:
+        raise HTTPException(400, "高鐵模式：請選擇起迄日期")
+    if d_from > d_to:
+        d_from, d_to = d_to, d_from
+    if (d_to - d_from).days + 1 > THSR_MAX_DAYS:
+        raise HTTPException(400, f"高鐵模式：日期範圍最多 {THSR_MAX_DAYS} 天")
+    fmt = date_format or "YYYYMMDD"
+    if not re.fullmatch(r"[YyMmDd\-/._ ]+", fmt):
+        raise HTTPException(400, "高鐵模式：日期格式只能含 Y M D 與 - / . _ 空白")
+    # 先換 4 個字的 YYYY 再換 YY，避免吃錯
+    strftime_fmt = (fmt.replace("YYYY", "%Y").replace("YY", "%y")
+                    .replace("MM", "%m").replace("DD", "%d"))
+    out = []
+    d = d_from
+    while d <= d_to:
+        out.append(d.strftime(strftime_fmt))
+        d += _td(days=1)
+    return out
+
+
+def thsr_base_name(used_pw: str) -> str:
+    """高鐵模式解開時用日期當檔名；日期格式裡的 / . 等檔名禁字換成 _（2024/03/15 → 2024_03_15）。"""
+    return re.sub(r"[^A-Za-z0-9_-]", "_", used_pw)
+
 
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
@@ -39,41 +85,13 @@ async def submit(
     files = file or []
     if not files:
         raise HTTPException(400, "沒有檔案")
-    use_fname_pw = str(use_filename_as_password).lower() in ("1", "true", "on", "yes")
-    use_thsr = str(thsr_mode).lower() in ("1", "true", "on", "yes")
+    use_fname_pw = _flag(use_filename_as_password)
+    use_thsr = _flag(thsr_mode)
 
-    # 高鐵模式：產生日期範圍內每一天的 YYYYMMDD 字串作為密碼候選。
-    # THSR 票 PDF 的開啟密碼 = 出發日期，格式如 "20240315"。
-    # 範圍上限 90 天（防呆，避免 user 不小心填一年逐日試 365 次 × 多檔）。
-    thsr_pw_candidates: list[str] = []
-    if use_thsr:
-        from datetime import date as _date, timedelta as _td
-        try:
-            d_from = _date.fromisoformat(thsr_date_from) if thsr_date_from else None
-            d_to = _date.fromisoformat(thsr_date_to) if thsr_date_to else None
-        except ValueError:
-            raise HTTPException(400, "高鐵模式：日期格式錯誤（需 YYYY-MM-DD）")
-        if not d_from or not d_to:
-            raise HTTPException(400, "高鐵模式：請選擇起迄日期")
-        if d_from > d_to:
-            d_from, d_to = d_to, d_from
-        # 不再限制日期範圍上限 — 前端 slider 已限制在 14 個月內 (≈420 天)
-        # PyMuPDF authenticate 是微秒級，420 次試開無感。
-        # 範圍下限：從上方的 `if d_from > d_to: swap` 已保證 d_to >= d_from
-        # 把 user 給的日期格式 token 轉成 strftime pattern。預設 YYYYMMDD。
-        # 接受 user 自訂任意 token 組合（例如 `YYYY/MM/DD`、`DD-MM-YY` 等）。
-        fmt = (thsr_date_format or "YYYYMMDD")
-        # 安全：只准許日期 token 與常見分隔；避免 user 注入 strftime 怪 token
-        if not re.fullmatch(r"[YyMmDd\-/._ ]+", fmt):
-            raise HTTPException(400, "高鐵模式：日期格式只能含 Y M D 與 - / . _ 空白")
-        # token 替換順序：先 4-char Y → 2-char Y，避免吃錯
-        strftime_fmt = (fmt
-                        .replace("YYYY", "%Y").replace("YY", "%y")
-                        .replace("MM", "%m").replace("DD", "%d"))
-        d = d_from
-        while d <= d_to:
-            thsr_pw_candidates.append(d.strftime(strftime_fmt))
-            d += _td(days=1)
+    # 高鐵模式：日期範圍內每一天都當密碼試（THSR 票 PDF 的開啟密碼＝出發日期，如 "20240315"）。
+    # PyMuPDF authenticate 是微秒級，幾百次試開無感。
+    thsr_pw_candidates = (thsr_candidates(thsr_date_from, thsr_date_to, thsr_date_format)
+                          if use_thsr else [])
 
     bid = uuid.uuid4().hex
     from ...core import upload_owner as _uo
@@ -127,9 +145,7 @@ async def submit(
                 #   - 高鐵模式成功 → 用日期作為檔名（user 規格）
                 #   - 其他 → 維持 `<原檔名>_decrypted.pdf`
                 if used_src == "thsr":
-                    # 用 used_pw 當檔名 — 但日期格式可能含 / 或 . 等檔名禁字，
-                    # sanitize 成 _。例：「2024/03/15」→「2024_03_15.pdf」
-                    base = re.sub(r"[^A-Za-z0-9_-]", "_", used_pw)
+                    base = thsr_base_name(used_pw)
                 else:
                     base = f"{Path(orig).stem}_decrypted"
                 # Use a unique temp name during writing; final name is
@@ -242,28 +258,52 @@ async def api_pdf_decrypt(
     request: Request,
     file: UploadFile = File(...),
     password: str = Form(""),
+    use_filename_as_password: str = Form(""),
+    thsr_mode: str = Form(""),
+    thsr_date_from: str = Form(""),
+    thsr_date_to: str = Form(""),
+    thsr_date_format: str = Form("YYYYMMDD"),
 ):
-    """單次上傳含密 PDF + 密碼，回傳已解密 PDF。空密碼會嘗試空字串開啟。"""
+    """單次上傳含密 PDF，回傳已解密 PDF。
+
+    密碼來源跟網頁一樣、依序試：高鐵模式（日期範圍內每一天）→ 檔名 → `password`。
+    都沒給時用空字串開（只有權限限制、沒有開啟密碼的 PDF）。高鐵模式解開的檔名是那個日期。
+    """
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF")
+    use_thsr = _flag(thsr_mode)
+    thsr = thsr_candidates(thsr_date_from, thsr_date_to, thsr_date_format) if use_thsr else []
     data = await file.read()
     if not data or data[:4] != b"%PDF":
         raise HTTPException(400, "不是有效的 PDF")
+    stem = Path(file.filename or "document.pdf").stem
+    candidates = [(d, "thsr") for d in thsr]
+    if _flag(use_filename_as_password):
+        candidates.append((stem, "fname"))
+    if password or not candidates:
+        candidates.append((password or "", "manual"))
     uid = uuid.uuid4().hex
     from ...core import upload_owner as _uo
     _uo.record(uid, request)
     src = settings.temp_dir / f"dec_{uid}_in.pdf"
     src.write_bytes(data)
     out = settings.temp_dir / f"dec_{uid}_out.pdf"
-    stem = Path(file.filename or "document.pdf").stem
     import asyncio as _asyncio
-    def _do():
+
+    def _do() -> str:
         with fitz.open(str(src)) as doc:
+            used_src = ""
             if doc.needs_pass:
-                if not doc.authenticate(password or ""):
+                for pw, tag in candidates:
+                    if doc.authenticate(pw):
+                        used_src, used_pw = tag, pw
+                        break
+                else:
+                    if use_thsr:
+                        raise HTTPException(400, f"密碼錯誤或無法解除（高鐵模式試了 {len(thsr)} 天）")
                     raise HTTPException(400, "密碼錯誤或無法解除")
             doc.save(str(out), encryption=fitz.PDF_ENCRYPT_NONE,
                      garbage=3, deflate=True)
-    await _asyncio.to_thread(_do)
-    return _FileResponse(str(out), media_type="application/pdf",
-                         filename=f"{stem}_decrypted.pdf")
+            return thsr_base_name(used_pw) if used_src == "thsr" else f"{stem}_decrypted"
+    base = await _asyncio.to_thread(_do)
+    return _FileResponse(str(out), media_type="application/pdf", filename=f"{base}.pdf")

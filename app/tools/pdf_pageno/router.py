@@ -295,8 +295,14 @@ async def api_pdf_pageno(
     font_size: float = Form(11.0),
     margin_mm: float = Form(10.0),
     color: str = Form("#000000"),
+    from_page: int = Form(1),
+    to_page: int = Form(0),  # 0 = 到最後一頁
 ):
-    """單次上傳 PDF，加頁碼後直接回 PDF。position: tl/tr/bl/br/tc/bc。"""
+    """單次上傳 PDF，加頁碼後直接回 PDF。position: tl/tr/bl/br/tc/bc。
+
+    `from_page` / `to_page`（1 起，0 ＝ 到最後一頁）只在這個範圍裡編頁碼（封面、目錄、封底不編）；
+    `{N}` 是範圍內的頁數，跟網頁一樣。
+    """
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF")
     data = await file.read()
@@ -319,7 +325,7 @@ async def api_pdf_pageno(
                     position=position, fmt=fmt, start=start,
                     font_size=font_size, margin_mm=margin_mm,
                     color_hex=color,
-                    from_page=1, to_page=None,
+                    from_page=max(1, from_page), to_page=(to_page if to_page and to_page > 0 else None),
                 )
             doc.save(str(out), garbage=3, deflate=True)
     await _asyncio.to_thread(_do)

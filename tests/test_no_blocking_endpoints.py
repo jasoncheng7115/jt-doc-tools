@@ -89,6 +89,13 @@ def _dispatches_elsewhere(node: ast.AST) -> bool:
             return True
         if isinstance(n, ast.Attribute) and n.attr == "job_manager":
             return True
+        # 使用者自訂正規式的專用執行緒池（`app/core/user_regex.run`，v1.17.38）
+        if (isinstance(n, ast.Attribute) and n.attr == "run" and isinstance(n.value, ast.Name)
+                and n.value.id in ("user_regex", "_user_regex")):
+            return True
+        # 文件去識別化把「有自訂正規式就走專用池、沒有就 to_thread」包成 `_run_scan`
+        if isinstance(n, ast.Name) and n.id == "_run_scan":
+            return True
     return False
 
 

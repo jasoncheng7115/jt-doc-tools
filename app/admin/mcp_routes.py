@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from ..core import audit_db
 
@@ -64,7 +64,7 @@ def build_mcp_router(templates) -> APIRouter:
         for cid, label in registry.CATEGORIES.items():
             items = []
             for t in registry.TOOLS:
-                if t.category != cid:
+                if t.category != cid or t.stamp:      # AI 用印另有開關（「允許 AI 用印」），不在這裡逐支開
                     continue
                 m = meta.get(t.tool_id)
                 items.append({"name": t.name, "title": t.title, "on": t.name in enabled,
@@ -76,7 +76,7 @@ def build_mcp_router(templates) -> APIRouter:
             "request": request,
             "cfg": ms.get(),
             "enabled_tools": ms.enabled_tools(),
-            "tools": registry.TOOLS,
+            "tools": [t for t in registry.TOOLS if not t.stamp],   # AI 用印另有開關，不算在逐支開放的工具裡
             "categories": registry.CATEGORIES,
             "tokens": tokens,
             "auth_enabled": auth_settings.is_enabled(),
@@ -106,13 +106,14 @@ def build_mcp_router(templates) -> APIRouter:
                 raise HTTPException(400, "站台網址要以 http:// 或 https:// 開頭")
             notify_settings.save({"site_url": url})
         cfg = ms.save({k: body[k] for k in ("enabled", "tools", "rate_per_minute", "max_concurrent",
-                                            "ticket_bind_ip", "ticket_allow_http") if k in body})
+                                            "ticket_bind_ip", "ticket_allow_http", "allow_stamp") if k in body})
         audit_db.log_event("settings_change", username=_actor(request), ip=_ip(request), target="mcp",
                            details={"enabled": cfg["enabled"], "tools": cfg["tools"],
                                     "rate_per_minute": cfg["rate_per_minute"],
                                     "max_concurrent": cfg["max_concurrent"],
                                     "ticket_bind_ip": cfg["ticket_bind_ip"],
                                     "ticket_allow_http": cfg["ticket_allow_http"],
+                                    "allow_stamp": cfg["allow_stamp"],
                                     "site_url_changed": "site_url" in body})
         return {"ok": True, "cfg": cfg, "site_url": (notify_settings.get().get("site_url") or "")}
 
@@ -126,13 +127,84 @@ def build_mcp_router(templates) -> APIRouter:
             body = None
         if not isinstance(body, dict) or not isinstance(body.get("preview"), str):
             raise HTTPException(400, "需要 preview")
-        allowed = body.get("allowed") is True
-        if not at.api_tokens.set_mcp(body["preview"], allowed):
+        row = next((t for t in at.api_tokens.list_tokens() if t.get("token_preview") == body["preview"]), None)
+        if row is None:
             raise HTTPException(404, "找不到這張 Token")
-        label = next((t.get("label") for t in at.api_tokens.list_tokens()
-                      if t.get("token_preview") == body["preview"]), "")
+        label = str(row.get("label") or "")[:64]
+        if "stamp" in body:
+            # AI 用印：要先綁使用者（用印要追得到是誰），而且這張 Token 要能連 MCP
+            stamp = body.get("stamp") is True
+            if stamp and not row.get("owner_user_id"):
+                raise HTTPException(400, "這張 Token 還沒綁定使用者，不能允許用印")
+            if stamp and not row.get("mcp"):
+                raise HTTPException(400, "先允許這張 Token 連 MCP，才能允許用印")
+            at.api_tokens.set_stamp(body["preview"], stamp)
+            audit_db.log_event("settings_change", username=_actor(request), ip=_ip(request), target="mcp",
+                               details={"token": label, "stamp": stamp})
+            return {"ok": True, "stamp": stamp}
+        allowed = body.get("allowed") is True
+        at.api_tokens.set_mcp(body["preview"], allowed)
+        if not allowed and row.get("stamp"):
+            at.api_tokens.set_stamp(body["preview"], False)     # 不能連 MCP 就一併收回用印
         audit_db.log_event("settings_change", username=_actor(request), ip=_ip(request), target="mcp",
-                           details={"token": str(label)[:64], "mcp": allowed})
+                           details={"token": label, "mcp": allowed})
         return {"ok": True, "mcp": allowed}
+
+    # ---- AI 用印紀錄（v1.17.38）----
+
+    def _ai_rows(request: Request) -> list[dict]:
+        import time as _t
+        from ..core import ai_stamp
+        q = request.query_params
+        def day(v: str, end: bool = False) -> float:
+            try:
+                return _t.mktime(_t.strptime(v, "%Y-%m-%d")) + (86400 if end else 0)
+            except (TypeError, ValueError):
+                return 0.0
+        uid = q.get("user_id") or ""
+        rows = ai_stamp.list_all(user_id=int(uid) if uid.isdigit() else None, asset_id=q.get("asset_id") or "",
+                                 since=day(q.get("since") or ""), until=day(q.get("until") or "", True))
+        return rows
+
+    @router.get("/mcp/ai-stamp", response_class=HTMLResponse)
+    async def ai_stamp_log_page(request: Request):
+        from ..core.asset_manager import asset_manager
+        seals = [{"id": a.id, "name": a.name} for t in ("stamp", "signature") for a in asset_manager.list(type=t)]
+        return templates.TemplateResponse(request, "admin_ai_stamp_log.html", {"request": request, "seals": seals})
+
+    @router.get("/mcp/ai-stamp.json")
+    async def ai_stamp_log_json(request: Request):
+        import asyncio as _a
+        rows = await _a.to_thread(_ai_rows, request)
+        return JSONResponse({"items": rows}, headers={"Cache-Control": "no-store"})
+
+    @router.get("/mcp/ai-stamp.csv")
+    async def ai_stamp_log_csv(request: Request):
+        import asyncio as _a
+        import csv
+        import io
+        import time as _t
+        from fastapi.responses import Response
+        from ..core.http_utils import content_disposition
+        rows = await _a.to_thread(_ai_rows, request)
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["request_id", "created_at", "user", "token", "tool", "file", "seals", "pages", "placements",
+                    "needs_confirmation", "status", "decided_by", "decided_at", "ip"])
+        fmt = lambda v: _t.strftime("%Y-%m-%d %H:%M:%S", _t.localtime(v)) if v else ""
+        from ..core import csv_safe
+        for r in rows:
+            # 檔名由 AI 決定、使用者名稱與章名也是人填的：試算表會把 = + - @（含 tab、換行、前置空白）開頭的
+            # 格子當成公式 → 整列走共用的 csv_safe
+            w.writerow(csv_safe.row([r["request_id"], fmt(r["created_at"]), r["user"], r["token"], r["tool"],
+                                     r["filename"], "、".join(a.get("name", "") for a in r["assets"]),
+                                     " ".join(str(p + 1) for p in r["pages"]), r["placements"],
+                                     r["needs_confirmation"], r["status"], r["decided_by"] or "",
+                                     fmt(r["decided_at"]), r["ip"]]))
+        audit_db.log_event("export", username=_actor(request), ip=_ip(request), target="ai_stamp_log",
+                           details={"rows": len(rows)})
+        return Response("\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",
+                        headers={"Content-Disposition": content_disposition("ai-stamp-log.csv"),
+                                 "Cache-Control": "no-store"})
 
     return router

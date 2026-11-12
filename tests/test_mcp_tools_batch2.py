@@ -111,6 +111,24 @@ def test_encrypt_then_decrypt(mcp):
     assert err, "密碼錯要回錯誤"
 
 
+def test_decrypt_thsr_mode(mcp):
+    """高鐵模式（密碼＝出發日期）透過 MCP 也做得到；結果檔名是那個日期。"""
+    c, tok = mcp
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 72), "ticket")
+    enc = doc.tobytes(encryption=fitz.PDF_ENCRYPT_AES_256, user_pw="20261108", owner_pw="o-20261108")
+    doc.close()
+    fid = _upload_inline(c, tok, enc, "thsr-ticket.pdf")
+    from app.mcp import settings as ms, registry
+    ms.save({"tools": [t.name for t in registry.TOOLS]})
+    res = _run(c, tok, "pdf_decrypt", [fid],
+               {"thsr_mode": True, "thsr_date_from": "2026-10-01", "thsr_date_to": "2026-11-30"})
+    assert [f["name"] for f in res["files"]] == ["20261108.pdf"], res
+    err, msg = _call(c, tok, "jtdt_run", {"tool": "pdf_decrypt", "files": [fid], "params": {
+        "thsr_mode": True, "thsr_date_from": "2026-01-01", "thsr_date_to": "2026-01-31"}})
+    assert err and "31" in str(msg), "範圍裡沒有那一天要回錯誤並說試了幾天"
+
+
 def test_audit_does_not_record_passwords(mcp, monkeypatch):
     from app.core import audit_db
     seen = []
@@ -181,5 +199,7 @@ def test_titles_match_the_site_tool_names():
     from app import main as app_main
     from app.mcp import registry
     names = {t.metadata.id: t.metadata.name for t in app_main.tools}
-    assert {t.name: t.title for t in registry.TOOLS if t.title != names.get(t.tool_id)} == {}
+    # 同一支工具拆成兩個 MCP 工具時（例如表單自動填寫的「公司清單」），標題寫成「工具名稱：用途」
+    assert {t.name: t.title for t in registry.TOOLS
+            if t.title != names.get(t.tool_id) and not t.title.startswith(f"{names.get(t.tool_id)}：")} == {}
     assert set(t.category for t in registry.TOOLS) <= set(registry.CATEGORIES)

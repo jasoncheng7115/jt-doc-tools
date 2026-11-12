@@ -492,6 +492,12 @@ def sweep_all() -> dict[str, Any]:
     except Exception:
         logger.exception("workspace sweep failed")
     report["transit_proof"] = _sweep_transit_proof(s["transit_proof_days"])
+    # AI 用印：24 小時沒確認的作廢、刪檔（查詢時也會跑；這裡保證沒人看也會清）
+    try:
+        from . import ai_stamp
+        report["ai_stamp_expired"] = ai_stamp.expire_due()
+    except Exception:
+        logger.exception("ai stamp expiry failed")
     try:
         from . import official_doc_cases
         report["official_doc_cases"] = official_doc_cases.purge_older_than(

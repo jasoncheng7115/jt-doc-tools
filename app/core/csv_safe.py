@@ -59,6 +59,10 @@ def sanitize(value: Any) -> Any:
         return value
     if value[0] in _TRIGGERS:
         return _PREFIX + value
+    # 前面墊空白再接 `=`：有些試算表匯入時會先去掉前置空白再判斷是不是公式
+    head = value.lstrip(" \u3000\n\x0b\x0c")
+    if head and head[0] in _TRIGGERS:
+        return _PREFIX + value
     return value
 
 

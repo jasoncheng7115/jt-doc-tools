@@ -87,6 +87,11 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("app/tools/submission_check/router.py", "api_update_self_entity"):
         "自家實體清單以 `_user_key(user)` 分檔，entity_id 只在該使用者的檔案內查找",
     ("app/tools/submission_check/router.py", "api_delete_self_entity"): "同上",
+    ("app/tools/pdf_seam_stamp/router.py", "api_ai_seam_stamp"):
+        "asset_id 是共用資產庫的章；`ai_stamp.check()` → `_asset_policy` 逐顆判斷 AI 授權、可用對象與"
+        "是否受管制，不通過一律 403（`tests/test_ai_stamp.py`、`test_ai_stamp_hardening.py`）",
+    ("app/tools/submission_check/router.py", "upload_files"):
+        "case_id 原樣交給 `_ingest()`，裡面 `_check_case_acl(case, request, write=True)`（v1.17.37 抽出共用）",
     ("app/tools/pdf_stamp/router.py", "tool_preview"):
         "未實作的佔位端點，主體只有 `raise HTTPException(404)`",
     ("app/tools/pdf_stamp/router.py", "api_pdf_stamp"):
@@ -299,7 +304,7 @@ def _conditional_acl_sites() -> list[tuple[str, str, str]]:
 
 #: 例外：條件不成立的那條路徑另有更強的保護，每筆都要寫明。
 FAILOPEN_EXEMPT: dict[tuple[str, str], str] = {
-    ("app/tools/submission_check/router.py", "upload_files"):
+    ("app/tools/submission_check/router.py", "_ingest"):
         "`if case_id:` 的另一條路徑是**建立新案件**（擁有者就是當下這個人），"
         "沒有既有資料可被越權存取",
     ("app/web/workspace_routes.py", "workspace_save"):

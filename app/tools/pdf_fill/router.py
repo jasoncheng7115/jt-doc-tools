@@ -902,6 +902,13 @@ def _result_filename(orig: str) -> str:
 
 
 # ---- 對外 API：單次 upload + 自動辨識欄位填寫 + 直接回 PDF ----
+@router.get("/api/companies", include_in_schema=True)
+async def api_companies(request: Request):
+    """可以用來填表的公司（只有編號與名稱，不含任何欄位資料）；`is_active` 是沒指定時用的那一家。"""
+    return {"companies": [{"id": c["id"], "name": c["name"], "is_active": c["is_active"]}
+                          for c in profile_manager.list_companies()]}
+
+
 @router.post("/api/pdf-fill", include_in_schema=True)
 async def api_pdf_fill(
     request: Request,
@@ -910,7 +917,10 @@ async def api_pdf_fill(
     font_id: str = Form("auto"),
 ):
     """單次上傳廠商表單 PDF，使用指定 company_id 的 profile 填入欄位後回 PDF。
-    company_id 空字串 → 使用預設 profile。"""
+    company_id 空字串 → 使用預設 profile；指定的公司不存在 → 400（不可以默默改用別家公司的資料）。
+    公司清單：`GET /tools/pdf-fill/api/companies`。"""
+    if company_id and company_id not in {c["id"] for c in profile_manager.list_companies()}:
+        raise HTTPException(400, "找不到這個 company_id；公司清單見 GET /tools/pdf-fill/api/companies")
     data = await file.read()
     if not data:
         raise HTTPException(400, "empty file")

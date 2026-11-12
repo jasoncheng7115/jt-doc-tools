@@ -18,8 +18,10 @@
 """
 from __future__ import annotations
 
+import asyncio
 import csv
 
+from ...core import user_regex as _user_regex
 from ...core import csv_safe as _csv_safe
 import io
 import random
@@ -235,8 +237,8 @@ def _op_filter(lines: list[str], params: dict) -> list[str]:
             raise HTTPException(400, f"regex 過長（>{_MAX_FILTER_REGEX_LEN}）")
         flags = re.IGNORECASE if case_insensitive else 0
         try:
-            rx = re.compile(pattern, flags)
-        except re.error as e:
+            rx = _user_regex.compile_user(pattern, flags, max_len=_MAX_FILTER_REGEX_LEN)
+        except ValueError as e:
             raise HTTPException(400, f"regex 編譯失敗：{e}")
         match_fn = lambda s: rx.search(s) is not None  # noqa: E731
     else:
@@ -293,6 +295,20 @@ _OPS: dict[str, Callable[[list[str], dict], list[str]]] = {
 }
 
 
+def _uses_regex(ops) -> bool:
+    return any(isinstance(op, dict) and op.get("regex") for op in ops or [])
+
+
+async def _run_pipeline(lines, ops):
+    """有使用者的正規式就放到專用的執行緒池（卡住也不會拖垮整站）；沒有就照一般的背景執行緒。"""
+    if not _uses_regex(ops):
+        return await asyncio.to_thread(_apply_pipeline, lines, ops)
+    try:
+        return await _user_regex.run(_apply_pipeline, lines, ops)
+    except _user_regex.RegexBusy:
+        raise HTTPException(503, "正規式的處理忙碌中，請稍後再試")
+
+
 def _apply_pipeline(lines: list[str], ops: list[dict]) -> tuple[list[str], list[str]]:
     """套用 ops 到 lines，回 (final_lines, applied_op_names)。"""
     applied = []
@@ -337,7 +353,8 @@ async def process(request: Request):
     if len(lines) > _MAX_LINES:
         raise HTTPException(413, f"超過 {_MAX_LINES:,} 行上限")
     original_count = len(lines)
-    out, applied = _apply_pipeline(lines, ops)
+    # 使用者給的 regex（filter）可能很慢：放到執行緒跑，不可以卡住整個站的事件迴圈
+    out, applied = await _run_pipeline(lines, ops)
     return JSONResponse({
         "lines": out,
         "count": len(out),
@@ -370,7 +387,8 @@ async def upload(request: Request, file: UploadFile = File(...)):
     if len(lines) > _MAX_LINES:
         raise HTTPException(413, f"超過 {_MAX_LINES:,} 行上限")
     original_count = len(lines)
-    out, applied = _apply_pipeline(lines, ops)
+    # 使用者給的 regex（filter）可能很慢：放到執行緒跑，不可以卡住整個站的事件迴圈
+    out, applied = await _run_pipeline(lines, ops)
     return JSONResponse({
         "lines": out,
         "count": len(out),

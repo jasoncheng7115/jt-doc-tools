@@ -239,7 +239,7 @@ def authenticate(request: Request) -> tuple[runner.Ctx, str]:
     except ws.WorkspaceError:
         raise McpHttpError(403, -32001, "No workspace for this token") from None
     ctx = runner.Ctx(token=presented, token_label=str(row.get("label") or ""), ws_key=key, user=user,
-                     ip=_ip(request), base=request_base(request))
+                     ip=_ip(request), base=request_base(request), stamp=bool(row.get("stamp")))
     return ctx, hashlib.sha256(presented.encode("utf-8")).hexdigest()
 
 
@@ -262,13 +262,21 @@ def visible_tools(ctx: runner.Ctx) -> list[registry.McpTool]:
     out = []
     for name in mcp_settings.enabled_tools():
         t = registry.BY_NAME[name]
-        if t.tool_id not in loaded:
+        if t.tool_id not in loaded or t.stamp:
             continue
         if auth_settings.is_enabled():
             from ..core import permissions
             if not ctx.user or not permissions.user_can_use_tool(ctx.user["user_id"], t.tool_id):
                 continue
         out.append(t)
+    # AI 用印：不看開放清單，看「允許 AI 用印」＋登入＋ Token 勾「允許用印」＋工具權限；缺一個就看不到
+    if mcp_settings.get().get("allow_stamp") and auth_settings.is_enabled() and ctx.stamp and ctx.user:
+        from ..core import permissions
+        uid = ctx.user["user_id"]
+        for t in registry.TOOLS:
+            if t.stamp and t.tool_id in loaded and any(
+                    permissions.user_can_use_tool(uid, x) for x in (t.any_tools or (t.tool_id,))):
+                out.append(t)
     return out
 
 

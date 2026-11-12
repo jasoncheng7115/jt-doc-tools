@@ -59,6 +59,7 @@ def _state() -> dict:
             assets.append({"id": a.id, "name": a.name, "type": a.type, "mode": p["mode"],
                            "requesters": _describe(p["requesters"], users, groups),
                            "custodians": _describe(p["custodians"], users, groups),
+                           "ai": {**p["ai"], "subjects": _describe(p["ai"]["subjects"], users, groups)},
                            "thumb_url": f"/admin/assets/{a.id}/thumb"})
     return {"ok": True, "enabled": seal_policy.is_enabled(), "readable": seal_policy.readable(),
             "auth_enabled": auth_settings.is_enabled(), "assets": assets,
@@ -134,11 +135,14 @@ def register(router, templates) -> None:
         try:
             after = seal_policy.set_policy(a.id, a.type, body if isinstance(body, dict) else None)
         except seal_policy.PolicyError as e:
-            return _err(e, 409 if e.code == "NOT_ENABLED" else 400)
+            return _err(e, 409 if e.code in ("NOT_ENABLED", "AI_ON_CONTROLLED") else 400)
         _audit(request, "seal_asset_policy_change", a.name, {
             "asset_id": a.id, "type": a.type,
             "mode": [before["mode"], after["mode"]],
-            "requesters": len(after["requesters"]), "custodians": len(after["custodians"])})
+            "requesters": len(after["requesters"]), "custodians": len(after["custodians"]),
+            "ai": {"enabled": [before["ai"]["enabled"], after["ai"]["enabled"]],
+                   "subjects": len(after["ai"]["subjects"]), "confirm": after["ai"]["confirm"],
+                   "daily_limit": after["ai"]["daily_limit"]}})
         return JSONResponse(_state(), headers={"Cache-Control": "no-store"})
 
 

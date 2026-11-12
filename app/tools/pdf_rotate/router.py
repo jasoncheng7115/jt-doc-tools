@@ -131,6 +131,42 @@ def _flip_page(page, *, horizontal: bool) -> None:
     page.parent.update_stream(xref, new)
 
 
+VALID_MODES = ("rotate-90", "rotate-180", "rotate-270", "flip-h", "flip-v")
+
+
+def parse_per_page(per_page: str) -> dict[int, str]:
+    """`{"頁碼(1 起)": "rotate-90" | "flip-h" | … | "none"}` → {頁碼: 動作}；網頁與 API 共用。"""
+    out: dict[int, str] = {}
+    if not per_page:
+        return out
+    import json as _json
+    try:
+        raw = _json.loads(per_page)
+        if not isinstance(raw, dict):
+            raise ValueError("per_page must be JSON object")
+        for k, v in list(raw.items())[:5000]:
+            pn = int(k)
+            vs = str(v)
+            if vs != "none" and vs not in VALID_MODES:
+                raise ValueError(f"per_page mode 無效：{vs}")
+            out[pn] = vs
+    except Exception as e:
+        raise HTTPException(400, f"per_page 解析失敗：{e}")
+    return out
+
+
+def _apply_mode_to_page(page, m: str) -> None:
+    if m == "none" or not m:
+        return
+    if m.startswith("rotate-"):
+        ang = int(m.split("-")[1])
+        page.set_rotation((page.rotation + ang) % 360)
+    elif m == "flip-h":
+        _flip_page(page, horizontal=True)
+    elif m == "flip-v":
+        _flip_page(page, horizontal=False)
+
+
 @router.post("/submit")
 async def submit(
     request: Request,
@@ -146,24 +182,9 @@ async def submit(
     # Back-compat: translate legacy angle param.
     if angle is not None and mode.startswith("rotate-"):
         mode = f"rotate-{angle}"
-    valid = {"rotate-90", "rotate-180", "rotate-270", "flip-h", "flip-v"}
-    if mode not in valid:
-        raise HTTPException(400, f"mode 必須是 {valid}")
-    per_page_map: dict[int, str] = {}
-    if per_page:
-        import json as _json
-        try:
-            raw = _json.loads(per_page)
-            if not isinstance(raw, dict):
-                raise ValueError("per_page must be JSON object")
-            for k, v in raw.items():
-                pn = int(k)
-                vs = str(v)
-                if vs != "none" and vs not in valid:
-                    raise ValueError(f"per_page mode 無效：{vs}")
-                per_page_map[pn] = vs
-        except Exception as e:
-            raise HTTPException(400, f"per_page 解析失敗：{e}")
+    if mode not in VALID_MODES:
+        raise HTTPException(400, f"mode 必須是 {VALID_MODES}")
+    per_page_map = parse_per_page(per_page)
     files = file or []
     if not files: raise HTTPException(400, "沒有檔案")
     bid = uuid.uuid4().hex
@@ -178,17 +199,6 @@ async def submit(
         if not data: raise HTTPException(400, f"空檔：{f.filename}")
         sp = bdir / f"{i:03d}_{Path(f.filename).name}"
         sp.write_bytes(data); saved.append((sp, f.filename))
-
-    def _apply_mode_to_page(page, m: str) -> None:
-        if m == "none" or not m:
-            return
-        if m.startswith("rotate-"):
-            ang = int(m.split("-")[1])
-            page.set_rotation((page.rotation + ang) % 360)
-        elif m == "flip-h":
-            _flip_page(page, horizontal=True)
-        elif m == "flip-v":
-            _flip_page(page, horizontal=False)
 
     def run(job):
         outs: list[Path] = []
@@ -238,10 +248,22 @@ async def api_pdf_rotate(
     file: UploadFile = File(...),
     angle: int = Form(90),
     pages: str = Form("all"),
+    mode: str = Form(""),
+    per_page: str = Form(""),
 ):
-    """單次上傳 PDF，旋轉指定頁面，回新 PDF。angle: 90/180/270；pages: all 或 1-3,5,7。"""
-    if angle not in (90, 180, 270):
+    """單次上傳 PDF，旋轉 / 翻轉指定頁面，回新 PDF。
+
+    angle: 90/180/270；pages: all 或 1-3,5,7。`mode`（rotate-90/180/270、flip-h、flip-v）給了就取代 angle；
+    `per_page` 是 JSON 物件 `{"3": "flip-h", "5": "none"}`，逐頁覆寫（跟網頁一樣）。
+    """
+    if mode:
+        if mode not in VALID_MODES:
+            raise HTTPException(400, f"mode 必須是 {', '.join(VALID_MODES)}")
+    elif angle not in (90, 180, 270):
         raise HTTPException(400, "angle 必須是 90 / 180 / 270")
+    else:
+        mode = f"rotate-{angle}"
+    per_page_map = parse_per_page(per_page)
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF")
     data = await file.read()
@@ -259,9 +281,10 @@ async def api_pdf_rotate(
         with fitz.open(str(src)) as doc:
             target = _parse_pages(pages, doc.page_count)
             for i in range(doc.page_count):
-                if i in target:
-                    page = doc[i]
-                    page.set_rotation((page.rotation + angle) % 360)
+                if i + 1 in per_page_map:
+                    _apply_mode_to_page(doc[i], per_page_map[i + 1])
+                elif i in target:
+                    _apply_mode_to_page(doc[i], mode)
             doc.save(str(out), garbage=3, deflate=True)
     await _asyncio.to_thread(_do)
     return FileResponse(str(out), media_type="application/pdf",

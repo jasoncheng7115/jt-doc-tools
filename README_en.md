@@ -1,6 +1,6 @@
 [繁體中文](README.md) ｜ **English** ｜ [日本語](README_ja.md)
 
-# Jason Tools Document Toolbox v1.17.36
+# Jason Tools Document Toolbox v1.17.38
 
 > ### ⚠ Installed with git before 2026-09-13? Run one command before this upgrade
 >
@@ -27,7 +27,7 @@
 
 > An integrated PDF / Office document platform. 53 tools cover **form filling and stamping**, **watermarks**, **merge / split / rotate / reorder**, **format conversion**, **scan stitching**, **de-identification**, **word counts**, **annotation handling**, **diffing**, **sentence translation**, **list processing**, **e-invoice processing**, **VAT lookup**, **a page editor**, **encryption / decryption** and more.
 >
-> Enterprise features: **local / LDAP / AD multi-realm authentication**, **single sign-on** (OIDC + SAML, ready for M365 / Google / Keycloak), **RBAC roles and permissions**, **audit log**, **SIEM forwarding** (syslog / CEF / GELF), **font management**, **user workspace**, **seal requests (stamped by the custodian after approval)**, **background jobs with completion notices**, a **REST API** and **MCP (lets Claude Code / Codex / OpenCode call the non-LLM tools)**.
+> Enterprise features: **local / LDAP / AD multi-realm authentication**, **single sign-on** (OIDC + SAML, ready for M365 / Google / Keycloak), **RBAC roles and permissions**, **audit log**, **SIEM forwarding** (syslog / CEF / GELF), **font management**, **user workspace**, **seal requests (stamped by the custodian after approval)**, **background jobs with completion notices**, a **REST API** and **MCP (lets Claude Code / Codex / OpenCode call the non-LLM tools; AI stamping needs each seal approved and can require the owner's confirmation)**.
 >
 > **No cloud; your data stays with you.** Runs on Linux, macOS and Windows, either standalone or as an internal server for a whole team.
 

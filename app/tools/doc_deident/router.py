@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 from ...config import settings
 from ...core import office_convert, pdf_preview
+from ...core import user_regex as _user_regex
 from ...core.job_manager import job_manager
 from . import patterns as P
 from . import redact_core as _redact
@@ -373,47 +374,36 @@ async def detect(
         # 整份目錄會把台灣專屬的式子套到英文文件上，那是抓錯不是抓不到。
         selected_ids = P.default_ids_for(doc_lang or _default_doc_lang(request))
 
-    # Parse custom regex spec: one rule per line, "label|regex"
-    custom_regexes: list[tuple[str, re.Pattern]] = []
-    for line in (custom or "").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        if "|" in line:
-            label, _, rx_str = line.partition("|")
-            label = label.strip() or "自訂"
-            rx_str = rx_str.strip()
-        else:
-            label = "自訂"
-            rx_str = line
-        try:
-            custom_regexes.append((label, re.compile(rx_str)))
-        except re.error as exc:
-            raise HTTPException(400, f"自訂 regex 無效：{rx_str} — {exc}")
+    custom_regexes = parse_custom_rules(custom)
 
-    findings_by_page: list[dict] = []
-    all_findings: list[dict] = []
-    page_texts: list[str] = []
-    with fitz.open(str(pdf_path)) as doc:
-        total_pages = doc.page_count
-        for pno in range(doc.page_count):
-            page = doc[pno]
-            page_findings = _build_findings_for_page(page, selected_ids,
-                                                    custom_regexes)
-            for f in page_findings:
-                f["page"] = pno + 1
-                f["id"] = len(all_findings)
-                all_findings.append(f)
-            findings_by_page.append({
-                "page": pno + 1,
-                "count": len(page_findings),
-            })
-            # v1.9.38：跳過 bad-CMap noise，避免誤報識別物
-            from ...core.bad_cmap import is_bad_cmap_text, clean_pdf_text
-            _t = page.get_text("text") or ""
-            _cleaned = "\n".join(clean_pdf_text(ln) for ln in _t.split("\n")
-                                   if ln and not is_bad_cmap_text(ln))
-            page_texts.append(_cleaned)
+    def _detect_all():
+        # 畫頁面＋逐頁比對是重活，而且自訂正規式可能很慢：不可以在事件迴圈裡做
+        findings_by_page: list[dict] = []
+        all_findings: list[dict] = []
+        page_texts: list[str] = []
+        with fitz.open(str(pdf_path)) as doc:
+            total_pages = doc.page_count
+            for pno in range(doc.page_count):
+                page = doc[pno]
+                page_findings = _build_findings_for_page(page, selected_ids,
+                                                        custom_regexes)
+                for f in page_findings:
+                    f["page"] = pno + 1
+                    f["id"] = len(all_findings)
+                    all_findings.append(f)
+                findings_by_page.append({
+                    "page": pno + 1,
+                    "count": len(page_findings),
+                })
+                # v1.9.38：跳過 bad-CMap noise，避免誤報識別物
+                from ...core.bad_cmap import is_bad_cmap_text, clean_pdf_text
+                _t = page.get_text("text") or ""
+                _cleaned = "\n".join(clean_pdf_text(ln) for ln in _t.split("\n")
+                                       if ln and not is_bad_cmap_text(ln))
+                page_texts.append(_cleaned)
+        return total_pages, findings_by_page, all_findings, page_texts
+
+    total_pages, findings_by_page, all_findings, page_texts = await _run_scan(_detect_all, custom_regexes)
 
     # === LLM 補偵測（v1.4.27）===
     # regex 抓不到的 context-sensitive 案例（人名「王經理」「Dr. Chen」、
@@ -832,6 +822,37 @@ async def download(upload_id: str, request: Request):
 
 
 # ---- 對外 API：單次 upload + 偵測 + 自動遮罩 / 真遮蔽 + 直接回 PDF ----
+def parse_custom_rules(custom: str) -> list[tuple[str, re.Pattern]]:
+    """自訂偵測規則：一行一條，`標籤|regex`（沒有 `|` 的整行當 regex）；網頁與對外 API 共用。"""
+    out: list[tuple[str, re.Pattern]] = []
+    for line in (custom or "").splitlines()[:200]:
+        line = line.strip()
+        if not line:
+            continue
+        if "|" in line:
+            label, _, rx_str = line.partition("|")
+            label = label.strip() or "自訂"
+            rx_str = rx_str.strip()
+        else:
+            label = "自訂"
+            rx_str = line
+        try:
+            out.append((label, _user_regex.compile_user(rx_str)))
+        except ValueError as exc:
+            raise HTTPException(400, f"自訂 regex 無效：{rx_str[:80]} — {exc}")
+    return out
+
+
+async def _run_scan(fn, custom_regexes):
+    """有自訂正規式就放到專用的執行緒池（卡住也不會拖垮整站）；沒有就照一般的背景執行緒。"""
+    if not custom_regexes:
+        return await _asyncio.to_thread(fn)
+    try:
+        return await _user_regex.run(fn)
+    except _user_regex.RegexBusy:
+        raise HTTPException(503, "自訂正規式的處理忙碌中，請稍後再試")
+
+
 @router.post("/api/doc-deident", include_in_schema=True)
 async def api_doc_deident(
     request: Request,
@@ -841,6 +862,7 @@ async def api_doc_deident(
     mode: str = Form("mask"),    # mask（同字數的 *）/ redact（黑條真遮蔽）/ replace（換成假值）
     replacements: str = Form(""),      # replace 模式：JSON 物件 {"原值": "指定的新值"}
     valid_checksum: str = Form(""),    # replace 模式："1" → 產生可通過檢查碼的假值
+    custom: str = Form(""),            # 自訂規則：一行一條「標籤|regex」
 ):
     """單次上傳 PDF / Office，依 types 偵測敏感資料、依 mode 處理後回 PDF。
 
@@ -887,12 +909,13 @@ async def api_doc_deident(
     selected_ids = {t for t in (types or "").split(",") if t.strip()}
     if not selected_ids:
         selected_ids = P.default_ids_for(doc_lang)
+    custom_regexes = parse_custom_rules(custom)
 
     out_path = _out_path(upload_id)
     mode_fill = (0, 0, 0) if mode == "redact" else None
     # 一份文件共用一個 Replacer —— 同一個原值固定對應同一個假值。
     from .fake_values import Replacer as _Replacer
-    _rep = _Replacer(valid_checksum=(valid_checksum or "").strip() == "1")
+    _rep = _Replacer(valid_checksum=(valid_checksum or "").strip().lower() in ("1", "true", "on", "yes"))
 
     def _do():
         with fitz.open(str(pdf_path)) as doc:
@@ -900,7 +923,7 @@ async def api_doc_deident(
             by_page: dict[int, list[dict]] = {}
             for pno in range(doc.page_count):
                 page = doc[pno]
-                findings = _build_findings_for_page(page, selected_ids, [])
+                findings = _build_findings_for_page(page, selected_ids, custom_regexes)
                 if findings:
                     by_page[pno] = findings
             # 2. 依 mode redact / mask
@@ -942,7 +965,7 @@ async def api_doc_deident(
                             pass
             doc.save(str(out_path), garbage=3, deflate=True)
             return sum(len(v) for v in by_page.values())
-    processed = await _asyncio.to_thread(_do)
+    processed = await _run_scan(_do, custom_regexes)
     stem = Path(orig_name).stem
     headers = {"X-Deident-Count": str(processed)}
     return FileResponse(str(out_path), media_type="application/pdf",

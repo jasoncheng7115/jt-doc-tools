@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}{{ tr('AI 用印紀錄') }} · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('ai-stamp', size=22) }} {{ tr('AI 用印紀錄') }}</h1>
+<p class="muted">{{ tr('AI 經 MCP 蓋的每一次章：誰、用哪一張 Token、哪幾顆章、哪幾頁、是否經本人確認。產出的 PDF 裡也有一筆不顯示的註記（編號與時間），拿檔案回查得到是哪一次。') }}
+  <a href="/admin/mcp">{{ tr('回到 MCP 設定') }}</a></p>
+
+<section class="panel">
+  <div class="ail-filters">
+    <select class="field jt-select" id="ailSeal" aria-label="{{ tr('章') }}">
+      <option value="">{{ tr('全部的章') }}</option>
+      {% for s in seals %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+    </select>
+    <label>{{ tr('從') }} <input type="date" class="field" id="ailSince"></label>
+    <label>{{ tr('到') }} <input type="date" class="field" id="ailUntil"></label>
+    <button type="button" class="btn btn-small" id="ailApply">{{ icon('search', size=14) }} <span>{{ tr('查詢') }}</span></button>
+    <a class="btn btn-small" id="ailCsv" href="/admin/mcp/ai-stamp.csv">{{ icon('download', size=14) }} <span>{{ tr('匯出 CSV') }}</span></a>
+    <span class="muted" id="ailCount" aria-live="polite"></span>
+  </div>
+  <div class="ail-wrap"><table class="ail-table">
+    <thead><tr><th>{{ tr('時間') }}</th><th>{{ tr('使用者') }}</th><th>Token</th><th>{{ tr('工具') }}</th>
+      <th>{{ tr('檔案') }}</th><th>{{ tr('章') }}</th><th>{{ tr('頁') }}</th><th>{{ tr('狀態') }}</th><th>{{ tr('確認者') }}</th><th>{{ tr('來源 IP') }}</th></tr></thead>
+    <tbody id="ailRows"></tbody>
+  </table></div>
+  <p class="muted" id="ailEmpty" hidden>{{ tr('沒有紀錄。') }}</p>
+</section>
+
+<style nonce="{{ request.state.csp_nonce }}">
+  .ail-filters { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+  .ail-filters label { display:flex; align-items:center; gap:4px; font-size:13px; }
+  .ail-wrap { overflow-x:auto; }
+  .ail-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .ail-table th, .ail-table td { padding:6px 8px; border-bottom:1px solid var(--border, #e5e7eb); text-align:left; vertical-align:top; }
+  .ail-table td { word-break:break-all; }
+  .ail-st { font-size:12px; padding:1px 8px; border-radius:999px; white-space:nowrap; }
+  .ail-st.s-done, .ail-st.s-approved { background:#dcfce7; color:#166534; }
+  .ail-st.s-pending { background:#fef3c7; color:#92400e; }
+  .ail-st.s-rejected, .ail-st.s-expired { background:#f3f4f6; color:#4b5563; }
+  .ail-st.s-void { background:#fee2e2; color:#991b1b; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/custom_select.js"></script>
+<script nonce="{{ request.state.csp_nonce }}">
+(function () {
+  const $ = id => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const ST = { done: tr('已蓋好（不需確認）'), approved: tr('本人已核准'), pending: tr('待確認'),
+               rejected: tr('本人已退回'), expired: tr('逾時作廢'),
+               void: tr('條件改變作廢') };
+  const TOOLS = { 'pdf-stamp': tr('用印與簽名'), 'pdf-seam-stamp': tr('騎縫章') };
+  const sel = $('ailSeal');
+  function query() {
+    const p = new URLSearchParams();
+    if (sel.value) p.set('asset_id', sel.value);
+    if ($('ailSince').value) p.set('since', $('ailSince').value);
+    if ($('ailUntil').value) p.set('until', $('ailUntil').value);
+    return p.toString();
+  }
+  async function load() {
+    const q = query();
+    $('ailCsv').href = '/admin/mcp/ai-stamp.csv' + (q ? '?' + q : '');
+    const r = await fetch('/admin/mcp/ai-stamp.json' + (q ? '?' + q : ''));
+    if (!r.ok) { $('ailCount').textContent = await friendlyServerError(r, tr('讀取失敗')); return; }
+    const items = (await r.json()).items;
+    $('ailRows').replaceChildren(...items.map(it => {
+      const row = el('tr');
+      const st = el('span', 'ail-st s-' + it.status, ST[it.status] || it.status);
+      const cells = [jtTime.dt(it.created_at), it.user, it.token || '—', TOOLS[it.tool] || it.tool, it.filename,
+                     it.assets.map(a => a.name).join('、'),
+                     it.tool === 'pdf-seam-stamp' ? tr('騎縫') : it.pages.map(p => p + 1).join('、'), null,
+                     it.decided_by ? it.decided_by + '（' + jtTime.dt(it.decided_at) + '）' : '—', it.ip || '—'];
+      cells.forEach((v, i) => {
+        const td = el('td');
+        if (i === 7) td.append(st); else td.textContent = v;
+        if (i === 1 || i === 2 || i === 4 || i === 5 || i === 8) td.dataset.i18n = 'skip';
+        row.append(td);
+      });
+      return row;
+    }));
+    $('ailEmpty').hidden = items.length > 0;
+    $('ailCount').textContent = tr('共 {0} 筆').replace('{0}', items.length);
+  }
+  $('ailApply').addEventListener('click', load);
+  load();
+})();
+</script>
+{% endblock %}

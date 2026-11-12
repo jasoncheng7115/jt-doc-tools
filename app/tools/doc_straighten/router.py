@@ -535,8 +535,13 @@ async def submit(request: Request, upload_id: str = Form(...),
 async def api_doc_straighten(request: Request, file: UploadFile = File(...),
                              dpi: int = Form(200), binarize: bool = Form(False),
                              detect_quad: bool = Form(True),
-                             enhance: bool = Form(True)):
-    """一次呼叫：上傳 → 拉正 → 直接回 PDF（同步，適合小檔）。"""
+                             enhance: bool = Form(True),
+                             size_w: str = Form(""), size_h: str = Form(""),
+                             size_unit: str = Form("px")):
+    """一次呼叫：上傳 → 拉正 → 直接回 PDF（同步，適合小檔）。
+
+    `size_w` / `size_h` / `size_unit`（px / mm）：輸出每頁的尺寸，跟網頁一樣；沒填或不合法 ＝ 照拉正後的大小。
+    """
     info = await _stash(request, [(await file.read(), file.filename or "")])
     upload_id = info["upload_id"]
     src = _src_path(upload_id)
@@ -545,7 +550,8 @@ async def api_doc_straighten(request: Request, file: UploadFile = File(...),
     def _work():
         results = SC.straighten_pdf(src, out, dpi=_clamp_dpi(dpi),
                                     do_binarize=binarize,
-                                    detect_quad=detect_quad, enhance=enhance)
+                                    detect_quad=detect_quad, enhance=enhance,
+                                    out_size=_parse_out_size(size_w, size_h, size_unit, _clamp_dpi(dpi)))
         worst = max((abs(r.residual) for r in results), default=0.0)
         return results, worst
 

@@ -22,7 +22,8 @@ def test_page_shows_tools_tokens_and_snippets(client, auth_off, reset_mcp):
         import re
         text = re.sub(r"<[^>]+>", "", html)       # 範例有語法顏色（span），比對去掉標記後的文字
         for t in registry.TOOLS:
-            assert f'value="{t.name}"' in html
+            # AI 用印的工具不在逐支開放的卡片裡（看「允許 AI 用印」與 Token 的「用印」開關）
+            assert (f'value="{t.name}"' in html) != t.stamp, t.name
         assert "ai-agent" in html and tok.token not in html, "只顯示遮罩，不顯示 Token 本身"
         for client_name in ("claude mcp add --transport http", "bearer_token_env_var", '"type": "remote"',
                             "mcp-remote", "OpenCode"):

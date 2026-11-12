@@ -22,6 +22,8 @@ DEFAULTS: dict[str, Any] = {
     "ticket_bind_ip": True,
     #: 站台網址是 HTTP 時也發票證（要管理員明確同意）
     "ticket_allow_http": False,
+    #: AI 用印（v1.17.38）：總開關。還要 Token 勾「允許用印」、每顆章開 AI 授權
+    "allow_stamp": False,
 }
 
 #: 可以調的範圍（超出就夾回來）
@@ -43,6 +45,7 @@ def get() -> dict[str, Any]:
     out["enabled"] = out.get("enabled") is True
     out["ticket_bind_ip"] = out.get("ticket_bind_ip") is not False
     out["ticket_allow_http"] = out.get("ticket_allow_http") is True
+    out["allow_stamp"] = out.get("allow_stamp") is True
     for k, (lo, hi) in _RANGES.items():
         try:
             out[k] = max(lo, min(hi, int(out.get(k))))
@@ -58,7 +61,7 @@ def save(changes: dict[str, Any]) -> dict[str, Any]:
     from . import registry
     with _lock:
         cur = get()
-        for k in ("enabled", "ticket_bind_ip", "ticket_allow_http"):
+        for k in ("enabled", "ticket_bind_ip", "ticket_allow_http", "allow_stamp"):
             if k in changes:
                 cur[k] = changes[k] is True
         for k in _RANGES:
@@ -80,6 +83,7 @@ def enabled_tools() -> list[str]:
     """管理員開放的工具（MCP 名稱，照登記表順序）。"""
     from . import registry
     want = get()["tools"]
+    # AI 用印的工具不在這份清單裡（另有開關與條件，見 server.visible_tools）
     if want is None:
-        return [t.name for t in registry.TOOLS if t.default_on]
-    return [n for n in registry.NAMES if n in set(want)]
+        return [t.name for t in registry.TOOLS if t.default_on and not t.stamp]
+    return [n for n in registry.NAMES if n in set(want) and not registry.BY_NAME[n].stamp]

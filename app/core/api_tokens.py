@@ -61,7 +61,7 @@ def _preview(token: str) -> str:
 
 #: 檔案裡每一筆的欄位（不含 Token 本身）
 _STORED = ("token_sha256", "token_enc", "preview", "label", "created_at", "last_used_at",
-           "expires_at", "enabled", "owner_user_id", "mcp")
+           "expires_at", "enabled", "owner_user_id", "mcp", "stamp")
 
 
 def _stored(tok: "ApiToken") -> dict:
@@ -115,6 +115,8 @@ class ApiToken:
     owner_user_id: Optional[int] = None
     # v1.17.1：這張 Token 能不能連 MCP（AI 客戶端）。預設不行，管理員在「設定 → MCP」逐張打開
     mcp: bool = False
+    # v1.17.38：這張 Token 能不能經 MCP 用印（AI 用印）。預設不行；要先綁使用者
+    stamp: bool = False
 
     def to_public(self) -> dict:
         """Safe-to-display dict — masks the token middle so UI can show a
@@ -133,6 +135,7 @@ def _public(row: dict) -> dict:
         "enabled": row.get("enabled", True),
         "owner_user_id": row.get("owner_user_id"),
         "mcp": bool(row.get("mcp", False)),
+        "stamp": bool(row.get("stamp", False)),
     }
 
 
@@ -293,6 +296,8 @@ class ApiTokenManager:
             changed = False
             for t in data.get("tokens", []):
                 if _matches(t, token_preview_or_full):
+                    if t.get("owner_user_id") != owner_user_id:
+                        t["stamp"] = False      # 改綁給別人：用印權限不跟著轉過去，要重新允許
                     t["owner_user_id"] = owner_user_id
                     changed = True
             if changed:
@@ -309,6 +314,21 @@ class ApiTokenManager:
             for t in data.get("tokens", []):
                 if _matches(t, token_preview_or_full):
                     t["mcp"] = bool(allowed)
+                    changed = True
+            if changed:
+                self._write(data)
+            return changed
+
+    def set_stamp(self, token_preview_or_full: str, allowed: bool) -> bool:
+        """打開 / 關閉這張 Token 經 MCP 用印（v1.17.38）。打開要先綁使用者（呼叫端檢查）。"""
+        if not token_preview_or_full:
+            return False
+        with self._lock:
+            data = self._read()
+            changed = False
+            for t in data.get("tokens", []):
+                if _matches(t, token_preview_or_full):
+                    t["stamp"] = bool(allowed)
                     changed = True
             if changed:
                 self._write(data)

@@ -315,6 +315,9 @@ async def api(request: Request, file: UploadFile = File(...),
 
     不給 `stamp` 就由系統依 `text` / `shape` / `color` 產生印章。
     """
+    if getattr(request.state, "api_via_mcp", False):
+        # 經 MCP（AI）只能走 `/api/ai-seam-stamp`：只收資產庫裡經 AI 授權的章，不收上傳、不收文字產生的章
+        raise HTTPException(403, "AI 用騎縫章請使用 /tools/pdf-seam-stamp/api/ai-seam-stamp")
     data = await file.read()
     if not data:
         raise HTTPException(400, "請提供檔案")
@@ -368,3 +371,92 @@ async def thumb(upload_id: str, page_no: int, request: Request):
             raise HTTPException(400, str(e))
     return FileResponse(str(out), media_type="image/png",
                         headers={"Cache-Control": "max-age=300"})
+
+
+# ------------------------------------------------------------ AI 用印（v1.17.38） --
+
+@router.post("/api/ai-seam-stamp", include_in_schema=True)
+async def api_ai_seam_stamp(request: Request, file: UploadFile = File(...), asset_id: str = Form(...),
+                            mode: str = Form("side"), group: int = Form(2), edge: str = Form("right"),
+                            size_mm: float = Form(40), offset_mm: float = Form(3), pos_mm: float = Form(0),
+                            angle_deg: float = Form(0), opacity: float = Form(1.0),
+                            jitter_pos: bool = Form(False), jitter_angle: bool = Form(False), seed: int = Form(0)):
+    """AI 用騎縫章：只收資產庫裡經 AI 授權的印章（`asset_id`），不收上傳、不收文字產生的章（使用者 2026-11-12）。
+    需要確認 → 回 202 與 `request_id`；不需要 → 直接回 PDF。"""
+    from ...core import ai_stamp
+    from ...core.client_ip import real_client_ip
+    from ..pdf_stamp.router import ai_stamp_http_error
+    require_uuid_hex(asset_id, "asset_id")      # 資產編號一律 32 位十六進位（不讓它碰到路徑）
+    try:
+        user = ai_stamp.require(request, "pdf-seam-stamp")
+        policies = ai_stamp.check(user["id"], "pdf-seam-stamp", {asset_id: 1})
+    except ai_stamp.AiStampError as e:
+        raise ai_stamp_http_error(e)
+    import math as _math
+    nums = {"size_mm": size_mm, "offset_mm": offset_mm, "pos_mm": pos_mm, "angle_deg": angle_deg, "opacity": opacity}
+    if any(not _math.isfinite(float(v)) for v in nums.values()):
+        ai_stamp.release(user["id"], {asset_id: 1})
+        raise HTTPException(400, "數值參數不可以是 NaN 或無限大")
+    uid = uuid.uuid4().hex
+    src, out = _src(uid), _out(uid)
+    handed_off = False
+    try:
+        data = await file.read()
+        if not data:
+            raise HTTPException(400, "請提供檔案")
+        request.state.upload_filename = file.filename or ""
+        if data[:5] == b"%PDF-":
+            src.write_bytes(data)
+        elif office_convert.is_office_file(file.filename or ""):
+            raw = settings.temp_dir / f"{_PREFIX}raw_{uid}"
+            raw.write_bytes(data)
+            try:
+                await office_convert.convert_to_pdf_async(raw, src)
+            finally:
+                raw.unlink(missing_ok=True)
+        else:
+            raise HTTPException(400, "只支援 PDF 與文書檔")
+        spec = _spec_from_form(mode=mode, group=group, edge=edge, size_mm=size_mm, offset_mm=offset_mm,
+                               pos_mm=pos_mm, angle_deg=angle_deg, opacity=opacity, jitter_pos=jitter_pos,
+                               jitter_angle=jitter_angle, seed=seed)
+
+        def _render() -> int:            # 畫頁面與存檔是重活：不可以在事件迴圈裡做
+            ensure_readable_pdf(src, min_pages=2)
+            png = SS.apply_opacity(SS.normalize_upload(SS.load_asset(asset_id)), spec.opacity)
+            with fitz.open(str(src)) as doc:
+                if doc.page_count < 2:
+                    raise HTTPException(400, "騎縫章至少需要 2 頁")
+                n = doc.page_count
+                SC.apply_seam(doc, png, spec)
+                doc.save(str(out), garbage=3, deflate=True)
+            return n
+        n = await _asyncio.to_thread(_render)
+        res = await _asyncio.to_thread(ai_stamp.finish, user=user, ip=real_client_ip(request),
+                                       tool_id="pdf-seam-stamp", filename=file.filename or "document.pdf",
+                                       src=src, out=out, policies=policies, uses={asset_id: 1},
+                                       pages=list(range(n)))
+    except ai_stamp.AiStampError as e:
+        ai_stamp.release(user["id"], {asset_id: 1})
+        src.unlink(missing_ok=True)
+        out.unlink(missing_ok=True)
+        raise ai_stamp_http_error(e)
+    except BaseException:
+        ai_stamp.release(user["id"], {asset_id: 1})
+        src.unlink(missing_ok=True)
+        out.unlink(missing_ok=True)
+        raise
+    try:
+        if res["status"] == "pending":
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=202, content={
+                **res, "message": "已送出，等待本人在網頁上確認（AI 用印確認頁）；確認之前拿不到檔案"})
+        from starlette.background import BackgroundTask
+        stem = Path(file.filename or "document.pdf").stem
+        handed_off = True
+        return FileResponse(str(out), media_type="application/pdf", filename=f"{stem}_seam.pdf",
+                            headers={"X-JTDT-AI-Stamp": res["request_id"]},
+                            background=BackgroundTask(out.unlink, missing_ok=True))
+    finally:
+        src.unlink(missing_ok=True)
+        if not handed_off:
+            out.unlink(missing_ok=True)

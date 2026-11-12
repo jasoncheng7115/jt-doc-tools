@@ -32,6 +32,9 @@ ALLOWED = {
     ("app/core/seal_flow.py", "_stamp_one"): "run_stamp 拆出來的單份文件用印（同上）",
     ("app/core/seal_flow.py", "clean_watermark"): "流程的浮水印只收種類是浮水印的資產（不是印章或簽名）",
     ("app/core/seal_flow.py", "simulate"): "管理員模擬：只讀章的名稱與管制設定，不碰圖檔",
+    ("app/core/ai_stamp.py", "eligible"): "AI 用印：每顆章都過 _asset_policy（裡面呼叫 is_controlled_asset，受管制的章一律不給）",
+    ("app/core/ai_stamp.py", "check"): "AI 用印：同上，每顆章都過 _asset_policy（test_ai_stamp 變異驗證過）",
+    ("app/core/ai_stamp.py", "_policies"): "AI 用印：check() 與核准時的重新檢查共用，每顆章都過 _asset_policy（test_ai_stamp_hardening 變異驗證過）",
     ("app/web/seal_request_routes.py", "seal_image"):
         "章圖只給這件案件的保管人、只在待用印 / 用印中 / 用印失敗，且只限核准的章（test_seal_stamp 驗）",
 }

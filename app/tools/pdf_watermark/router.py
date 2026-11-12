@@ -501,8 +501,12 @@ async def api_pdf_watermark(
     mode: str = Form("tile"),
     text_color: str = Form("#cc0000"),
     text_size_pt: float = Form(48.0),
+    page_mode: str = Form("all"),
 ):
-    """單次上傳 PDF + 文字浮水印，回 PDF。mode: tile（鋪滿）/ single（單點）。"""
+    """單次上傳 PDF + 文字浮水印，回 PDF。mode: tile（鋪滿）/ single（單點）；
+    page_mode: all（每一頁，預設）/ first（只有第一頁）/ last（只有最後一頁），跟網頁一樣。"""
+    if page_mode not in ("all", "first", "last"):
+        raise HTTPException(400, "page_mode 必須是 all / first / last")
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "只支援 PDF")
     if not (text or "").strip():
@@ -525,6 +529,11 @@ async def api_pdf_watermark(
         text_color=text_color,
         text_size_pt=float(text_size_pt),
     )
+    if page_mode != "all":
+        import fitz
+        with fitz.open(str(src)) as d:
+            n = d.page_count
+        params.pages = [0] if page_mode == "first" else [max(0, n - 1)]
     import asyncio as _asyncio
     await _asyncio.to_thread(service.apply_watermark, src, out, None, params)
     return FileResponse(str(out), media_type="application/pdf",

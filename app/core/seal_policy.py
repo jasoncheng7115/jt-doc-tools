@@ -35,6 +35,9 @@ MODES = ("direct", "approval")
 #: 主體種類（同權限系統；組織單位的 key 是 DN）。
 SUBJECT_TYPES = ("user", "group", "ou")
 MAX_SUBJECTS = 500
+#: AI 用印（v1.17.38，MCP）：每顆章各自的授權。預設關閉；需要確認預設開（使用者 2026-11-12：印章與簽名都預設要確認）。
+AI_DEFAULT: dict[str, Any] = {"enabled": False, "subjects": [], "confirm": True, "daily_limit": 0}
+MAX_AI_DAILY = 1000
 
 _LOCK = threading.Lock()
 
@@ -59,6 +62,8 @@ MESSAGES = {
     "TOO_MANY": "人員與群組太多",
     "UNREADABLE": "用印申請的設定檔讀不出來，所有印章與簽名暫時都當成受管制；請洽管理員檢查",
     "BAD_RETENTION": "保留期限要是 0（不自動刪除）到 36500 天之間的整數",
+    "BAD_AI": "AI 使用的設定格式不正確",
+    "AI_ON_CONTROLLED": "「僅限核准案件使用」的章不能開放 AI 使用",
 }
 
 
@@ -124,8 +129,15 @@ def _clean_policy(raw: Any) -> dict[str, Any]:
                 out.append({"type": s["type"], "key": str(s["key"]).strip()})
         return out
 
+    ai_raw = raw.get("ai") if isinstance(raw.get("ai"), dict) else {}
+    try:
+        limit = max(0, min(MAX_AI_DAILY, int(ai_raw.get("daily_limit") or 0)))
+    except (TypeError, ValueError):
+        limit = 0
+    ai = {"enabled": ai_raw.get("enabled") is True, "subjects": subs(ai_raw.get("subjects")),
+          "confirm": ai_raw.get("confirm") is not False, "daily_limit": limit}
     return {"mode": mode, "requesters": subs(raw.get("requesters")),
-            "custodians": subs(raw.get("custodians"))}
+            "custodians": subs(raw.get("custodians")), "ai": ai}
 
 
 def get_policy(asset_id: str) -> dict[str, Any]:
@@ -133,7 +145,8 @@ def get_policy(asset_id: str) -> dict[str, Any]:
     try:
         data = _read()
     except _Unreadable:
-        return {"mode": "approval", "requesters": [], "custodians": [], "unreadable": True}
+        return {"mode": "approval", "requesters": [], "custodians": [], "ai": dict(AI_DEFAULT),
+                "unreadable": True}
     return _clean_policy(data["assets"].get(str(asset_id)))
 
 
@@ -200,6 +213,30 @@ def _check_subjects(v: Any) -> list[dict]:
     return out
 
 
+def _check_ai(v: Any, cur: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(v, dict):
+        raise PolicyError("BAD_AI")
+    out = dict(cur)
+    for key in ("enabled", "confirm"):
+        if key in v:
+            if not isinstance(v[key], bool):
+                raise PolicyError("BAD_AI")
+            out[key] = v[key]
+    if "subjects" in v:
+        out["subjects"] = _check_subjects(v["subjects"])
+    if "daily_limit" in v:
+        n = v["daily_limit"]
+        if isinstance(n, bool) or not isinstance(n, int) or not (0 <= n <= MAX_AI_DAILY):
+            raise PolicyError("BAD_AI")
+        out["daily_limit"] = n
+    return out
+
+
+def ai_policy(asset_id: str) -> dict[str, Any]:
+    """這顆章的 AI 授權（讀不出設定檔時當成關閉）。"""
+    return dict(get_policy(asset_id).get("ai") or AI_DEFAULT)
+
+
 def set_policy(asset_id: str, asset_type: str, patch: dict[str, Any]) -> dict[str, Any]:
     """改一顆章的設定。功能沒啟用時不能改成受管制（停用狀態下不可以出現新的管制）。回改完的設定。"""
     if asset_type not in CONTROLLABLE_TYPES:
@@ -225,7 +262,12 @@ def set_policy(asset_id: str, asset_type: str, patch: dict[str, Any]) -> dict[st
             cur["requesters"] = _check_subjects(patch["requesters"])
         if "custodians" in patch:
             cur["custodians"] = _check_subjects(patch["custodians"])
-        if cur == {"mode": "direct", "requesters": [], "custodians": []}:
+        if "ai" in patch:
+            cur["ai"] = _check_ai(patch["ai"], cur["ai"])
+        if cur["mode"] == "approval" and cur["ai"]["enabled"]:
+            # 受管制的章 AI 一律不能用（使用者 2026-11-12）：不可以同時存在，免得之後改回直接使用時無聲開放
+            raise PolicyError("AI_ON_CONTROLLED")
+        if cur == {"mode": "direct", "requesters": [], "custodians": [], "ai": AI_DEFAULT}:
             data["assets"].pop(str(asset_id), None)
         else:
             data["assets"][str(asset_id)] = cur

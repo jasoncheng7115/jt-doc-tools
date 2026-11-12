@@ -391,7 +391,7 @@ A / B，然後：
 ### v1.17.6 — MCP（AI 連接）的資安檢查（每次發版必過）
 
 MCP 讓 Claude Code、Codex CLI、OpenCode 這類 AI 客戶端用 API Token 呼叫本站的工具，是另一個對外入口。
-自動化：`tests/test_mcp_server.py`、`tests/test_mcp_cross_user.py`、`tests/test_mcp_admin.py`、`tests/test_mcp_tools_batch2.py`。
+自動化：`tests/test_mcp_server.py`、`tests/test_mcp_cross_user.py`、`tests/test_mcp_admin.py`、`tests/test_mcp_tools_batch2.py`、`tests/test_mcp_tools_batch3.py`、`tests/test_mcp_tools_batch4.py`、`tests/test_ai_stamp.py`。
 
 - [ ] **預設關閉**：全新安裝 `/mcp` 回 403；打開總開關後，Token 也要逐張勾「允許 MCP」才能用
 - [ ] **沒開認證也要 Token**（不因為站台沒開登入就放行）；開了認證時 Token 一定要有擁有者，沒有擁有者的 Token 403
@@ -402,6 +402,16 @@ MCP 讓 Claude Code、Codex CLI、OpenCode 這類 AI 客戶端用 API Token 呼�
 - [ ] **Origin**：瀏覽器帶來的 `Origin` 不是站台網址一律 403（防 DNS rebinding 讓網頁替使用者呼叫）
 - [ ] **限流與同時數**：超過每分鐘次數回錯誤、同一張 Token 同時跑的作業有上限
 - [ ] **高風險工具預設不開放**：`pdf_decrypt`（解除密碼）要管理員另外勾
+- [ ] **經 MCP 一律不用 LLM**（v1.17.37）：有 LLM 選項的工具，MCP 送出的請求不帶開啟 LLM 的欄位；送件前檢核強制 `allow_llm=false`，站台有 LLM 也不呼叫（`tests/test_mcp_tools_batch3.py`，變異驗證過）
+- [ ] **JSON 參數先檢查**：`ops`、`per_page`、`bookmarks` 這類 JSON 字串參數在 MCP 端就檢查格式與型別（陣列 / 物件），不合格不送到原本的 API
+- [ ] **背景作業的報告網址只收同一支工具底下的路徑**：`meta.result_url` 不是 `/tools/<這支工具>/` 開頭、含 `..` 或怪字元就不去讀
+- [ ] **用印、騎縫章、加密紙本備份、事務機不經 MCP**：歸類表是「不開放」或「另有規則」；用印與騎縫章只能走 AI 用印（下一項）
+- [ ] **AI 用印**（v1.17.38）：預設關閉；未啟用登入、總開關關、Token 沒勾「用印」或沒綁使用者、沒有工具權限、章沒開 AI 使用 / 不在對象 / 受管制，任何一項不符都 403 而且工具清單看不到；只收資產庫裡經 AI 授權的章（不收上傳圖、png_b64、文字章，不回章圖）；需要確認時核准只收網頁登入（帶 Token 403），核准前 AI 拿不到檔案、24 小時作廢刪檔；每日上限；Token 改綁或關 MCP 收回「用印」；原本的用印 API 經 MCP 403；稽核不含章圖（`tests/test_ai_stamp.py`，四處變異驗證）
+- [ ] **允許 MCP 的 Token 只能經 MCP 使用**（v1.17.38）：AI 客戶端讀得到自己設定裡的 Token；拿它直接呼叫任何一般 API（含偽造 `X-JTDT-Via-MCP`）一律 403 `MCP_TOKEN_REST_DENIED`，否則 MCP 那一層的限制（AI 用印、編輯器不收圖片、不開放的工具）全部可以繞過；沒勾 MCP 的 Token 照常（`tests/test_ai_stamp_hardening.py`，變異驗證）
+- [ ] **AI 用印的時間差與資源**（v1.17.38）：核准時重新檢查條件（收回授權 → `void` 刪檔）；每日上限算處數、檢查與扣用量同一個 BEGIN IMMEDIATE 交易、失敗退回；每人待確認 20 件 / 500 MB；暫存檔用完刪、不登記上傳者；位置不收 NaN / 無限大；通知不帶 AI 決定的檔名；紀錄 CSV 中和公式（含前置空白）
+- [ ] **使用者自訂正規式（ReDoS）**（v1.17.38）：清單處理、文字 / 文件去識別化拒絕「無上限重複裡面又有無上限重複」；其餘放專用 2 條執行緒池、滿了回 503 不排隊，卡住的正規式拖不垮其他工具（Python `re` 沒有逾時，殘餘風險：池子被佔住時這三支工具的自訂正規式暫時不能用）
+- [ ] **PDF 編輯器經 MCP 不收圖片**（v1.17.37）：資產庫的印章、簽名不可以從編輯器繞過 AI 用印的規則 —— MCP 端拒絕 `image` / `asset_id` / `existing_src`，原本的 API 認得「經 MCP」（程序內密值，外部偽造不了）再擋一次；兩層各自變異驗證（`tests/test_mcp_tools_batch4.py`）
+- [ ] **表單自動填寫**：公司清單只有編號與名稱；指定不存在的公司回 400，不會把別家公司的資料填進去；MCP 預設不開放
 - [ ] **稽核不記密碼與 Token**：`mcp_call` 的參數裡 `user_pw` / `password` 等不出現在紀錄；只記 Token 名稱
 - [ ] **檔案傳輸用 HTTPS**：站台網址是 `http://` 時票證預設不發（管理員另外允許才行）
 
