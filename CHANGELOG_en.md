@@ -5,9 +5,18 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (967 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (968 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
+
+---
+
+## [1.17.39] - 2026-11-12
+
+### Fixed
+
+- When approving on the AI stamp confirmation page fails because the file cannot be saved to the workspace, the error is now a fixed message (internal exception details are no longer returned); the request stays pending and can be approved again after freeing space.
+- Tests: the MCP e-invoice test is skipped where the QR decoding library is missing (same check as the e-invoice tool's own tests).
 
 ---
 

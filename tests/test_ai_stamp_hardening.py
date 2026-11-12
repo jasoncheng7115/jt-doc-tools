@@ -376,3 +376,20 @@ def test_doc_deident_scan_helper_really_leaves_the_event_loop(custom):
 
     asyncio.run(main())
     assert seen == [True]
+
+
+def test_workspace_failure_on_approval_keeps_it_pending_and_hides_internals(env, monkeypatch):
+    """核准時存不進工作區：回 409 固定文字（不帶例外內容），這件維持待確認、檔案還在（CodeQL #233）。"""
+    from app.core import ai_stamp, workspace
+    e = env
+    _set_ai(e, confirm=True)
+    rid = _api(e).json()["request_id"]
+
+    def boom(*a, **k):
+        raise workspace.WorkspaceError("/internal/secret/path quota")
+    monkeypatch.setattr(workspace, "save_bytes_for_key", boom)
+    r = _session(e["uid"]).post(f"/ai-stamp/api/{rid}/approve")
+    assert r.status_code == 409 and r.json()["code"] == "WORKSPACE", r.text
+    assert "secret" not in r.text and "/internal" not in r.text
+    assert ai_stamp._row(rid)["status"] == "pending"  # noqa: SLF001
+    assert (ai_stamp.files_root() / rid / "out.pdf").exists()

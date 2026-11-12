@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
@@ -105,11 +106,12 @@ def build_router(templates) -> APIRouter:
             return await asyncio.to_thread(ai_stamp.approve, request_id, me["id"], me["label"], _ip(request))
         except ai_stamp.AiStampError as e:
             return _err(e)
-        except ws.WorkspaceError as e:
-            # 存不進工作區（容量滿、工作區沒開）：維持待確認，清出空間再按一次
-            from ..core.log_safe import safe_user_error
+        except ws.WorkspaceError:
+            # 存不進工作區（容量滿、工作區沒開）：維持待確認，清出空間再按一次。
+            # 回固定文字，例外內容只進伺服器日誌（不把內部訊息回給瀏覽器）
+            logging.getLogger(__name__).warning("AI 用印核准時存不進工作區", exc_info=True)
             return JSONResponse(status_code=409, content={
-                "detail": "存不進你的工作區，這件維持待確認：" + safe_user_error(e, "工作區無法存檔"),
+                "detail": "存不進你的工作區（可能是容量已滿或工作區沒有開啟），這件維持待確認；清出空間後再按一次核准",
                 "code": "WORKSPACE"})
 
     @router.post("/ai-stamp/api/{request_id}/reject")

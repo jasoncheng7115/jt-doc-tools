@@ -110,7 +110,13 @@ def test_transit_proof_reports_unreadable_files(mcp):
     assert out["count"] == 0 and len(out["failed"]) == 1, out
 
 
-@pytest.mark.skipif(importlib.util.find_spec("pyzbar") is None, reason="需要 pyzbar")
+def _zbar_available() -> bool:
+    """pyzbar 套件裝了不代表能用：還要系統的 libzbar（CI 沒有）。跟工具回 503 用同一個判斷。"""
+    from app.tools.einvoice_scan import qr_decoder
+    return qr_decoder.is_qr_backend_available()
+
+
+@pytest.mark.skipif(not _zbar_available(), reason="zbar / pyzbar 不可用")
 def test_einvoice_scan_without_qr(mcp):
     c, tok = mcp
     fid = _upload_inline(c, tok, _png(300, 300, (255, 255, 255)), "blank.png")
