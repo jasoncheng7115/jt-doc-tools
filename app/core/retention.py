@@ -55,6 +55,9 @@ _DEFAULTS: dict[str, Any] = {
     # 重跑校正（不需要錄音，對方用的是自己那份）。所以預設 30 天已經很寬。
     # 這個欄位 v1.16.71 才加：舊安裝升級後第一次清理就會套用 30 天。
     "speech_audio_days":      30,
+    # 名片辨識的辨識批次（原圖、裁圖、辨識結果、校對過的聯絡人）。名片是別人的個資，
+    # 辨識完匯出就該清掉；預設 30 天，依建立時間起算。0 或 -1 ＝不自動刪。
+    "business_cards_days":    30,
     "fill_history_days":      365,
     "stamp_history_days":     365,
     "watermark_history_days": 365,
@@ -172,6 +175,11 @@ def collect_stats() -> dict[str, Any]:
     from . import official_doc_cases
     stats["official_doc_cases"] = official_doc_cases.stats()
     stats["speech_audio"] = _speech_audio_stats()
+    try:
+        from ..tools.business_card_reader import store as _bc_store
+        stats["business_cards"] = _bc_store.stats()
+    except Exception:
+        stats["business_cards"] = {"size_mb": 0.0, "files": 0, "oldest_days": None}
     from . import job_files
     s = get()
     split = job_files.usage(s["jobs_hours"] * 3600 if s["jobs_hours"] > 0 else 0)
@@ -498,6 +506,15 @@ def sweep_all() -> dict[str, Any]:
         report["ai_stamp_expired"] = ai_stamp.expire_due()
     except Exception:
         logger.exception("ai stamp expiry failed")
+    # 名片辨識：保留期限到了的批次連同原圖、裁圖一起刪
+    try:
+        from ..tools.business_card_reader import store as _bc_store
+        if _bc_store.db_path().exists():
+            report["business_cards_expired"] = _bc_store.expire_due(days=s["business_cards_days"])
+            from ..tools.business_card_reader import books as _bc_books
+            report["business_card_people_expired"] = _bc_books.expire_due()   # 名片簿：每本自己的保留期限
+    except Exception:
+        logger.exception("business card expiry failed")
     try:
         from . import official_doc_cases
         report["official_doc_cases"] = official_doc_cases.purge_older_than(

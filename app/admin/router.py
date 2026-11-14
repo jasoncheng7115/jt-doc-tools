@@ -54,6 +54,8 @@ def build_router(templates) -> APIRouter:
     router = APIRouter(dependencies=[Depends(require_admin)])
     from . import seal_request_admin
     seal_request_admin.register(router, templates)   # 設定 → 用印申請
+    from . import business_card_admin
+    business_card_admin.register(router, templates)  # 設定 → 名片簿
 
     @router.get("/", response_class=HTMLResponse)
     async def admin_home(request: Request):

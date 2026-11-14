@@ -13,6 +13,8 @@
    `Co-Authored-By: Claude …` 是一般的協作署名，**不擋**。
 2. **簡體字** —— commit / PR / branch 一律台灣繁體（v1.5.3 踩過，
    當時要請使用者暫時關掉 ruleset 才改得掉）。
+3. **真實名片上的內容** —— 開發機上有名片樣本時，交給 `check_card_content.py` 比對
+   （姓名、公司、號碼、網域；使用者 2026-11-14：「那都是真實資料，這是鐵則」）。
 
 用法：
 
@@ -49,6 +51,16 @@ def check(text: str) -> list[str]:
     hits = sorted({c for c in text if c in _SIMPLIFIED})
     if hits:
         bad.append("出現簡體字：" + " ".join(hits) + "（commit 訊息一律台灣繁體）")
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import check_card_content as _cc
+        tok = _cc.load_tokens()
+        if any(tok.values()):
+            n = len(_cc.scan_text(text, tok))
+            if n:
+                bad.append(f"有 {n} 處跟真實名片相同的內容（名片內容一律改成杜撰的值）")
+    except ImportError:
+        pass
     return bad
 
 

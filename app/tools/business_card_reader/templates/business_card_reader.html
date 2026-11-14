@@ -1,0 +1,1921 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}{{ tr('名片辨識') }} · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('id-card', size=22) }} {{ tr('名片辨識') }}<span class="tool-beta" title="{{ tr('試用中：功能還可能調整') }}">Beta</span></h1>
+<p class="muted bc-intro">{{ tr('辨識名片上的姓名、公司、職稱、電話、Email 等資料，可一張照片多張名片自動切卡；校對後匯出聯絡人清單（CSV / XLSX / ODS / VCF / JSON）。不需要 AI。') }}</p>
+
+{% if shared_env %}
+<div class="info-box bc-shared">{{ icon('info', size=16) }} {{ tr('這台沒有啟用帳號登入：名片批次是這台電腦上所有人共用的。不要在多人共用的環境處理別人的名片。') }}</div>
+{% endif %}
+
+<div class="bc-tabs" role="tablist" aria-label="{{ tr('名片辨識') }}">
+  <button type="button" class="bc-tabbtn active" role="tab" id="bcTabScan" aria-selected="true">{{ icon('crop', size=16) }}<span>{{ tr('辨識名片') }}</span></button>
+  <button type="button" class="bc-tabbtn" role="tab" id="bcTabBooks" aria-selected="false">{{ icon('book', size=16) }}<span>{{ tr('名片簿') }}</span></button>
+</div>
+<div id="bcScanView">
+
+<section class="panel bc-panel" id="bcIntake">
+  <h2 class="bc-h">{{ icon('upload', size=18) }} {{ tr('1. 匯入名片') }}</h2>
+  <div class="bc-modes" role="radiogroup" aria-label="{{ tr('收件模式') }}">
+    <label class="bc-mode"><input type="radio" name="bcMode" value="single" checked>
+      <span class="bc-mode-t">{{ tr('每張圖片一張名片') }}</span>
+      <span class="bc-mode-d muted">{{ tr('一次選多個檔案或手機連拍，每張照片（或 PDF 每頁）當一張名片，直接辨識。') }}</span>
+      <svg class="bc-ill" viewBox="0 0 120 72" aria-hidden="true" focusable="false"><rect class="bc-ill-photo" x="4" y="10" width="34" height="52" rx="4"/><g><rect class="bc-ill-card" x="8" y="28" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="12" y="32" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="12" y="38" width="18" height="2" rx="1"/></g><rect class="bc-ill-photo" x="43" y="10" width="34" height="52" rx="4"/><g><rect class="bc-ill-card" x="47" y="28" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="51" y="32" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="51" y="38" width="18" height="2" rx="1"/></g><rect class="bc-ill-photo" x="82" y="10" width="34" height="52" rx="4"/><g><rect class="bc-ill-card" x="86" y="28" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="90" y="32" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="90" y="38" width="18" height="2" rx="1"/></g></svg></label>
+    <label class="bc-mode"><input type="radio" name="bcMode" value="multi">
+      <span class="bc-mode-t">{{ tr('一張圖片多張名片') }}</span>
+      <span class="bc-mode-d muted">{{ tr('把幾張名片平放一起拍或掃描，自動找出每一張；先確認範圍再一次辨識。') }}</span>
+      <svg class="bc-ill" viewBox="0 0 120 72" aria-hidden="true" focusable="false"><rect class="bc-ill-photo" x="4" y="4" width="112" height="64" rx="4"/><g transform="rotate(-6 25.0 20.0)"><rect class="bc-ill-det" x="9" y="9" width="32" height="22" rx="2"/><rect class="bc-ill-card" x="12" y="12" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="16" y="16" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="16" y="22" width="18" height="2" rx="1"/></g><g transform="rotate(3 60.0 19.0)"><rect class="bc-ill-det" x="44" y="8" width="32" height="22" rx="2"/><rect class="bc-ill-card" x="47" y="11" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="51" y="15" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="51" y="21" width="18" height="2" rx="1"/></g><g transform="rotate(-2 95.0 21.0)"><rect class="bc-ill-det" x="79" y="10" width="32" height="22" rx="2"/><rect class="bc-ill-card" x="82" y="13" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="86" y="17" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="86" y="23" width="18" height="2" rx="1"/></g><g transform="rotate(4 26.0 51.0)"><rect class="bc-ill-det" x="10" y="40" width="32" height="22" rx="2"/><rect class="bc-ill-card" x="13" y="43" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="17" y="47" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="17" y="53" width="18" height="2" rx="1"/></g><g transform="rotate(-4 61.0 52.0)"><rect class="bc-ill-det" x="45" y="41" width="32" height="22" rx="2"/><rect class="bc-ill-card" x="48" y="44" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="52" y="48" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="52" y="54" width="18" height="2" rx="1"/></g><g transform="rotate(5 95.0 50.0)"><rect class="bc-ill-det" x="79" y="39" width="32" height="22" rx="2"/><rect class="bc-ill-card" x="82" y="42" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="86" y="46" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="86" y="52" width="18" height="2" rx="1"/></g></svg></label>
+  </div>
+
+  <details class="bc-notes-box" id="bcNotesBox">
+    <summary>{{ icon('edit', size=14) }} {{ tr('備註（選填，套用到這一批每一張）') }}</summary>
+    <div class="bc-notes-grid">
+      <label>{{ tr('活動名稱') }}<input class="field" id="bcEvent" maxlength="120" placeholder="{{ tr('例：台中展場') }}"></label>
+      <label>{{ tr('來源') }}<input class="field" id="bcSource" maxlength="120" placeholder="{{ tr('例：拜訪、交換名片') }}"></label>
+      <label>{{ tr('標籤') }}<input class="field" id="bcTags" maxlength="400" placeholder="{{ tr('以逗號分隔') }}"></label>
+      <label class="bc-notes-memo">{{ tr('備註') }}<textarea class="field" id="bcMemo" rows="2" maxlength="2000"></textarea></label>
+    </div>
+    <p class="muted bc-small">{{ tr('備註是你另外補充的，跟名片上印的內容分開存，匯出時在「活動」「來源」「標籤」「備註」欄。') }}</p>
+  </details>
+
+  <div class="bc-src">
+    <button type="button" class="btn btn-primary" id="bcPick">{{ icon('image', size=16) }}<span>{{ tr('選擇檔案') }}</span></button>
+    <button type="button" class="btn" id="bcCamera">{{ icon('smartphone', size=16) }}<span>{{ tr('手機拍攝') }}</span></button>
+    <button type="button" class="btn bc-handoff-btn" id="bcHandoff" title="{{ tr('顯示 QR Code，用手機開這一頁接著拍') }}">{{ icon('qr', size=16) }}<span>{{ tr('用手機接續') }}</span></button>
+    {% if workspace_enabled(request) %}<button type="button" class="btn ws-load-btn" id="bcWs" data-ws-exts="{{ workspace_extensions() }}">{{ icon('archive', size=16) }}<span>{{ tr('從工作區載入') }}</span></button>{% endif %}
+    <input type="file" id="bcFiles" accept="{{ accept }},image/*,application/pdf" multiple hidden>
+    <input type="file" id="bcCam" accept="image/*" capture="environment" multiple hidden>
+    <button type="button" class="btn" id="bcBurst" hidden>{{ icon('image', size=16) }}<span>{{ tr('連拍') }}</span></button>
+  </div>
+  <div class="bc-drop" id="bcDrop" tabindex="0">{{ icon('upload', size=22) }}<span>{{ tr('或把照片 / PDF 拖到這裡') }}</span></div>
+  <p class="muted bc-small">{{ tr('支援 JPEG、PNG、PDF') }}{% if heif %}{{ tr('、HEIC（iPhone 照片）') }}{% endif %}{{ tr('；一批最多 {0} 個檔、{1} 頁、{2} 張名片。').replace('{0}', max_files|string).replace('{1}', max_pages|string).replace('{2}', max_cards|string) }}
+    {{ tr('拍攝訣竅：從正上方拍、光線均勻、避開反光；多張一起拍時卡片之間留一點空隙，背景跟卡片顏色要有對比。') }}</p>
+  <div class="bc-busy" id="bcBusy" hidden><span class="spinner"></span><span id="bcBusyText"></span></div>
+  <p class="bc-err" id="bcErr" role="alert" hidden></p>
+
+  <div class="bc-batches" id="bcBatchesBox" hidden>
+    <h3 class="bc-h3">{{ icon('clock', size=15) }} {{ tr('之前的辨識批次') }}</h3>
+    <div id="bcBatches" class="bc-batch-list"></div>
+    {% if keep_days > 0 %}
+    <p class="muted bc-small">{{ tr('辨識批次只有你看得到，{0} 天後自動刪除（含原圖與裁圖）；可以隨時「立即清除」。已下載或另存的檔案不受影響。').replace('{0}', keep_days|string) }}</p>
+    {% else %}
+    <p class="muted bc-small">{{ tr('辨識批次只有你看得到；管理員設定為不自動刪除，用完請按「立即清除」。已下載或另存的檔案不受影響。') }}</p>
+    {% endif %}
+  </div>
+</section>
+
+<section class="panel bc-panel" id="bcFrames" hidden>
+  <h2 class="bc-h">{{ icon('crop', size=18) }} {{ tr('2. 確認名片範圍') }}</h2>
+  <div class="bc-pagebar">
+    <button type="button" class="btn btn-small" id="bcPrevPage" aria-label="{{ tr('上一頁') }}">{{ icon('back', size=14) }}</button>
+    <b id="bcPageTitle"></b>
+    <button type="button" class="btn btn-small" id="bcNextPage" aria-label="{{ tr('下一頁') }}">{{ icon('next', size=14) }}</button>
+    <span class="muted" id="bcPageSummary"></span>
+  </div>
+  <div class="bc-frames">
+    <div class="bc-stage" id="bcStage">
+      <img id="bcPageImg" alt="">
+      <svg id="bcSvg" class="bc-svg"></svg>
+    </div>
+    <aside class="bc-side">
+      <div class="bc-side-h">{{ tr('目前選取') }}：<b id="bcSelName">—</b></div>
+      <button type="button" class="btn" id="bcAddBox">{{ icon('plus', size=15) }}<span>{{ tr('新增範圍') }}</span></button>
+      <button type="button" class="btn" id="bcRotate">{{ icon('rotate-cw', size=15) }}<span>{{ tr('旋轉') }}</span></button>
+      <button type="button" class="btn btn-danger-soft" id="bcRemoveBox">{{ icon('trash', size=15) }}<span>{{ tr('移除範圍') }}</span></button>
+      <button type="button" class="btn" id="bcResetBoxes">{{ icon('refresh', size=15) }}<span>{{ tr('復原框位') }}</span></button>
+      <label class="bc-side-memo">{{ tr('這張的備註') }}<input class="field" id="bcCardMemo" maxlength="500"></label>
+      <p class="muted bc-small">{{ tr('拖曳四個角可以修正範圍；點空白處取消選取。框位改過的名片才會重新辨識。') }}</p>
+    </aside>
+  </div>
+  <p class="muted bc-small bc-modeback">{{ tr('其實每張圖片只有一張名片？') }}
+    <button type="button" class="btn btn-small" id="bcToSingle">{{ icon('refresh', size=13) }}<span>{{ tr('改成每張圖片一張名片並直接辨識') }}</span></button></p>
+  <p class="bc-warn" id="bcZeroWarn" hidden>{{ icon('warn', size=15) }} {{ tr('這一頁沒有偵測到名片：請按「新增範圍」自己框，或重新拍攝（卡片之間留空隙、背景與卡片要有對比）。') }}</p>
+  <div class="bc-cta"><button type="button" class="btn btn-primary btn-lg" id="bcRecognize">{{ icon('play', size=16) }}<span id="bcRecognizeText"></span></button></div>
+</section>
+
+<section class="panel bc-panel" id="bcReview" hidden>
+  <h2 class="bc-h bc-h-row">
+    <span>{{ icon('check', size=18) }} {{ tr('3. 校對辨識結果') }}</span>
+    <span class="bc-counts" id="bcCounts"></span>
+    <label class="bc-only"><input type="checkbox" id="bcOnlyCheck"> {{ tr('只看待確認') }}</label>
+  </h2>
+  <div class="bc-bulk">
+    <span class="bc-dirty" id="bcDirty" hidden></span>
+    <button type="button" class="btn btn-small" id="bcSaveAll" disabled>{{ icon('save', size=13) }}<span id="bcSaveAllText">{{ tr('全部儲存') }}</span></button>
+    <button type="button" class="btn btn-small" id="bcConfirmAll">{{ icon('check', size=13) }}<span>{{ tr('全部確認') }}</span></button>
+    <button type="button" class="btn btn-small" id="bcToLm">{{ icon('merge', size=13) }}<span>{{ tr('合併之前匯出的檔案') }}</span></button>
+    <button type="button" class="btn btn-small btn-primary" id="bcToBook">{{ icon('book', size=13) }}<span>{{ tr('存進名片簿') }}</span></button>
+  </div>
+  <div class="bc-warn bc-multihint" id="bcMergeHint" hidden>
+    {{ icon('merge', size=16) }}<span>{{ tr('這幾筆可能是同一位，可以合併成一位：') }}</span>
+    <div class="bc-mh-list" id="bcMergeList"></div>
+  </div>
+  <details class="bc-applybox" id="bcApplyBox">
+    <summary>{{ icon('edit', size=14) }} {{ tr('整批套用活動、來源、標籤、備註') }}</summary>
+    <div class="bc-notes-grid">
+      <label>{{ tr('活動名稱') }}<input class="field" id="bcAEvent" maxlength="120"></label>
+      <label>{{ tr('來源') }}<input class="field" id="bcASource" maxlength="120"></label>
+      <label>{{ tr('標籤') }}<input class="field" id="bcATags" maxlength="400" placeholder="{{ tr('以逗號分隔') }}"></label>
+      <label class="bc-notes-memo">{{ tr('備註') }}<textarea class="field" id="bcAMemo" rows="2" maxlength="2000"></textarea></label>
+    </div>
+    <p class="muted bc-small">{{ tr('套用到這一批每一位：標籤會加上去（原本的留著），活動、來源、備註只填進還沒填的人。') }}</p>
+    <button type="button" class="btn btn-small" id="bcApplyGo">{{ icon('check', size=13) }}<span>{{ tr('套用到這一批每一位') }}</span></button>
+  </details>
+  <div class="bc-warn bc-multihint" id="bcMultiHint" hidden>
+    {{ icon('warn', size=16) }}<span id="bcMultiHintText"></span>
+    <button type="button" class="btn btn-small" id="bcMultiHintBtn">{{ icon('crop', size=13) }}<span>{{ tr('改成一張圖片多張名片') }}</span></button>
+  </div>
+  <div class="bc-progress" id="bcProgress" hidden><div class="bc-bar"><span id="bcBar"></span></div><span id="bcProgressText"></span></div>
+  <div class="bc-mobile-tabs" role="tablist">
+    <button type="button" class="bc-tab active" data-pane="card">{{ tr('原圖') }}</button>
+    <button type="button" class="bc-tab" data-pane="fields">{{ tr('欄位') }}</button>
+  </div>
+  <div class="bc-review" id="bcReviewBody">
+    <div class="bc-cardpane" data-pane="card">
+      <div class="bc-nav">
+        <button type="button" class="btn btn-small" id="bcPrev" aria-label="{{ tr('上一張') }}">{{ icon('back', size=14) }}</button>
+        <b id="bcCardTitle"></b>
+        <button type="button" class="btn btn-small" id="bcNext" aria-label="{{ tr('下一張') }}">{{ icon('next', size=14) }}</button>
+      </div>
+      <div class="bc-cardwrap" id="bcCardWrap"><img id="bcCardImg" alt=""><div class="bc-hl" id="bcHl" hidden></div></div>
+      <div class="bc-zoom" id="bcZoomBox" hidden><span class="muted">{{ tr('辨識重點（放大）') }}</span><canvas id="bcZoom" width="640" height="90"></canvas></div>
+      <p class="muted bc-small" id="bcCardInfo"></p>
+      <div class="bc-cardacts">
+        <button type="button" class="btn btn-small" id="bcRetry">{{ icon('refresh', size=13) }}<span>{{ tr('重新辨識') }}</span></button>
+        <button type="button" class="btn btn-small" id="bcAddPerson">{{ icon('user', size=13) }}<span>{{ tr('同一張再加一位') }}</span></button>
+        <button type="button" class="btn btn-small" id="bcPageMulti">{{ icon('crop', size=13) }}<span>{{ tr('這張圖片有好幾張名片') }}</span></button>
+        <button type="button" class="btn btn-small" id="bcAiSuggest" hidden>{{ icon('sparkles', size=13) }}<span>{{ tr('請 AI 建議欄位') }}</span></button>
+      </div>
+    </div>
+    <div class="bc-fieldpane" data-pane="fields">
+      <p class="bc-cardstate" id="bcCardState" hidden></p>
+      <div class="bc-mergedbar" id="bcMergedBar" hidden>{{ icon('merge', size=14) }}<span id="bcMergedText"></span>
+        <button type="button" class="btn btn-small" id="bcUnmerge">{{ icon('rotate-ccw', size=13) }}<span>{{ tr('解除合併') }}</span></button></div>
+      <div class="bc-mergedbar" id="bcMergedInto" hidden>{{ icon('merge', size=14) }}<span id="bcMergedIntoText"></span>
+        <button type="button" class="btn btn-small" id="bcGoMerged">{{ icon('next', size=13) }}<span>{{ tr('看合併後的那一位') }}</span></button></div>
+      <div class="bc-retrydiff" id="bcRetryDiff" hidden><b>{{ icon('refresh', size=14) }} {{ tr('重新辨識前後不同的欄位') }}</b>
+        <button type="button" class="btn btn-small" id="bcRetryDiffClose" aria-label="{{ tr('關閉') }}">{{ icon('close', size=12) }}</button>
+        <ul id="bcRetryDiffList"></ul></div>
+      <div class="bc-aibox" id="bcAiBox" hidden>
+        <div class="bc-aihead"><b>{{ icon('sparkles', size=14) }} {{ tr('AI 建議') }}</b><span class="muted" id="bcAiWho"></span>
+          <button type="button" class="btn btn-small" id="bcAiClose" aria-label="{{ tr('關閉') }}">{{ icon('close', size=12) }}</button></div>
+        <div id="bcAiList"></div>
+      </div>
+      <div id="bcPersons" class="bc-persons"></div>
+      <div id="bcFields" class="bc-fields"></div>
+      <div class="bc-addfield">
+        <select id="bcAddKey" class="field jt-select"></select>
+        <button type="button" class="btn btn-small" id="bcAddField">{{ icon('plus', size=13) }}<span>{{ tr('新增欄位') }}</span></button>
+      </div>
+      <details class="bc-cnotes"><summary>{{ icon('edit', size=14) }} {{ tr('這位聯絡人的備註') }}</summary>
+        <div class="bc-notes-grid">
+          <label>{{ tr('活動名稱') }}<input class="field" id="bcCEvent" maxlength="120"></label>
+          <label>{{ tr('來源') }}<input class="field" id="bcCSource" maxlength="120"></label>
+          <label>{{ tr('標籤') }}<input class="field" id="bcCTags" maxlength="400"></label>
+          <label class="bc-notes-memo">{{ tr('備註') }}<textarea class="field" id="bcCMemo" rows="2" maxlength="2000"></textarea></label>
+        </div>
+      </details>
+      <div class="bc-saveacts">
+        <button type="button" class="btn btn-primary" id="bcConfirm">{{ icon('check', size=15) }}<span>{{ tr('儲存並確認') }}</span></button>
+        <button type="button" class="btn" id="bcSave">{{ icon('save', size=15) }}<span>{{ tr('只儲存') }}</span></button>
+        <button type="button" class="btn btn-danger-soft" id="bcExclude">{{ icon('close', size=15) }}<span id="bcExcludeText">{{ tr('排除這一位') }}</span></button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="panel bc-panel" id="bcExport" hidden>
+  <h2 class="bc-h">{{ icon('download', size=18) }} {{ tr('4. 匯出聯絡人') }}</h2>
+  <div class="bc-exrow">
+    <label>{{ tr('範圍') }}
+      <select id="bcScope" class="field jt-select">
+        <option value="confirmed">{{ tr('已確認') }}</option>
+        <option value="all">{{ tr('全部（包含待確認）') }}</option>
+      </select></label>
+    <label>{{ tr('欄名') }}
+      <select id="bcLang" class="field jt-select">
+        <option value="zh">{{ tr('中文') }}</option>
+        <option value="en">{{ tr('英文代碼') }}</option>
+      </select></label>
+  </div>
+  <p class="bc-exsum" id="bcExSum"></p>
+  <div class="bc-pvbox" id="bcPvBox" hidden>
+    <div class="bc-subh">{{ icon('eye', size=14) }} <span id="bcPvTitle"></span></div>
+    <div class="bc-preview" id="bcPreview"></div>
+  </div>
+  <div class="bc-subh">{{ icon('download', size=14) }} {{ tr('下載') }}</div>
+  <div class="bc-fmts">
+    <button type="button" class="btn bc-fmt" data-fmt="xlsx">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">XLSX</span><span class="bc-fmt-d">{{ tr('Excel 試算表') }}</span></button>
+    <button type="button" class="btn bc-fmt" data-fmt="ods">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">ODS</span><span class="bc-fmt-d">{{ tr('OxOffice、LibreOffice 試算表') }}</span></button>
+    <button type="button" class="btn bc-fmt" data-fmt="csv">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">CSV</span><span class="bc-fmt-d">{{ tr('純文字，逗號分隔') }}</span></button>
+    <button type="button" class="btn bc-fmt" data-fmt="vcf">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">VCF</span><span class="bc-fmt-d">{{ tr('匯入手機或郵件通訊錄') }}</span></button>
+    <button type="button" class="btn bc-fmt" data-fmt="json">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">JSON</span><span class="bc-fmt-d">{{ tr('給其他系統讀取') }}</span></button>
+  </div>
+  <label class="bc-wssave" id="bcWsSaveRow" hidden><input type="checkbox" id="bcWsSave"> {{ tr('下載時同時存一份到我的工作區（XLSX、ODS、JSON；工作區不收 CSV 與 VCF）') }}</label>
+  <div class="bc-subh" id="bcLmHead">{{ icon('merge', size=14) }} {{ tr('合併之前匯出的檔案或名片清單（去除重複）') }}</div>
+  <p class="muted bc-small">{{ tr('上傳之前從這裡匯出的檔案（XLSX、ODS、CSV、VCF、JSON），或你原本就有的聯絡人清單，跟這一批比對：同一個人不重複、清單缺的補上、新的人接在最後、兩邊不一樣的由你決定，再下載一份合併後的檔案。上傳的檔案只暫存在伺服器約 2 小時，不會存進名片簿。') }}</p>
+  <div class="bc-src">
+    <button type="button" class="btn" id="bcLmPick">{{ icon('upload', size=15) }}<span>{{ tr('上傳之前匯出的檔案或名片清單') }}</span></button>
+    <input type="file" id="bcLmFile" accept=".csv,.tsv,.txt,.xlsx,.ods,.vcf,.json" hidden>
+  </div>
+  <div class="bc-lm" id="bcLm" hidden>
+    <p class="bc-small"><b id="bcLmName"></b>　<span class="muted" id="bcLmRows"></span></p>
+    <div class="bc-subh">{{ tr('欄位對應（自動對好了，不對的請改）') }}</div>
+    <div class="bc-lm-map" id="bcLmMap"></div>
+    <div class="bc-lm-acts"><button type="button" class="btn btn-primary" id="bcLmPlanBtn">{{ icon('search', size=15) }}<span>{{ tr('比對') }}</span></button>
+      <button type="button" class="btn" id="bcLmDone">{{ icon('trash', size=15) }}<span>{{ tr('完成並刪除暫存的清單') }}</span></button></div>
+    <div id="bcLmPlan" hidden>
+      <p class="bc-small" id="bcLmCounts"></p>
+      <div class="bc-lm-items" id="bcLmItems"></div>
+      <div id="bcLmPairsBox" hidden>
+        <div class="bc-subh">{{ icon('warn', size=14) }} {{ tr('可能是同一人（規則判斷不了）') }}
+          <button type="button" class="btn btn-small" id="bcLmAi" hidden>{{ icon('sparkles', size=13) }}<span>{{ tr('請 AI 判斷') }}</span></button></div>
+        <p class="muted bc-small" id="bcLmAiInfo" hidden></p>
+        <div class="bc-lm-items" id="bcLmPairs"></div>
+      </div>
+      <div class="bc-subh">{{ icon('download', size=14) }} {{ tr('下載整合後的清單') }}</div>
+      <div class="bc-fmts" id="bcLmFmts">
+        <button type="button" class="btn bc-fmt" data-fmt="xlsx">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">XLSX</span><span class="bc-fmt-d">{{ tr('Excel 試算表') }}</span></button>
+        <button type="button" class="btn bc-fmt" data-fmt="ods">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">ODS</span><span class="bc-fmt-d">{{ tr('OxOffice、LibreOffice 試算表') }}</span></button>
+        <button type="button" class="btn bc-fmt" data-fmt="csv">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">CSV</span><span class="bc-fmt-d">{{ tr('純文字，逗號分隔') }}</span></button>
+        <button type="button" class="btn bc-fmt" data-fmt="vcf">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">VCF</span><span class="bc-fmt-d">{{ tr('匯入手機或郵件通訊錄') }}</span></button>
+        <button type="button" class="btn bc-fmt" data-fmt="json">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">JSON</span><span class="bc-fmt-d">{{ tr('給其他系統讀取') }}</span></button>
+      </div>
+      <p class="muted bc-small">{{ tr('存成 VCF / JSON 時，試算表裡對應不到欄位的欄不會帶過去；要保留全部欄位請存成試算表。') }}</p>
+    </div>
+  </div>
+  <details class="bc-fmtnote"><summary>{{ icon('info', size=13) }} {{ tr('各格式的注意事項') }}</summary>
+    <p class="muted bc-small">{{ tr('電話、分機、郵遞區號與統編在 XLSX、ODS 裡都是文字，不會被吃掉開頭的 0。CSV 沒有型別：直接點兩下用試算表打開時開頭的 0 可能不見，請改用 XLSX / ODS，或在試算表裡用「匯入文字」並把這幾欄設成文字。CSV 預設會在 =、+、-、@ 開頭的值前面加單引號，避免被當成公式（原值仍在 JSON 匯出裡）。') }}</p>
+  </details>
+</section>
+</div>
+
+<div id="bcBookView" hidden>
+<section class="panel bc-panel">
+  <h2 class="bc-h">{{ icon('book', size=18) }} {{ tr('名片簿') }}</h2>
+  <div class="bk-bar">
+    <label>{{ tr('名片簿') }}<select id="bkBook" class="field jt-select"></select></label>
+    <label>{{ tr('搜尋') }}<input id="bkQ" class="field" maxlength="200" placeholder="{{ tr('姓名、公司、職稱、電話、Email、備註（空白分開多個關鍵字）') }}"></label>
+    <label>{{ tr('標籤') }}<input id="bkTag" class="field" maxlength="60"></label>
+  </div>
+  <p class="muted bc-small bk-info"><span id="bkRole"></span><span id="bkKeep"></span>
+    <button type="button" class="btn btn-small" id="bkKeepEdit" hidden>{{ icon('clock', size=13) }}<span>{{ tr('變更保留期限') }}</span></button></p>
+  <div class="bk-body">
+    <div class="bk-list">
+      <div class="bk-count muted" id="bkCount"></div>
+      <div class="bk-table-wrap"><table class="bk-table" id="bkTable"></table></div>
+      <p class="muted bk-empty" id="bkEmpty" hidden>{{ tr('還沒有人。在「辨識名片」校對好之後，按「存進名片簿」就會出現在這裡。') }}</p>
+      <button type="button" class="btn btn-small" id="bkMore" hidden>{{ icon('refresh', size=13) }}<span>{{ tr('載入更多') }}</span></button>
+    </div>
+    <div class="bk-detail" id="bkDetail" hidden>
+      <div class="bk-dhead"><div><h3 id="bkName"></h3><p class="muted" id="bkSub"></p></div>
+        <button type="button" class="btn btn-small" id="bkClose" aria-label="{{ tr('關閉') }}">{{ icon('close', size=14) }}</button></div>
+      <div class="bk-fields" id="bkFields"></div>
+      <div class="bc-addfield bk-edit">
+        <select id="bkAddKey" class="field jt-select"></select>
+        <button type="button" class="btn btn-small" id="bkAddField">{{ icon('plus', size=13) }}<span>{{ tr('新增欄位') }}</span></button>
+      </div>
+      <div class="bc-notes-grid bk-notes">
+        <label>{{ tr('標籤') }}<input class="field" id="bkTags" maxlength="400" placeholder="{{ tr('以逗號分隔') }}"></label>
+        <label>{{ tr('活動名稱') }}<input class="field" id="bkEvent" maxlength="120"></label>
+        <label class="bc-notes-memo">{{ tr('備註') }}<textarea class="field" id="bkMemo" rows="2" maxlength="2000"></textarea></label>
+      </div>
+      <div class="bc-saveacts bk-edit">
+        <button type="button" class="btn btn-primary" id="bkSave">{{ icon('save', size=15) }}<span>{{ tr('儲存') }}</span></button>
+        <button type="button" class="btn" id="bkMergeBtn">{{ icon('merge', size=15) }}<span>{{ tr('跟另一位合併') }}</span></button>
+        <button type="button" class="btn btn-danger-soft" id="bkDelete">{{ icon('trash', size=15) }}<span>{{ tr('刪除這一位') }}</span></button>
+      </div>
+      <div class="bk-merge" id="bkMergeBox" hidden>
+        <input class="field" id="bkMergeQ" placeholder="{{ tr('搜尋要併進來的那一位') }}">
+        <div class="bk-merge-list" id="bkMergeList"></div>
+      </div>
+      <h4 class="bk-h4">{{ icon('id-card', size=15) }} {{ tr('歷史名片') }}</h4>
+      <p class="muted bc-small">{{ tr('每一次存進來的名片都留著，換公司、升職都看得到。') }}</p>
+      <div class="bk-cards" id="bkCards"></div>
+      <h4 class="bk-h4">{{ icon('clock', size=15) }} {{ tr('互動紀錄') }}</h4>
+      <div class="bk-iform bk-edit">
+        <select id="bkIKind" class="field jt-select">
+          <option value="meeting">{{ tr('會面') }}</option><option value="call">{{ tr('電話') }}</option>
+          <option value="email">Email</option><option value="visit">{{ tr('拜訪') }}</option>
+          <option value="other">{{ tr('其他') }}</option>
+        </select>
+        <input type="date" class="field" id="bkIDate">
+        <input class="field" id="bkINote" maxlength="2000" placeholder="{{ tr('談了什麼、下一步') }}">
+        <button type="button" class="btn btn-small" id="bkIAdd">{{ icon('plus', size=13) }}<span>{{ tr('新增') }}</span></button>
+      </div>
+      <ul class="bk-ilist" id="bkIList"></ul>
+    </div>
+  </div>
+  <div class="bc-subh">{{ icon('download', size=14) }} {{ tr('匯出這本（有搜尋條件時只匯出查到的）') }}</div>
+  <div class="bc-fmts" id="bkFmts">
+    <button type="button" class="btn bc-fmt" data-fmt="xlsx">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">XLSX</span><span class="bc-fmt-d">{{ tr('Excel 試算表') }}</span></button>
+    <button type="button" class="btn bc-fmt" data-fmt="ods">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">ODS</span><span class="bc-fmt-d">{{ tr('OxOffice、LibreOffice 試算表') }}</span></button>
+    <button type="button" class="btn bc-fmt" data-fmt="csv">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">CSV</span><span class="bc-fmt-d">{{ tr('純文字，逗號分隔') }}</span></button>
+    <button type="button" class="btn bc-fmt" data-fmt="vcf">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">VCF</span><span class="bc-fmt-d">{{ tr('匯入手機或郵件通訊錄') }}</span></button>
+    <button type="button" class="btn bc-fmt" data-fmt="json">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">JSON</span><span class="bc-fmt-d">{{ tr('給其他系統讀取') }}</span></button>
+  </div>
+</section>
+</div>
+
+<div class="bc-handoff" id="bcCamBox" hidden role="dialog" aria-modal="true" aria-labelledby="bcCamT">
+  <div class="bc-handoff-card bc-cam-card">
+    <h3 id="bcCamT">{{ icon('image', size=16) }} {{ tr('連拍名片') }}</h3>
+    <p class="muted bc-small">{{ tr('一張拍完換下一張，拍好按「完成」一次上傳。照片只在這個頁面裡，按完成才會送出。') }}</p>
+    <div class="bc-cam-stage"><video id="bcCamVideo" playsinline muted></video></div>
+    <div class="bc-cam-thumbs" id="bcCamThumbs"></div>
+    <div class="bc-cam-acts">
+      <button type="button" class="btn" id="bcCamCancel">{{ icon('close', size=15) }}<span>{{ tr('取消') }}</span></button>
+      <button type="button" class="btn btn-lg" id="bcCamShot">{{ icon('image', size=18) }}<span>{{ tr('拍這一張') }}</span></button>
+      <button type="button" class="btn btn-primary" id="bcCamDone" disabled>{{ icon('upload', size=15) }}<span id="bcCamDoneText">{{ tr('完成') }}</span></button>
+    </div>
+  </div>
+</div>
+
+<div class="bc-handoff" id="bkSaveBox" hidden role="dialog" aria-modal="true" aria-labelledby="bkSaveT">
+  <div class="bc-handoff-card bk-save-card">
+    <h3 id="bkSaveT">{{ icon('book', size=16) }} {{ tr('存進名片簿') }}</h3>
+    <div class="bk-save-opts">
+      <label>{{ tr('存到') }}<select id="bkSaveBook" class="field jt-select"></select></label>
+      <label>{{ tr('哪些人') }}<select id="bkSaveScope" class="field jt-select">
+        <option value="confirmed">{{ tr('已確認的') }}</option>
+        <option value="all">{{ tr('全部（包含待確認）') }}</option>
+        <option value="current">{{ tr('只有目前這一位') }}</option>
+      </select></label>
+    </div>
+    <p class="muted bc-small">{{ tr('名片簿裡可能是同一人的（Email、手機、或姓名＋公司相同）會先選好「合併」：那個人多一張名片紀錄、目前資料換成這張的公司與職稱，舊的留在歷史名片裡。') }}</p>
+    <div class="bk-save-list" id="bkSaveList"></div>
+    <div class="bk-save-acts">
+      <button type="button" class="btn" id="bkSaveCancel">{{ icon('close', size=15) }}<span>{{ tr('取消') }}</span></button>
+      <button type="button" class="btn btn-primary" id="bkSaveGo">{{ icon('save', size=15) }}<span>{{ tr('存進名片簿') }}</span></button>
+    </div>
+  </div>
+</div>
+
+<div class="bc-handoff" id="bcHandoffBox" hidden role="dialog" aria-modal="true" aria-labelledby="bcHandoffT">
+  <div class="bc-handoff-card">
+    <h3 id="bcHandoffT">{{ icon('qr', size=16) }} {{ tr('用手機接續') }}</h3>
+    <p class="muted">{{ tr('用手機相機掃下方 QR Code 開這一頁，用同一個帳號登入後按「手機拍攝」。手機上辨識的批次，這裡的「之前的辨識批次」會自動出現。') }}</p>
+    <img id="bcHandoffImg" alt="QR Code" width="220" height="220">
+    <div class="bc-handoff-url" id="bcHandoffUrl"></div>
+    <button type="button" class="btn btn-primary" id="bcHandoffClose">{{ tr('關閉') }}</button>
+  </div>
+</div>
+
+<template id="bcIcons">
+  <span data-icon="alert">{{ icon('warn', size=14) }}</span>
+  <span data-icon="check">{{ icon('check', size=14) }}</span>
+  <span data-icon="trash">{{ icon('trash', size=13) }}</span>
+  <span data-icon="x">{{ icon('close', size=13) }}</span>
+  <span data-icon="open">{{ icon('eye', size=13) }}</span>
+</template>
+
+<style nonce="{{ request.state.csp_nonce }}">
+.bc-menu { position: absolute; z-index: 900; background: var(--bg-panel, #fff); border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px; box-shadow: 0 12px 32px rgba(15,23,42,.18); padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.bc-menu-h { font-size: 12px; font-weight: 600; color: var(--text-muted, #64748b); padding: 6px 10px 4px; }
+.bc-menu-i { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: none;
+  background: none; border-radius: 8px; padding: 8px 10px; cursor: pointer; color: inherit; font: inherit; }
+.bc-menu-i:hover:not(:disabled), .bc-menu-i:focus-visible { background: var(--primary-soft, #eff6ff); outline: none; }
+.bc-menu-i:disabled { opacity: .55; cursor: not-allowed; }
+.bc-menu-t { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.bc-menu-d { font-size: 12.5px; color: var(--text-muted, #64748b); line-height: 1.45; }
+.bc-rec { font-size: 11px; font-weight: 600; color: #fff; background: var(--success, #16a34a); border-radius: 999px; padding: 1px 7px; }
+.bc-tabs { display: flex; gap: 6px; margin: 4px 0 14px; border-bottom: 1px solid var(--border, #e5e7eb); }
+.bc-tabbtn { display: flex; align-items: center; gap: 6px; border: none; background: none; padding: 9px 14px; cursor: pointer;
+  font: inherit; font-weight: 600; color: var(--text-muted, #64748b); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.bc-tabbtn.active { color: var(--primary, #2563eb); border-bottom-color: var(--primary, #2563eb); }
+.bk-bar { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(220px, 2fr) minmax(120px, 1fr); gap: 10px; }
+.bk-bar label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.bk-list { min-width: 0; }   /* 名片簿清單在 grid 裡：表格太寬時捲動表格，不撐開整頁 */
+.bk-info { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 !important; }
+.bk-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.bk-body.open { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); }
+.bk-count { font-size: 13px; margin-bottom: 6px; }
+.bk-table-wrap { overflow-x: auto; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; }
+.bk-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.bk-table th, .bk-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border, #e5e7eb); white-space: nowrap;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.bk-table th { background: var(--bg-subtle, #f8fafc); color: var(--text-muted, #475569); font-weight: 600; }
+.bk-table tbody tr { cursor: pointer; }
+.bk-table tbody tr:hover td, .bk-table tbody tr.sel td { background: var(--primary-soft, #eff6ff); }
+.bk-table tr:last-child td { border-bottom: none; }
+.bk-empty { margin: 10px 0; }
+#bkMore { margin-top: 8px; }
+.bk-detail { border: 1px solid var(--border, #e5e7eb); border-radius: 10px; padding: 14px; }
+.bk-dhead { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.bk-dhead h3 { margin: 0; }
+.bk-dhead p { margin: 2px 0 0; font-size: 13px; }
+.bk-fields { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 8px; }
+.bk-frow { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; }
+.bk-frow input { width: 100%; }
+.bk-frow button { border: none; background: none; cursor: pointer; color: var(--text-muted, #64748b); }
+.bk-notes { margin-top: 10px; }
+.bk-merge { margin-top: 10px; border: 1px dashed var(--border, #cbd5e1); border-radius: 8px; padding: 10px; }
+.bk-merge-list button { display: flex; width: 100%; justify-content: space-between; gap: 8px; border: none; background: none;
+  padding: 7px 8px; cursor: pointer; font: inherit; color: inherit; text-align: left; border-radius: 6px; }
+.bk-merge-list button:hover { background: var(--primary-soft, #eff6ff); }
+.bk-h4 { display: flex; align-items: center; gap: 6px; margin: 18px 0 4px; font-size: 14px; }
+.bk-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 8px; }
+.bk-card { border: 1px solid var(--border, #e5e7eb); border-radius: 8px; overflow: hidden; font-size: 12.5px; background: var(--bg-panel, #fff); }
+.bk-card img { display: block; width: 100%; aspect-ratio: 1.7; object-fit: cover; background: var(--bg-subtle, #f1f5f9); }
+.bk-card .noimg { aspect-ratio: 1.7; display: flex; align-items: center; justify-content: center; color: var(--text-muted, #94a3b8);
+  background: var(--bg-subtle, #f1f5f9); }
+.bk-card div.meta { padding: 6px 8px; line-height: 1.5; }
+.bk-card b { display: block; }
+.bk-iform { display: grid; grid-template-columns: 110px 150px minmax(0, 1fr) auto; gap: 8px; margin: 8px 0; }
+.bk-ilist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bk-ilist li { display: flex; gap: 8px; align-items: flex-start; border-left: 3px solid var(--primary, #2563eb); padding: 4px 8px;
+  background: var(--bg-subtle, #f8fafc); border-radius: 0 6px 6px 0; font-size: 13px; }
+.bk-ilist li .when { white-space: nowrap; color: var(--text-muted, #64748b); }
+.bk-ilist li .txt { flex: 1; white-space: pre-wrap; word-break: break-word; }
+.bk-ilist li button { border: none; background: none; cursor: pointer; color: var(--text-muted, #64748b); }
+.bk-readonly .bk-edit { display: none !important; }
+.bk-save-card { max-width: 640px; text-align: left; }
+.bk-save-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+.bk-save-opts label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.bk-save-list { max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.bk-save-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px; align-items: center;
+  border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+.bk-save-row .who b { display: block; }
+.bk-save-acts { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 900px) {
+  .bk-bar, .bk-body.open, .bk-save-opts { grid-template-columns: 1fr; }
+  .bk-iform { grid-template-columns: 1fr 1fr; }
+  .bk-save-row { grid-template-columns: 1fr; }
+}
+.bc-handoff { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center;
+  justify-content: center; z-index: 1000; padding: 16px; }
+.bc-handoff[hidden] { display: none; }
+.bc-handoff-card { background: var(--bg-panel, #fff); border-radius: 12px; padding: 20px; max-width: 360px; width: 100%;
+  text-align: center; box-shadow: 0 10px 30px rgba(15,23,42,.25); }
+.bc-handoff-card h3 { margin: 0 0 8px; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.bc-handoff-card p { font-size: 13px; line-height: 1.55; margin: 0 0 12px; text-align: left; }
+.bc-handoff-card img { width: 220px; height: 220px; image-rendering: pixelated; background: #fff; border-radius: 6px; }
+.bc-handoff-url { font-size: 12px; color: var(--text-muted, #64748b); word-break: break-all; margin: 8px 0 14px; }
+@media (max-width: 700px) { .bc-handoff-btn { display: none; } }
+.bc-bulk { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.bc-dirty { font-size: 13px; color: var(--warning-text, #92400e); margin-right: auto; }
+.bc-warn.bc-multihint { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; margin: 0 0 12px; padding: 10px 14px;
+  background: var(--warning-soft, #fffbeb); border: 1px solid var(--warning-border, #fcd34d); border-radius: 8px; }
+.bc-warn.bc-multihint[hidden] { display: none; }
+.bc-multihint #bcMultiHintText { flex: 1 1 240px; }
+.bc-modeback { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.bc-raw { margin-left: 6px; color: var(--text-muted, #64748b); }
+.bc-alt { grid-column: 2 / -1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px;
+  color: var(--text-muted, #475569); margin-top: 2px; }
+.bc-alt b { color: var(--text, #0f172a); font-weight: 600; }
+.bc-lm { border: 1px solid var(--border, #e5e7eb); border-radius: 10px; padding: 12px; margin-top: 10px; }
+.bc-lm-map { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.bc-lm-col { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 6px; align-items: center;
+  border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 6px 8px; font-size: 13px; }
+.bc-lm-col .h { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bc-lm-col .ex { grid-column: 1 / -1; color: var(--text-muted, #64748b); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bc-lm-acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.bc-lm-items { display: flex; flex-direction: column; gap: 6px; max-height: 420px; overflow-y: auto; }
+.bc-lm-item { display: grid; grid-template-columns: 70px minmax(0, 1fr) minmax(0, 1fr) 190px; gap: 8px; align-items: start;
+  border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.bc-lm-item .k { font-weight: 600; border-radius: 999px; padding: 1px 8px; text-align: center; font-size: 12px; }
+.bc-lm-item .k.new { background: #ecfdf5; color: #047857; } .bc-lm-item .k.update { background: #eff6ff; color: #1d4ed8; }
+.bc-lm-item .k.conflict { background: #fffbeb; color: #92400e; } .bc-lm-item .k.same { background: #f1f5f9; color: #475569; }
+.bc-lm-item .who b { display: block; }
+.bc-lm-item .diffs { grid-column: 2 / 4; font-size: 12px; color: var(--text-muted, #475569); }
+.bc-lm-item .ai { grid-column: 2 / -1; font-size: 12px; }
+.bc-aibox { border: 1px solid #c7d2fe; background: #eef2ff; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }
+.bc-aihead { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.bc-aihead .muted { font-size: 12px; flex: 1; }
+.bc-airow { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 6px; align-items: center; font-size: 13px; padding: 3px 0; }
+.bc-airow .why { grid-column: 2 / -1; font-size: 12px; color: #92400e; }
+@media (max-width: 800px) { .bc-lm-item { grid-template-columns: 1fr; } .bc-lm-item .diffs, .bc-lm-item .ai { grid-column: 1; } }
+.bc-mh-list { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.bc-mh-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--text, #0f172a); }
+.bc-applybox { margin: 0 0 12px; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 8px 12px; }
+.bc-applybox summary { cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; }
+.bc-applybox .bc-notes-grid { margin-top: 10px; }
+.bc-mergedbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; padding: 6px 10px;
+  background: var(--primary-soft, #eff6ff); border-radius: 8px; margin-bottom: 8px; }
+.bc-mergedbar[hidden], .bc-retrydiff[hidden] { display: none; }
+.bc-mergedbar span { flex: 1; }
+.bc-retrydiff { border: 1px solid #fde68a; background: #fffbeb; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-size: 13px; }
+.bc-retrydiff b { display: inline-flex; align-items: center; gap: 6px; }
+.bc-retrydiff button { float: right; }
+.bc-retrydiff ul { margin: 6px 0 0; padding-left: 18px; }
+.bc-cam-card { max-width: 640px; }
+.bc-cam-stage { background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 4 / 3; }
+.bc-cam-stage video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bc-cam-thumbs { display: flex; gap: 6px; overflow-x: auto; margin: 8px 0; min-height: 4px; }
+.bc-cam-thumbs img { height: 56px; border-radius: 4px; }
+.bc-cam-acts { display: flex; justify-content: space-between; gap: 8px; }
+.bc-wssave { display: flex; align-items: flex-start; gap: 6px; margin: 12px 0 2px; font-size: 13px; }
+.bc-wssave input { margin-top: 2px; }
+  .bc-intro { margin-top:-4px; }
+  .bc-panel { display:flex; flex-direction:column; gap:12px; }
+  .bc-h { display:flex; align-items:center; gap:8px; margin:0; }
+  /* 不用 space-between：卡片標題前面的收折箭頭（::before）也算一格，會把標題擠到中間 */
+  .bc-h-row { flex-wrap:wrap; }
+  .bc-h-row > .bc-counts { margin-left:auto; }
+  .bc-h3 { display:flex; align-items:center; gap:6px; margin:4px 0; font-size:15px; }
+  .bc-modes { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; }
+  .bc-mode { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; border:2px dashed var(--border, #cbd5e1);
+             border-radius:10px; padding:12px 14px; cursor:pointer; }
+  .bc-mode input { grid-row:1 / span 2; align-self:center; }
+  .bc-mode:has(input:checked) { border-color:var(--primary, #2563eb); background:var(--primary-soft, #eff6ff); }
+  .bc-mode-t { font-weight:600; }
+  .bc-mode-d { font-size:13px; }
+  /* 兩種收件模式的示意圖：左邊三張照片各一張名片；右邊一張照片裡六張，虛線是自動找到的範圍 */
+  .bc-mode { grid-template-columns:auto 1fr auto; }
+  .bc-ill { grid-column:3; grid-row:1 / span 2; width:120px; height:72px; align-self:center; }
+  .bc-ill-photo { fill:var(--surface, #fff); stroke:#94a3b8; stroke-width:1.5; }
+  .bc-ill-card { fill:#dbeafe; stroke:#3b82f6; stroke-width:1; }
+  .bc-ill-ln { fill:#1e40af; }
+  .bc-ill-ln2 { fill:#93c5fd; }
+  .bc-ill-det { fill:none; stroke:#f97316; stroke-width:1.2; stroke-dasharray:3 2; }
+  .bc-src { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .bc-drop { display:flex; align-items:center; justify-content:center; gap:8px; border:2px dashed var(--border, #cbd5e1);
+             border-radius:10px; padding:14px; color:var(--muted, #6b7280); }
+  .bc-drop.over { border-color:var(--primary, #2563eb); color:var(--primary, #2563eb); }
+  .bc-small { font-size:12.5px; margin:0; }
+  .bc-notes-box summary, .bc-cnotes summary { cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+  .bc-notes-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px 12px; margin:8px 0; }
+  .bc-notes-grid label { display:flex; flex-direction:column; gap:4px; font-size:13px; }
+  .bc-notes-memo { grid-column:1 / -1; }
+  .bc-busy { display:flex; align-items:center; gap:8px; }
+  .bc-err { color:var(--danger, #b91c1c); margin:0; }
+  .bc-warn { color:var(--warning-text, #92400e); display:flex; align-items:center; gap:6px; margin:0; }
+  .bc-shared { border-color:#fca5a5; }
+  .bc-batch-list { display:flex; flex-direction:column; gap:6px; }
+  .bc-batch { display:flex; align-items:center; gap:10px; flex-wrap:wrap; border:1px solid var(--border, #e5e7eb);
+              border-radius:8px; padding:8px 10px; font-size:13px; }
+  .bc-batch b { min-width:0; overflow-wrap:anywhere; }
+  .bc-batch .bc-batch-acts { margin-left:auto; display:flex; gap:6px; }
+  .bc-pagebar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .bc-frames { display:grid; grid-template-columns:minmax(0, 1fr) 220px; gap:14px; }
+  .bc-stage { position:relative; background:#111; border-radius:8px; overflow:hidden; touch-action:none; }
+  .bc-stage img { display:block; width:100%; height:auto; user-select:none; }
+  .bc-svg { position:absolute; inset:0; width:100%; height:100%; }
+  .bc-svg .q { fill:rgba(37, 99, 235, .10); stroke:#2563eb; stroke-width:3; vector-effect:non-scaling-stroke; cursor:pointer; }
+  .bc-svg .q.sel { fill:rgba(37, 99, 235, .18); stroke:#f59e0b; }
+  .bc-svg .h { fill:#fff; stroke:#2563eb; stroke-width:2; vector-effect:non-scaling-stroke; cursor:grab; }
+  .bc-svg .tag rect { fill:#2563eb; }
+  .bc-svg .tag text { fill:#fff; font-weight:700; }
+  .bc-side { display:flex; flex-direction:column; gap:8px; }
+  .bc-side .btn { justify-content:flex-start; }
+  .bc-side-h { font-size:14px; }
+  .bc-batches { border-top:1px solid var(--border, #e5e7eb); padding-top:10px; }
+  .bc-cardpane, .bc-fieldpane { min-width:0; }
+  .btn-danger-soft { color:var(--danger, #b91c1c); border-color:#fecaca; }
+  .btn-danger-soft:hover { background:#fef2f2; }
+  .bc-side-memo { display:flex; flex-direction:column; gap:4px; font-size:13px; }
+  .bc-cta { display:flex; justify-content:center; }
+  .bc-counts { font-size:13px; color:var(--muted, #6b7280); font-weight:400; }
+  .bc-only { font-size:13px; font-weight:400; display:flex; align-items:center; gap:4px; }
+  .bc-progress { display:flex; align-items:center; gap:10px; font-size:13px; }
+  .bc-bar { flex:1; height:8px; background:var(--border, #e5e7eb); border-radius:999px; overflow:hidden; }
+  .bc-bar span { display:block; height:100%; width:0; background:var(--primary, #2563eb); transition:width .3s; }
+  .bc-review { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); gap:16px; }
+  .bc-mobile-tabs { display:none; gap:6px; }
+  .bc-tab { flex:1; padding:6px; border:1px solid var(--border, #cbd5e1); background:none; border-radius:6px; }
+  .bc-tab.active { background:var(--primary, #2563eb); color:#fff; border-color:transparent; }
+  .bc-nav { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+  .bc-cardwrap { position:relative; background:#f3f4f6; border-radius:8px; overflow:hidden; }
+  .bc-cardwrap img { display:block; width:100%; height:auto; }
+  .bc-hl { position:absolute; border:3px solid #2563eb; border-radius:4px; box-shadow:0 0 0 9999px rgba(0, 0, 0, .12); pointer-events:none; }
+  .bc-zoom { display:flex; align-items:center; gap:10px; margin-top:8px; }
+  .bc-zoom canvas { flex:1; min-width:0; max-width:100%; height:auto; border:2px solid #2563eb; border-radius:6px; background:#fff; }
+  .bc-cardacts, .bc-saveacts { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .bc-cardstate { margin:0 0 8px; color:var(--danger, #b91c1c); }
+  .bc-persons { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px; }
+  .bc-person { font-size:12px; padding:2px 10px; border-radius:999px; border:1px solid var(--border, #cbd5e1); background:none; cursor:pointer; }
+  .bc-person.active { background:var(--primary, #2563eb); color:#fff; border-color:transparent; }
+  .bc-fields { display:flex; flex-direction:column; gap:6px; }
+  .bc-frow { display:grid; grid-template-columns:96px minmax(0, 1fr) auto; gap:4px 8px; align-items:center; }
+  .bc-frow > span { font-size:13px; color:var(--muted, #4b5563); }
+  .bc-frow input { min-width:0; }
+  .bc-fval { display:flex; gap:6px; min-width:0; }
+  .bc-fval > .field { flex:1 1 auto; width:auto; min-width:0; max-width:none; }
+  .bc-fval > .bc-ext { flex:0 0 90px; }
+  .bc-fval textarea.field { resize:vertical; overflow:hidden; line-height:1.45; font:inherit; }
+  .bc-frow.check input { border-color:#f59e0b; }
+  .bc-frow.focus input { outline:2px solid #2563eb; }
+  .bc-frow .bc-ext { width:90px; }
+  .bc-reason { grid-column:2 / -1; font-size:12px; color:#92400e; background:#fffbeb; border:1px solid #fde68a; border-radius:6px;
+               padding:3px 8px; display:flex; gap:6px; align-items:center; }
+  .bc-fdel { border:none; background:none; color:var(--muted, #6b7280); cursor:pointer; padding:4px; }
+  .bc-addfield { display:flex; gap:8px; margin-top:8px; }
+  .bc-addfield select { max-width:200px; }
+  .bc-exrow { display:flex; gap:14px; flex-wrap:wrap; }
+  .bc-exrow label { display:flex; flex-direction:column; gap:4px; font-size:13px; }
+  .bc-exsum { margin:12px 0 0; display:flex; gap:6px; align-items:flex-start; line-height:1.55; }
+  .bc-subh { display:flex; align-items:center; gap:6px; font-weight:600; font-size:13.5px; margin:16px 0 8px; }
+  .bc-pvbox .bc-subh .muted { font-weight:400; }
+  .bc-preview { overflow-x:auto; border:1px solid var(--border, #e5e7eb); border-radius:8px; }
+  .bc-preview table { border-collapse:separate; border-spacing:0; font-size:12.5px; min-width:100%; }
+  .bc-preview th, .bc-preview td { padding:7px 12px; white-space:nowrap; max-width:240px; overflow:hidden;
+    text-overflow:ellipsis; text-align:left; border-bottom:1px solid var(--border, #e5e7eb); vertical-align:top; }
+  .bc-preview th { background:var(--bg-subtle, #f8fafc); font-weight:600; color:var(--text-muted, #475569); }
+  .bc-preview tr:last-child td { border-bottom:none; }
+  .bc-preview tr:nth-child(even) td { background:var(--bg-subtle, #f8fafc); }
+  .bc-preview th:first-child, .bc-preview td:first-child { position:sticky; left:0; z-index:1;
+    background:var(--bg-panel, #fff); box-shadow:1px 0 0 var(--border, #e5e7eb); font-weight:600; }
+  .bc-preview th:first-child { background:var(--bg-subtle, #f8fafc); }
+  .bc-preview td.empty { color:var(--text-muted, #94a3b8); }
+  .bc-fmts { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; }
+  .bc-fmt { display:grid; grid-template-columns:auto 1fr; grid-template-rows:auto auto; column-gap:8px; row-gap:1px;
+    align-items:center; justify-items:start; text-align:left; padding:10px 12px; height:auto; }
+  .bc-fmt > svg { grid-row:1 / span 2; }
+  .bc-fmt-t { font-weight:700; font-size:14px; }
+  .bc-fmt-d { font-size:12px; color:var(--text-muted, #64748b); font-weight:400; white-space:normal; }
+  .bc-fmtnote { margin-top:10px; }
+  .bc-fmtnote summary { cursor:pointer; font-size:12.5px; color:var(--text-muted, #64748b); display:flex; align-items:center; gap:5px; }
+  .bc-fmtnote p { margin-top:6px; }
+  @media (max-width: 800px) {
+    .bc-modes { grid-template-columns:1fr; }
+    .bc-ill { width:96px; height:58px; }
+    .bc-notes-grid { grid-template-columns:1fr; }
+    .bc-frames { grid-template-columns:1fr; }
+    .bc-side { flex-direction:row; flex-wrap:wrap; }
+    .bc-review { grid-template-columns:1fr; }
+    .bc-mobile-tabs { display:flex; }
+    .bc-review [data-pane]:not(.active-pane) { display:none; }
+    .bc-frow { grid-template-columns:80px minmax(0, 1fr) auto; }
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/custom_select.js"></script>
+<script nonce="{{ request.state.csp_nonce }}">
+(function () {
+  const API = '/tools/business-card-reader/api';
+  const $ = id => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const ICONS = $('bcIcons').content;
+  const iconOf = name => { const s = ICONS.querySelector('[data-icon="' + name + '"] svg'); return s ? s.cloneNode(true) : document.createTextNode(''); };
+  const KEYS = [
+    ['name', tr('姓名')], ['name_en', tr('外文姓名')], ['title', tr('職稱')], ['department', tr('部門')],
+    ['company', tr('公司 / 機關')], ['company_en', tr('外文公司名稱')], ['vat', tr('統一編號')],
+    ['mobile', tr('手機')], ['phone', tr('電話')], ['fax', tr('傳真')], ['email', 'Email'], ['url', tr('網址')],
+    ['address', tr('地址')], ['im', tr('通訊帳號')],
+  ];
+  const LABEL = Object.fromEntries(KEYS);
+  const MULTI = new Set(['mobile', 'phone', 'fax', 'email', 'url', 'address', 'im']);
+  const FLAG_TEXT = { blurry: tr('有點模糊'), glare: tr('有反光'), edge: tr('卡片可能被照片邊緣切到'), whole: tr('沒找到卡片邊界，用整張圖') };
+  const S = { batch: null, page: 0, sel: null, edits: {}, cardIdx: 0, person: 0, onlyCheck: false, poll: null, focus: null,
+              drafts: {}, shown: '', retrySnap: {}, goMerged: null };
+
+  function err(msg) { const e = $('bcErr'); e.textContent = msg || ''; e.hidden = !msg; }
+  function busy(text) { $('bcBusy').hidden = !text; $('bcBusyText').textContent = text || ''; }
+  async function api(method, path, body, isForm) {
+    const opt = { method, headers: {} };
+    if (body !== undefined) {
+      if (isForm) opt.body = body; else { opt.body = JSON.stringify(body); opt.headers['Content-Type'] = 'application/json'; }
+    }
+    const r = await fetch(API + path, opt);
+    if (!r.ok) throw new Error(await friendlyServerError(r, tr('處理失敗')));
+    return r;
+  }
+
+  // ------------------------------------------------------------------ 1. 匯入
+  const mode = () => document.querySelector('input[name="bcMode"]:checked').value;
+  $('bcPick').addEventListener('click', () => $('bcFiles').click());
+  $('bcCamera').addEventListener('click', () => $('bcCam').click());
+  $('bcFiles').addEventListener('change', e => upload([...e.target.files]));
+  $('bcCam').addEventListener('change', e => upload([...e.target.files]));
+  if ($('bcWs') && window.attachWorkspaceLoadButton) window.attachWorkspaceLoadButton($('bcWs'), $('bcFiles'));
+  const drop = $('bcDrop');
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => upload([...(e.dataTransfer.files || [])]));
+  drop.addEventListener('click', () => $('bcFiles').click());
+
+  async function upload(files) {
+    files = files.filter(Boolean);
+    if (!files.length) return;
+    if (window.unlockPdfFiles) { try { files = await window.unlockPdfFiles(files); } catch (_e) { return; } }
+    err('');
+    const fd = new FormData();
+    files.forEach(f => fd.append('files', f, f.name));
+    fd.append('mode', mode());
+    fd.append('event', $('bcEvent').value); fd.append('source', $('bcSource').value);
+    fd.append('tags', $('bcTags').value); fd.append('memo', $('bcMemo').value);
+    busy(tr('上傳 {0} 個檔案，找出名片中…').replace('{0}', files.length));
+    disableIntake(true);
+    try {
+      const r = await api('POST', '/batches', fd, true);
+      show(await r.json());
+      loadBatches();
+    } catch (e) { err(e.message); }
+    finally { busy(''); disableIntake(false); $('bcFiles').value = ''; $('bcCam').value = ''; }
+  }
+  function disableIntake(on) { ['bcPick', 'bcCamera', 'bcWs'].forEach(id => { if ($(id)) $(id).disabled = on; }); }
+
+  async function loadBatches() {
+    try {
+      const items = (await (await api('GET', '/batches')).json()).items;
+      const box = $('bcBatches');
+      box.replaceChildren(...items.map(b => {
+        const row = el('div', 'bc-batch');
+        const cards = Object.values(b.cards || {}).reduce((a, n) => a + n, 0);
+        const ct = b.contacts || {};
+        row.append(el('b', null, jtTime.dt(b.created_at) + (b.notes && b.notes.event ? '・' + b.notes.event : '')),
+          el('span', 'muted', tr('{0} 頁、{1} 張名片、已確認 {2} 位').replace('{0}', b.pages).replace('{1}', cards).replace('{2}', ct.confirmed || 0)));
+        const acts = el('span', 'bc-batch-acts');
+        const open = el('button', 'btn btn-small'); open.type = 'button'; open.append(iconOf('open'), el('span', null, tr('開啟')));
+        open.addEventListener('click', () => openBatch(b.id));
+        const del = el('button', 'btn btn-small btn-danger-soft'); del.type = 'button'; del.append(iconOf('trash'), el('span', null, tr('立即清除')));
+        del.addEventListener('click', () => removeBatch(b.id));
+        acts.append(open, del); row.append(acts);
+        return row;
+      }));
+      $('bcBatchesBox').hidden = !items.length;
+    } catch (_e) { /* 清單讀不到不影響上傳 */ }
+  }
+  async function openBatch(id) {
+    err('');
+    try { show(await (await api('GET', '/batches/' + id)).json()); } catch (e) { err(e.message); }
+  }
+  async function removeBatch(id) {
+    if (!(await showConfirm(tr('原圖、裁好的名片、辨識結果與校對都會刪除，不能復原。已經下載的檔案不受影響。確定清除？'),
+          { title: tr('立即清除'), kind: 'danger', okText: tr('清除') }))) return;
+    try {
+      await api('DELETE', '/batches/' + id);
+      if (S.batch && S.batch.id === id) { S.batch = null; ['bcFrames', 'bcReview', 'bcExport'].forEach(x => $(x).hidden = true); }
+      loadBatches();
+    } catch (e) { showAlert(e.message); }
+  }
+
+  // ------------------------------------------------------------------ 共同
+  function show(batch) {
+    if (S.batch && S.batch.id !== batch.id) { S.drafts = {}; S.shown = ''; }
+    S.batch = batch;
+    const multiFrames = batch.mode === 'multi' && batch.status === 'frames';
+    $('bcFrames').hidden = !multiFrames;
+    const started = !multiFrames;
+    $('bcReview').hidden = !started;
+    $('bcExport').hidden = !started;
+    if (multiFrames) { S.page = Math.min(S.page, batch.pages.length - 1); S.edits = {}; renderPage(); }
+    if (started) { renderReview(); refreshExport(); }
+    clearTimeout(S.poll);
+    const busyNow = batch.status === 'recognizing' || batch.counts.cards_pending;
+    if (busyNow) {
+      // 辨識中輪詢不帶 OCR 文字行（300 張的完整內容約 1 MB）；做完再讀一次完整的
+      S.poll = setTimeout(async () => { try { S.wasLite = true; show(await (await api('GET', '/batches/' + batch.id + '?lite=1')).json()); } catch (_e) {} }, 1500);
+    } else if (S.wasLite) {
+      S.wasLite = false;
+      S.poll = setTimeout(async () => { try { show(await (await api('GET', '/batches/' + batch.id)).json()); } catch (_e) {} }, 0);
+    }
+    if (batch.status !== 'frames') (multiFrames ? $('bcFrames') : $('bcReview')).scrollIntoView({ block: 'nearest' });
+  }
+
+  // ------------------------------------------------------------------ 2. 確認範圍（多卡）
+  const page = () => S.batch.pages[S.page];
+  function boxes() {
+    const p = page();
+    if (!S.edits[p.id]) S.edits[p.id] = p.cards.map(c => ({ id: c.id, quad: c.quad.map(x => x.slice()), rotate: c.rotate, memo: c.memo }));
+    return S.edits[p.id];
+  }
+  function renderPage() {
+    const p = page();
+    const n = S.batch.pages.length;
+    $('bcPageTitle').textContent = tr('第 {0} 頁，共偵測到 {1} 張').replace('{0}', p.idx + 1).replace('{1}', boxes().length);
+    $('bcPageSummary').textContent = n > 1 ? tr('（共 {0} 頁、{1} 張）').replace('{0}', n)
+      .replace('{1}', S.batch.pages.reduce((a, x) => a + (S.edits[x.id] ? S.edits[x.id].length : x.cards.length), 0)) : '';
+    $('bcPrevPage').disabled = S.page === 0; $('bcNextPage').disabled = S.page >= n - 1;
+    const img = $('bcPageImg');
+    const src = API + '/batches/' + S.batch.id + '/pages/' + p.id + '/image?max=1600';
+    if (img.dataset.src !== src) { img.dataset.src = src; img.src = src; }
+    $('bcZeroWarn').hidden = boxes().length > 0;
+    const total = S.batch.pages.reduce((a, x) => a + (S.edits[x.id] ? S.edits[x.id].length : x.cards.length), 0);
+    $('bcRecognizeText').textContent = tr('辨識全部 {0} 張').replace('{0}', total);
+    $('bcRecognize').disabled = total === 0;
+    drawSvg();
+  }
+  function drawSvg() {
+    const p = page();
+    const svg = $('bcSvg');
+    svg.setAttribute('viewBox', '0 0 ' + p.width + ' ' + p.height);
+    const NS = 'http://www.w3.org/2000/svg';
+    const r = Math.max(p.width, p.height) / 90;
+    svg.replaceChildren();
+    boxes().forEach((b, i) => {
+      const poly = document.createElementNS(NS, 'polygon');
+      poly.setAttribute('points', b.quad.map(q => q.join(',')).join(' '));
+      poly.setAttribute('class', 'q' + (S.sel === i ? ' sel' : ''));
+      poly.addEventListener('pointerdown', e => { e.stopPropagation(); select(i); startMove(e, i); });
+      svg.append(poly);
+      const g = document.createElementNS(NS, 'g'); g.setAttribute('class', 'tag');
+      const rect = document.createElementNS(NS, 'rect');
+      const x0 = b.quad[0][0], y0 = b.quad[0][1];
+      rect.setAttribute('x', x0); rect.setAttribute('y', y0); rect.setAttribute('width', r * 2.4); rect.setAttribute('height', r * 2.4); rect.setAttribute('rx', r * 0.4);
+      const t = document.createElementNS(NS, 'text');
+      t.setAttribute('x', x0 + r * 1.2); t.setAttribute('y', y0 + r * 1.75); t.setAttribute('text-anchor', 'middle'); t.setAttribute('font-size', r * 1.6);
+      t.textContent = String(i + 1);
+      g.append(rect, t); svg.append(g);
+      if (S.sel === i) {
+        b.quad.forEach((q, k) => {
+          const c = document.createElementNS(NS, 'circle');
+          c.setAttribute('cx', q[0]); c.setAttribute('cy', q[1]); c.setAttribute('r', r); c.setAttribute('class', 'h');
+          c.addEventListener('pointerdown', e => { e.stopPropagation(); startDrag(e, i, k); });
+          svg.append(c);
+        });
+      }
+    });
+    $('bcSelName').textContent = S.sel == null ? '—' : tr('名片 {0}').replace('{0}', S.sel + 1);
+    $('bcCardMemo').value = S.sel == null ? '' : (boxes()[S.sel].memo || '');
+    ['bcRotate', 'bcRemoveBox', 'bcCardMemo'].forEach(id => $(id).disabled = S.sel == null);
+  }
+  function svgPoint(e) {
+    const svg = $('bcSvg');
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  }
+  function clamp(v, max) { return Math.max(0, Math.min(max, v)); }
+  function startDrag(e, i, k) {
+    const svg = $('bcSvg'); const p = page();
+    svg.setPointerCapture(e.pointerId);
+    const move = ev => { const q = svgPoint(ev); boxes()[i].quad[k] = [clamp(q.x, p.width), clamp(q.y, p.height)]; drawSvg(); };
+    const up = () => { svg.removeEventListener('pointermove', move); svg.removeEventListener('pointerup', up); };
+    svg.addEventListener('pointermove', move); svg.addEventListener('pointerup', up);
+  }
+  function startMove(e, i) {
+    const svg = $('bcSvg'); const p = page();
+    svg.setPointerCapture(e.pointerId);
+    let last = svgPoint(e);
+    const move = ev => {
+      const q = svgPoint(ev); const dx = q.x - last.x, dy = q.y - last.y; last = q;
+      boxes()[i].quad = boxes()[i].quad.map(([x, y]) => [clamp(x + dx, p.width), clamp(y + dy, p.height)]);
+      drawSvg();
+    };
+    const up = () => { svg.removeEventListener('pointermove', move); svg.removeEventListener('pointerup', up); };
+    svg.addEventListener('pointermove', move); svg.addEventListener('pointerup', up);
+  }
+  function select(i) { S.sel = i; drawSvg(); }
+  $('bcSvg').addEventListener('pointerdown', () => select(null));
+  $('bcAddBox').addEventListener('click', () => {
+    const p = page();
+    const w = p.width * 0.3, h = w * 0.6, x = (p.width - w) / 2, y = (p.height - h) / 2;
+    boxes().push({ id: null, quad: [[x, y], [x + w, y], [x + w, y + h], [x, y + h]], rotate: 0, memo: '' });
+    S.sel = boxes().length - 1; renderPage();
+  });
+  $('bcRemoveBox').addEventListener('click', () => { if (S.sel == null) return; boxes().splice(S.sel, 1); S.sel = null; renderPage(); });
+  $('bcRotate').addEventListener('click', () => {
+    if (S.sel == null) return;
+    const b = boxes()[S.sel]; b.rotate = ((b.rotate || 0) + 90) % 360;
+    showToast && showToast(tr('名片 {0} 辨識前會轉 {1}°').replace('{0}', S.sel + 1).replace('{1}', b.rotate), 'ok');
+  });
+  $('bcResetBoxes').addEventListener('click', () => { delete S.edits[page().id]; S.sel = null; renderPage(); });
+  $('bcCardMemo').addEventListener('input', e => { if (S.sel != null) boxes()[S.sel].memo = e.target.value; });
+  $('bcPrevPage').addEventListener('click', () => { S.page--; S.sel = null; renderPage(); });
+  $('bcNextPage').addEventListener('click', () => { S.page++; S.sel = null; renderPage(); });
+  $('bcRecognize').addEventListener('click', async () => {
+    const btn = $('bcRecognize'); btn.disabled = true; err('');
+    try {
+      for (const p of S.batch.pages) {
+        if (!S.edits[p.id]) continue;
+        await api('PUT', '/batches/' + S.batch.id + '/pages/' + p.id + '/cards',
+                  { cards: S.edits[p.id].map(b => ({ id: b.id, quad: b.quad, rotate: b.rotate, memo: b.memo })) });
+      }
+      const r = await (await api('POST', '/batches/' + S.batch.id + '/recognize')).json();
+      S.edits = {}; S.cardIdx = 0; show(r.batch);
+    } catch (e) { err(e.message); btn.disabled = false; }
+  });
+
+  // ------------------------------------------------------------------ 改收件模式（不用重新上傳）
+  async function toMulti(pageIds) {
+    const ok = await showConfirm(tr('這 {0} 頁會重新找出每一張名片，接著請確認範圍再辨識；這幾頁目前的辨識結果與你改過的欄位會清掉，其他頁不受影響。').replace('{0}', pageIds.length),
+                                 { title: tr('改成一張圖片多張名片'), okText: tr('重新找名片') });
+    if (!ok) return;
+    await changeMode('multi', pageIds);
+  }
+  async function changeMode(m, pageIds) {
+    busy(m === 'multi' ? tr('重新找出每一張名片中…') : tr('改成每張圖片一張名片…'));
+    try {
+      const r = await (await api('POST', '/batches/' + S.batch.id + '/mode', { mode: m, pages: pageIds || null })).json();
+      if (m === 'multi' && r.pages.length) {
+        const first = r.batch.pages.findIndex(p => p.id === r.pages[0]);
+        S.page = first >= 0 ? first : 0;
+      }
+      S.edits = {}; S.sel = null; S.cardIdx = 0;
+      show(r.batch);
+      if (m === 'multi') $('bcFrames').scrollIntoView({ block: 'start' });
+    } catch (e) { showAlert(e.message); }
+    finally { busy(''); }
+  }
+  $('bcPageMulti').addEventListener('click', () => {
+    const vis = visibleCards(); if (!vis.length) return;
+    toMulti([vis[S.cardIdx].page.id]);
+  });
+  $('bcToSingle').addEventListener('click', async () => {
+    const ok = await showConfirm(tr('每張圖片（或 PDF 每頁）會當成一張名片直接辨識，這一批的框位會重新找。'),
+                                 { title: tr('改成每張圖片一張名片'), okText: tr('改成一張並辨識') });
+    if (ok) changeMode('single', null);
+  });
+
+  // ------------------------------------------------------------------ 3. 校對
+  function allCards() {
+    const out = [];
+    S.batch.pages.forEach(p => p.cards.forEach(c => out.push({ page: p, card: c })));
+    return out;
+  }
+  function contactsOf(cardId) { return S.batch.contacts.filter(c => c.card_id === cardId); }
+  function visibleCards() {
+    const all = allCards();
+    if (!S.onlyCheck) return all;
+    return all.filter(x => x.card.status === 'failed' || contactsOf(x.card.id).some(c => c.status === 'check'));
+  }
+  function renderReview() {
+    const b = S.batch; const k = b.counts;
+    $('bcCounts').textContent = tr('共 {0} 位　已確認 {1} 位　待確認 {2} 位').replace('{0}', k.contacts).replace('{1}', k.confirmed).replace('{2}', k.check);
+    const busyNow = k.cards_pending > 0;
+    $('bcProgress').hidden = !busyNow;
+    if (busyNow) {
+      const done = k.cards - k.cards_pending;
+      $('bcBar').style.width = (k.cards ? Math.round(done * 100 / k.cards) : 0) + '%';
+      $('bcProgressText').textContent = tr('辨識中 {0} / {1} 張（可以先校對已完成的；關掉頁面也會繼續，回來按「之前的辨識批次」）').replace('{0}', done).replace('{1}', k.cards);
+    }
+    // 單卡模式卻像是一張圖片拍了好幾張：提示改模式（不用重新上傳）
+    const hinted = b.mode === 'single' ? b.pages.filter(p => p.multi_hint) : [];
+    $('bcMultiHint').hidden = !hinted.length;
+    if (hinted.length) {
+      $('bcMultiHintText').textContent = tr('第 {0} 頁看起來一張圖片裡有好幾張名片。').replace('{0}', hinted.map(p => p.idx + 1).join('、'));
+      $('bcMultiHintBtn').onclick = () => toMulti(hinted.map(p => p.id));
+    }
+    renderMergeHints();
+    const vis = visibleCards();
+    if (!vis.length) { $('bcCardTitle').textContent = S.onlyCheck ? tr('沒有待確認的了') : ''; return; }
+    S.cardIdx = Math.max(0, Math.min(S.cardIdx, vis.length - 1));
+    const { page: p, card: c } = vis[S.cardIdx];
+    $('bcCardTitle').textContent = tr('第 {0} 頁・名片 {1}').replace('{0}', p.idx + 1).replace('{1}', c.idx + 1) + '（' + (S.cardIdx + 1) + ' / ' + vis.length + '）';
+    $('bcPrev').disabled = S.cardIdx === 0; $('bcNext').disabled = S.cardIdx >= vis.length - 1;
+    const img = $('bcCardImg');
+    const src = c.status === 'done' ? API + '/batches/' + b.id + '/cards/' + c.id + '/image?max=1600&v=' + encodeURIComponent(c.updated_at || c.engine || '') : '';
+    if (img.dataset.src !== src) { img.dataset.src = src; img.src = src || 'data:image/gif;base64,R0lGODlhAQABAAAAACw='; }
+    const flags = (c.flags || []).map(f => FLAG_TEXT[f]).filter(Boolean);
+    const secs = (typeof c.secs === 'number')
+      ? ((typeof c.ocr_secs === 'number')
+          ? tr('耗時 {0} 秒（文字辨識 {1} 秒）').replace('{0}', c.secs.toFixed(1)).replace('{1}', c.ocr_secs.toFixed(1))
+          : tr('耗時 {0} 秒').replace('{0}', c.secs.toFixed(1)))
+      : '';
+    $('bcCardInfo').textContent = [c.engine ? tr('辨識引擎：{0}').replace('{0}', c.engine) : '', secs, flags.join('、'), c.memo ? tr('備註：{0}').replace('{0}', c.memo) : ''].filter(Boolean).join('　');
+    const st = $('bcCardState');
+    st.hidden = c.status === 'done';
+    st.textContent = c.status === 'failed' ? (c.error || tr('辨識失敗')) + tr('，可以按「重新辨識」或回去調整框位。')
+      : (c.status === 'pending' || c.status === 'ocr') ? tr('這張還在辨識中…') : '';
+    const people = contactsOf(c.id);
+    S.person = Math.min(S.person, Math.max(0, people.length - 1));
+    const pb = $('bcPersons');
+    pb.replaceChildren(...(people.length > 1 ? people.map((ct, i) => {
+      const x = el('button', 'bc-person' + (i === S.person ? ' active' : ''), (fieldVal(ct, 'name') || fieldVal(ct, 'name_en') || tr('聯絡人 {0}').replace('{0}', i + 1)));
+      x.type = 'button'; x.addEventListener('click', () => { S.person = i; renderReview(); }); return x;
+    }) : []));
+    // 背景辨識時每 1.5 秒重讀一次：同一位聯絡人、伺服器上沒變就不要重畫欄位（正在打字的游標與修改會被洗掉）
+    const ctNow = people[S.person];
+    const sig = ctNow ? ctNow.id + '@' + ctNow.updated_at : 'none:' + c.id;
+    if (sig !== S.shown || !ctNow) { S.shown = sig; renderFields(ctNow); $('bcAiBox').hidden = true; }
+    $('bcMergedBar').hidden = !(ctNow && ctNow.merged);
+    if (ctNow && ctNow.merged) $('bcMergedText').textContent = tr('這一位是 {0} 張名片合併的（正反面或同一人的兩張）。').replace('{0}', (ctNow.card_ids || []).length || 2);
+    const into = !ctNow ? b.contacts.find(x => (x.card_ids || []).includes(c.id) && x.card_id !== c.id) : null;
+    $('bcMergedInto').hidden = !into;
+    if (into) { $('bcMergedIntoText').textContent = tr('這張已經併到 {0}。').replace('{0}', cardLabel(into.card_id)); S.goMerged = into.card_id; }
+    showRetryDiff(c);
+    updateDirty();
+    $('bcRetry').disabled = c.status === 'ocr' || c.status === 'pending';
+    hideHl();
+  }
+  const fieldVal = (ct, key) => ((ct && ct.fields || []).find(f => f.key === key && f.status !== 'deleted') || {}).value || '';
+  let cur = null;          // 正在編修的聯絡人（深拷貝）
+  function renderFields(ct) {
+    // 切換名片時改過還沒存的留在 S.drafts，切回來接著改，「全部儲存」一次存
+    cur = ct ? (S.drafts[ct.id] || JSON.parse(JSON.stringify(ct))) : null;
+    const box = $('bcFields');
+    ['bcConfirm', 'bcSave', 'bcExclude', 'bcAddField', 'bcAddKey'].forEach(id => $(id).disabled = !cur);
+    if (!cur) { box.replaceChildren(el('p', 'muted', tr('這張卡還沒有辨識結果。'))); return; }
+    $('bcExcludeText').textContent = cur.status === 'excluded' ? tr('取消排除') : tr('排除這一位');
+    const rows = [];
+    KEYS.forEach(([key, label]) => {
+      const fs = cur.fields.filter(f => f.key === key && f.status !== 'deleted');
+      if (!fs.length && ['name', 'company', 'title', 'mobile', 'phone', 'email'].includes(key)) {
+        rows.push(fieldRow({ key, value: '', status: 'empty', id: 'new-' + key, source: { method: 'manual' } }, label, true));
+      }
+      fs.forEach((f, i) => rows.push(fieldRow(f, label + (fs.length > 1 ? ' ' + (i + 1) : ''), false)));
+    });
+    box.replaceChildren(...rows);
+    const n = cur.notes || {};
+    $('bcCEvent').value = n.event || ''; $('bcCSource').value = n.source || '';
+    $('bcCTags').value = (n.tags || []).join(', '); $('bcCMemo').value = n.memo || '';
+  }
+  function fieldRow(f, label, placeholder) {
+    const row = el('div', 'bc-frow' + (f.status === 'check' ? ' check' : ''));
+    row.append(el('span', null, label));
+    const wrap = el('div', 'bc-fval');
+    // 地址常常很長：用會自動長高的多行框；其他欄位是一行但填滿整欄
+    const long = f.key === 'address';
+    const inp = el(long ? 'textarea' : 'input', 'field'); inp.value = f.value || ''; inp.maxLength = 500;
+    if (long) {
+      inp.rows = 1;
+      const grow = () => { inp.style.height = 'auto'; inp.style.height = inp.scrollHeight + 'px'; };
+      inp.addEventListener('input', grow);
+      requestAnimationFrame(grow);
+    }
+    inp.setAttribute('aria-label', label);
+    // 點一下或 Tab 進來都框出原文（只靠 focus 事件的話，視窗沒有焦點時不會觸發）
+    inp.addEventListener('focus', () => { focusRow(row, f); });
+    inp.addEventListener('click', () => { focusRow(row, f); });
+    inp.addEventListener('input', () => {
+      if (placeholder && !cur.fields.includes(f)) { f.id = Math.random().toString(16).slice(2, 14); cur.fields.push(f); placeholder = false; }
+      f.value = inp.value; if (f.source.method !== 'manual' && f.status !== 'confirmed') f.status = 'confirmed';
+      markDirty();
+    });
+    wrap.append(inp);
+    if (['phone', 'fax'].includes(f.key)) {
+      const ext = el('input', 'bc-ext field'); ext.placeholder = tr('分機'); ext.value = f.ext || ''; ext.maxLength = 10;
+      ext.setAttribute('aria-label', label + ' ' + tr('分機'));
+      ext.addEventListener('input', () => { f.ext = ext.value; markDirty(); });
+      wrap.append(ext);
+    }
+    row.append(wrap);
+    const del = el('button', 'bc-fdel'); del.type = 'button'; del.title = tr('刪除這個值'); del.setAttribute('aria-label', tr('刪除這個值'));
+    del.append(iconOf('x'));
+    del.addEventListener('click', () => { if (cur.fields.includes(f)) { f.status = 'deleted'; markDirty(); } row.remove(); });
+    row.append(del);
+    if (f.status === 'check' && f.reason) {
+      const r = el('div', 'bc-reason'); r.append(iconOf('alert'), el('span', null, tr(f.reason)));
+      // 自動修正過的值附上原本認成什麼（例如公司名稱的「股份」）
+      if (f.raw && f.raw !== f.value) r.append(el('span', 'bc-raw', tr('原本認成：{0}').replace('{0}', f.raw)));
+      row.append(r);
+    }
+    if (f.source && f.source.method === 'qr') { const r = el('div', 'bc-reason'); r.append(el('span', null, tr('來自 QR Code'))); row.append(r); }
+    // 信心低的那一行放大再讀一次的另一種讀法：只給人參考，按「套用」才換
+    const vc = visibleCards()[S.cardIdx];
+    const srcLine = f.source && f.source.method === 'ocr' && Number.isInteger(f.source.line) && vc && vc.card.lines
+      ? vc.card.lines[f.source.line] : null;
+    if (srcLine && srcLine.alt && srcLine.alt !== srcLine.text) {
+      const compact = (f.value || '') === String(srcLine.text || '').replace(/\s+/g, '');
+      const altVal = compact ? srcLine.alt.replace(/\s+/g, '') : srcLine.alt;
+      if (altVal !== f.value) {
+        const r = el('div', 'bc-alt');
+        r.append(el('span', null, tr('另一種讀法：')), el('b', null, altVal));
+        const b = el('button', 'btn btn-small'); b.type = 'button'; b.append(el('span', null, tr('套用')));
+        b.addEventListener('click', () => { inp.value = altVal; inp.dispatchEvent(new Event('input', { bubbles: true })); r.remove(); });
+        r.append(b);
+        row.append(r);
+      }
+    }
+    return row;
+  }
+  function focusRow(row, f) {
+    document.querySelectorAll('.bc-frow.focus').forEach(x => x.classList.remove('focus'));
+    row.classList.add('focus');
+    const box = f.source && f.source.box;
+    S.focus = box || null;
+    if (box) showHl(box); else hideHl();
+  }
+  function cardSize() { const vis = visibleCards()[S.cardIdx]; return vis && vis.card.size; }
+  function showHl(box) {
+    const img = $('bcCardImg'); const size = cardSize();
+    if (!size || !img.naturalWidth) return hideHl();
+    const sx = img.clientWidth / size[0], sy = img.clientHeight / size[1];
+    const hl = $('bcHl'); const pad = 4;
+    hl.style.left = (box[0] * sx - pad) + 'px'; hl.style.top = (box[1] * sy - pad) + 'px';
+    hl.style.width = (box[2] * sx + 2 * pad) + 'px'; hl.style.height = (box[3] * sy + 2 * pad) + 'px';
+    hl.hidden = false;
+    // 放大那一行：從原尺寸裁圖畫到 canvas
+    const zc = $('bcZoom'); const ctx = zc.getContext('2d');
+    const rx = img.naturalWidth / size[0];
+    const sw = Math.max(1, box[2] * rx + 16), sh = Math.max(1, box[3] * rx + 12);
+    zc.width = Math.min(1200, Math.round(sw * Math.min(3, 640 / sw * 1.6)));
+    zc.height = Math.round(zc.width * sh / sw);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, zc.width, zc.height);
+    ctx.drawImage(img, box[0] * rx - 8, box[1] * rx - 6, sw, sh, 0, 0, zc.width, zc.height);
+    $('bcZoomBox').hidden = false;
+  }
+  function hideHl() { $('bcHl').hidden = true; $('bcZoomBox').hidden = true; S.focus = null; }
+
+  function collectNotes() {
+    return { event: $('bcCEvent').value, source: $('bcCSource').value, tags: $('bcCTags').value, memo: $('bcCMemo').value };
+  }
+  async function saveCur(status) {
+    if (!cur) return;
+    const body = draftBody(cur);
+    if (status) body.status = status;
+    try {
+      await api('PUT', '/batches/' + S.batch.id + '/contacts/' + cur.id, body);
+      delete S.drafts[cur.id]; S.shown = '';
+      const fresh = await (await api('GET', '/batches/' + S.batch.id)).json();
+      if (status === 'confirmed' && S.onlyCheck) { /* 這張確認後就不在「只看待確認」裡，留在同一個位置 */ }
+      else if (status === 'confirmed') S.cardIdx++;
+      show(fresh);
+      showToast && showToast(status === 'confirmed' ? tr('已確認') : tr('已儲存'), 'ok');
+    } catch (e) { showAlert(e.message); }
+  }
+  function draftBody(d) {
+    return { fields: d.fields.filter(f => f.status !== 'deleted' || !String(f.id).startsWith('new-')),
+             notes: d === cur ? collectNotes() : (d.notes || {}) };
+  }
+  function markDirty() {
+    if (!cur) return;
+    cur.notes = collectNotes();
+    S.drafts[cur.id] = cur;
+    updateDirty();
+  }
+  ['bcCEvent', 'bcCSource', 'bcCTags', 'bcCMemo'].forEach(id => $(id).addEventListener('input', markDirty));
+  function updateDirty() {
+    const n = Object.keys(S.drafts).length;
+    $('bcDirty').hidden = !n;
+    $('bcDirty').textContent = tr('{0} 位改過還沒儲存').replace('{0}', n);
+    $('bcSaveAll').disabled = !n;
+    $('bcSaveAllText').textContent = n ? tr('全部儲存（{0} 位）').replace('{0}', n) : tr('全部儲存');
+  }
+  async function saveAll(confirmAll) {
+    if (!S.batch) return;
+    if (cur && S.drafts[cur.id]) cur.notes = collectNotes();
+    const items = Object.values(S.drafts).map(d => Object.assign({ id: d.id }, draftBody(d)));
+    if (confirmAll) {
+      const open = S.batch.contacts.filter(c => c.status !== 'excluded' && c.status !== 'confirmed');
+      if (!open.length) { showToast && showToast(tr('這一批都已經確認或排除了'), 'ok'); if (!items.length) return; }
+      else {
+        const unchecked = open.filter(c => (S.drafts[c.id] || c).fields.some(f => f.status === 'check')).length;
+        const msg = tr('會把 {0} 位還沒確認的聯絡人一次標成已確認，每個欄位都算人工確認過。').replace('{0}', open.length)
+          + (unchecked ? tr('其中 {0} 位還有標「需確認」的欄位，建議先看過再確認。').replace('{0}', unchecked) : '')
+          + (items.length ? tr('改過還沒存的 {0} 位會一起儲存。').replace('{0}', items.length) : '');
+        if (!(await showConfirm(msg, { title: tr('全部確認'), okText: tr('全部確認') }))) return;
+      }
+    }
+    const btns = [$('bcSaveAll'), $('bcConfirmAll')]; btns.forEach(b => b.disabled = true);
+    try {
+      const r = await (await api('POST', '/batches/' + S.batch.id + '/contacts/save-all',
+                                 { items, confirm_all: !!confirmAll })).json();
+      S.drafts = {}; S.shown = '';
+      show(r.batch);
+      showToast && showToast(confirmAll ? tr('已確認 {0} 位').replace('{0}', r.confirmed) : tr('已儲存 {0} 位').replace('{0}', r.saved), 'ok');
+    } catch (e) { showAlert(e.message); }
+    finally { $('bcConfirmAll').disabled = false; updateDirty(); }
+  }
+  $('bcSaveAll').addEventListener('click', () => saveAll(false));
+  $('bcConfirmAll').addEventListener('click', () => saveAll(true));
+  // 改過還沒存就要離開頁面：瀏覽器先問一下
+  window.addEventListener('beforeunload', e => { if (Object.keys(S.drafts).length) { e.preventDefault(); e.returnValue = ''; } });
+  $('bcConfirm').addEventListener('click', () => saveCur('confirmed'));
+  $('bcSave').addEventListener('click', () => saveCur(null));
+  $('bcExclude').addEventListener('click', () => saveCur(cur && cur.status === 'excluded' ? 'check' : 'excluded'));
+  $('bcPrev').addEventListener('click', () => { S.cardIdx--; S.person = 0; renderReview(); });
+  $('bcNext').addEventListener('click', () => { S.cardIdx++; S.person = 0; renderReview(); });
+  $('bcOnlyCheck').addEventListener('change', e => { S.onlyCheck = e.target.checked; S.cardIdx = 0; renderReview(); });
+  $('bcRetry').addEventListener('click', async () => {
+    const v = visibleCards()[S.cardIdx]; if (!v) return;
+    if (!(await showConfirm(tr('重新辨識這一張。你改過或確認過的欄位會保留，其他欄位換成新的結果。'), { title: tr('重新辨識'), okText: tr('重新辨識') }))) return;
+    const before = contactsOf(v.card.id)[0];
+    if (before) S.retrySnap[v.card.id] = Object.fromEntries(before.fields.filter(f => f.status !== 'deleted').map(f => [f.key + '#' + f.id, [f.key, f.value]]));
+    try { await api('POST', '/batches/' + S.batch.id + '/cards/' + v.card.id + '/retry'); openBatch(S.batch.id); } catch (e) { showAlert(e.message); }
+  });
+  $('bcAddPerson').addEventListener('click', async () => {
+    const v = visibleCards()[S.cardIdx]; if (!v) return;
+    try {
+      await api('POST', '/batches/' + S.batch.id + '/cards/' + v.card.id + '/contacts');
+      S.person = contactsOf(v.card.id).length; openBatch(S.batch.id);
+    } catch (e) { showAlert(e.message); }
+  });
+  $('bcAddKey').replaceChildren(...KEYS.map(([k, l]) => { const o = el('option', null, l); o.value = k; return o; }));
+  // 本站樣式的下拉：程式先放好選項再套用（之後改選項文字要 refresh）
+  if (window.enhanceJtSelects) window.enhanceJtSelects(document);
+  $('bcAddField').addEventListener('click', () => {
+    if (!cur) return;
+    const key = $('bcAddKey').value;
+    if (!MULTI.has(key) && cur.fields.some(f => f.key === key && f.status !== 'deleted')) { showAlert(tr('這個欄位已經有了，直接改它就好。')); return; }
+    cur.fields.push({ id: Math.random().toString(16).slice(2, 14), key, value: '', status: 'confirmed', source: { method: 'manual' } });
+    markDirty();
+    const keep = cur; renderFields(keep); cur = keep;
+    const inputs = $('bcFields').querySelectorAll('input.field'); if (inputs.length) inputs[inputs.length - 1].focus();
+  });
+  document.querySelectorAll('.bc-tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.bc-tab').forEach(x => x.classList.toggle('active', x === t));
+    document.querySelectorAll('.bc-review [data-pane]').forEach(p => p.classList.toggle('active-pane', p.dataset.pane === t.dataset.pane));
+  }));
+  document.querySelector('.bc-review [data-pane="card"]').classList.add('active-pane');
+  // 視窗大小改了（手機轉向）：框位依新尺寸重新定位，不是收起來
+  window.addEventListener('resize', () => { if (S.focus) showHl(S.focus); });
+
+  // ------------------------------------------------------------------ 4. 匯出
+  const exportBody = () => ({ scope: $('bcScope').value, lang: $('bcLang').value });
+  let pvTimer = null;
+  function refreshExport() { clearTimeout(pvTimer); pvTimer = setTimeout(preview, 250); }
+  async function preview() {
+    if (!S.batch) return;
+    const k = S.batch.counts;
+    $('bcScope').options[0].textContent = tr('已確認（{0} 位）').replace('{0}', k.confirmed);
+    $('bcScope').options[1].textContent = tr('全部，包含待確認（{0} 位）').replace('{0}', k.contacts);
+    if ($('bcScope')._jtSelect) $('bcScope')._jtSelect.refresh();
+    try {
+      const pv = await (await api('POST', '/batches/' + S.batch.id + '/export/preview', exportBody())).json();
+      const skip = $('bcScope').value === 'confirmed' ? pv.skipped_check : 0;
+      $('bcExSum').textContent = pv.count
+        ? tr('會匯出 {0} 位聯絡人').replace('{0}', pv.count) + (skip ? tr('；另有 {0} 位待確認不會匯出（要一起匯出請把範圍改成「全部」）').replace('{0}', skip) : '') + (pv.excluded ? tr('；{0} 位已排除').replace('{0}', pv.excluded) : '') + '。'
+        : tr('目前沒有可以匯出的聯絡人：還沒有確認任何一位。請先校對，或把範圍改成「全部，包含待確認」。');
+      // 預覽只列這幾位有資料的欄（第一欄姓名一定列）；值裡的換行顯示成「 / 」，列高才一致。下載的檔照樣有全部欄位
+      const keep = pv.headers.map((_, i) => i === 0 || pv.rows.some(r => String(r[i] || '').trim()));
+      const t = el('table');
+      const hr = el('tr'); pv.headers.forEach((h, i) => { if (keep[i]) hr.append(el('th', null, h)); }); t.append(hr);
+      pv.rows.forEach(r => {
+        const tr_ = el('tr');
+        r.forEach((v, i) => {
+          if (!keep[i]) return;
+          const text = String(v || '').replace(/\s*\n\s*/g, ' / ');
+          const td = el('td', text ? null : 'empty', text || '—'); if (text) td.title = text; tr_.append(td);
+        });
+        t.append(tr_);
+      });
+      $('bcPreview').replaceChildren(pv.count ? t : '');
+      $('bcPvBox').hidden = !pv.count;
+      S.big5 = { missing: pv.big5_missing || [], count: pv.big5_missing_count || 0 };
+      const hidden = keep.filter(x => !x).length;
+      $('bcPvTitle').textContent = tr('預覽前 {0} 位').replace('{0}', pv.rows.length)
+        + (hidden ? tr('（{0} 個空白欄位不列，下載的檔案照樣有）').replace('{0}', hidden) : '');
+      document.querySelectorAll('.bc-fmts .btn').forEach(b => b.disabled = !pv.count);
+    } catch (e) { $('bcExSum').textContent = e.message; }
+  }
+  ['bcScope', 'bcLang'].forEach(id => $(id).addEventListener('change', refreshExport));
+  // 工作區有開才顯示（管理員停用時按下去只會 404）；只收工作區認得的格式
+  const WS_FMTS = ['xlsx', 'ods', 'json'];
+  const wsMeta = document.querySelector('meta[name="jt-workspace"]');
+  $('bcWsSaveRow').hidden = !window.saveToWorkspace || (wsMeta && wsMeta.getAttribute('content') === 'off');
+  // 下載：XLSX / ODS 先選「打開就能篩選與搜尋」或「純資料」，CSV 先選編碼（附建議）
+  async function download(b, fmt, extra) {
+    b.disabled = true;
+    try {
+      const r = await api('POST', '/batches/' + S.batch.id + '/export', Object.assign({ format: fmt }, exportBody(), extra || {}));
+      const blob = await r.blob();
+      const name = (r.headers.get('Content-Disposition') || '').match(/filename\*=UTF-8''([^;]+)/);
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = name ? decodeURIComponent(name[1]) : ('contacts.' + fmt);
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      if ($('bcWsSave').checked && WS_FMTS.includes(fmt) && window.saveToWorkspace) {
+        try {
+          const res = await window.saveToWorkspace({ blob }, a.download, 'business-card-reader');
+          if (window.showToast) window.showToast(res && res.duplicate
+            ? tr('已存至工作區（工作區已有同名檔，已另存一份）') : tr('已存至工作區'), 'ok');
+        } catch (e) { showAlert(e.message || tr('存至工作區失敗')); }
+      }
+    } catch (e) { showAlert(e.message); }
+    finally { b.disabled = false; }
+  }
+  function closeMenu() { const m = document.getElementById('bcMenu'); if (m) m.remove(); }
+  function openMenu(btn, title, items) {
+    closeMenu();
+    const m = el('div', 'bc-menu'); m.id = 'bcMenu'; m.setAttribute('role', 'menu');
+    m.append(el('div', 'bc-menu-h', title));
+    items.forEach(it => {
+      const x = el('button', 'bc-menu-i'); x.type = 'button'; x.setAttribute('role', 'menuitem'); x.disabled = !!it.disabled;
+      const t = el('span', 'bc-menu-t', it.label);
+      if (it.rec) t.append(el('span', 'bc-rec', tr('建議')));
+      x.append(t, el('span', 'bc-menu-d', it.desc));
+      x.addEventListener('click', () => { closeMenu(); it.run(); });
+      m.append(x);
+    });
+    document.body.append(m);
+    const r = btn.getBoundingClientRect();
+    const w = Math.min(340, window.innerWidth - 24);
+    m.style.width = w + 'px';
+    m.style.left = Math.max(12, Math.min(r.left + window.scrollX, window.scrollX + window.innerWidth - w - 12)) + 'px';
+    // 下方放不下就往上開；上下都放不下（視窗很矮）就放下方、限制高度並捲到看得見
+    const h = m.offsetHeight, below = window.innerHeight - r.bottom - 12, above = r.top - 12;
+    if (h + 6 <= below || above < h + 6) {
+      m.style.top = (r.bottom + window.scrollY + 6) + 'px';
+      if (h + 6 > below) { m.style.maxHeight = Math.max(160, below - 6) + 'px'; m.style.overflowY = 'auto'; }
+    } else {
+      m.style.top = (r.top + window.scrollY - h - 6) + 'px';
+    }
+    m.scrollIntoView({block: 'nearest'});
+    const first = m.querySelector('.bc-menu-i:not(:disabled)'); if (first) first.focus();
+  }
+  document.addEventListener('click', e => {
+    const m = document.getElementById('bcMenu');
+    if (m && !m.contains(e.target) && !e.target.closest('.bc-fmts')) closeMenu();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+  let menuW = window.innerWidth;
+  window.addEventListener('resize', () => { if (window.innerWidth !== menuW) { menuW = window.innerWidth; closeMenu(); } });
+  document.querySelectorAll('.bc-fmts .btn').forEach(b => b.addEventListener('click', () => {
+    const fmt = b.dataset.fmt;
+    if (document.getElementById('bcMenu') && S.menuFor === fmt) { closeMenu(); return; }
+    S.menuFor = fmt;
+    if (fmt === 'xlsx' || fmt === 'ods') {
+      openMenu(b, fmt.toUpperCase(), [
+        { label: tr('打開就能篩選與搜尋'), rec: true, desc: fmt === 'xlsx'
+            ? tr('整份做成 Excel 表格，每一欄標題都有篩選下拉與搜尋框')
+            : tr('標題列加上自動篩選，打開就能篩選與搜尋'), run: () => download(b, fmt, { table: true }) },
+        { label: tr('純資料'), desc: tr('只有標題與資料，沒有篩選；要貼到別的表或匯入其他系統時用'),
+          run: () => download(b, fmt, { table: false }) },
+      ]);
+    } else if (fmt === 'csv') {
+      const big5 = S.big5 || { count: 0, missing: [] };
+      openMenu(b, tr('CSV 編碼'), [
+        { label: tr('UTF-8（含 BOM）'), rec: true,
+          desc: tr('Excel 點兩下打開中文不會亂碼，OxOffice、Google 試算表、Numbers 也都認得'),
+          run: () => download(b, 'csv', { encoding: 'utf-8', bom: true }) },
+        { label: tr('UTF-8（不含 BOM）'), desc: tr('給程式或資料庫匯入；Excel 直接打開中文會亂碼'),
+          run: () => download(b, 'csv', { encoding: 'utf-8', bom: false }) },
+        { label: 'Big5', disabled: big5.count > 0,
+          desc: big5.count
+            ? tr('這次的資料有 {0} 個字 Big5 沒有（例如：{1}），存成 Big5 會變成問號，不能選').replace('{0}', big5.count).replace('{1}', big5.missing.slice(0, 5).join('、'))
+            : tr('只有舊系統或舊版 Excel 要求 Big5 時才選；罕用字可能沒有對應'),
+          run: () => download(b, 'csv', { encoding: 'big5' }) },
+      ]);
+    } else {
+      closeMenu(); download(b, fmt);
+    }
+  }));
+
+  // ================================================================== 同一批裡合併（正反面 / 同一人）
+  function cardLabel(cardId) {
+    for (const p of S.batch.pages) {
+      const c = p.cards.find(x => x.id === cardId);
+      if (c) return tr('第 {0} 頁・名片 {1}').replace('{0}', p.idx + 1).replace('{1}', c.idx + 1);
+    }
+    return tr('另一張');
+  }
+  function renderMergeHints() {
+    const hints = (S.batch.merge_hints || []);
+    $('bcMergeHint').hidden = !hints.length;
+    const byId = Object.fromEntries(S.batch.contacts.map(c => [c.id, c]));
+    $('bcMergeList').replaceChildren(...hints.map(h => {
+      const a = byId[h.a], b = byId[h.b]; if (!a || !b) return el('span');
+      const row = el('div', 'bc-mh-row');
+      const why = h.reason === 'front_back' ? tr('可能是同一張名片的正反面') : (h.by === 'email' ? tr('同一個 Email') : tr('同一支手機'));
+      row.append(el('span', null, cardLabel(a.card_id) + ' ＋ ' + cardLabel(b.card_id) + '：' + why));
+      const btn = el('button', 'btn btn-small'); btn.type = 'button'; btn.append(el('span', null, tr('合併成一位')));
+      btn.addEventListener('click', () => mergeContacts(a.id, b.id));
+      row.append(btn);
+      return row;
+    }));
+  }
+  async function mergeContacts(keep, other) {
+    if (S.drafts[keep] || S.drafts[other]) {
+      if (!(await showConfirm(tr('這兩位有改過還沒儲存的欄位，合併會用已儲存的內容。要繼續嗎？'), { title: tr('合併成一位'), okText: tr('合併') }))) return;
+    }
+    try {
+      await api('POST', '/batches/' + S.batch.id + '/contacts/merge', { keep, other });
+      delete S.drafts[keep]; delete S.drafts[other]; S.shown = '';
+      show(await (await api('GET', '/batches/' + S.batch.id)).json());
+      showToast && showToast(tr('已合併成一位'), 'ok');
+    } catch (e) { showAlert(e.message); }
+  }
+  $('bcUnmerge').addEventListener('click', async () => {
+    if (!cur) return;
+    if (!(await showConfirm(tr('解除合併：兩位都回到合併前的樣子，合併之後改過的欄位會不見。'), { title: tr('解除合併'), okText: tr('解除合併') }))) return;
+    try {
+      await api('POST', '/batches/' + S.batch.id + '/contacts/' + cur.id + '/unmerge');
+      delete S.drafts[cur.id]; S.shown = '';
+      show(await (await api('GET', '/batches/' + S.batch.id)).json());
+    } catch (e) { showAlert(e.message); }
+  });
+  $('bcGoMerged').addEventListener('click', () => {
+    const i = visibleCards().findIndex(v => v.card.id === S.goMerged);
+    if (i >= 0) { S.cardIdx = i; S.person = 0; renderReview(); }
+  });
+  // 整批套用活動 / 來源 / 標籤 / 備註
+  $('bcApplyGo').addEventListener('click', async () => {
+    const notes = { event: $('bcAEvent').value, source: $('bcASource').value, tags: $('bcATags').value, memo: $('bcAMemo').value };
+    if (!Object.values(notes).some(v => v.trim())) { showAlert(tr('先填要套用的內容。')); return; }
+    try {
+      show(await (await api('PATCH', '/batches/' + S.batch.id, { notes, apply_to_contacts: true })).json());
+      S.shown = ''; renderReview();
+      showToast && showToast(tr('已套用到這一批每一位'), 'ok');
+    } catch (e) { showAlert(e.message); }
+  });
+  // 重新辨識前後的差異（保留人工修改的欄位不會變；這裡列出辨識值換掉的）
+  function showRetryDiff(card) {
+    const snap = S.retrySnap[card.id];
+    if (!snap || card.status !== 'done') { if (!snap) $('bcRetryDiff').hidden = true; return; }
+    delete S.retrySnap[card.id];
+    const after = contactsOf(card.id)[0];
+    if (!after) return;
+    const old = {}; Object.values(snap).forEach(([k, v]) => { (old[k] = old[k] || []).push(v); });
+    const now = {}; after.fields.filter(f => f.status !== 'deleted').forEach(f => { (now[f.key] = now[f.key] || []).push(f.value); });
+    const lines = [];
+    new Set([...Object.keys(old), ...Object.keys(now)]).forEach(k => {
+      const a = (old[k] || []).join('、'), b = (now[k] || []).join('、');
+      if (a !== b) lines.push((LABEL[k] || k) + '：' + (a || tr('（空白）')) + ' → ' + (b || tr('（空白）')));
+    });
+    $('bcRetryDiffList').replaceChildren(...(lines.length ? lines.map(t => el('li', null, t)) : [el('li', null, tr('沒有不同。'))]));
+    $('bcRetryDiff').hidden = false;
+  }
+  $('bcRetryDiffClose').addEventListener('click', () => { $('bcRetryDiff').hidden = true; });
+  // 連拍：瀏覽器支援相機（要 HTTPS 或本機）時，在頁面裡一張一張拍，最後一次上傳
+  const CAM = { stream: null, shots: [] };
+  $('bcBurst').hidden = !(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  $('bcBurst').addEventListener('click', async () => {
+    try {
+      CAM.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 2560 }, height: { ideal: 1920 } }, audio: false });
+    } catch (e) { showAlert(tr('打不開相機：{0}').replace('{0}', e.message || e.name || '')); return; }
+    CAM.shots = []; renderShots();
+    const v = $('bcCamVideo'); v.srcObject = CAM.stream; await v.play().catch(() => {});
+    $('bcCamBox').hidden = false;
+  });
+  function stopCam() { if (CAM.stream) CAM.stream.getTracks().forEach(t => t.stop()); CAM.stream = null; $('bcCamBox').hidden = true; }
+  function renderShots() {
+    $('bcCamThumbs').replaceChildren(...CAM.shots.map(sh => { const i = el('img'); i.src = sh.url; i.alt = ''; return i; }));
+    $('bcCamDone').disabled = !CAM.shots.length;
+    $('bcCamDoneText').textContent = CAM.shots.length ? tr('完成，上傳 {0} 張').replace('{0}', CAM.shots.length) : tr('完成');
+  }
+  $('bcCamShot').addEventListener('click', () => {
+    const v = $('bcCamVideo'); if (!v.videoWidth) return;
+    const cv = document.createElement('canvas'); cv.width = v.videoWidth; cv.height = v.videoHeight;
+    cv.getContext('2d').drawImage(v, 0, 0);
+    cv.toBlob(b => { if (!b) return; CAM.shots.push({ blob: b, url: URL.createObjectURL(b) }); renderShots(); }, 'image/jpeg', 0.92);
+  });
+  $('bcCamCancel').addEventListener('click', () => { CAM.shots.forEach(s_ => URL.revokeObjectURL(s_.url)); CAM.shots = []; stopCam(); });
+  $('bcCamDone').addEventListener('click', () => {
+    const files = CAM.shots.map((sh, i) => new File([sh.blob], 'card-' + (i + 1) + '.jpg', { type: 'image/jpeg' }));
+    CAM.shots.forEach(s_ => URL.revokeObjectURL(s_.url)); CAM.shots = [];
+    stopCam();
+    if (files.length) upload(files);
+  });
+
+  // ================================================================== 跟手上的名片清單整合
+  const LM = { token: null, headers: [], sample: [], mapping: {}, targets: [], plan: null, decisions: {}, pairs: [], name: '' };
+  const KIND_TEXT = { new: tr('新增'), update: tr('補上'), conflict: tr('不同'), same: tr('相同') };
+  const DEC_TEXT = { add: tr('加成新的一列'), merge: tr('補上清單缺的'), keep_list: tr('補上缺的，不同的保留清單的'),
+                     use_card: tr('補上缺的，不同的改用名片的'), skip: tr('不動') };
+  $('bcLmPick').addEventListener('click', () => $('bcLmFile').click());
+  // 校對區的捷徑：捲到「合併之前匯出的檔案」並直接開選檔
+  $('bcToLm').addEventListener('click', () => {
+    $('bcLmHead').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('bcLmFile').click();
+  });
+  $('bcLmFile').addEventListener('change', async e => {
+    const f = e.target.files[0]; if (!f || !S.batch) return;
+    const fd = new FormData(); fd.append('file', f, f.name);
+    try {
+      const r = await (await api('POST', '/batches/' + S.batch.id + '/list-merge', fd, true)).json();
+      Object.assign(LM, { token: r.token, headers: r.headers, sample: r.sample, mapping: r.mapping, targets: r.targets,
+                          plan: null, decisions: {}, pairs: [], name: f.name });
+      $('bcLmName').textContent = f.name;
+      $('bcLmRows').textContent = tr('{0} 列、{1} 欄').replace('{0}', r.rows).replace('{1}', r.headers.length);
+      renderLmMap(); $('bcLm').hidden = false; $('bcLmPlan').hidden = true;
+    } catch (err_) { showAlert(err_.message); }
+    finally { $('bcLmFile').value = ''; }
+  });
+  function renderLmMap() {
+    $('bcLmMap').replaceChildren(...LM.headers.map((h, i) => {
+      const d = el('div', 'bc-lm-col');
+      d.append(el('span', 'h', h || tr('（沒有欄名）')));
+      const sel = el('select', 'field jt-select');
+      const o0 = el('option', null, tr('不使用（原樣保留）')); o0.value = ''; sel.append(o0);
+      LM.targets.forEach(t => { const o = el('option', null, tr(t.label)); o.value = t.key; sel.append(o); });
+      sel.value = LM.mapping[String(i)] || '';
+      sel.addEventListener('change', () => { if (sel.value) LM.mapping[String(i)] = sel.value; else delete LM.mapping[String(i)]; });
+      const ex = LM.sample.map(r => r[i]).filter(Boolean).slice(0, 2).join('、');
+      d.append(sel, el('span', 'ex', ex ? tr('例：{0}').replace('{0}', ex) : ''));
+      return d;
+    }));
+    if (window.enhanceJtSelects) window.enhanceJtSelects($('bcLmMap'));
+  }
+  const lmBody = extra => Object.assign({ mapping: LM.mapping, scope: $('bcScope').value, pairs: LM.pairs }, extra || {});
+  async function lmPlan() {
+    try {
+      LM.plan = await (await api('POST', '/batches/' + S.batch.id + '/list-merge/' + LM.token + '/plan', lmBody())).json();
+      renderLmPlan(); $('bcLmPlan').hidden = false;
+    } catch (e) { showAlert(e.message); }
+  }
+  $('bcLmPlanBtn').addEventListener('click', lmPlan);
+  const whoText = w => w ? [w.name || '—', w.company, w.email || w.mobile].filter(Boolean).join('・') : '—';
+  function renderLmPlan() {
+    const c = LM.plan.counts || {};
+    $('bcLmCounts').textContent = tr('新增 {0} 位、補上 {1} 位、不同 {2} 位、相同 {3} 位；清單裡其他 {4} 列照原樣保留。')
+      .replace('{0}', c.new || 0).replace('{1}', c.update || 0).replace('{2}', c.conflict || 0).replace('{3}', c.same || 0).replace('{4}', c.untouched || 0);
+    const items = LM.plan.items.filter(it => it.kind !== 'untouched');
+    $('bcLmItems').replaceChildren(...items.map(it => {
+      const row = el('div', 'bc-lm-item');
+      row.append(el('span', 'k ' + it.kind, KIND_TEXT[it.kind] || it.kind));
+      const a = el('div', 'who'); a.append(el('b', null, tr('名片')), el('span', null, whoText(it.card)));
+      const b = el('div', 'who'); b.append(el('b', null, tr('清單')), el('span', null, it.list ? whoText(it.list) : tr('（沒有這個人）')));
+      const sel = el('select', 'field jt-select');
+      const opts = it.kind === 'new' ? ['add', 'skip'] : it.kind === 'conflict' ? ['keep_list', 'use_card', 'add', 'skip']
+        : it.kind === 'update' ? ['merge', 'add', 'skip'] : ['skip', 'add'];
+      opts.forEach(v => { const o = el('option', null, DEC_TEXT[v]); o.value = v; sel.append(o); });
+      sel.value = LM.decisions[it.contact_id] || LM.plan.default_decision[it.kind] || opts[0];
+      sel.addEventListener('change', () => { LM.decisions[it.contact_id] = sel.value; });
+      row.append(a, b, sel);
+      if (it.diffs && it.diffs.length) {
+        row.append(el('div', 'diffs', it.diffs.map(d => (LABEL[d.key] || d.key) + '：' + (d.kind === 'conflict'
+          ? tr('名片「{0}」、清單「{1}」').replace('{0}', d.card || '').replace('{1}', d.list || '') : tr('補上「{0}」').replace('{0}', d.card || ''))).join('；')));
+      }
+      return row;
+    }));
+    const pairs = (LM.plan.pairs || []).filter(pr => !LM.pairs.some(x => x.contact_id === pr.contact_id));
+    $('bcLmPairsBox').hidden = !pairs.length;
+    $('bcLmAi').hidden = !LM.plan.ai;
+    $('bcLmPairs').replaceChildren(...pairs.map(pr => {
+      const row = el('div', 'bc-lm-item');
+      row.append(el('span', 'k conflict', tr('可能')));
+      const a = el('div', 'who'); a.append(el('b', null, tr('名片')), el('span', null, whoText(pr.card)));
+      const b = el('div', 'who'); b.append(el('b', null, tr('清單第 {0} 列').replace('{0}', pr.row + 1)), el('span', null, whoText(pr.list)));
+      const btn = el('button', 'btn btn-small'); btn.type = 'button'; btn.append(el('span', null, tr('是同一人，合併')));
+      btn.addEventListener('click', () => { LM.pairs.push({ contact_id: pr.contact_id, row: pr.row }); lmPlan(); });
+      row.append(a, b, btn);
+      if (pr.ai) row.append(el('div', 'ai', (pr.ai.same ? tr('AI：可能是同一人') : pr.ai.same === false ? tr('AI：可能不是同一人') : tr('AI：無法判斷'))
+        + (pr.ai.reason ? '（' + pr.ai.reason + '）' : '')));
+      return row;
+    }));
+    if (window.enhanceJtSelects) window.enhanceJtSelects($('bcLmItems'));
+  }
+  $('bcLmAi').addEventListener('click', async () => {
+    const pairs = (LM.plan.pairs || []).filter(pr => !LM.pairs.some(x => x.contact_id === pr.contact_id)).slice(0, 30);
+    if (!pairs.length) return;
+    $('bcLmAi').disabled = true;
+    try {
+      const r = await (await api('POST', '/batches/' + S.batch.id + '/list-merge/' + LM.token + '/ai-check',
+                                 lmBody({ pairs: pairs.map(p => ({ contact_id: p.contact_id, row: p.row })) }))).json();
+      r.items.forEach(x => { const pr = LM.plan.pairs.find(p => p.contact_id === x.contact_id && p.row === x.row); if (pr) pr.ai = x; });
+      $('bcLmAiInfo').hidden = false;
+      $('bcLmAiInfo').textContent = tr('AI 只給建議：模型 {0}，資料送到 {1}（只送那幾組的欄位文字）。合併要你自己按。')
+        .replace('{0}', r.info.model || '—').replace('{1}', r.info.host || '—');
+      renderLmPlan();
+    } catch (e) { showAlert(e.message); }
+    finally { $('bcLmAi').disabled = false; }
+  });
+  document.querySelectorAll('#bcLmFmts .btn').forEach(b => b.addEventListener('click', () => {
+    const fmt = b.dataset.fmt;
+    const go = extra => lmDownload(b, fmt, extra);
+    if (fmt === 'vcf' || fmt === 'json') { go({}); return; }
+    if (fmt === 'csv') {
+      openMenu(b, tr('CSV 編碼'), [
+        { label: tr('UTF-8（含 BOM）'), rec: true, desc: tr('Excel 點兩下打開中文不會亂碼，OxOffice、Google 試算表、Numbers 也都認得'), run: () => go({ encoding: 'utf-8', bom: true }) },
+        { label: tr('UTF-8（不含 BOM）'), desc: tr('給程式或資料庫匯入；Excel 直接打開中文會亂碼'), run: () => go({ encoding: 'utf-8', bom: false }) },
+        { label: 'Big5', desc: tr('只有舊系統或舊版 Excel 要求 Big5 時才選；罕用字可能沒有對應'), run: () => go({ encoding: 'big5' }) },
+      ]);
+    } else {
+      openMenu(b, fmt.toUpperCase(), [
+        { label: tr('打開就能篩選與搜尋'), rec: true, desc: tr('標題列加上篩選與搜尋'), run: () => go({ table: true }) },
+        { label: tr('純資料'), desc: tr('只有標題與資料，沒有篩選；要貼到別的表或匯入其他系統時用'), run: () => go({ table: false }) },
+      ]);
+    }
+  }));
+  async function lmDownload(b, fmt, extra) {
+    b.disabled = true;
+    try {
+      const r = await api('POST', '/batches/' + S.batch.id + '/list-merge/' + LM.token + '/download',
+                          lmBody(Object.assign({ format: fmt, decisions: LM.decisions }, extra || {})));
+      const blob = await r.blob();
+      const name = (r.headers.get('Content-Disposition') || '').match(/filename\*=UTF-8''([^;]+)/);
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = name ? decodeURIComponent(name[1]) : ('merged.' + fmt);
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    } catch (e) { showAlert(e.message); }
+    finally { b.disabled = false; }
+  }
+  $('bcLmDone').addEventListener('click', async () => {
+    if (!LM.token) return;
+    try { await api('DELETE', '/batches/' + S.batch.id + '/list-merge/' + LM.token); } catch (_e) {}
+    LM.token = null; $('bcLm').hidden = true; showToast && showToast(tr('已刪除暫存的清單'), 'ok');
+  });
+
+  // ================================================================== AI 建議欄位（選用）
+  let AI = null;
+  async function loadAi() { try { AI = await (await api('GET', '/ai')).json(); } catch (_e) { AI = null; } $('bcAiSuggest').hidden = !(AI && AI.available); }
+  $('bcAiSuggest').addEventListener('click', async () => {
+    if (!cur) return;
+    $('bcAiSuggest').disabled = true;
+    try {
+      const r = await (await api('POST', '/batches/' + S.batch.id + '/contacts/' + cur.id + '/ai-suggest')).json();
+      $('bcAiWho').textContent = tr('模型 {0}・送到 {1}・{2}').replace('{0}', r.model || '—').replace('{1}', (r.info && r.info.host) || '—')
+        .replace('{2}', r.mode === 'vision' ? tr('看了這張名片圖') : tr('只看了 OCR 文字'));
+      $('bcAiList').replaceChildren(...(r.fields.length ? r.fields.map(f => {
+        const row = el('div', 'bc-airow');
+        row.append(el('span', null, LABEL[f.key] || f.key), el('b', null, f.value));
+        const b = el('button', 'btn btn-small'); b.type = 'button'; b.append(el('span', null, tr('套用')));
+        b.addEventListener('click', () => {
+          const same = cur.fields.find(x => x.key === f.key && x.status !== 'deleted');
+          if (same && !MULTI.has(f.key)) { same.value = f.value; same.status = 'check'; same.reason = f.reason; }
+          else cur.fields.push({ id: Math.random().toString(16).slice(2, 14), key: f.key, value: f.value, status: 'check',
+                                 reason: f.reason, source: { method: 'ai' } });
+          markDirty(); const keep = cur; renderFields(keep); cur = keep; row.remove();
+        });
+        row.append(b);
+        row.append(el('span', 'why', tr(f.reason)));
+        return row;
+      }) : [el('p', 'muted', tr('AI 沒有建議。'))]));
+      $('bcAiBox').hidden = false;
+    } catch (e) { showAlert(e.message); }
+    finally { $('bcAiSuggest').disabled = false; }
+  });
+  $('bcAiClose').addEventListener('click', () => { $('bcAiBox').hidden = true; });
+  loadAi();
+
+  // ================================================================== 名片簿
+  const B = { books: [], book: null, role: null, items: [], total: 0, person: null, pfields: [], q: '', tag: '' };
+  const ROLE_TEXT = { owner: tr('你的個人名片簿'), edit: tr('你可以編修'), view: tr('你只能查詢') };
+  const IKIND = { meeting: tr('會面'), call: tr('電話'), email: 'Email', visit: tr('拜訪'), other: tr('其他') };
+  function showView(v) {
+    const books = v === 'books';
+    $('bcScanView').hidden = books; $('bcBookView').hidden = !books;
+    $('bcTabScan').classList.toggle('active', !books); $('bcTabBooks').classList.toggle('active', books);
+    $('bcTabScan').setAttribute('aria-selected', String(!books)); $('bcTabBooks').setAttribute('aria-selected', String(books));
+    try { history.replaceState(null, '', books ? '#books' : location.pathname + location.search); } catch (_e) {}
+    if (books) loadBooks();
+  }
+  $('bcTabScan').addEventListener('click', () => showView('scan'));
+  $('bcTabBooks').addEventListener('click', () => showView('books'));
+  const bookName = b => b.kind === 'personal' ? tr('我的名片簿') : b.name;
+  function fillBookSelect(sel, list, keep) {
+    sel.replaceChildren(...list.map(b => { const o = el('option', null, bookName(b) + (b.kind === 'shared' ? '（' + ROLE_TEXT[b.role] + '）' : '')); o.value = b.id; return o; }));
+    if (keep && list.some(b => b.id === keep)) sel.value = keep;
+    if (sel._jtSelect) sel._jtSelect.refresh(); else if (window.enhanceJtSelects) window.enhanceJtSelects(sel.parentElement);
+  }
+  async function loadBooks() {
+    try {
+      const r = await (await api('GET', '/books')).json();
+      B.books = r.items;
+      let keep = B.book && B.book.id;
+      if (!keep) { try { keep = localStorage.getItem('bc.book') || ''; } catch (_e) {} }
+      fillBookSelect($('bkBook'), B.books, keep);
+      selectBook($('bkBook').value);
+    } catch (e) { showAlert(e.message); }
+  }
+  function selectBook(id) {
+    B.book = B.books.find(b => b.id === id) || B.books[0] || null;
+    if (!B.book) return;
+    try { localStorage.setItem('bc.book', B.book.id); } catch (_e) {}
+    $('bkRole').textContent = ROLE_TEXT[B.book.role] || '';
+    const d = B.book.effective_keep_days;
+    $('bkKeep').textContent = '・' + (d > 0 ? tr('最後更新超過 {0} 天的人會自動刪除').replace('{0}', d) : tr('永久保留'));
+    $('bkKeepEdit').hidden = B.book.kind !== 'personal';
+    closePerson(); searchPeople(true);
+  }
+  $('bkBook').addEventListener('change', () => selectBook($('bkBook').value));
+  $('bkKeepEdit').addEventListener('click', async () => {
+    const cap = B.book.personal_max_days || 0;
+    const v = await showPrompt(cap ? tr('保留幾天（1～{0}；依每個人的最後更新起算）').replace('{0}', cap) : tr('保留幾天（0 ＝永久；依每個人的最後更新起算）'),
+                               { title: tr('變更保留期限'), defaultValue: String(B.book.keep_days || 0) });
+    if (v == null) return;
+    try { await api('PATCH', '/books/' + B.book.id, { keep_days: Number(v) }); await loadBooks(); showToast && showToast(tr('已儲存'), 'ok'); }
+    catch (e) { showAlert(e.message); }
+  });
+  let qTimer = null;
+  ['bkQ', 'bkTag'].forEach(id => $(id).addEventListener('input', () => { clearTimeout(qTimer); qTimer = setTimeout(() => searchPeople(true), 350); }));
+  async function searchPeople(reset) {
+    if (!B.book) return;
+    if (reset) { B.items = []; }
+    B.q = $('bkQ').value.trim(); B.tag = $('bkTag').value.trim();
+    const qs = new URLSearchParams({ q: B.q, tag: B.tag, limit: '50', offset: String(B.items.length) });
+    try {
+      const r = await (await api('GET', '/books/' + B.book.id + '/people?' + qs.toString())).json();
+      B.items = B.items.concat(r.items); B.total = r.total; B.role = r.role;
+      renderPeople();
+    } catch (e) { showAlert(e.message); }
+  }
+  $('bkMore').addEventListener('click', () => searchPeople(false));
+  function renderPeople() {
+    const t = $('bkTable');
+    const head = el('thead'); const hr = el('tr');
+    [tr('姓名'), tr('公司 / 機關'), tr('職稱'), tr('手機'), 'Email', tr('最後更新')].forEach(h => hr.append(el('th', null, h)));
+    head.append(hr);
+    const body = el('tbody');
+    B.items.forEach(p => {
+      const r = el('tr'); if (B.person && B.person.id === p.id) r.className = 'sel';
+      [p.name || p.name_en || '—', p.company, p.title, p.mobile, p.email, jtTime.dt(p.updated_at)].forEach(v => {
+        const td = el('td', null, v || ''); if (v) td.title = v; r.append(td);
+      });
+      r.addEventListener('click', () => openPerson(p.id));
+      body.append(r);
+    });
+    t.replaceChildren(head, body);
+    t.parentElement.hidden = !B.items.length;
+    $('bkEmpty').hidden = B.items.length > 0 || !!(B.q || B.tag);
+    $('bkCount').textContent = (B.q || B.tag) ? tr('查到 {0} 人').replace('{0}', B.total) : tr('共 {0} 人').replace('{0}', B.total);
+    $('bkMore').hidden = B.items.length >= B.total;
+  }
+  function closePerson() { B.person = null; $('bkDetail').hidden = true; document.querySelector('.bk-body').classList.remove('open'); }
+  $('bkClose').addEventListener('click', () => { closePerson(); renderPeople(); });
+  async function openPerson(pid) {
+    try {
+      const p = await (await api('GET', '/books/' + B.book.id + '/people/' + pid)).json();
+      B.person = p; B.pfields = JSON.parse(JSON.stringify(p.fields || []));
+      renderPerson(); renderPeople();
+      $('bkDetail').hidden = false; document.querySelector('.bk-body').classList.add('open');
+      if (window.innerWidth < 900) $('bkDetail').scrollIntoView({ block: 'start' });
+    } catch (e) { showAlert(e.message); }
+  }
+  const fv = (fs, k) => ((fs || []).find(f => f.key === k) || {}).value || '';
+  function renderPerson() {
+    const p = B.person; const ro = !(p.role === 'owner' || p.role === 'edit');
+    $('bkDetail').classList.toggle('bk-readonly', ro);
+    $('bkName').textContent = fv(p.fields, 'name') || fv(p.fields, 'name_en') || tr('（沒有姓名）');
+    $('bkSub').textContent = [fv(p.fields, 'company'), fv(p.fields, 'title')].filter(Boolean).join('・')
+      + '　' + tr('最後更新：{0}').replace('{0}', jtTime.dt(p.updated_at));
+    $('bkFields').replaceChildren(...B.pfields.map((f, i) => {
+      const r = el('div', 'bk-frow');
+      r.append(el('span', null, LABEL[f.key] || f.key));
+      const inp = el('input', 'field'); inp.value = f.value || ''; inp.maxLength = 500; inp.readOnly = ro;
+      inp.addEventListener('input', () => { f.value = inp.value; });
+      r.append(inp);
+      const x = el('button'); x.type = 'button'; x.className = 'bk-edit'; x.setAttribute('aria-label', tr('刪除這個值')); x.append(iconOf('x'));
+      x.addEventListener('click', () => { B.pfields.splice(i, 1); renderPerson(); });
+      r.append(x);
+      return r;
+    }));
+    const n = p.notes || {};
+    $('bkTags').value = (n.tags || []).join(', '); $('bkEvent').value = n.event || ''; $('bkMemo').value = n.memo || '';
+    ['bkTags', 'bkEvent', 'bkMemo'].forEach(id => { $(id).readOnly = ro; });
+    $('bkCards').replaceChildren(...(p.cards || []).map(c => {
+      const d = el('div', 'bk-card');
+      if (c.image) {
+        const img = el('img'); img.alt = ''; img.loading = 'lazy';
+        img.src = API + '/books/' + B.book.id + '/people/' + p.id + '/cards/' + c.id + '/image';
+        d.append(img);
+      } else d.append(el('div', 'noimg', tr('沒有名片圖')));
+      const m = el('div', 'meta');
+      m.append(el('b', null, [fv(c.fields, 'company'), fv(c.fields, 'title')].filter(Boolean).join('・') || '—'),
+               el('span', 'muted', tr('拿到名片：{0}').replace('{0}', jtTime.dt(c.captured_at))));
+      d.append(m);
+      return d;
+    }));
+    $('bkIList').replaceChildren(...(p.interactions || []).map(it => {
+      const li = el('li');
+      li.append(el('span', 'when', jtTime.dt(it.at).slice(0, 10) + '・' + (IKIND[it.kind] || it.kind)), el('span', 'txt', it.note || ''));
+      if (!ro) {
+        const x = el('button'); x.type = 'button'; x.setAttribute('aria-label', tr('刪除')); x.append(iconOf('trash'));
+        x.addEventListener('click', async () => {
+          if (!(await showConfirm(tr('刪除這筆互動紀錄？'), { title: tr('刪除'), okText: tr('刪除') }))) return;
+          try { await api('DELETE', '/books/' + B.book.id + '/people/' + p.id + '/interactions/' + it.id); openPerson(p.id); } catch (e) { showAlert(e.message); }
+        });
+        li.append(x);
+      }
+      return li;
+    }));
+    $('bkMergeBox').hidden = true;
+  }
+  $('bkAddKey').replaceChildren(...KEYS.map(([k, l]) => { const o = el('option', null, l); o.value = k; return o; }));
+  $('bkAddField').addEventListener('click', () => {
+    const k = $('bkAddKey').value;
+    if (!MULTI.has(k) && B.pfields.some(f => f.key === k)) { showAlert(tr('這個欄位已經有了，直接改它就好。')); return; }
+    B.pfields.push({ id: Math.random().toString(16).slice(2, 14), key: k, value: '', status: 'confirmed', source: { method: 'manual' } });
+    renderPerson();
+    const ins = $('bkFields').querySelectorAll('input'); if (ins.length) ins[ins.length - 1].focus();
+  });
+  $('bkSave').addEventListener('click', async () => {
+    const notes = { tags: $('bkTags').value, event: $('bkEvent').value, memo: $('bkMemo').value, source: (B.person.notes || {}).source || '' };
+    try {
+      const p = await (await api('PUT', '/books/' + B.book.id + '/people/' + B.person.id,
+                                 { fields: B.pfields.filter(f => (f.value || '').trim()), notes })).json();
+      showToast && showToast(tr('已儲存'), 'ok'); openPerson(p.id); searchPeople(true);
+    } catch (e) { showAlert(e.message); }
+  });
+  $('bkDelete').addEventListener('click', async () => {
+    if (!(await showConfirm(tr('刪除這一位（含歷史名片與互動紀錄）？無法復原。'), { title: tr('刪除這一位'), okText: tr('刪除') }))) return;
+    try { await api('DELETE', '/books/' + B.book.id + '/people/' + B.person.id); closePerson(); searchPeople(true); } catch (e) { showAlert(e.message); }
+  });
+  $('bkMergeBtn').addEventListener('click', () => { $('bkMergeBox').hidden = !$('bkMergeBox').hidden; $('bkMergeQ').value = ''; $('bkMergeList').replaceChildren(); $('bkMergeQ').focus(); });
+  let mTimer = null;
+  $('bkMergeQ').addEventListener('input', () => {
+    clearTimeout(mTimer);
+    mTimer = setTimeout(async () => {
+      const q = $('bkMergeQ').value.trim(); if (!q) { $('bkMergeList').replaceChildren(); return; }
+      try {
+        const r = await (await api('GET', '/books/' + B.book.id + '/people?' + new URLSearchParams({ q, limit: '20' }))).json();
+        $('bkMergeList').replaceChildren(...r.items.filter(x => x.id !== B.person.id).map(x => {
+          const b = el('button'); b.type = 'button';
+          b.append(el('span', null, x.name || x.name_en || '—'), el('span', 'muted', [x.company, x.email || x.mobile].filter(Boolean).join('・')));
+          b.addEventListener('click', async () => {
+            const msg = tr('把「{0}」併進目前這一位？那一位的歷史名片與互動紀錄都會搬過來，然後刪掉那一筆。').replace('{0}', x.name || x.name_en || '—');
+            if (!(await showConfirm(msg, { title: tr('跟另一位合併'), okText: tr('合併') }))) return;
+            try { await api('POST', '/books/' + B.book.id + '/people/merge', { keep: B.person.id, others: [x.id] }); openPerson(B.person.id); searchPeople(true); }
+            catch (e) { showAlert(e.message); }
+          });
+          return b;
+        }));
+      } catch (e) { showAlert(e.message); }
+    }, 300);
+  });
+  $('bkIAdd').addEventListener('click', async () => {
+    const d = $('bkIDate').value;
+    const at = d ? new Date(d + 'T12:00:00').getTime() / 1000 : null;
+    try {
+      await api('POST', '/books/' + B.book.id + '/people/' + B.person.id + '/interactions',
+                { kind: $('bkIKind').value, note: $('bkINote').value, at });
+      $('bkINote').value = ''; openPerson(B.person.id);
+    } catch (e) { showAlert(e.message); }
+  });
+  document.querySelectorAll('#bkFmts .btn').forEach(b => b.addEventListener('click', () => {
+    const fmt = b.dataset.fmt;
+    const base = { q: B.q, tag: B.tag };
+    const go = extra => downloadBook(b, fmt, Object.assign({}, base, extra || {}));
+    if (fmt === 'xlsx' || fmt === 'ods') {
+      openMenu(b, fmt.toUpperCase(), [
+        { label: tr('打開就能篩選與搜尋'), rec: true, desc: tr('標題列加上篩選與搜尋'), run: () => go({ table: true }) },
+        { label: tr('純資料'), desc: tr('只有標題與資料，沒有篩選；要貼到別的表或匯入其他系統時用'), run: () => go({ table: false }) },
+      ]);
+    } else if (fmt === 'csv') {
+      openMenu(b, tr('CSV 編碼'), [
+        { label: tr('UTF-8（含 BOM）'), rec: true, desc: tr('Excel 點兩下打開中文不會亂碼，OxOffice、Google 試算表、Numbers 也都認得'), run: () => go({ encoding: 'utf-8', bom: true }) },
+        { label: tr('UTF-8（不含 BOM）'), desc: tr('給程式或資料庫匯入；Excel 直接打開中文會亂碼'), run: () => go({ encoding: 'utf-8', bom: false }) },
+        { label: 'Big5', desc: tr('只有舊系統或舊版 Excel 要求 Big5 時才選；罕用字可能沒有對應'), run: () => go({ encoding: 'big5' }) },
+      ]);
+    } else go();
+  }));
+  async function downloadBook(b, fmt, extra) {
+    b.disabled = true;
+    try {
+      const r = await api('POST', '/books/' + B.book.id + '/export', Object.assign({ format: fmt, lang: 'zh' }, extra));
+      const blob = await r.blob();
+      const name = (r.headers.get('Content-Disposition') || '').match(/filename\*=UTF-8''([^;]+)/);
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = name ? decodeURIComponent(name[1]) : ('contacts.' + fmt);
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    } catch (e) { showAlert(e.message); }
+    finally { b.disabled = false; }
+  }
+
+  // ------------------------------------------------------------------ 存進名片簿
+  let SV = null;
+  async function openSaveToBook() {
+    if (!S.batch) return;
+    if (Object.keys(S.drafts).length && !(await showConfirm(tr('還有改過沒儲存的聯絡人，要先「全部儲存」嗎？沒存的修改不會進名片簿。'),
+        { title: tr('存進名片簿'), okText: tr('先全部儲存') }))) return;
+    if (Object.keys(S.drafts).length) await saveAll(false);
+    try {
+      const r = await (await api('GET', '/books')).json();
+      const editable = r.items.filter(b => b.role === 'owner' || b.role === 'edit');
+      fillBookSelect($('bkSaveBook'), editable, B.book && B.book.id);
+      if (window.enhanceJtSelects) window.enhanceJtSelects($('bkSaveBox'));
+      $('bkSaveBox').hidden = false;
+      previewSave();
+    } catch (e) { showAlert(e.message); }
+  }
+  async function previewSave() {
+    const scope = $('bkSaveScope').value;
+    const body = { book: $('bkSaveBook').value };
+    if (scope === 'current') {
+      const vis = visibleCards()[S.cardIdx]; const ct = vis && contactsOf(vis.card.id)[S.person];
+      body.ids = ct ? [ct.id] : [];
+    } else body.scope = scope;
+    $('bkSaveList').replaceChildren(el('p', 'muted', tr('比對中…')));
+    try {
+      SV = await (await api('POST', '/batches/' + S.batch.id + '/save-to-book/preview', body)).json();
+      if (!SV.items.length) { $('bkSaveList').replaceChildren(el('p', 'muted', tr('沒有可以存的聯絡人：還沒有確認任何一位，可以把「哪些人」改成「全部」。'))); $('bkSaveGo').disabled = true; return; }
+      $('bkSaveGo').disabled = false;
+      $('bkSaveList').replaceChildren(...SV.items.map(it => {
+        const row = el('div', 'bk-save-row');
+        const who = el('div', 'who'); who.append(el('b', null, it.name || tr('（沒有姓名）')), el('span', 'muted', [it.company, it.title].filter(Boolean).join('・')));
+        const sel = el('select', 'field jt-select');
+        const add = (v, l) => { const o = el('option', null, l); o.value = v; sel.append(o); };
+        it.matches.forEach(m => add('merge:' + m.person.id, tr('合併到「{0}」（{1}）').replace('{0}', m.person.name || m.person.name_en || '—').replace('{1}', tr(m.reason))));
+        add('new', tr('新增一位'));
+        add('skip', tr('略過'));
+        sel.value = it.matches.length ? 'merge:' + it.matches[0].person.id : 'new';
+        it._sel = sel;
+        row.append(who, sel);
+        return row;
+      }));
+      if (window.enhanceJtSelects) window.enhanceJtSelects($('bkSaveList'));
+    } catch (e) { $('bkSaveList').replaceChildren(el('p', 'bc-err', e.message)); $('bkSaveGo').disabled = true; }
+  }
+  ['bkSaveBook', 'bkSaveScope'].forEach(id => $(id).addEventListener('change', previewSave));
+  const closeSave = () => { $('bkSaveBox').hidden = true; };
+  $('bkSaveCancel').addEventListener('click', closeSave);
+  $('bkSaveBox').addEventListener('click', e => { if (e.target === $('bkSaveBox')) closeSave(); });
+  $('bcToBook').addEventListener('click', openSaveToBook);
+  $('bkSaveGo').addEventListener('click', async () => {
+    if (!SV) return;
+    const items = SV.items.map(it => {
+      const v = it._sel.value;
+      return v.startsWith('merge:') ? { contact_id: it.contact_id, action: 'merge', person_id: v.slice(6) } : { contact_id: it.contact_id, action: v };
+    });
+    $('bkSaveGo').disabled = true;
+    try {
+      const r = await (await api('POST', '/batches/' + S.batch.id + '/save-to-book', { book: SV.book.id, items })).json();
+      closeSave();
+      showToast && showToast(tr('已存進名片簿：新增 {0} 位、合併 {1} 位').replace('{0}', r.added).replace('{1}', r.merged), 'ok');
+      B.book = { id: SV.book.id };
+    } catch (e) { showAlert(e.message); }
+    finally { $('bkSaveGo').disabled = false; }
+  });
+  if (location.hash === '#books') showView('books');
+  // 從「我的作業」按「開啟」回來：#batch=<批次編號> 直接打開那一批
+  const hb = /^#batch=([0-9a-f]{32})$/.exec(location.hash || '');
+  if (hb) openBatch(hb[1]);
+
+  // 用手機接續：開著的時候每 5 秒看一次有沒有新批次（手機那邊送出的），關掉或切回這個分頁時再讀一次
+  let handoffTimer = null;
+  function closeHandoff() {
+    $('bcHandoffBox').hidden = true;
+    if (handoffTimer) { clearInterval(handoffTimer); handoffTimer = null; }
+    loadBatches();
+  }
+  $('bcHandoff').addEventListener('click', () => {
+    $('bcHandoffImg').src = '/tools/business-card-reader/handoff-qr?_t=' + Date.now();
+    $('bcHandoffUrl').textContent = location.origin + '/tools/business-card-reader/';
+    $('bcHandoffBox').hidden = false;
+    $('bcHandoffClose').focus();
+    if (!handoffTimer) handoffTimer = setInterval(() => { if (!document.hidden) loadBatches(); }, 5000);
+  });
+  $('bcHandoffClose').addEventListener('click', closeHandoff);
+  $('bcHandoffBox').addEventListener('click', e => { if (e.target === $('bcHandoffBox')) closeHandoff(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('bcHandoffBox').hidden) closeHandoff(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('bkSaveBox').hidden) closeSave(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadBatches(); });
+
+  loadBatches();
+})();
+</script>
+{% endblock %}

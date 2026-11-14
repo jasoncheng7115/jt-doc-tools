@@ -28,7 +28,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.17.39"
+VERSION = "1.17.41"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -501,6 +501,7 @@ _TOOL_ALIASES = {
     "pdf-seam-stamp":     "seam seal perforation straddle chop stamp across pages tamper evident contract tender anti swap sliced rotate jitter random 騎縫章 騎縫印 騎縫 跨頁章 防抽換 防換頁 抽換 合約 標案 投標 用印 蓋章 切片 分片 側邊 對開 亂數 角度",
     "pdf-bookmark":       "bookmark bookmarks outline toc table of contents index navigation nested level chapter merge combine tender annual report 書籤 大綱 目錄 導覽 索引 章節 層級 巢狀 合併 串接 標案 投標 年報 結案報告 目錄頁 可點 跳頁 加書籤 建目錄",
     "submission-check":   "submission check submit review verify validate checklist pre-flight preflight completeness case bid tender application 送件 送審 投標 標案 申請 檢核 檢查 核對 清單 缺件 漏件 齊備 完整性 驗收 案件 送出前",
+    "business-card-reader": "business card name card visiting card contact ocr vcard vcf scan crm 名片 名片辨識 名片掃描 名片管理 聯絡人 通訊錄 客戶 交換名片 展覽 拜訪 業務 掃名片 切卡 匯出 試算表",
     "transit-proof":      "transit proof commute travel receipt ticket hsr tra mrt bus taxi uber rideshare easycard ipass reimbursement expense 乘車 乘車證明 交通 車票 高鐵 台鐵 捷運 公車 計程車 Uber 優步 叫車 網約車 行程收據 悠遊卡 一卡通 差旅 出差 報帳 核銷 憑證 整理",
     "mfp-fetch":          "mfp multifunction printer copier scanner scan mailbox box folder fetch retrieve pickup import mfp scan & fetch 事務機掃描取件 掃描取件 事務機取件 機內信箱 escl webdav fujifilm fuji xerox apeos apeosport docucentre docuworks internet services webdav 事務機 多功能事務機 影印機 印表機 複合機 掃描 掃描檔 掃描器 親展 親展信箱 機密信箱 信箱 資料夾 取件 取檔 取回 匯入 富士 富士軟片 富士全錄",
 }
@@ -630,6 +631,10 @@ templates.env.globals["nav_settings"] = [
                  "法規 規範 範例 公文 引用 出處 "
                  # 政府公開資料（/admin/knowledge/gov）也從這一頁進去
                  "open data opendata moj 政府公開資料 開放資料 全國法規資料庫 行政規則 釋例"},
+    {"icon": "id-card", "name": "名片簿", "description": "共用名片簿的成員與角色、各本的保留期限，個人名片簿的保留上限",
+     "url": "/admin/business-cards", "beta": True,
+     "keywords": "business card contact book address book shared members retention crm "
+                 "名片 名片簿 名片辨識 聯絡人 通訊錄 共用 成員 保留期限 查詢 權限"},
     {"icon": "printer", "name": "共用事務機", "description": "建立事務機並指定成員，成員不用自己新增就能測試與掃描",
      "url": "/admin/mfp",
      "keywords": "mfp multifunction printer copier scanner shared device member group scan escl airprint mopria "
@@ -739,7 +744,7 @@ NAV_SETTINGS_ORDER: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("品牌與資料", ("/admin/branding", "/admin/profile", "/admin/assets", "/admin/seal-request",
                     "/admin/settings-export")),
     ("工具資料", ("/admin/templates", "/admin/synonyms", "/admin/translation-glossary", "/admin/official-doc",
-                  "/admin/knowledge", "/admin/vat-db", "/admin/mfp")),
+                  "/admin/knowledge", "/admin/vat-db", "/admin/mfp", "/admin/business-cards")),
     ("帳號與權限", ("/admin/auth-settings", "/admin/sso", "/admin/users", "/admin/groups", "/admin/roles",
                     "/admin/permissions", "/admin/directory")),
     ("通知與檔案", ("/admin/notify", "/admin/workspace", "/admin/retention")),
@@ -2717,6 +2722,19 @@ async def _startup():
                               daemon=True).start()
     except Exception:                                    # noqa: BLE001
         pass
+    # 名片辨識：上次行程中斷時還在辨識的卡，啟動後在背景接著做（延後一點，不拖慢啟動）
+    try:
+        import threading as _bc_threading
+
+        def _bc_resume() -> None:
+            import time as _time
+            _time.sleep(20)
+            from .tools.business_card_reader import pipeline as _bc_pipeline, store as _bc_store
+            if _bc_store.db_path().exists():
+                _bc_pipeline.resume_all()
+        _bc_threading.Thread(target=_bc_resume, name="bizcard-resume", daemon=True).start()
+    except Exception:                                    # noqa: BLE001
+        logger.exception("名片辨識：排程恢復背景工作失敗")
     # Initialise auth + audit DBs (idempotent; applies pending migrations).
     # We do this even when auth is disabled so that turning auth on later
     # has the schema ready.

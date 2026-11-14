@@ -41,7 +41,10 @@ OWN_EXCEPTIONS = {"ValueError", "auth_ldap.AuthError", "auth_settings.BootstrapE
                   # 我們寫的句子；包進來的 `PackageError` / `safe_fetch` / `zip_guard` /
                   # `ExtractError` 也全是固定句子（只帶管理員自己填的主機名與上限數字），
                   # 索引失敗的代碼另外換成句子（`gov._INDEX_ERRORS`）。原因細節走 logger。
-                  "gov.GovNotFound", "gov.GovBusy", "gov.GovError", "gov.NeedsConfirm"}
+                  "gov.GovNotFound", "gov.GovBusy", "gov.GovError", "gov.NeedsConfirm",
+                  # 名片簿（v1.17.41）：`BookError` 每一處 raise 都是我們寫的句子（只帶我們自己的上限數字，
+                  # 例如「成員最多 200 個」），不帶使用者輸入或名片內容
+                  "books.BookError"}
 
 
 def _leaky_handlers(path: Path) -> list[tuple[int, str]]:

@@ -192,6 +192,7 @@ def test_plain_users_cannot_open_the_llm_page(admin_session, kb_isolated):
 _BETA_SETTINGS = {
     "/admin/knowledge": "公文知識庫",
     "/admin/seal-request": "用印申請：2026-11-06 剛上線，先標 Beta（使用者決定）",
+    "/admin/business-cards": "名片簿：名片辨識本身是 Beta 工具（v1.17.40），它的設定頁跟著標",
 }
 
 

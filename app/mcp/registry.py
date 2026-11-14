@@ -703,6 +703,24 @@ TOOLS: tuple[McpTool, ...] = (
                  '[{"type": "text", "x": 72, "y": 72, "w": 200, "h": 20, "text": "Reviewed", "font_size": 14, '
                  '"color": "#cc0000"}]}]}'}}),
     McpTool(
+        "business_card_read", "business-card-reader", "extract", "名片辨識",
+        "Read contacts from business-card photos or scans (OCR, no AI). Not human-reviewed: 'check' fields need confirming.",
+        "/tools/business-card-reader/api/business-card-reader", "pdf_or_image", 1, 20, file_field="files",
+        default_on=False,
+        params={"mode": {"type": "string", "enum": ["single", "multi"], "default": "single",
+                         "description": "'single' = one card per image or PDF page; 'multi' = several cards laid out in "
+                                        "one image (each found card is recognised without a person checking the frames)"},
+                "tags": {"type": "string", "maxLength": 400, "default": "", "description": "Comma-separated tags added to every contact"},
+                "event": {"type": "string", "maxLength": 120, "default": "", "description": "Where the cards were collected"},
+                "source": {"type": "string", "maxLength": 120, "default": "", "description": "How the cards were obtained"},
+                "memo": {"type": "string", "maxLength": 2000, "default": "", "description": "A note added to every contact"},
+                "wait": {"type": "integer", "minimum": 10, "maximum": 600, "default": 120,
+                         "description": "Seconds to wait for recognition before returning partial results"}},
+        output="json",
+        output_desc="JSON with contacts (fields with key / value / status / reason) and a review_url for a person to "
+                    "check the results on the site. Batches are deleted automatically after the site's retention period.",
+        example={"tool": "business_card_read", "files": ["<image_id>"], "params": {"mode": "single"}}),
+    McpTool(
         "meeting_transcribe", "meeting-transcribe", "extract", "會議錄音轉逐字稿",
         "Transcribe a meeting recording with speaker labels (speech service; long recordings take minutes).",
         "/tools/meeting-transcribe/api/meeting-transcribe", "audio", 1, 1, default_on=False,

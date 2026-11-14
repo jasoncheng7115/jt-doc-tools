@@ -32,6 +32,7 @@
         ('transit_proof', '乘車證明原始檔', 'transit_proof_days', 'days'),
         ('official_doc_cases', '公文撰擬案件', 'official_doc_cases_days', 'days'),
         ('speech_audio', '會議錄音', 'speech_audio_days', 'days'),
+        ('business_cards', '名片辨識批次', 'business_cards_days', 'days'),
         ('temp', '暫存上傳 / 工作檔', 'temp_hours', 'hours'),
         ('jobs', '作業結果檔', 'jobs_hours', 'hours'),
         ('job_records', '作業紀錄（我的作業）', 'job_records_days', 'days'),
@@ -44,6 +45,7 @@
         'temp': tr('不屬於任何保留期內作業的暫存檔（上傳的原檔、預覽圖等），共 {0} 個').replace('{0}', (stats.temp.files or 0)|string),
         'official_doc_cases': tr('輸入、草稿與版本，共 {0} 件；已刪除的從刪除那天起算').replace('{0}', (stats.official_doc_cases.files or 0)|string),
         'speech_audio': tr('轉逐字稿上傳的原始錄音，共 {0} 個；還在排隊或辨識中的不會刪。逐字稿跟著「作業結果檔」的保留期').replace('{0}', (stats.speech_audio.files or 0)|string),
+        'business_cards': tr('原圖、裁圖、辨識結果與校對過的聯絡人，共 {0} 批；依建立時間起算').replace('{0}', (stats.business_cards.files or 0)|string),
         'jobs': tr('保留期內或還在進行的作業擁有的檔案：結果檔、「開啟」要讀的資料與歸屬紀錄，共 {0} 個').replace('{0}', (stats.jobs.files or 0)|string),
       } %}
       {% for stat_key, label, setting_key, unit in rows %}

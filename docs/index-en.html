@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Jason Tools Document Toolbox: an integrated PDF / Office document platform. 53 tools in one place: form filling, stamps and signatures, watermarks, OCR, pre-submission checks, de-identification, PDF encryption, hidden-content scanning, diffing, sentence translation, e-invoice processing, VAT number lookup and more. Optional LDAP / AD authentication, SSO (OIDC / SAML / Kerberos), role permissions, auditing and log forwarding. Nothing goes to the cloud; your data stays with you.">
+<meta name="description" content="Jason Tools Document Toolbox: an integrated PDF / Office document platform. 54 tools in one place: form filling, stamps and signatures, watermarks, OCR, pre-submission checks, de-identification, PDF encryption, hidden-content scanning, diffing, sentence translation, e-invoice processing, VAT number lookup and more. Optional LDAP / AD authentication, SSO (OIDC / SAML / Kerberos), role permissions, auditing and log forwarding. Nothing goes to the cloud; your data stays with you.">
 <title>Jason Tools Document Toolbox; an all-in-one PDF and Office document platform</title>
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
@@ -90,7 +90,7 @@
     <div class="hero-eyebrow">Open source · no cloud · runs in your own server room</div>
     <h1 class="hero-title">
       Stop uploading company documents to online PDF tools<br>
-      <span class="hero-title-accent">53 tools here: self-hosted, open source, under your control</span>
+      <span class="hero-title-accent">54 tools here: self-hosted, open source, under your control</span>
     </h1>
     <p class="hero-lead">
       Auto-filled forms, stamps and signatures, watermarks, redaction of personal data, PDF encryption, metadata removal, hidden-content scanning, document comparison, page editing…
@@ -107,7 +107,7 @@
       </a>
     </div>
     <div class="hero-shot">
-      <img src="screenshots/en/index.png" alt="Jason Tools Document Toolbox main screen; all 53 tools" loading="lazy">
+      <img src="screenshots/en/index.png" alt="Jason Tools Document Toolbox main screen; all 54 tools" loading="lazy">
     </div>
   </div>
 </section>
@@ -160,7 +160,7 @@
 <section id="features" class="section section-light">
   <div class="container">
     <div class="section-eyebrow">Core features</div>
-    <h2 class="section-title">53 tools in 5 categories</h2>
+    <h2 class="section-title">54 tools in 5 categories</h2>
     <p class="section-lead">Every tool has its own page, one click away in the sidebar. Every result can be downloaded as a PDF or an image.</p>
     <div class="ofc-callout">
       <span class="ofc-callout-ic">
@@ -307,6 +307,10 @@
           <li>
             <span class="fl-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="14.01"/><line x1="17" y1="14" x2="17" y2="14.01"/><line x1="20" y1="14" x2="20" y2="14.01"/><line x1="14" y1="17" x2="17" y2="17"/><line x1="20" y1="17" x2="20" y2="17.01"/><line x1="14" y1="20" x2="14" y2="20.01"/><line x1="17" y1="20" x2="20" y2="20"/></svg></span>
             <div class="fl-text"><span class="fn">e-Invoice processing</span><span class="fd">Scan a Taiwan e-invoice QR code to read the invoice number, date, amount and tax ID, then fill in the seller, industry and accounting category (rules plus optional LLM); expense and period checks included, with export in seven formats</span></div>
+          </li>
+          <li>
+            <span class="fl-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2.2"/><line x1="14" y1="10" x2="18" y2="10"/><line x1="14" y1="14" x2="18" y2="14"/></svg></span>
+            <div class="fl-text"><span class="fn">Business card reader</span><span class="fd">Import photos or scans of business cards in one go, split a photo of several cards automatically, review each field against the image and export a spreadsheet or address book (VCF); keep them in a personal or shared card book for later lookup and merge them with a previous export or a contact list you already have, with duplicates removed (Beta)</span></div>
           </li>
           <li>
             <span class="fl-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"/><line x1="4" y1="10" x2="20" y2="10"/><circle cx="8" cy="15" r="1.2"/><circle cx="16" cy="15" r="1.2"/></svg></span>
@@ -965,9 +969,9 @@
 <section id="llm" class="section section-light">
   <div class="container">
     <div class="section-eyebrow">AI extras (optional)</div>
-    <h2 class="section-title">14 tools with optional LLM AI enhancements</h2>
+    <h2 class="section-title">15 tools with optional LLM AI enhancements</h2>
     <p class="section-lede">
-      Connect your own LLM (local Ollama, an LLM gateway such as LiteLLM, vLLM, LM Studio or a DGX Spark) to turn on smart options in these 14 tools. <b>The core tools do not depend on an LLM at all</b> and work 100% without one.
+      Connect your own LLM (local Ollama, an LLM gateway such as LiteLLM, vLLM, LM Studio or a DGX Spark) to turn on smart options in these 15 tools. <b>The core tools do not depend on an LLM at all</b> and work 100% without one.
     </p>
 
     <div class="llm-grid">
@@ -1109,6 +1113,16 @@
         <h3>e-Invoice processing (accounting category)</h3>
         <p>After scanning, invoices are sent to the LLM in batches: by seller tax ID, company name and industry: to decide the accounting category (fuel, meals, postage …). Rules run first and the LLM fills the gaps; your own rules can override both.</p>
         <p class="llm-effect"><b>Result</b>: classified automatically before filing an expense claim, with no picking of accounts by hand</p>
+      </article>
+
+      <article class="llm-card">
+        <div class="llm-card-head">
+          <span class="llm-card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="12" r="2"/><path d="M13 10h5"/><path d="M13 14h3"/></svg></span>
+          <div class="llm-tag">text + vision</div>
+        </div>
+        <h3>Business card reader (optional AI assist)</h3>
+        <p>By default only OCR and rules are used. Once an administrator turns on AI assist: when merging a contact list, it judges whether two entries the rules cannot decide are the same person (only those two entries' field text is sent); during review it suggests which field each item belongs to (text mode sends only that card's OCR text, image mode sends that one cropped card image).</p>
+        <p class="llm-effect"><b>Result</b>: AI only makes suggestions, a person always confirms them, and anything that differs from the OCR text is flagged</p>
       </article>
 
     </div>

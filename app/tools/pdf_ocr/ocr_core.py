@@ -70,6 +70,9 @@ def _tesseract_image_to_data(img_bytes: bytes, langs: str, preprocess: bool = Tr
             "top": int(data["top"][i]),
             "width": int(data["width"][i]),
             "height": int(data["height"][i]),
+            # Tesseract 自己判定的「哪一行」（區塊-段落-行）；中文字的框高低不一，靠座標併行會把同一行拆散
+            # （名片辨識用；其他呼叫端不看這個鍵）
+            "line": f'{data.get("block_num", [0] * n)[i]}-{data.get("par_num", [0] * n)[i]}-{data.get("line_num", [0] * n)[i]}',
         })
     return out
 

@@ -48,3 +48,37 @@ def translate(text: str, locale: str | None = None) -> str:
     if not text or not locale or locale == DEFAULT_LOCALE:
         return text
     return catalog(locale).get(text, text)
+
+
+#: 伺服器組好的訊息裡會變的部分：「…」引號裡的字（檔名、原文）、獨立的數字（不含 Big5、UTF-8 這種字裡的數字）
+_MSG_VARS = __import__("re").compile(r"「([^」]*)」|(?<![A-Za-z\d\-.])\d+(?:[.,]\d+)*(?![A-Za-z\d])")
+
+
+def translate_message(text: str, locale: str | None = None) -> str:
+    """翻譯**伺服器已經組好**的訊息（API 錯誤）：先整句查；查不到就把「…」與數字換成 `{0}` `{1}`… 再查，
+    查到就把原本的值填回去（引號裡的字照原樣，例如檔名）。都查不到就原樣回傳中文。
+
+    前端的 `tr()` 只接得住「變數全是數字」的句子（見 `static/js/i18n.js`），檔名這種要在產生的地方翻 ——
+    這支就是給伺服器那一端用的。
+    """
+    if not text or not locale or locale == DEFAULT_LOCALE:
+        return text
+    cat = catalog(locale)
+    if text in cat:
+        return cat[text]
+    vals: list[str] = []
+
+    def sub(m):
+        i = len(vals)
+        if m.group(1) is not None:
+            vals.append(m.group(1))
+            return "「{%d}」" % i
+        vals.append(m.group(0))
+        return "{%d}" % i
+    key = _MSG_VARS.sub(sub, text)
+    if not vals or key not in cat:
+        return text
+    out = cat[key]
+    for i, v in enumerate(vals):
+        out = out.replace("{%d}" % i, v)
+    return out

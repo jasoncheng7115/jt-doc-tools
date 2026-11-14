@@ -618,6 +618,42 @@ SAML 由 `tests/test_sso_saml_e2e.py` 涵蓋（自架 IdP、真 xmlsec 簽章，
 會出現三條假失敗；②OU 的 subject key 是**精確字串比對**，要用目錄實際回傳的
 大小寫（管理介面指派時寫的也是目錄回來的那一份）。
 
+### 1.14 名片辨識（`tests/test_business_card_detect.py` + `tests/test_business_card_extract.py` + `tests/test_business_card_export.py` + `tests/test_business_card_api.py` + `tests/test_business_card_page_browser.py` + `tests/test_business_card_site_features.py` + `tests/test_business_card_books.py` + `tests/test_business_card_phase2.py` + `tests/test_business_card_importer.py` + `tests/test_business_card_messages_translated.py` + `tests/test_no_business_card_content_in_public.py`）🆕 v1.17.40（第 2、3 版 v1.17.41）
+
+- 切卡（合成資料 `tests/bc_synth.py` 有標準答案；判準是角點誤差 ÷ 卡片短邊）：單卡斜拍＋透視 < 3%、一頁 6 張含 2 張直式全部找到且 < 4%、
+  兩張緊貼沿交界拆開、卡面左藍右白的色塊分界不被當成交界、空背景回 0 張（不當成功）、卡片佔滿畫面時用整張圖、使用者框位不收 NaN / 無限大 / 太小 / 格式錯。
+- 擷取：典型中文名片每一欄、最大字不一定是姓名、電話種類 / 標籤 / 分機（含 `+886`、`0800`、`Te|` 誤認）、國碼沒印不補、
+  被遮住的號碼標需確認、統編檢查碼（開頭 0 保留、不依公司名稱猜）、Email 缺 @ 標需確認、英文名片與兩行地址、職務詞＋職稱不當姓名、
+  地名不當姓名、低信心標需確認、通訊帳號的數字不當電話、每個欄位帶框位；QR（vCard / MECARD / 網址、一般文字不當指令）、QR 與印刷不同並列、相同不重複；
+  Tesseract 的行號併行、相距很遠的兩段拆開。
+- 匯出：多值欄動態展開不截斷、CSV（BOM、跳脫、公式中和與原值）、XLSX 每格文字型別 / 凍結 / 純資料沒有篩選 / 可篩選是 Excel 表格、
+  ODS 原生且 `display-filter-buttons`、三種表格筆數與欄名一致、VCF（CRLF、跳脫、折行還原、多 TEL / EMAIL）、JSON 保留原值。
+- API（OCR 換成假的）：單卡完整流程（備註帶到每一位、未確認匯出 409、確認後預覽筆數、五種格式）、多卡改框（刪 / 補 / 轉、只重跑改過的卡）、
+  重新辨識保留人工修改、同一張卡加第二位、PDF 多頁、有密碼的 PDF / 不支援的格式 / 超過檔數 / 解析度炸彈 / HEIC 無解碼元件、
+  改框與欄位的輸入檢查、立即清除刪檔、保留期限到期刪除、亂填編號 404、**別人的批次每一支端點都 404**、沒有工具權限進不來、稽核不記聯絡人內容。
+- 站內共通（`test_business_card_site_features.py`）：保留天數讀「檔案保留 / 清理」的 `business_cards_days`（預設 30、0 / -1 不刪、依建立時間起算所以改設定舊批次也跟著改、辨識中的不刪、`sweep_all` 照存的設定清、統計與管理頁有這一列）、刪除帳號一併刪他的批次（別人的不動；變異驗證過）、用手機接續 QR、畫面有「存到工作區」（只對 XLSX / ODS / JSON）、完成通知（張數 / 耗時 / 連結、不含名片內容、短於門檻 / 通知關閉 / 不在通知清單不送、送給擁有者、啟用登入時沒有歸屬不送、整批只送一次）。
+- 改收件模式（使用者 2026-11-13：一張圖片多張、模式忘了選）：只改指定頁、其他頁的確認結果保留、改成多張停在確認範圍且不先辨識、改回單張直接辨識、**背景辨識中改模式要先停下**（不可以被背景改回校對、不可以留下指向已刪卡面的聯絡人；變異驗證過）、輸入檢查；單卡模式「看起來有好幾張」改用一般大小下限（一頁 6 張每張約 7%，原本 8% 的下限永遠不提示；173 張真實照片框位 0 張變、提示多 7 張其中 5 張確實多張）。
+- 全部儲存 / 全部確認：只存不確認、排除的不會被拉回、有一筆不對整批不存、別人的聯絡人 404。CSV 編碼：預設 UTF-8 含 BOM、不含 BOM、Big5（cp950）、Big5 沒有的字回 422 並在預覽先講。
+- 統編被當成電話（使用者實測回報）：標籤認錯的十幾種寫法（破折號、注音ㄧ、形近字、間隔號、斜線、英文 VAT / Tax ID / GUI）、標籤在上一行、沒有標籤的 8 碼非 0 開頭、真的電話不被誤當統編、檢查碼過了不因信心低標需確認、地址與統編同一行各自切開且各框各的；姓名與手機同一行、中文職稱＋英文姓名同一行。真實樣本 183 張：統編 22 → 29、姓名 41 → 43、其他欄位不減。
+- 畫面（真瀏覽器）：之前的批次、未啟用登入寫明共用、確認範圍（6 個框、新增範圍、四個角）、校對（點欄位框出原文並放大、儲存並確認）、匯出預覽、手機寬度不橫向捲動。
+- 真實樣本（維基共享資源「台灣的名片」，真人資料、只在開發機）：`temp_pdfs/business_cards/_eval/eval_detect.py single|multi <輸出前綴>` 畫框拼總覽逐張目視，
+  改切卡前後各跑一次比對（`json` 檔逐張比 flags）。
+- 名片簿（`test_business_card_books.py`）：個人名片簿第一次用到自動建立、**別人的個人名片簿每一支端點都 404**、共用名片簿 `view` 只能查詢 / 匯出（改、合併、刪除、記互動 403）、
+  不是成員 404、管理員管理名片簿與成員但看不到裡面的人、成員可以是使用者 / 群組 / 組織單位（沿用 `permissions.subjects_for_user`）；
+  存進名片簿依 Email → 手機 → 姓名＋公司 找同一人、合併多一張名片紀錄（含名片圖）而舊資料留在歷史名片；查詢關鍵字要逐字跳脫（`%` `_` 不當萬用字元）；
+  每本各自的保留期限（依最後更新起算、0 永久、個人名片簿受管理員上限）、到期連名片圖一起刪、刪除帳號刪他的個人名片簿而共用的留著；稽核不含姓名與關鍵字；
+  舊版資料庫升上來（`_m2_books`）原本的批次與聯絡人都還在。
+- 第 2 版其他（`test_business_card_phase2.py`）：同一批合併（正反面、同一人；外文欄位、電話與 Email 不重複）與解除合併（回到合併前、沒合併過 409）、
+  合併提示、批次套用備註、重新辨識顯示差異、辨識走全站作業（「我的作業」有這一筆、`view_url` 回到那一批、取消會停）、一次完成 API（`wait`、`done=false` 之後接著讀）；
+  **AI 協助預設關閉、全站 LLM 與管理員開關兩道都要開（否則 409）**、建議一律 `status: check`、只送那一組或那一張、名片上的字當資料不當指令。
+- 清單整合（`test_business_card_importer.py`）：**之前從這裡匯出的 VCF / JSON 也收**（每一欄對得上、自己跟自己比每一位都是「相同」；
+  手機 / 通訊錄的 vCard：2.1 quoted-printable、群組前綴、折行、只有英文名放外文姓名）、CSV（UTF-8 / Big5 / BOM）/ XLSX / ODS 讀進來、欄名自動對應（中英日常見寫法）、
+  新增 / 相同 / 補上 / 衝突 / 沒配到的列照原樣保留、**好幾列都符合時挑最像且沒被配走的那一列**（之前匯出的檔裡正反面是兩列時，
+  合併完同一個人不會變兩份：`test_business_card_phase2.py::test_previous_export_merges_without_duplicates`，VCF / JSON / XLSX，變異驗證過）、人工指定配對、下載保留原本所有列與欄而且順序不變、公式中和、上限（20 MB、5,000 列、100 欄）、舊版 .xls 不收。
+- 伺服器訊息翻譯（`test_business_card_messages_translated.py`）：工具每一個錯誤訊息在英日介面都有翻譯（含帶數字與「」的訊息）。
+- 名片內容不外流（`test_no_business_card_content_in_public.py`）：真實樣本與實測名片上的號碼、Email、網域、姓名、公司不得出現在公開樹與 commit 訊息
+  （`tools/check_card_content.py`，命中也不印出內容；`sync-to-github.sh` 與 commit-msg 檢查都會跑）。
+
 ### 1.98 資料庫 schema 遷移 —— 每一支都要有「舊資料升上來」的測試 🆕 v1.14.95
 
 **全新資料庫升級測不到災難** —— 表本來就是空的，怎麼搬都不會少東西。
@@ -646,6 +682,9 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - **`app/core/kb/store.py`**（知識庫；在子資料夾裡，上面那條自動比對不會掃到，這裡手動列）：
   - [ ] **`_m2_gov_imports`**：只新增 `kb_gov_items`、`kb_gov_versions` 兩張表，不重建既有的表；
         既有的 v1 知識庫升上來資料集與文件都還在（`tests/test_kb_gov_import.py::test_migration_from_v1_keeps_existing_data`）
+- **`app/tools/business_card_reader/store.py`**（名片辨識；在工具資料夾裡，這裡手動列）：
+  - [ ] **`_m2_books`**（v1.17.41）：新增名片簿、成員、人、名片紀錄、互動五張表，`bc_contacts` 加 `merged`（ADD COLUMN）；
+        第 1 版的批次與聯絡人升上來都還在（`tests/test_business_card_books.py::test_upgrade_from_v1_keeps_batches`）
 
 ### 1.99 全部自動化測試一覽 🆕 v1.14.95
 
@@ -660,7 +699,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **555 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **566 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -724,6 +763,16 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_boxed_digits_and_sublabel.py` | 兩種讓欄位「有偵測到卻填不進去」的版型 |
 | `test_broken_input_no_500.py` | 任何工具端點收到壞輸入都不可以回 500 |
 | `test_browser_profiles_are_cleaned_up.py` | 無頭瀏覽器每次啟動都要給**自己的**設定檔目錄，用完要刪 |
+| `test_business_card_api.py` | 名片辨識 API：流程、改框、輸入檢查、匯出範圍、立即清除、存取控制（別人的批次一律 404） |
+| `test_business_card_books.py` | 名片簿：個人 / 共用、查詢與編修權限、存進名片簿與找同一人、合併、互動紀錄、保留期限、刪除帳號、升級 |
+| `test_business_card_detect.py` | 名片辨識：切卡（四角框偵測、拉正、使用者框位檢查） |
+| `test_business_card_export.py` | 名片辨識：匯出（CSV / XLSX / ODS / vCard / JSON）。資料全部是杜撰的 |
+| `test_business_card_extract.py` | 名片辨識：OCR 行 → 欄位（規則擷取）、QR、行的組合。資料全部杜撰 |
+| `test_business_card_importer.py` | 名片辨識：匯入既有聯絡人清單、比對、合併。資料全部是杜撰的 |
+| `test_business_card_messages_translated.py` | 名片辨識伺服器端的訊息（API 錯誤、欄位「需確認」的原因）英文、日文介面都要有翻譯 |
+| `test_business_card_page_browser.py` | 名片辨識畫面（真瀏覽器）：之前的批次、確認範圍（框、新增範圍）、校對（點欄位框出原文＋放大、儲存並確認）、 |
+| `test_business_card_phase2.py` | 名片辨識第 2 版：同一批合併（正反面 / 同一人）與解除、辨識走「我的作業」、跟手上的名片清單整合、AI 協助（選用） |
+| `test_business_card_site_features.py` | 名片辨識跟站內其他工具一樣該有的東西：保留期限（管理員設定）、刪除帳號一併清、存到工作區、 |
 | `test_button_icons_are_consistent.py` | 按鈕圖示的兩條檢查 |
 | `test_cancel_actually_stops_the_work.py` | 按下取消要**真的把工作停掉**，不是只把狀態改成「已停止」 |
 | `test_changelog_does_not_quote_people.py` | 公開的更新記錄裡不可以引述使用者 / 客戶說的話 |
@@ -958,6 +1007,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_net_ssl_corp_tls.py` | 企業 TLS 攔截環境的 Python 端信任修正（2026-06-30 客戶回報） |
 | `test_new_tools_input_boundaries.py` | 三支新工具（書籤與目錄 / 騎縫章 / 頁面尺寸統一）的輸入邊界 |
 | `test_no_blocking_endpoints.py` | async 端點裡不可以直接做重活 —— 那會把整站鎖住 |
+| `test_no_business_card_content_in_public.py` | 名片內容不可以公開（使用者 2026-11-14：「那都是真實資料，這是鐵則」） |
 | `test_no_duplicate_top_level_defs.py` | 同一個模組裡不可以有兩個同名的頂層函式或類別 |
 | `test_no_dynamic_style_injection.py` | 前端 JS 不可以動態注入 `<style>` —— CSP 會把它整段擋掉 |
 | `test_no_entity_inside_tr.py` | 樣板的 `tr('…')` 裡面不可以寫 HTML 字元參照（`&#10;` / `&nbsp;` …） |
@@ -2141,6 +2191,36 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
       SHARP NAS（public / shared 的權限）；各用兩個一般帳號驗證看不到彼此的個人文件，通過才拿掉「實驗功能」
 - [ ] **實機驗證（拿到設備後）**：C5571 → C5570 → C4570 → C6680 各跑一次連線測試，下載報告存進 docs-share/mfp-fetch/
 
+#### 名片辨識 (business-card-reader) 🆕 v1.17.40（Beta）
+- [ ] **每張圖片一張名片**：手機連拍 / 多選 10 張以上 → 一次送出、直接辨識；每張都有結果或看得到的錯誤，失敗一張可以單獨「重新辨識」
+- [ ] **一張圖片多張名片**：平放 6 張（含直式）拍一張、再加一頁 A4 掃描 → 每頁顯示「共偵測到 N 張」與編號；拖四角、新增範圍、移除、旋轉、復原框位都能用；
+      按「辨識全部 N 張」才開始；欄位不會跨張串在一起；漏框靠手動補的不算自動成功
+- [ ] 相貼的兩張、白卡白底、反光、裁到邊：可以修框、重拍或排除，其他張照常
+- [ ] 匯入時的整批備註（活動 / 來源 / 標籤 / 備註）與每張卡的備註，出現在聯絡人的備註與匯出的對應欄位
+- [ ] 校對：點欄位 → 卡面框出原文、下方放大；需確認的欄位有原因（號碼位數不對、統編檢查碼、QR 與印刷不同、信心低）；只看待確認；
+      儲存並確認、排除、同一張再加一位；重新辨識保留人工改過的欄位
+- [ ] 匯出：範圍「已確認 / 全部」與筆數預覽、略過幾筆講清楚；XLSX 與 ODS 各兩種（純資料 / 打開就能篩選與搜尋）用 Excel、OxOffice 實際打開：
+      電話 `02` / `+886` / 分機 `001` / 統編開頭 0 都還在、篩選下拉有搜尋框；CSV 用文字匯入核對；VCF 匯入 Apple 通訊錄與 Google 通訊錄
+- [ ] 關掉頁面辨識照常進行，回來從「之前的辨識批次」接著校對；「立即清除」後原圖與裁圖都不在
+- [ ] 手機直式：連拍、修框、切換「原圖 / 欄位」校對、下載都能完成，不需要桌機
+- [ ] 未啟用登入時頁面寫明「這台電腦上所有人共用」；啟用登入時別人看不到我的批次
+- [ ] 單卡模式上傳一張拍了好幾張名片的照片 → 校對畫面出現「第 N 頁看起來…」→ 按「改成一張圖片多張名片」→ 停在確認範圍、其他頁的結果還在；確認範圍頁按「改成每張圖片一張名片」→ 直接辨識
+- [ ] 改了欄位沒存就切到別張再回來 → 修改還在、上方寫「N 位改過還沒儲存」→「全部儲存」一次存；「全部確認」會先講有幾位還有需確認的欄位；有沒存的修改時關分頁瀏覽器會先問
+- [ ] 匯出：按 XLSX / ODS 跳出「打開就能篩選與搜尋（建議）/ 純資料」；按 CSV 跳出編碼（UTF-8 含 BOM 標建議、不含 BOM、Big5；資料有 Big5 沒有的字時 Big5 反灰並寫出是哪些字）；Excel 與 OxOffice 實際打開三種 CSV 核對中文
+- [ ] 「用手機接續」：電腦顯示 QR → 手機掃、登入同一帳號、拍兩張 → 電腦的「之前的辨識批次」5 秒內出現；匯出勾「存到工作區」→ 工作區有那份 XLSX；整批超過通知門檻時收到通知、內容沒有名片上的字
+- [ ] 🆕 v1.17.41 **名片簿**：校對完按「存進名片簿」→ 選個人或共用 → 預覽列出可能是同一人的 → 選合併 / 新增 → 切到「名片簿」分頁查得到；
+      打開那個人看得到歷史名片（含名片圖）、記一筆互動；同一人換了公司再存一次 → 目前資料換新、舊名片留在歷史
+- [ ] 共用名片簿：管理員在「設定 → 名片簿」（`/admin/business-cards`）建一本、加群組為「可查詢」、加一個人為「可編修」→ 兩個帳號各自登入確認權限；
+      不是成員的帳號看不到；管理員自己不是成員時看不到裡面的人
+- [ ] 跟手上的清單整合：上傳一份 XLSX / CSV（含不認得的欄）→ 欄位對應 → 逐位選新增 / 合併 / 略過 → 下載的檔案原本的列與欄都在、順序沒變、新的人在最後；按「完成」後暫存檔刪掉
+- [ ] 同一批正反面：一張名片正反面兩張照片 → 出現「可能是同一張的正反面」→ 合併 → 英文面姓名進外文欄位；「解除合併」回到原樣
+- [ ] AI 協助（管理員打開、全站 LLM 啟用）：校對時「AI 建議」只出現在那一位、每欄要按才套用、畫面寫出模型與主機；關掉任一道開關按鈕消失
+- [ ] 低信心的字出現「另一種讀法」、按了才換；手機「連拍」一次拍多張、每張都進同一批
+- [ ] 合併之前匯出的檔案：同一批先匯出 VCF、JSON、XLSX 各一份 → 校對區按「合併之前匯出的檔案」各上傳一次 → 比對全部是「相同」→ 下載（試算表 / VCF / JSON 都試）沒有重複的人；
+      再拿手機通訊錄匯出的 .vcf 試一次，英文名在外文姓名
+- [ ] 校對畫面「辨識引擎」後面有耗時（整張與文字辨識秒數）；匯入的兩種模式各有示意圖（桌機與手機寬度）；校對區標題靠左；
+      把頁面捲到下載按鈕在視窗底部 → 按 XLSX / CSV，選單往上開、整個看得到
+
 #### 乘車證明整理 (transit-proof) 🆕 v1.14.17
 - [ ] 上傳台鐵 / 高鐵乘車證明 PDF → 日期、交通工具、起訖、費用成表
 - [ ] 多份批次 → 單一彙整表；CSV 匯出欄位齊全（公式注入已由
@@ -2575,7 +2655,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] Windows **沒有 `sudo`**：文件裡的指令要分平台寫
       （Linux/macOS `sudo jtdt update`；Windows 先開系統管理員 PowerShell）。
 
-## 4. API 覆蓋檢查 🆕（v1.8.55 起完整列出，現 53 個工具）
+## 4. API 覆蓋檢查 🆕（v1.8.55 起完整列出，現 54 個工具）
 
 每個工具至少 1 個 `/api/<tool-id>` endpoint（路徑：`/tools/<tool-id>/api/<tool-id>` 或 `/tools/<tool-id>/convert`）。發版前 curl 抽測：
 
@@ -2674,6 +2754,30 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `/api/vat-lookup/{vat}` (path-style GET in main.py)
 - [ ] `/tools/einvoice-scan/api/einvoice-scan` + `/api/backend-status`
 - [ ] `/tools/submission-check/api/self-entities` (CRUD)
+- [ ] `/tools/business-card-reader/api/batches`（Beta，v1.17.40）— POST files[] + mode（single / multi）→ 201 批次；
+      多卡模式停在 `frames`，改框後再辨識；匯出五種格式、沒有可匯出的回 409。其餘端點（別人的批次每一支都 404）：
+      `GET/PATCH/DELETE /tools/business-card-reader/api/batches/{bid}`、
+      `GET /tools/business-card-reader/api/batches/{bid}/pages/{pid}/image`、`PUT /tools/business-card-reader/api/batches/{bid}/pages/{pid}/cards`、
+      `POST /tools/business-card-reader/api/batches/{bid}/mode`（改收件模式：只動指定頁、辨識中先停）、
+      `POST /tools/business-card-reader/api/batches/{bid}/contacts/save-all`（全部儲存 / 全部確認：先整份檢查、排除的不確認）、
+      `POST /tools/business-card-reader/api/batches/{bid}/recognize`、`GET /tools/business-card-reader/api/batches/{bid}/cards/{cid}/image`、
+      `POST /tools/business-card-reader/api/batches/{bid}/cards/{cid}/retry`、`POST /tools/business-card-reader/api/batches/{bid}/cards/{cid}/contacts`、
+      `PUT/DELETE /tools/business-card-reader/api/batches/{bid}/contacts/{ctid}`、
+      `POST /tools/business-card-reader/api/batches/{bid}/export/preview`、`POST /tools/business-card-reader/api/batches/{bid}/export`
+- [ ] 名片辨識第 2、3 版（v1.17.41）：
+      `POST /tools/business-card-reader/api/business-card-reader`（一次完成：`wait` 10～600 秒、`done=false` 之後用批次 API 接著讀、結果未經人工校對）；
+      `POST /tools/business-card-reader/api/batches/{bid}/contacts/merge`、`POST /tools/business-card-reader/api/batches/{bid}/contacts/{ctid}/unmerge`（沒合併過 409）、
+      `POST /tools/business-card-reader/api/batches/{bid}/contacts/{ctid}/ai-suggest`、`GET /tools/business-card-reader/api/ai`（AI 沒開 409、建議一律 `status: check`）；
+      `POST /tools/business-card-reader/api/batches/{bid}/save-to-book/preview`、`POST /tools/business-card-reader/api/batches/{bid}/save-to-book`；
+      `GET /tools/business-card-reader/api/books`、`GET/PATCH /tools/business-card-reader/api/books/{book_id}`、`POST /tools/business-card-reader/api/books/{book_id}/export`、
+      `GET /tools/business-card-reader/api/books/{book_id}/people`、`POST /tools/business-card-reader/api/books/{book_id}/people/merge`、
+      `GET/PUT/DELETE /tools/business-card-reader/api/books/{book_id}/people/{pid}`、`GET /tools/business-card-reader/api/books/{book_id}/people/{pid}/cards/{cid}/image`、
+      `GET/POST /tools/business-card-reader/api/books/{book_id}/people/{pid}/interactions`、`PUT/DELETE /tools/business-card-reader/api/books/{book_id}/people/{pid}/interactions/{iid}`
+      （看不到的名片簿 404、只能查詢卻要修改 403）；
+      `POST /tools/business-card-reader/api/batches/{bid}/list-merge`、`DELETE /tools/business-card-reader/api/batches/{bid}/list-merge/{token}`、
+      `POST /tools/business-card-reader/api/batches/{bid}/list-merge/{token}/plan`、`POST /tools/business-card-reader/api/batches/{bid}/list-merge/{token}/download`、
+      `POST /tools/business-card-reader/api/batches/{bid}/list-merge/{token}/ai-check`（暫存約 2 小時、過期 410、別人的 token 404；
+      上傳收 CSV / XLSX / ODS / VCF / JSON、回 `kind`，下載收五種格式；批次內容的卡面帶 `secs` / `ocr_secs`）
 - [ ] `/tools/transit-proof/api/transit-proof` — POST files[] → JSON `{ok, count, entries, failed}`；
       **認不出的檔不會讓整批失敗**（HTTP 仍 200），要看 `failed` 是不是空的
 - [ ] `/tools/mfp-fetch/api/detect`（Beta，v1.16.84）— POST JSON `{host, port?, scheme?}` → `{ok, token, report}`；
@@ -2847,6 +2951,13 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `POST /admin/knowledge/api/gov/{gid}/download`、`POST /admin/knowledge/api/gov/{gid}/import`、`POST /admin/knowledge/api/gov/{gid}/update`
       — 背景作業（回 `job_id`）；還沒下載就匯入 → 400；同時只能一件 → 409；寫 `kb_import` 稽核
 - [ ] `POST /admin/knowledge/api/gov/packages/{pid}/upload` — 手動上傳下載檔（同一套檢查）；超過上限 → 413；背景處理、失敗原因記在那個下載檔上
+
+### 名片簿（管理員，`/admin/business-cards`）🆕 v1.17.41
+- [ ] `GET /admin/business-cards/api/state` — 個人名片簿保留上限、AI 協助開關與全站 LLM 狀態、共用名片簿清單（只有名稱、人數、保留期限，沒有裡面的人）
+- [ ] `PUT /admin/business-cards/api/settings` — 個人名片簿上限（天，0＝不限）；超出範圍 / 非數字 400
+- [ ] `PUT /admin/business-cards/api/ai` — 打開 / 關閉 AI 協助（文字 / 看圖）；全站 LLM 沒啟用時打開仍不會作用（工具端 409）；寫稽核
+- [ ] `POST /admin/business-cards/api/books`、`PUT/DELETE /admin/business-cards/api/books/{book_id}` — 建立、改名與保留期限、刪除共用名片簿（刪除要輸入名稱確認；個人名片簿不能從這裡改，404）
+- [ ] `PUT /admin/business-cards/api/books/{book_id}/members` — 成員（使用者 / 群組 / 組織單位）與角色 `view` / `edit`；格式錯 400 且原本的成員不變；非管理員 403
 
 ### 用印申請（管理員，`/admin/seal-request`）🆕 v1.17.28
 - [ ] `GET /admin/seal-request/api/state` — 未啟用時 `enabled=false`、每顆章 `mode=direct`；清單只有印章與簽名（沒有 Logo、浮水印）
@@ -3274,7 +3385,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 目前沒有自動化測試碰過，跑 `python tools/report_endpoint_test_coverage.py`，
 那份是**提示不是判決**。
 
-共 **326 支**（工具首頁不列，§2 已逐支驗收）。
+共 **327 支**（工具首頁不列，§2 已逐支驗收）。
 
 **全站（認證 / 帳號 / 工作區 / 介面語言）**
 
@@ -3343,6 +3454,12 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `POST /workspace/save`
 - [ ] `POST /pdf-password/check` — 上傳的 PDF 要不要開啟密碼（只有擁有者密碼的回 false）＋能不能在這裡解；檢查完不留暫存檔；未登入擋
 - [ ] `GET /workspace/thumb/{file_id}`
+
+**business-card-reader（名片辨識）** 🆕 v1.17.40
+
+- [ ] `GET /tools/business-card-reader/handoff-qr` —— 「用手機接續」的 QR Code：回 PNG、`X-Handoff-Url` 是這一頁的網址
+      （經反向代理時用 `X-Forwarded-Proto` / `-Host`，協定只收 http / https）、`no-store`；啟用登入時沒登入進不來；
+      QR 裡只有網址、不帶登入資訊（`tests/test_business_card_site_features.py`）
 
 **doc-deident（文件去識別化）**
 
@@ -6380,6 +6497,26 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > **最高原則：加 i18n 不可以改壞現有功能。** 所以每一個階段的第一條驗收都是
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
+
+### 6.149 v1.17.41 — 名片簿、清單整合、AI 協助（**每次發版必過**）
+
+- [ ] 名片簿存取控制：別人的個人名片簿每一支端點 404、共用名片簿 `view` 改不了（403）、不是成員 404、管理員看不到裡面的人（`tests/test_business_card_books.py`，變異驗證過）。
+- [ ] 刪除帳號一併刪個人名片簿、到期連名片圖一起刪；稽核不含姓名與關鍵字。
+- [ ] AI 協助兩道開關都要開、建議一律要人確認（`tests/test_business_card_phase2.py`）。
+- [ ] 清單整合下載保留原本所有列與欄、順序不變（`tests/test_business_card_importer.py`）。
+- [ ] **名片內容不可進公開檔**：`python tools/check_card_content.py` 回 0（同步腳本與 commit-msg 也會跑）；更新記錄、測試、文件裡的號碼與名字一律杜撰。
+- [ ] 擷取改動前後跑真實樣本比對（開發機 scratchpad 的比較腳本），欄位數不可減少。
+- [ ] 之前匯出的檔（VCF / JSON / XLSX）上傳回來跟同一批合併，同一個人不會變兩份（`test_previous_export_merges_without_duplicates`）。
+- [ ] 校對區標題靠左、下載選單在視窗底部往上開（`test_business_card_page_browser.py`，兩處都變異驗證過）。
+
+### 6.148 v1.17.40 — 新工具「名片辨識」（Beta）（**每次發版必過**）
+
+- [ ] 切卡回歸：改 `detector.py` 前後各跑一次 `temp_pdfs/business_cards/_eval/eval_detect.py single|multi`（真實樣本，只在開發機），
+      比對 `json` 逐張的 flags 與框位，變了的逐張畫出來看（合成資料的角點誤差測試在 `tests/test_business_card_detect.py`）。
+- [ ] 別人的批次每一支端點 404、沒有工具權限的角色進不來（`tests/test_business_card_api.py`）。
+- [ ] 匯出：XLSX / ODS 兩種模式用 Excel 與 OxOffice 打開，電話開頭 0、`+886`、分機 `001`、統編開頭 0 都在；可篩選模式有篩選下拉與搜尋。
+- [ ] 稽核不記聯絡人內容；批次到期與「立即清除」連原圖、裁圖一起刪。
+- [ ] 手機寬度（390）三個區塊不橫向捲動；切換「原圖 / 欄位」。
 
 ### 6.147 v1.17.38 — AI 用印（**每次發版必過**）
 

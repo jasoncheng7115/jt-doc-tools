@@ -2382,6 +2382,155 @@ curl -X POST http://localhost:8765/tools/transit-proof/api/transit-proof \
 （HTTP 仍是 200）。要判斷有沒有漏，看 `failed` 是不是空的，不要只看 HTTP 狀態。
 超過 200 個檔案回 `400`；完全沒帶 `files` 回 `422`。
 
+### 名片辨識
+
+照片或掃描檔裡的名片 → 切卡、辨識、校對 → 聯絡人清單。不需要 LLM；OCR 走「設定 → OCR」的引擎。
+辨識批次只有建立的人看得到（啟用登入時依帳號；未啟用登入時這台電腦上的人共用），別人的批次、不存在的編號一律 404。
+批次預設保留 30 天，到期連同原圖與裁圖一起刪除；可以隨時刪除。
+
+```text
+POST   /tools/business-card-reader/api/batches                         # 建立批次（上傳）
+GET    /tools/business-card-reader/api/batches                         # 我的批次清單
+GET    /tools/business-card-reader/api/batches/{batch_id}              # 批次內容（頁、卡面框、辨識行、聯絡人）
+PATCH  /tools/business-card-reader/api/batches/{batch_id}              # 整批的備註
+DELETE /tools/business-card-reader/api/batches/{batch_id}              # 立即清除
+GET    /tools/business-card-reader/api/batches/{batch_id}/pages/{page_id}/image?max=1600
+GET    /tools/business-card-reader/api/batches/{batch_id}/cards/{card_id}/image?max=0
+PUT    /tools/business-card-reader/api/batches/{batch_id}/pages/{page_id}/cards   # 改框
+POST   /tools/business-card-reader/api/batches/{batch_id}/mode         # 改收件模式（不用重新上傳）
+POST   /tools/business-card-reader/api/batches/{batch_id}/recognize    # 全部辨識（背景）
+POST   /tools/business-card-reader/api/batches/{batch_id}/cards/{card_id}/retry
+POST   /tools/business-card-reader/api/batches/{batch_id}/cards/{card_id}/contacts  # 同一張卡再加一位
+POST   /tools/business-card-reader/api/batches/{batch_id}/contacts/save-all  # 全部儲存 / 全部確認
+POST   /tools/business-card-reader/api/batches/{batch_id}/contacts/merge          # 同一批合併兩位（正反面 / 同一人）
+POST   /tools/business-card-reader/api/batches/{batch_id}/contacts/{contact_id}/unmerge
+POST   /tools/business-card-reader/api/business-card-reader                      # 一次完成：上傳 → 辨識 → 回聯絡人 JSON
+PUT    /tools/business-card-reader/api/batches/{batch_id}/contacts/{contact_id}     # 校對 / 確認 / 排除
+DELETE /tools/business-card-reader/api/batches/{batch_id}/contacts/{contact_id}
+POST   /tools/business-card-reader/api/batches/{batch_id}/export/preview
+POST   /tools/business-card-reader/api/batches/{batch_id}/export
+```
+
+**建立批次**（multipart）：`files`（可多個；JPEG、PNG、PDF，主機有解碼元件時另收 HEIC）、`mode`＝`single`（每張圖片一張名片，建立後直接在背景辨識）
+或 `multi`（每張圖片多張名片，先停在確認範圍，用 `PUT …/cards` 改框後再 `POST …/recognize`）；
+`event`、`source`、`tags`（逗號分隔）、`memo` 是人工補充，套用到這批每一位聯絡人（跟名片原文分開存）。
+一批最多 50 個檔、100 頁、300 張卡面，單檔 40 MB；超過回 400 / 413 並說明怎麼拆批。回 201 與批次內容。
+
+```bash
+curl -X POST http://localhost:8765/tools/business-card-reader/api/batches \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "files=@card1.jpg" -F "files=@card2.jpg" -F "mode=single" -F "event=展場" | jq '.id, .counts'
+```
+
+批次內容的 `counts`：`files`、`pages`、`cards`（卡面）、`cards_done`、`cards_failed`、`cards_pending`、`contacts`（聯絡人，不含排除）、`confirmed`、`check`。
+`status`：`frames`（多卡模式等確認範圍）、`recognizing`、`review`。輪詢到 `cards_pending` 為 0 就辨識完了。
+每張卡面（`pages[].cards[]`）辨識完帶 `engine`（實際用的 OCR 引擎）、`secs`（這張從拉正到擷取完的秒數）與 `ocr_secs`（其中文字辨識的秒數）。
+
+**改框**（JSON）：`{"cards": [{"id"?, "quad": [[x,y]×4], "rotate": 0|90|180|270, "memo"?}], "recognize": true?}`，座標是頁影像的像素；
+沒帶 `id` 的是新增的框，清單裡沒有的框會刪除。框位或角度沒變的卡保留辨識結果，改過的才重新辨識。數值不收 NaN、無限大、太小的框；一頁最多 60 張。
+
+**改收件模式**（JSON）：`{"mode": "multi" | "single", "pages": [頁編號…]?}`，上傳後發現模式選錯時用，不必重新上傳。
+只改指定的頁（省略＝整批），那幾頁重新找卡面、原本的辨識結果與修改清掉，其他頁不動。`multi` 停在確認範圍（`status=frames`）、
+`single` 直接在背景辨識。背景還在辨識時會先等手上那一張做完（最多 60 秒，否則 409）。單卡模式下 `pages[].multi_hint=true` 表示那張圖看起來有好幾張名片。
+
+**聯絡人**：`fields` 是清單，每一項 `{"id", "key", "value", "status", "reason", "source", "ext"?, "label"?, "zip"?, "norm"?}`，
+`key` 是 `name`、`name_en`、`title`、`department`、`company`、`company_en`、`vat`、`mobile`、`phone`、`fax`、`email`、`url`、`address`、`im`；
+電話、Email、地址這類可以有好幾筆。`status`：`auto`（辨識值）、`check`（需確認，`reason` 寫原因）、`confirmed`（人工確認）、`deleted`。
+`source.method` 是 `ocr` / `qr` / `manual`，`source.box` 是那一行在卡面圖上的位置（`[left, top, width, height]`）。
+存檔：`PUT …/contacts/{id}` 帶 `fields`（整份）、`notes`（`event` / `source` / `tags` / `memo`）、`status`（`check` / `confirmed` / `excluded`）；
+`status=confirmed` 時這位的每個欄位一併標成人工確認。重新辨識（`retry`）保留人工改過、確認過的欄位。
+**全部儲存**：`POST …/contacts/save-all` 帶 `{"items": [{"id", "fields"?, "notes"?}], "confirm_all"?: true}`，一次存好幾位；
+先整份檢查（有一筆不對就整批不存），`confirm_all=true` 另把所有沒排除、還沒確認的聯絡人標成已確認（欄位一併算人工確認）。回 `saved`、`confirmed` 與批次內容。
+
+**匯出**（JSON）：`format`＝`csv` / `xlsx` / `ods` / `vcf` / `json`；`scope`＝`confirmed`（預設）/ `all`（含待確認）/ `selected`（另帶 `ids`）；
+試算表 `table=true` 打開就有篩選與搜尋（XLSX 是 Excel 表格、ODS 是自動篩選），`false` 純資料；`lang`＝`zh`（中文欄名）/ `en`（英文代碼）；
+`columns` 可選欄位與順序；CSV 另有 `encoding`（`utf-8` 預設 / `big5`；Big5 沒有的字回 422，不會無聲變成問號）、`bom`（預設 true，只對 UTF-8）與 `safe`（預設 true：`=`、`+`、`-`、`@`、tab、換行或前置空白開頭的值前面加單引號）；
+JSON 另有 `include_source`。一人一列，第二支以後的電話、Email 等各自一欄，欄數依這次匯出最多的那一位展開。
+電話、分機、郵遞區號、統編在 XLSX、ODS 都是文字型別。沒有任何一位可以匯出時回 409。`export/preview` 回 `count`、`headers`、前 5 列、`skipped_check`、`excluded`，以及 `big5_missing`（Big5 沒有的字，最多 10 個）與 `big5_missing_count`。
+
+```bash
+curl -X POST http://localhost:8765/tools/business-card-reader/api/batches/BATCH_ID/export \
+  -H "Authorization: Bearer YOUR_TOKEN" -H "Content-Type: application/json" \
+  -d '{"format": "xlsx", "scope": "all", "table": true}' -OJ
+```
+
+稽核：建立批次 `business_card_batch`、改收件模式 `business_card_mode`、全部確認 `business_card_confirm_all`、匯出 `business_card_export`、立即清除 `business_card_delete`（只記批次編號、筆數與格式，不記聯絡人內容）。
+
+**一次完成**（multipart，給程式與 MCP 用）：`files`、`mode`、`event` / `source` / `tags` / `memo` 同建立批次，另有 `wait`（10～600 秒，預設 120）。
+多卡模式自動找到的每一張直接辨識（沒有人確認範圍）。回 `batch_id`、`done`（`false` ＝還沒做完，之後用批次 API 接著讀）、`counts`、
+`contacts`（每位的 `fields`：`key` / `value` / `status` / `reason`）與 `review_url`。**結果未經人工校對**：`status` 是 `check` 的欄位要人確認。
+
+```bash
+curl -X POST http://localhost:8765/tools/business-card-reader/api/business-card-reader \
+  -H "Authorization: Bearer YOUR_TOKEN" -F "files=@card.jpg" -F "mode=single" | jq '.contacts[0].fields'
+```
+
+**同一批合併**：`POST …/contacts/merge` 帶 `{"keep", "other"}`，other 併進 keep（英文面的姓名、公司放進外文欄位；電話、Email 不重複），
+卡面都算 keep 的。批次內容的 `merge_hints` 列出可能是同一位的兩筆（`reason`＝`front_back` 正反面 / `duplicate` 同一人；`by`＝`email` / `mobile`）。
+`POST …/contacts/{id}/unmerge` 解除最近一次合併（兩位回到合併前的樣子，合併之後的修改會不見；沒合併過回 409）。
+`GET …/batches/{id}?lite=true` 不帶每張卡的 OCR 文字行（辨識中輪詢用）。辨識走全站的作業系統，會出現在「我的作業」（`view_url` 回到那一批）。
+
+#### 名片簿
+
+```text
+GET    /tools/business-card-reader/api/books                                   # 我看得到的名片簿與角色（owner / edit / view）
+PATCH  /tools/business-card-reader/api/books/{book_id}                         # 個人名片簿的保留天數 {"keep_days"}
+GET    /tools/business-card-reader/api/books/{book_id}/people?q=&tag=&limit=&offset=
+GET    /tools/business-card-reader/api/books/{book_id}/people/{person_id}      # 目前資料、歷史名片、互動紀錄
+PUT    /tools/business-card-reader/api/books/{book_id}/people/{person_id}      # {"fields"?, "notes"?}
+DELETE /tools/business-card-reader/api/books/{book_id}/people/{person_id}
+POST   /tools/business-card-reader/api/books/{book_id}/people/merge            # {"keep", "others": [...]}
+GET    /tools/business-card-reader/api/books/{book_id}/people/{person_id}/cards/{card_id}/image
+POST   /tools/business-card-reader/api/books/{book_id}/people/{person_id}/interactions        # {"kind", "note", "at"?}
+PUT    /tools/business-card-reader/api/books/{book_id}/people/{person_id}/interactions/{id}
+DELETE /tools/business-card-reader/api/books/{book_id}/people/{person_id}/interactions/{id}
+POST   /tools/business-card-reader/api/books/{book_id}/export                  # 參數同批次匯出，另有 ids / q / tag
+POST   /tools/business-card-reader/api/batches/{batch_id}/save-to-book/preview # {"book", "scope" | "ids"} → 每位可能是同一人的
+POST   /tools/business-card-reader/api/batches/{batch_id}/save-to-book         # {"book", "items": [{"contact_id", "action": new|merge|skip, "person_id"?}]}
+```
+
+個人名片簿只有本人（`owner`）看得到；共用名片簿依成員角色：`view` 可以查詢、看、匯出，`edit` 另外可以存進來、修改、合併、刪除、記互動。
+看不到的名片簿一律 404，只能查詢卻要修改回 403。`q` 是空白分開的關鍵字（每個都要出現在某個欄位或備註），`tag` 是完整的標籤。
+互動 `kind`＝`meeting` / `call` / `email` / `visit` / `other`，`at` 是時間戳記（省略＝現在）。存進名片簿時 `preview` 依 Email → 手機 → 姓名＋公司
+找名片簿裡可能是同一人的（`matches[].reason`）；`merge` 讓那個人多一張名片紀錄（含名片圖），目前資料換成新的，舊的留在歷史名片。
+保留期限每本各自設（依最後更新起算，0 ＝永久），個人名片簿受管理員的上限限制。稽核：`business_card_book_query`（不記關鍵字）、
+`business_card_book_view`、`business_card_book_save`、`business_card_book_edit`、`business_card_book_merge`、`business_card_book_delete`、
+`business_card_book_export`、`business_card_interaction`。共用名片簿與成員由管理員在「設定 → 名片簿」管理（`/admin/business-cards/api/…`）。
+
+#### 合併之前匯出的檔案或名片清單
+
+```text
+POST   /tools/business-card-reader/api/batches/{batch_id}/list-merge                     # multipart file（CSV / XLSX / ODS / VCF / JSON）
+POST   /tools/business-card-reader/api/batches/{batch_id}/list-merge/{token}/plan        # {"mapping"?, "scope", "pairs"?}
+POST   /tools/business-card-reader/api/batches/{batch_id}/list-merge/{token}/download    # 參數同匯出（csv / xlsx / ods / vcf / json）＋ decisions
+DELETE /tools/business-card-reader/api/batches/{batch_id}/list-merge/{token}
+POST   /tools/business-card-reader/api/batches/{batch_id}/list-merge/{token}/ai-check    # 選用，見下
+```
+
+可以上傳之前從這裡匯出的檔案（五種格式都收；VCF 也收手機或通訊錄匯出的 vCard），或自己的聯絡人清單，跟這一批合併並去除重複。
+上傳回 `token`、`kind`（檔案種類）、`headers`、前 5 列、`mapping`（欄號 → 欄位，自動對應）與可選的 `targets`；VCF / JSON 先排成跟匯出一樣的表格（中文欄名）。清單只暫存在伺服器暫存區（約 2 小時），
+只用在這次整合，過期回 410。`plan` 回每一位的 `kind`（`new` 新增 / `same` 相同 / `update` 清單缺的補上 / `conflict` 兩邊不同；
+清單裡沒配到的列是 `untouched`，照原樣保留）、`diffs` 與規則判斷不了的 `pairs`；`pairs` 參數可以手動指定「這位就是清單第幾列」。
+同一條規則有好幾列符合時，挑差異最少、還沒被別張名片配走的那一列（清單裡有重複的人，或同一人的正反面是兩列時，不會兩張都併進同一列）。
+`download` 的 `decisions`＝`{contact_id: add | merge | skip | keep_list | use_card}`：原本的列與欄全部保留、順序不變，新的人接在最後；
+存成 VCF / JSON 時，對應不到欄位的欄不會帶過去。
+上限 20 MB、5,000 列、100 欄；舊版 Excel（.xls）不收。
+
+#### AI 協助（選用，預設關閉）
+
+```text
+GET    /tools/business-card-reader/api/ai                                          # 有沒有開、模型、資料送到哪台主機
+POST   /tools/business-card-reader/api/batches/{batch_id}/contacts/{contact_id}/ai-suggest
+POST   /tools/business-card-reader/api/batches/{batch_id}/list-merge/{token}/ai-check  # {"pairs": [{"contact_id", "row"}]}（最多 30 組）
+```
+
+要全站 LLM 啟用、而且管理員在「設定 → 名片簿」打開，沒開回 409。`ai-check` 只送那幾組的欄位文字，回 `same` / `confidence` / `reason`；
+`ai-suggest` 文字模式只送那一張的 OCR 文字、看圖模式送那一張裁好的名片圖，回的每個欄位都是 `status: check`，
+跟 OCR 原文不一樣時 `reason` 寫明。AI 的結果只是建議，不會自己寫進聯絡人。稽核 `business_card_ai`（只記筆數）。
+
+批次的 `expires_at` 依管理員在「檔案保留 / 清理」設定的天數（`business_cards_days`，預設 30；0 ＝不自動刪，`expires_at` 為 `null`）從建立時間起算；刪除帳號時一起刪除。
+`GET /tools/business-card-reader/handoff-qr` 回這一頁網址的 QR Code（PNG，畫面「用手機接續」用；不帶任何登入資訊）。
+
 ---
 
 ## 9b. 事務機掃描取件 API
@@ -2922,15 +3071,15 @@ AI 客戶端讀得到自己設定裡的 Token，同一張如果也能直接打 A
 | `workspace_download_url` | 取得一次性下載指令（`curl`） |
 | `workspace_read_text` | 分頁讀工作區裡的文字檔 |
 
-目前開放的工具（共 46 支）：
+目前開放的工具（共 47 支）：
 
 * 文件轉換：`office_to_pdf`（辦公文件轉 PDF）、`document_to_images`（辦公文件轉圖片）、`image_to_pdf`（圖片轉 PDF）、`pdf_to_markdown`（PDF 轉 Markdown）、`markdown_to_document`（Markdown 轉辦公文件）、`office_convert`（辦公文件格式互轉）、`pdf_to_office`（PDF 轉文書檔）、`pdf_to_slides`（PDF 轉簡報）
 * PDF 編修：`pdf_merge`（檔案合併）、`pdf_split`（頁面分拆）、`pdf_compress`（PDF 壓縮）、`pdf_rotate`（頁面轉向）、`pdf_page_numbers`（插入頁碼）、`pdf_watermark`（浮水印）、`pdf_flatten_annotations`（註解平面化）、`pdf_remove_annotations`（註解清除）、`pdf_encrypt`（PDF 密碼保護）、`pdf_decrypt`（PDF 密碼解除）、`pdf_n_up`（多頁合併）、`pdf_clean_metadata`（中繼資料清除）、`pdf_reorder_pages`（頁面整理）、`pdf_page_size`（頁面尺寸統一）、`pdf_bookmarks`（書籤與目錄）、`document_straighten`（掃描修正）、`pdf_add_border`（頁面加框）、`scan_merge`（掃描拼合）、`document_deidentify`（文件去識別化）、`pdf_fill_form`（表單自動填寫）、`pdf_edit`（PDF 編輯器）
-* 擷取與統計：`pdf_extract_text`（擷取文字）、`document_word_count`（字數統計）、`pdf_extract_images`（擷取圖片）、`pdf_ocr`（OCR 文字辨識）、`pdf_extract_attachments`（PDF 附件萃取）、`pdf_hidden_content_scan`（隱藏內容掃描）、`text_list_process`（清單處理）、`transit_proof_parse`（乘車證明整理）、`pdf_list_annotations`（註解整理）、`einvoice_scan`（電子發票處理）、`text_deidentify`（文字去識別化）、`meeting_transcribe`（會議錄音轉逐字稿）
+* 擷取與統計：`pdf_extract_text`（擷取文字）、`document_word_count`（字數統計）、`pdf_extract_images`（擷取圖片）、`pdf_ocr`（OCR 文字辨識）、`pdf_extract_attachments`（PDF 附件萃取）、`pdf_hidden_content_scan`（隱藏內容掃描）、`text_list_process`（清單處理）、`transit_proof_parse`（乘車證明整理）、`pdf_list_annotations`（註解整理）、`einvoice_scan`（電子發票處理）、`text_deidentify`（文字去識別化）、`meeting_transcribe`（會議錄音轉逐字稿）、`business_card_read`（名片辨識）
 * 比對：`text_diff`（文字差異比對）、`document_diff`（文件差異比對）、`submission_check`（送件前檢核）
 * 查詢：`vat_lookup`（統編查詢）、`pdf_fill_companies`（表單自動填寫：公司清單）
 
-PDF 密碼解除（`pdf_decrypt`，也支援高鐵模式）、表單自動填寫（`pdf_fill_companies`、`pdf_fill_form`，填進去的是公司資料）、會議錄音轉逐字稿（`meeting_transcribe`，檔案大、處理久）預設不開放，要管理員另外勾選。有 LLM 選項的工具（文件 / 文字去識別化、註解整理、電子發票處理、送件前檢核、表單自動填寫等）經 MCP 一律不使用 LLM。PDF 編輯器（`pdf_edit`）經 MCP 只能放文字與圖形，不收圖片、印章、簽名。用印、騎縫章、以 LLM 為核心的工具（公文撰擬、逐句翻譯、文件翻譯、會議摘要）、事務機與加密紙本備份不經 MCP 開放。辦公文件格式互轉與 OCR 文字辨識在伺服器端是背景作業，`jtdt_run` 會等到做完；等太久會先回作業編號，AI 用 `job_status` 查。設定頁點工具卡片可以看每一支給 AI 的用法、參數與回傳值。
+PDF 密碼解除（`pdf_decrypt`，也支援高鐵模式）、表單自動填寫（`pdf_fill_companies`、`pdf_fill_form`，填進去的是公司資料）、會議錄音轉逐字稿（`meeting_transcribe`，檔案大、處理久）、名片辨識（`business_card_read`，處理的是別人的聯絡資料、結果未經人工校對）預設不開放，要管理員另外勾選。有 LLM 選項的工具（文件 / 文字去識別化、註解整理、電子發票處理、送件前檢核、表單自動填寫等）經 MCP 一律不使用 LLM。PDF 編輯器（`pdf_edit`）經 MCP 只能放文字與圖形，不收圖片、印章、簽名。用印、騎縫章、以 LLM 為核心的工具（公文撰擬、逐句翻譯、文件翻譯、會議摘要）、事務機與加密紙本備份不經 MCP 開放。辦公文件格式互轉與 OCR 文字辨識在伺服器端是背景作業，`jtdt_run` 會等到做完；等太久會先回作業編號，AI 用 `job_status` 查。設定頁點工具卡片可以看每一支給 AI 的用法、參數與回傳值。
 
 執行時在伺服器內部用**同一張 Token** 呼叫各工具原本的 API，檢查、權限、稽核都跟 REST 一樣（稽核標「經由 MCP」）。
 
@@ -3181,6 +3330,19 @@ curl http://localhost:8765/admin/seal-request/api/state \
 ```
 
 設成「僅限核准案件使用」的章，在用印與簽名、騎縫章、PDF 編輯器（含 `/tools/pdf-stamp/api/pdf-stamp` 等對外 API）一律回 403，資產圖檔網址也拿不到。
+
+### 名片簿（管理員）
+
+共用名片簿與成員、個人名片簿的保留上限、名片辨識的 AI 協助開關。管理員管理名片簿與成員，但看不到名片簿裡的人。每一項修改都寫稽核。
+
+| 端點 | 方法 | 說明 |
+|---|---|---|
+| `/admin/business-cards/api/state` | GET | 目前設定：`personal_max_days`（個人名片簿保留上限）、`ai`（AI 協助的開關、模式與全站 LLM 狀態）、`shared`（共用名片簿：名稱、人數、保留期限、成員與角色，不含裡面的人）、`personal`（個人名片簿的本數與總人數） |
+| `/admin/business-cards/api/settings` | PUT | 個人名片簿保留上限，內文 `{"personal_max_days": 0}`（0 ＝不限，最多 36500） |
+| `/admin/business-cards/api/ai` | PUT | AI 協助，內文 `{"enabled": true, "mode": "text"}`（`mode` 為 `text` / `vision`）；全站 LLM 沒啟用時打開也不會作用 |
+| `/admin/business-cards/api/books` | POST | 新增共用名片簿，內文 `{"name": "…", "keep_days": 0}` |
+| `/admin/business-cards/api/books/{book_id}` | PUT / DELETE | 改名稱與保留期限 `{"name"?, "keep_days"?}`；刪除要帶 `{"confirm": "名片簿名稱"}`（連同裡面的人、名片圖、互動紀錄） |
+| `/admin/business-cards/api/books/{book_id}/members` | PUT | 成員整份替換，內文 `{"members": [{"type", "key", "role"}]}`：`type` 為 `user` / `group` / `ou`，`role` 為 `view`（可查詢）/ `edit`（可編修）；格式錯回 400、原本的成員不變 |
 
 ### 設定匯出清單
 

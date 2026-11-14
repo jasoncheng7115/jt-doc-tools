@@ -1,6 +1,6 @@
 **繁體中文** ｜ [English](README_en.md) ｜ [日本語](README_ja.md)
 
-# Jason Tools 文件工具箱 v1.17.39
+# Jason Tools 文件工具箱 v1.17.41
 
 > ### ⚠ 2026-09-13 之前用 git 安裝的，這一版升級前要先跑一行
 >
@@ -25,7 +25,7 @@
 > 之後 `jtdt update` 恢復正常。**不受影響**：tarball 安裝、Windows 安裝程式、
 > 或 2026-09-13 之後才安裝的。v1.15.43 起已修正，不會再發生。
 
-> 整合式 PDF / Office 文件處理平台，53 個工具整合解決：**填單用印**、**浮水印**、**多頁合併 / 拆分 / 旋轉 / 整理**、**轉檔**、**掃描拼合**、**去識別化**、**字數統計**、**註解整理**、**差異比對**、**逐句翻譯**、**清單處理**、**電子發票處理**、**統編查詢**、**頁面編輯器**、**加密 / 解密**等。
+> 整合式 PDF / Office 文件處理平台，54 個工具整合解決：**填單用印**、**浮水印**、**多頁合併 / 拆分 / 旋轉 / 整理**、**轉檔**、**掃描拼合**、**去識別化**、**字數統計**、**註解整理**、**差異比對**、**逐句翻譯**、**清單處理**、**電子發票處理**、**統編查詢**、**頁面編輯器**、**加密 / 解密**等。
 >
 > 企業功能：**本機 / LDAP / AD 多領域認證**、**SSO 單一登入**(OIDC + SAML，可接 M365 / Google / Keycloak)、**RBAC 角色權限**、**稽核記錄**、**SIEM 轉送**(syslog / CEF / GELF)、**字型管理**、**使用者工作區**、**用印申請（核准後由保管人用印）**、**背景作業與完成通知**、**REST API**、**MCP（讓 Claude Code / Codex / OpenCode 呼叫不用 LLM 的工具；AI 用印要逐顆章核准，可以要求本人確認）**。
 >
@@ -95,7 +95,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 
 ---
 
-## 53 個工具速覽
+## 54 個工具速覽
 
 ### 填單用印
 - **表單自動填寫** — 自動偵測欄位 + 模板填值
@@ -124,6 +124,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 - **送件前檢核** — 批次驗收：頁面尺寸、字型嵌入、欄位完整、敏感資料殘留、隱藏內容
 - **清單處理** — 貼文字 / 上傳 .txt / .csv / .xlsx / .docx / .pdf 等檔案，一行一筆做排序 / 去重 / 篩選 / 取頭尾 / 大小寫轉換等，可組合多種操作；結果一鍵複製或下載 .txt / .csv / .xlsx
 - **電子發票處理** — 掃台灣電子發票 QR Code 解出發票號碼 / 日期 / 金額 / 統編，自動帶賣方公司名、行業、會計科目（規則 + 可選 LLM 判讀），支援報帳檢查 + 當期發票檢查，匯出 .xlsx / .ods / .csv / .json / .xml / .txt / .md（標題可自訂）
+- **名片辨識**（Beta）— 名片照片或掃描檔一次匯入（手機可以連拍），一張照片放好幾張名片也能自動切卡（可拖四角修正），辨識姓名 / 公司 / 職稱 / 電話 / 分機 / Email / 統編 / 地址，逐欄對照原圖校對後匯出 .xlsx / .ods（純資料或打開就能篩選）/ .csv / .vcf / .json；可以存進**個人或共用名片簿**長期查詢（同一人換工作、升職都保留歷史名片與互動紀錄，共用名片簿分查詢 / 編修權限、每本各自設保留期限），也可以上傳之前匯出的檔案（含 VCF / JSON）或手上的聯絡人清單，合併並去除重複。不需要 AI（另有選用的 AI 協助）
 - **乘車證明整理** — 拉一批台鐵購票證明 / 高鐵電子車票證明 / Uber 行程收據 PDF，自動整理日期 / 交通工具 / 來源-目的 / 費用成表格，欄位可自訂，匯出 .xlsx / .ods / .csv / .json / .xml / .txt / .md 報帳
 - **統編查詢** — 輸入 8 位統一編號反查，或公司 / 機關 / 學校名稱、地址、行業關鍵字模糊搜尋（標示命中字）；含類別篩選 + 批次查詢 + CSV 匯出
 - **事務機掃描取件** — 新增事務機（IP 或主機名稱）做連線測試與型號辨識，逐步列出 DNS / TCP / TLS 憑證 / HTTP 的診斷結果，可下載診斷報告；支援 eSCL（AirPrint / Mopria 掃描）的事務機可以直接掃描存進工作區（PDF 或 JPEG）。管理員可以建立共用事務機並指定成員；同一台一次只服務一個人，其他人自動排隊。只連內部網路，連線測試與掃描不傳送帳密。FUJIFILM 事務機的機內信箱取件已在 Apeos C5571 實機驗證（同系列一併支援），可選「取件並刪除」（檔案存好之後才刪除原件）；Canon Advanced Box、Konica Minolta 公用信箱、SHARP NAS 的檔案分享取件（WebDAV / SMB），以及 KYOCERA 文件匣、RICOH 文件伺服器的直接取件（SOAP）是實驗功能：依原廠工具的研究或手冊公開的方式寫成、尚未在實機上驗證，只讀取不刪除。預設存成 PDF
@@ -251,7 +252,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 
 ## LLM AI 加值（選用，預設關閉）
 
-接 OpenAI-compatible 後端（本機 Ollama、LiteLLM 等 LLM 閘道、vLLM、LM Studio、DGX Spark）後，**14 個工具**自動多出聰明選項：
+接 OpenAI-compatible 後端（本機 Ollama、LiteLLM 等 LLM 閘道、vLLM、LM Studio、DGX Spark）後，**15 個工具**自動多出聰明選項：
 
 | 工具 | LLM 做什麼 | 模式 |
 |---|---|---|
@@ -269,6 +270,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 | 註解整理 | 多筆審閱意見自動分「重大 / 一般 / 提問」 | text |
 | 文件差異比對 | 行 diff 之外多給「主要修改了哪幾條條款」自然語言摘要 | text |
 | 電子發票處理 | 規則對不到的品項，用 LLM 判讀會計科目分類 | text |
+| 名片辨識（選用） | 整合聯絡人清單時判斷兩筆是不是同一人；校對時建議欄位歸類（只送那一張，建議一律要人確認） | text + **vision** |
 
 **核心工具完全不依賴 LLM**；沒設定就跟以前一樣全部能用。詳見 **[LLM.md](LLM.md)**。
 
@@ -318,7 +320,7 @@ $f="$env:TEMP\jtdt-install.ps1"; try { Invoke-WebRequest 'https://cdn.jsdelivr.n
 | **[AUTH.md](AUTH.md)** | 認證 / RBAC / 內建帳號(jtdt-admin / jtdt-auditor)/ 2FA / SSO(OIDC+SAML) / Reverse Proxy SSO(Kerberos) / 帳號鎖定 / 緊急復原 |
 | **[reverse_proxy_sso.md](reverse_proxy_sso.md)** | Reverse Proxy SSO（Kerberos / SPNEGO）完整部署：AD service account、setspn、ktpass / keytab、Nginx 設定、瀏覽器自動登入、標頭偽造防護 |
 | **[API.md](API.md)**（[線上網頁版](https://jasoncheng7115.github.io/jt-doc-tools/api.html)）| REST API:Bearer token、endpoint 一覽、上傳格式、回傳格式、錯誤碼、curl / Python 範例、Job 流程；MCP（AI 客戶端）的連線與設定 |
-| **[LLM.md](LLM.md)** | LLM AI 加值功能（預設關閉）：14 個工具如何用 LLM、效果範例、支援的 LLM 伺服器與閘道（Ollama / LiteLLM / vLLM…）、關閉思考與並行設定 |
+| **[LLM.md](LLM.md)** | LLM AI 加值功能（預設關閉）：15 個工具如何用 LLM、效果範例、支援的 LLM 伺服器與閘道（Ollama / LiteLLM / vLLM…）、關閉思考與並行設定 |
 | **[SECURITY.md](SECURITY.md)** | 資安政策、OWASP Top 10 (2025) 對照、漏洞回報管道、GitHub native scan 整合 |
 | **[COMPLIANCE.md](COMPLIANCE.md)**（[線上網頁版](https://jasoncheng7115.github.io/jt-doc-tools/compliance.html)）| 資料保護與合規：文件留在哪裡、哪些情況會連到外部、工具做到的控制與組織要做的事，以及個資法、GDPR、ISO/IEC 27001:2022、ISO/IEC 42001:2023 的對照 |
 | **[CHANGELOG.md](CHANGELOG.md)** | 完整更新記錄 |

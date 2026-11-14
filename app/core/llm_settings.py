@@ -488,6 +488,10 @@ class LLMSettingsManager:
          "use": "視覺校對：直接看頁面影像對照 OCR 結果，能修文字脫漏 / 排版亂；直接 / 對位 / 完整辨識也走此設定。完整辨識建議用 qwen2.5vl:7b（grounding 能給座標、無 thinking mode、約 9GB VRAM）；qwen3-vl 因 thinking mode 在 Ollama 整合不穩、gemma4:26b 無 grounding 能力不可用於完整辨識", "kind": "vision"},
         {"id": "einvoice-scan", "name": "電子發票處理（LLM 判讀會計科目）",
          "use": "批次依賣方統編 / 名稱 / 行業，判斷對應會計科目（油料費 / 餐費 / 郵電費 等）", "kind": "text"},
+        {"id": "business-card-reader", "name": "名片辨識（AI 協助，選用）",
+         "use": "整合名片清單時判斷兩筆是不是同一人；校對時依 OCR 文字建議欄位歸類（只送那一張的文字，建議一律要人確認）", "kind": "text"},
+        {"id": "business-card-reader-vision", "name": "名片辨識（AI 看圖協助，選用）",
+         "use": "校對時把那一張裁好的名片圖送給視覺模型建議欄位（要另外在「設定 → 名片簿」選看圖模式）", "kind": "vision"},
     ]
 
     def get_model_for(self, tool_id: str) -> str:

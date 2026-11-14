@@ -154,6 +154,7 @@ def test_the_retention_periods_on_the_page_are_the_defaults_in_the_code():
         "表單填寫、用印簽名、浮水印的歷史檔案": f"{d['fill_history_days']} 天",
         "公文撰擬案件": f"{d['official_doc_cases_days']} 天",
         "會議錄音轉逐字稿上傳的原始錄音": f"{d['speech_audio_days']} 天",
+        "名片辨識批次": f"{d['business_cards_days']} 天",
     }
     assert d["fill_history_days"] == d["stamp_history_days"] == d["watermark_history_days"]
     rows = {r.split("|")[1].strip(): r for r in data.splitlines() if r.startswith("| ")}

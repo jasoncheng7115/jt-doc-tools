@@ -1,6 +1,6 @@
 [繁體中文](README.md) ｜ **English** ｜ [日本語](README_ja.md)
 
-# Jason Tools Document Toolbox v1.17.39
+# Jason Tools Document Toolbox v1.17.41
 
 > ### ⚠ Installed with git before 2026-09-13? Run one command before this upgrade
 >
@@ -25,7 +25,7 @@
 > `jtdt update` then works as usual. **Unaffected**: tarball installs, the Windows installer,
 > and anything installed after 2026-09-13. Fixed from v1.15.43 onwards.
 
-> An integrated PDF / Office document platform. 53 tools cover **form filling and stamping**, **watermarks**, **merge / split / rotate / reorder**, **format conversion**, **scan stitching**, **de-identification**, **word counts**, **annotation handling**, **diffing**, **sentence translation**, **list processing**, **e-invoice processing**, **VAT lookup**, **a page editor**, **encryption / decryption** and more.
+> An integrated PDF / Office document platform. 54 tools cover **form filling and stamping**, **watermarks**, **merge / split / rotate / reorder**, **format conversion**, **scan stitching**, **de-identification**, **word counts**, **annotation handling**, **diffing**, **sentence translation**, **list processing**, **e-invoice processing**, **VAT lookup**, **a page editor**, **encryption / decryption** and more.
 >
 > Enterprise features: **local / LDAP / AD multi-realm authentication**, **single sign-on** (OIDC + SAML, ready for M365 / Google / Keycloak), **RBAC roles and permissions**, **audit log**, **SIEM forwarding** (syslog / CEF / GELF), **font management**, **user workspace**, **seal requests (stamped by the custodian after approval)**, **background jobs with completion notices**, a **REST API** and **MCP (lets Claude Code / Codex / OpenCode call the non-LLM tools; AI stamping needs each seal approved and can require the owner's confirmation)**.
 >
@@ -95,7 +95,7 @@ Detailed installation notes are in **[INSTALL.md](INSTALL.md)** (required tools,
 
 ---
 
-## The 53 tools at a glance
+## The 54 tools at a glance
 
 ### Forms and stamps
 - **Auto-fill forms**; field detection plus template values
@@ -124,6 +124,7 @@ Detailed installation notes are in **[INSTALL.md](INSTALL.md)** (required tools,
 - **Pre-submission check**: batch verification: page size, embedded fonts, complete fields, leftover personal data, hidden content
 - **List tools**; paste text or upload.txt /.csv /.xlsx /.docx /.pdf and treat each line as an item: sort, deduplicate, filter, take the first or last lines, change case and more, combining steps; copy the result or download.txt /.csv /.xlsx
 - **e-Invoice processing**: scan a Taiwan e-invoice QR code for the invoice number, date, amount and tax ID, filling in the seller, industry and accounting category (rules plus optional LLM); expense and period checks included, exporting.xlsx /.ods /.csv /.json /.xml /.txt /.md (with a configurable title)
+- **Business card reader** (Beta) — import photos or scans of business cards in one go (phones can shoot several in a row); a photo of several cards is split automatically (drag the corners to adjust). Reads name / company / title / phone / extension / email / VAT number / address; review each field against the image, then export .xlsx / .ods (plain data or ready to filter) / .csv / .vcf / .json. Save them into **personal or shared card books** for later lookup (when someone changes jobs or gets promoted, earlier cards and interaction records are kept; shared card books have view / edit permissions and each book has its own retention period), or upload a previous export (including VCF / JSON) or a contact list you already have and merge them with duplicates removed. No AI needed (optional AI assist is available)
 - **Transit receipts** — drop in a batch of Taiwan Railway purchase certificates, THSR electronic ticket certificates or Uber trip receipts; date, transport, route and fare are collected into a table with configurable columns, exportable as .xlsx / .ods / .csv / .json / .xml / .txt / .md for expense claims
 - **Company ID lookup**: look up an 8-digit tax ID, or search company, agency and school names, addresses and industries with highlighted matches; category filters, batch lookup and CSV export
 - **MFP Scan & Fetch** — add an MFP by IP or host name for a connection test and model identification, with step-by-step DNS / TCP / TLS certificate / HTTP diagnostics and a downloadable report; MFPs that support eSCL (AirPrint / Mopria scanning) can scan straight into the workspace (PDF or JPEG). Administrators can create shared MFPs and choose members; each MFP serves one person at a time and others queue automatically. Only internal-network addresses are reached, and connection tests and scans send no credentials. Mailbox retrieval on FUJIFILM MFPs has been verified on a real Apeos C5571 (the same series is supported too), with an optional "fetch and delete" that deletes originals only after the files are saved; file share retrieval from Canon Advanced Box, Konica Minolta public boxes and SHARP NAS (WebDAV / SMB) and direct retrieval from KYOCERA document boxes and the RICOH Document Server (SOAP) are experimental: built from research into the manufacturers' tools or the methods in their manuals and not yet verified on a real device, they only read (never delete). PDF is saved by default
@@ -251,7 +252,7 @@ Connecting is only the start: what actually goes wrong is the primary DC restart
 
 ## LLM AI extras (optional, off by default)
 
-Connect an OpenAI-compatible backend (local Ollama, an LLM gateway such as LiteLLM, vLLM, LM Studio or a DGX Spark) and **14 tools** gain smart options automatically:
+Connect an OpenAI-compatible backend (local Ollama, an LLM gateway such as LiteLLM, vLLM, LM Studio or a DGX Spark) and **15 tools** gain smart options automatically:
 
 | Tool | What the LLM does | Mode |
 |---|---|---|
@@ -269,6 +270,7 @@ Connect an OpenAI-compatible backend (local Ollama, an LLM gateway such as LiteL
 | Annotation report | sorts many review comments into “major / normal / question” | text |
 | Document compare | beyond the line diff, a plain-language summary of which clauses changed | text |
 | e-Invoice processing | when rules do not match an item, the LLM decides the accounting category | text |
+| Business card reader (optional) | Judges whether two entries are the same person when merging a contact list; suggests which field each item belongs to during review (only that one card is sent, and a person always confirms the suggestions) | text + **vision** |
 
 **The core tools do not depend on an LLM at all**; without one configured everything works as before. See **[LLM.md](LLM.md)**.
 
@@ -318,7 +320,7 @@ Leave it unset and nothing changes: **the other 50 tools are entirely unaffected
 | **[AUTH.md](AUTH.md)** | Authentication / RBAC / built-in accounts (jtdt-admin / jtdt-auditor) / 2FA / SSO (OIDC+SAML) / Reverse Proxy SSO (Kerberos) / account lockout / emergency recovery |
 | **[reverse_proxy_sso.md](reverse_proxy_sso.md)** | Reverse Proxy SSO (Kerberos / SPNEGO) end-to-end deployment: AD service account, setspn, ktpass / keytab, nginx configuration, automatic browser sign-in, header spoofing protection |
 | **[API.md](API.md)** ([web version](https://jasoncheng7115.github.io/jt-doc-tools/api-en.html)) | REST API: bearer tokens, the endpoint list, upload and response formats, error codes, curl / Python examples, the job flow; connecting MCP (AI clients) |
-| **[LLM.md](LLM.md)** | Optional LLM features (off by default): how 14 tools use an LLM, examples, supported LLM servers and gateways (Ollama / LiteLLM / vLLM…), turning thinking off and concurrency |
+| **[LLM.md](LLM.md)** | Optional LLM features (off by default): how 15 tools use an LLM, examples, supported LLM servers and gateways (Ollama / LiteLLM / vLLM…), turning thinking off and concurrency |
 | **[SECURITY.md](SECURITY.md)** | Security policy, OWASP Top 10 (2025) mapping, vulnerability reporting, GitHub native scan integration |
 | **[COMPLIANCE.md](COMPLIANCE.md)** ([web version](https://jasoncheng7115.github.io/jt-doc-tools/compliance-en.html)) | Data protection and compliance: where documents stay, when the tool connects to the outside, the controls it provides and what your organization does, plus mappings to Taiwan's Personal Data Protection Act, GDPR, ISO/IEC 27001:2022 and ISO/IEC 42001:2023 |
 | **[CHANGELOG.md](CHANGELOG.md)** | Full change log |

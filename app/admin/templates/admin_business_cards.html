@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% block title %}{{ tr('名片簿') }} · {{ app_name }}{% endblock %}
+{% block content %}
+<h1>{{ icon('id-card', size=22) }} {{ tr('名片簿') }}<span class="tool-beta" title="{{ tr('試用中：功能還可能調整') }}">Beta</span></h1>
+<p class="muted">{{ tr('名片辨識校對好的聯絡人可以存進名片簿長期保留、之後查詢。每個人有自己的個人名片簿；共用名片簿由這裡建立，指定成員可以查詢或編修。') }}</p>
+
+<div class="panel">
+  <div class="bca-notes">
+    <div class="bca-note"><span class="bca-note-ic">{{ icon('lock', size=16) }}</span>
+      <div><b>{{ tr('管理員看不到內容') }}</b><p>{{ tr('這一頁只管名片簿與成員，看不到裡面的人；要查詢某本共用名片簿，請把自己加進成員。') }}</p></div></div>
+    <div class="bca-note"><span class="bca-note-ic">{{ icon('user', size=16) }}</span>
+      <div><b>{{ tr('查詢與編修') }}</b><p>{{ tr('「可查詢」能搜尋、看歷史名片、匯出；「可編修」另外可以存進來、修改、合併、刪除、記互動。') }}</p></div></div>
+    <div class="bca-note"><span class="bca-note-ic">{{ icon('clock', size=16) }}</span>
+      <div><b>{{ tr('保留期限') }}</b><p>{{ tr('每本各自設，依每個人的「最後更新」起算；0 ＝永久保留。到期自動刪除（含名片圖）並寫入稽核。') }}</p></div></div>
+  </div>
+  <p class="bc-warn bca-auth" id="bcaAuth" hidden>{{ icon('warn', size=15) }} {{ tr('這台沒有啟用帳號登入：所有人共用同一本個人名片簿，共用名片簿也不分成員。多人使用請先啟用登入。') }}</p>
+</div>
+
+<div class="panel">
+  <h2>{{ icon('user', size=18) }} {{ tr('個人名片簿') }}</h2>
+  <p class="muted" id="bcaPersonalStats"></p>
+  <div class="bca-row">
+    <label>{{ tr('保留上限（天）') }}<input class="field" id="bcaMax" type="number" min="0" max="36500" step="1"></label>
+    <button type="button" class="btn btn-primary" id="bcaMaxSave">{{ icon('save', size=15) }}<span>{{ tr('儲存') }}</span></button>
+  </div>
+  <p class="muted bca-small">{{ tr('0 ＝不限制，使用者可以選永久保留；設了上限之後，使用者只能在上限內選天數，選永久也會依上限刪除。') }}</p>
+</div>
+
+<div class="panel">
+  <h2>{{ icon('sparkles', size=18) }} {{ tr('AI 協助（選用）') }}</h2>
+  <p class="muted">{{ tr('預設不開。開了之後，整合名片清單時可以請 AI 判斷兩筆是不是同一人（只送那兩筆的欄位文字），校對時可以請 AI 建議欄位歸類（文字模式只送那一張的 OCR 文字；看圖模式送那一張裁好的名片圖）。AI 只給建議，一律要人確認。') }}</p>
+  <p class="bc-warn" id="bcaLlmOff" hidden>{{ icon('warn', size=15) }} {{ tr('全站 LLM 沒有開啟：這裡開了也不會出現，要先到「設定 → LLM」開啟。') }}</p>
+  <div class="bca-row">
+    <label class="bca-check"><input type="checkbox" id="bcaAiOn"> {{ tr('開啟名片辨識的 AI 協助') }}</label>
+    <label>{{ tr('模式') }}<select class="field jt-select" id="bcaAiMode">
+      <option value="text">{{ tr('文字模式（建議）：只送 OCR 文字') }}</option>
+      <option value="vision">{{ tr('看圖模式：送那一張裁好的名片圖') }}</option>
+    </select></label>
+    <button type="button" class="btn btn-primary" id="bcaAiSave">{{ icon('save', size=15) }}<span>{{ tr('儲存') }}</span></button>
+  </div>
+  <p class="muted bca-small" id="bcaAiInfo"></p>
+</div>
+
+<div class="panel">
+  <h2 class="bca-h">{{ icon('book', size=18) }} {{ tr('共用名片簿') }}
+    <button type="button" class="btn btn-small" id="bcaNew">{{ icon('plus', size=14) }}<span>{{ tr('新增共用名片簿') }}</span></button></h2>
+  <div class="bca-table-wrap">
+    <table class="bca-table">
+      <thead><tr><th>{{ tr('名稱') }}</th><th>{{ tr('保留期限') }}</th><th>{{ tr('人數') }}</th><th>{{ tr('成員') }}</th><th></th></tr></thead>
+      <tbody id="bcaBooks"></tbody>
+    </table>
+  </div>
+  <p class="muted bca-small" id="bcaEmpty" hidden>{{ tr('還沒有共用名片簿。') }}</p>
+</div>
+
+<div class="bca-dialog" id="bcaDlg" hidden role="dialog" aria-modal="true" aria-labelledby="bcaDlgT">
+  <div class="bca-card">
+    <h3 id="bcaDlgT"></h3>
+    <div class="bca-form">
+      <label>{{ tr('名稱') }}<input class="field" id="bcaName" maxlength="80"></label>
+      <label>{{ tr('保留天數（0 ＝永久）') }}<input class="field" id="bcaKeep" type="number" min="0" max="36500" step="1"></label>
+    </div>
+    <div id="bcaMembersBox">
+      <h4>{{ tr('成員') }}</h4>
+      <div class="bca-add">
+        <input class="field" id="bcaSearch" placeholder="{{ tr('搜尋使用者或群組') }}">
+        <select class="field jt-select" id="bcaRole">
+          <option value="view">{{ tr('可查詢') }}</option>
+          <option value="edit">{{ tr('可編修') }}</option>
+        </select>
+      </div>
+      <div class="bca-pick" id="bcaPick"></div>
+      <div class="bca-add">
+        <input class="field" id="bcaOu" placeholder="{{ tr('組織單位（OU）的 DN，例：OU=Sales,DC=example,DC=com') }}">
+        <button type="button" class="btn btn-small" id="bcaOuAdd">{{ icon('plus', size=13) }}<span>{{ tr('加入組織單位') }}</span></button>
+      </div>
+      <ul class="bca-members" id="bcaMembers"></ul>
+    </div>
+    <div class="bca-acts">
+      <button type="button" class="btn" id="bcaCancel">{{ icon('close', size=15) }}<span>{{ tr('取消') }}</span></button>
+      <button type="button" class="btn btn-primary" id="bcaSave">{{ icon('save', size=15) }}<span>{{ tr('儲存') }}</span></button>
+    </div>
+  </div>
+</div>
+
+<template id="bcaIcons">
+  <span data-icon="edit">{{ icon('edit', size=13) }}</span>
+  <span data-icon="trash">{{ icon('trash', size=13) }}</span>
+  <span data-icon="x">{{ icon('close', size=13) }}</span>
+</template>
+
+<style nonce="{{ request.state.csp_nonce }}">
+.bca-notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.bca-note { display: flex; gap: 10px; align-items: flex-start; }
+.bca-note b { display: block; margin-bottom: 2px; }
+.bca-note p { margin: 0; font-size: 13px; color: var(--text-muted, #475569); line-height: 1.55; }
+.bca-note-ic { color: var(--primary, #2563eb); margin-top: 2px; }
+.bc-warn { color: var(--warning-text, #92400e); display: flex; align-items: center; gap: 6px; margin: 0; }
+.bca-auth { margin-top: 12px; }
+.bca-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.bca-row label, .bca-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.bca-row input { width: 160px; }
+.bca-small { font-size: 12.5px; margin: 8px 0 0; }
+.bca-h { display: flex; align-items: center; gap: 10px; }
+.bca-h .btn { margin-left: auto; }
+.bca-table-wrap { overflow-x: auto; }
+.bca-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.bca-table th, .bca-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border, #e5e7eb); vertical-align: top; }
+.bca-table th { color: var(--text-muted, #475569); font-weight: 600; white-space: nowrap; }
+.bca-table td.acts { white-space: nowrap; text-align: right; }
+.bca-tag { display: inline-block; font-size: 12px; border-radius: 999px; padding: 1px 8px; margin: 0 4px 4px 0;
+  background: var(--primary-soft, #eff6ff); color: var(--primary, #1d4ed8); }
+.bca-tag.edit { background: #ecfdf5; color: #047857; }
+.bca-tag.gone { background: #f1f5f9; color: #64748b; text-decoration: line-through; }
+.bca-dialog { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center;
+  justify-content: center; z-index: 1000; padding: 16px; }
+.bca-dialog[hidden] { display: none; }
+.bca-card { background: var(--bg-panel, #fff); border-radius: 12px; padding: 20px; width: 100%; max-width: 620px;
+  max-height: calc(100vh - 32px); overflow-y: auto; box-shadow: 0 10px 30px rgba(15,23,42,.25); }
+.bca-card h3 { margin: 0 0 12px; }
+.bca-card h4 { margin: 16px 0 8px; font-size: 14px; }
+.bca-form { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+.bca-add { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.bca-add .field { flex: 1 1 200px; }
+.bca-add .jt-select, .bca-add select { flex: 0 0 130px; }
+.bca-pick { max-height: 180px; overflow-y: auto; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; margin-bottom: 10px; }
+.bca-pick button { display: flex; width: 100%; justify-content: space-between; gap: 8px; text-align: left; border: none;
+  background: none; padding: 7px 10px; cursor: pointer; font: inherit; color: inherit; }
+.bca-pick button:hover { background: var(--primary-soft, #eff6ff); }
+.bca-pick .muted { font-size: 12px; }
+.bca-members { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bca-members li { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 6px 10px; }
+.bca-members li .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.bca-members li select { width: 110px; }
+.bca-members li button { border: none; background: none; cursor: pointer; color: var(--text-muted, #64748b); }
+.bca-check { flex-direction: row !important; align-items: center; gap: 6px !important; font-size: 14px !important; }
+.bca-row label select, .bca-row .jt-select { min-width: 260px; }
+.bca-acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+@media (max-width: 760px) { .bca-notes { grid-template-columns: 1fr; } .bca-form { grid-template-columns: 1fr; } }
+</style>
+
+<script nonce="{{ request.state.csp_nonce }}">
+(function () {
+  const API = '/admin/business-cards/api';
+  const $ = id => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const iconOf = n => document.querySelector('#bcaIcons [data-icon="' + n + '"]').firstElementChild.cloneNode(true);
+  let state = null, subjects = null, editing = null, members = [];
+
+  async function api(method, path, body) {
+    const opt = { method, headers: {} };
+    if (body !== undefined) { opt.body = JSON.stringify(body); opt.headers['Content-Type'] = 'application/json'; }
+    const r = await fetch(API + path, opt);
+    if (!r.ok) throw new Error(await window.friendlyServerError(r, tr('處理失敗')));
+    return r.json();
+  }
+  const keepText = d => d > 0 ? tr('{0} 天').replace('{0}', d) : tr('永久');
+
+  function render() {
+    $('bcaAuth').hidden = state.auth_enabled;
+    $('bcaMax').value = state.personal_max_days;
+    $('bcaPersonalStats').textContent = tr('{0} 本個人名片簿，共 {1} 人。').replace('{0}', state.personal.books).replace('{1}', state.personal.people);
+    $('bcaEmpty').hidden = state.shared.length > 0;
+    $('bcaBooks').replaceChildren(...state.shared.map(b => {
+      const tr_ = el('tr');
+      tr_.append(el('td', null, b.name), el('td', null, keepText(b.keep_days)), el('td', null, String(b.people)));
+      const mt = el('td');
+      if (!b.members.length) mt.append(el('span', 'muted', tr('沒有成員')));
+      b.members.forEach(m => mt.append(el('span', 'bca-tag' + (m.role === 'edit' ? ' edit' : '') + (m.exists ? '' : ' gone'),
+        (m.name || m.key) + '・' + (m.role === 'edit' ? tr('可編修') : tr('可查詢')))));
+      const at = el('td', 'acts');
+      const eb = el('button', 'btn btn-small'); eb.type = 'button'; eb.append(iconOf('edit'), el('span', null, tr('編輯')));
+      eb.addEventListener('click', () => openDlg(b));
+      const db = el('button', 'btn btn-small btn-danger-soft'); db.type = 'button'; db.append(iconOf('trash'), el('span', null, tr('刪除')));
+      db.addEventListener('click', () => removeBook(b));
+      at.append(eb, ' ', db);
+      tr_.append(mt, at);
+      return tr_;
+    }));
+  }
+  function renderAi() {
+    const a = state.ai || {};
+    $('bcaLlmOff').hidden = !!a.llm;
+    $('bcaAiOn').checked = !!a.enabled;
+    $('bcaAiMode').value = a.mode || 'text';
+    if ($('bcaAiMode')._jtSelect) $('bcaAiMode')._jtSelect.refresh();
+    $('bcaAiInfo').textContent = a.llm && a.model ? tr('目前會用模型 {0}，資料送到 {1}。').replace('{0}', a.model).replace('{1}', a.host || '—') : '';
+  }
+  async function load() { state = await api('GET', '/state'); render(); renderAi(); }
+  $('bcaAiSave').addEventListener('click', async () => {
+    try { state = await api('PUT', '/ai', { enabled: $('bcaAiOn').checked, mode: $('bcaAiMode').value }); render(); renderAi(); showToast && showToast(tr('已儲存'), 'ok'); }
+    catch (e) { showAlert(e.message); }
+  });
+
+  $('bcaMaxSave').addEventListener('click', async () => {
+    try { state = await api('PUT', '/settings', { personal_max_days: Number($('bcaMax').value || 0) }); render(); showToast && showToast(tr('已儲存'), 'ok'); }
+    catch (e) { showAlert(e.message); }
+  });
+
+  async function ensureSubjects() {
+    if (subjects) return;
+    try { const r = await fetch('/admin/seal-request/api/subjects'); subjects = await r.json(); } catch (_e) { subjects = { users: [], groups: [] }; }
+  }
+  function nameOf(m) {
+    if (m.name) return m.name;
+    if (!subjects) return m.key;
+    if (m.type === 'user') { const u = subjects.users.find(x => x.key === m.key); return u ? u.username + '@' + (u.source || 'local') : m.key; }
+    if (m.type === 'group') { const g = subjects.groups.find(x => x.key === m.key); return g ? g.name : m.key; }
+    return m.key;
+  }
+  const typeText = t => t === 'user' ? tr('使用者') : t === 'group' ? tr('群組') : tr('組織單位');
+  function renderMembers() {
+    $('bcaMembers').replaceChildren(...members.map((m, i) => {
+      const li = el('li');
+      li.append(el('span', 'muted', typeText(m.type)), el('span', 'nm', nameOf(m)));
+      const sel = el('select', 'field jt-select');
+      [['view', tr('可查詢')], ['edit', tr('可編修')]].forEach(([v, l]) => { const o = el('option', null, l); o.value = v; sel.append(o); });
+      sel.value = m.role; sel.addEventListener('change', () => { m.role = sel.value; });
+      const x = el('button'); x.type = 'button'; x.setAttribute('aria-label', tr('移除')); x.append(iconOf('x'));
+      x.addEventListener('click', () => { members.splice(i, 1); renderMembers(); renderPick(); });
+      li.append(sel, x);
+      return li;
+    }));
+    if (window.enhanceJtSelects) window.enhanceJtSelects($('bcaMembers'));
+  }
+  function renderPick() {
+    const q = $('bcaSearch').value.trim().toLowerCase();
+    const has = (t, k) => members.some(m => m.type === t && m.key === k);
+    const rows = [];
+    (subjects ? subjects.groups : []).forEach(g => { if (!has('group', g.key) && (!q || (g.name || '').toLowerCase().includes(q))) rows.push(['group', g.key, g.name, tr('群組・{0} 人').replace('{0}', g.members)]); });
+    (subjects ? subjects.users : []).forEach(u => {
+      const label = (u.username || '') + '@' + (u.source || 'local');
+      if (!has('user', u.key) && (!q || label.toLowerCase().includes(q) || (u.display_name || '').toLowerCase().includes(q))) rows.push(['user', u.key, label, u.display_name || tr('使用者')]);
+    });
+    $('bcaPick').replaceChildren(...rows.slice(0, 80).map(([t, k, n, d]) => {
+      const b = el('button'); b.type = 'button'; b.append(el('span', null, n), el('span', 'muted', d));
+      b.addEventListener('click', () => { members.push({ type: t, key: k, role: $('bcaRole').value, name: n }); renderMembers(); renderPick(); });
+      return b;
+    }));
+  }
+  $('bcaSearch').addEventListener('input', renderPick);
+  $('bcaOuAdd').addEventListener('click', () => {
+    const dn = $('bcaOu').value.trim(); if (!dn) return;
+    if (!members.some(m => m.type === 'ou' && m.key === dn)) members.push({ type: 'ou', key: dn, role: $('bcaRole').value });
+    $('bcaOu').value = ''; renderMembers();
+  });
+
+  async function openDlg(b) {
+    editing = b || null;
+    await ensureSubjects();
+    $('bcaDlgT').textContent = b ? tr('編輯共用名片簿') : tr('新增共用名片簿');
+    $('bcaName').value = b ? b.name : '';
+    $('bcaKeep').value = b ? b.keep_days : 0;
+    members = b ? b.members.map(m => ({ type: m.type, key: m.key, role: m.role, name: m.name })) : [];
+    $('bcaSearch').value = '';
+    renderMembers(); renderPick();
+    $('bcaDlg').hidden = false; $('bcaName').focus();
+  }
+  const closeDlg = () => { $('bcaDlg').hidden = true; };
+  $('bcaNew').addEventListener('click', () => openDlg(null));
+  $('bcaCancel').addEventListener('click', closeDlg);
+  $('bcaDlg').addEventListener('click', e => { if (e.target === $('bcaDlg')) closeDlg(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('bcaDlg').hidden) closeDlg(); });
+  $('bcaSave').addEventListener('click', async () => {
+    const body = { name: $('bcaName').value, keep_days: Number($('bcaKeep').value || 0) };
+    try {
+      let id = editing && editing.id;
+      if (editing) await api('PUT', '/books/' + id, body);
+      else id = (await api('POST', '/books', body)).created;
+      state = await api('PUT', '/books/' + id + '/members', { members: members.map(m => ({ type: m.type, key: m.key, role: m.role })) });
+      render(); closeDlg(); showToast && showToast(tr('已儲存'), 'ok');
+    } catch (e) { showAlert(e.message); }
+  });
+  async function removeBook(b) {
+    const name = await showPrompt(tr('刪除「{0}」會一併刪除裡面 {1} 個人的資料、歷史名片與互動紀錄，無法復原。請輸入名片簿名稱確認：').replace('{0}', b.name).replace('{1}', b.people),
+                                  { title: tr('刪除共用名片簿'), okText: tr('刪除') });
+    if (name == null) return;
+    try { state = await api('DELETE', '/books/' + b.id, { confirm: name }); render(); } catch (e) { showAlert(e.message); }
+  }
+  if (window.enhanceJtSelects) window.enhanceJtSelects(document);
+  load().catch(e => showAlert(e.message));
+})();
+</script>
+{% endblock %}

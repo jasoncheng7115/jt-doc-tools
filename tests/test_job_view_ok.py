@@ -364,6 +364,8 @@ TABLE = {
     "app/tools/submission_check/router.py": ("page", "/tools/submission-check/case/{uid}", None),
     "app/core/kb/indexer.py": ("page", "/admin/knowledge", None),
     "app/core/kb/gov.py": ("page", "/admin/knowledge/gov", None),
+    # 名片辨識的批次自己保存（`business_cards.sqlite`，保留期限另外設），「開啟」是 `#batch=<批次編號>`
+    "app/tools/business_card_reader/pipeline.py": ("page", "/tools/business-card-reader/#batch={uid}", None),
 }
 
 

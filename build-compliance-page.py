@@ -60,6 +60,7 @@ TITLE = "資料保護與合規 | Jason Tools 文件工具箱"
 #: 圖示（Lucide 的線條圖示，同介紹站其他區塊的畫法）
 _IC = {
     "lock": '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    "card": '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2.2"/><line x1="14" y1="10" x2="18" y2="10"/><line x1="14" y1="14" x2="18" y2="14"/>',
     "users": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>'
              '<path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     "log": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>'
@@ -92,7 +93,7 @@ _IC = {
 CARD_SECTIONS = ("工具本身做到的", "你的組織使用後要做的")
 CARD_ICONS = {
     "存取控制": "lock", "稽核記錄": "log", "保留期限與備份": "clock", "AI 產出可核對": "sparkle",
-    "文件處理的隔離": "box", "事務機連線與取件": "printer", "用印申請": "seal", "AI 用印": "seal", "加密紙本備份": "paper", "透明與安全開發": "code",
+    "文件處理的隔離": "box", "事務機連線與取件": "printer", "用印申請": "seal", "AI 用印": "seal", "加密紙本備份": "paper", "名片辨識": "card", "透明與安全開發": "code",
     "部署與連線": "globe", "帳號與權限": "users", "保留與備份": "db", "AI 使用與人工覆核": "eye",
 }
 

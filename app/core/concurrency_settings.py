@@ -77,6 +77,7 @@ OFFICE_TOOL_IDS: frozenset[str] = frozenset({
 #: 管理員看得出來才知道那個作業為什麼久。**新增用到 `ocr_engine` 的工具要加進來**。
 OCR_TOOL_IDS: frozenset[str] = frozenset({
     "pdf-editor", "pdf-ocr", "submission-check",
+    "business-card-reader",   # 名片辨識：逐卡 OCR
 })
 
 #: 可能呼叫**外部服務**的工具（LLM 或遠端 GPU OCR）。這一類的瓶頸不在本機 ——
@@ -89,6 +90,7 @@ REMOTE_TOOL_IDS: frozenset[str] = frozenset({
     "submission-check", "text-deident", "translate-doc", "doc-translate",
     "meeting-summary",
     "official-doc",         # 公文撰擬：整理資料 ＋ 撰寫草稿各呼叫一次 LLM
+    "business-card-reader",  # 名片辨識：選用的 AI 協助（預設關閉）
 })
 
 

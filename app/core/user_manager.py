@@ -418,6 +418,17 @@ def delete(user_id: int) -> None:
         from .log_safe import safe_log
         logger.warning(
             "刪除帳號後清理事務機連線失敗 user_id=%s", safe_log(str(user_id)))
+    # 名片辨識：他的辨識批次（原圖、裁圖、聯絡人）
+    try:
+        from ..tools.business_card_reader import store as bc_store
+        if bc_store.db_path().exists():
+            bc_store.purge_owner(f"u{int(user_id)}")
+            from ..tools.business_card_reader import books as bc_books
+            bc_books.purge_owner(f"u{int(user_id)}", int(user_id))
+    except Exception:  # noqa: BLE001 — 同上
+        from .log_safe import safe_log
+        logger.warning(
+            "刪除帳號後清理名片辨識批次失敗 user_id=%s", safe_log(str(user_id)))
 
 
 def _count_admin_users(conn) -> int:

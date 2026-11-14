@@ -67,6 +67,10 @@ MANAGED: tuple[dict, ...] = (
     {"file": "ai_stamp.sqlite", "label": "AI 用印", "backup": True,
      "impact": "AI 用印的待確認清單與紀錄遺失（已核准的檔案在工作區，不受影響）",
      "impact_en": "the AI stamping queue and records are lost (approved files are in the workspaces)"},
+    {"file": "business_cards.sqlite", "label": "名片辨識與名片簿", "backup": True,
+     "impact": "名片簿裡的人、歷史名片與互動紀錄、辨識批次遺失（名片圖在 business_cards 目錄，不受影響但對不上資料）",
+     "impact_en": "people, card history and interaction records in card books, and recognition batches are lost "
+                  "(the card images in business_cards remain but can no longer be matched)"},
     {"file": "vat_db.sqlite", "label": "統編資料庫", "backup": False,
      "impact": "統一編號查詢失效；可從官方來源重新下載（檔案大，不納入備份）",
      "impact_en": "VAT lookup unavailable; re-downloadable from the official "
