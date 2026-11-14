@@ -165,6 +165,9 @@ def _build_impress_odp(odg_path: Path, odp_out: Path,
         data["META-INF/manifest.xml"] = (
             data["META-INF/manifest.xml"].decode("utf-8", "replace")
             .replace(_GRAPHICS_MIME, _PRESENTATION_MIME).encode())
+    # meta / settings / manifest 是 Draw 匯入原樣帶過來的：新版 LibreOffice（26.2 起）寫的是 1.4，
+    # 上面把 content / styles 壓成 1.3 → 版本不一致，整份被拒載（CI 換成 Ubuntu 26.04 才抓到）
+    _force_odf_version(data, "1.3")
     for name, blob in pics.items():
         data[name] = blob
     # ODF 規定 zip 內每個檔案都要列在 manifest；raster fallback 新加的整頁圖若沒補
@@ -206,6 +209,37 @@ def _pin_root_graphic_defaults(styles) -> int:
                 gp.set(_q("draw", attr), "none")
                 n += 1
     return n
+
+
+def _force_odf_version(data: dict, version: str) -> None:
+    """把 meta.xml / settings.xml 的 `office:version` 與 manifest 的 `manifest:version` 統一成 `version`。
+
+    ODF 規定同一份文件裡這幾處版本要一致，不一致時 LibreOffice 整份拒載，錯誤只有一句
+    「source file could not be loaded」。content / styles 由呼叫端處理。
+    """
+    office = "urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+    mns = "urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"
+    for name in ("meta.xml", "settings.xml"):
+        if name not in data:
+            continue
+        try:
+            root = etree.fromstring(data[name], _safe_parser())
+        except etree.XMLSyntaxError:
+            continue
+        root.set("{%s}version" % office, version)
+        data[name] = etree.tostring(root, xml_declaration=True, encoding="UTF-8")
+    key = "META-INF/manifest.xml"
+    if key in data:
+        try:
+            root = etree.fromstring(data[key], _safe_parser())
+        except etree.XMLSyntaxError:
+            return
+        attr = "{%s}version" % mns
+        root.set(attr, version)
+        for e in root:
+            if isinstance(e.tag, str) and e.get(attr) is not None:
+                e.set(attr, version)
+        data[key] = etree.tostring(root, xml_declaration=True, encoding="UTF-8")
 
 
 def _sync_manifest(data: dict) -> None:

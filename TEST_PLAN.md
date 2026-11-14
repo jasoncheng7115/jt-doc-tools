@@ -699,7 +699,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **567 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **568 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -773,6 +773,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_business_card_page_browser.py` | 名片辨識畫面（真瀏覽器）：之前的批次、確認範圍（框、新增範圍）、校對（點欄位框出原文＋放大、儲存並確認）、 |
 | `test_business_card_phase2.py` | 名片辨識第 2 版：同一批合併（正反面 / 同一人）與解除、辨識走「我的作業」、跟手上的名片清單整合、AI 協助（選用） |
 | `test_business_card_site_features.py` | 名片辨識跟站內其他工具一樣該有的東西：保留期限（管理員設定）、刪除帳號一併清、存到工作區、 |
+| `test_business_card_url_ids.py` | 名片辨識頁：網址列 `#batch=` 帶進來的批次編號，先驗格式、再編碼，才接進 API 路徑 |
 | `test_button_icons_are_consistent.py` | 按鈕圖示的兩條檢查 |
 | `test_cancel_actually_stops_the_work.py` | 按下取消要**真的把工作停掉**，不是只把狀態改成「已停止」 |
 | `test_changelog_does_not_quote_people.py` | 公開的更新記錄裡不可以引述使用者 / 客戶說的話 |
@@ -6509,6 +6510,8 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 - [ ] 擷取改動前後跑真實樣本比對（開發機 scratchpad 的比較腳本），欄位數不可減少。
 - [ ] 之前匯出的檔（VCF / JSON / XLSX）上傳回來跟同一批合併，同一個人不會變兩份（`test_previous_export_merges_without_duplicates`）。
 - [ ] 校對區標題靠左、下載選單在視窗底部往上開（`test_business_card_page_browser.py`，兩處都變異驗證過）。
+- [ ] 網址 `#batch=` 帶進來的編號先驗格式再編碼（`test_business_card_url_ids.py`，CodeQL #234）。
+- [ ] **PDF 轉簡報在 LibreOffice 26.2 起**：產出的 .odp 五個部分 ODF 版本一致（`test_pdf_to_slides.py::test_odf_version_is_the_same_in_every_part_even_from_lo26`，變異驗證過）；有 Ubuntu 26.04 / LibreOffice 26.2 的機器時實際轉一份 .odp 與 .pptx 打開看。
 
 ### 6.148 v1.17.40 — 新工具「名片辨識」（Beta）（**每次發版必過**）
 

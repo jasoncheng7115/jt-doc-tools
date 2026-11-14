@@ -18,7 +18,7 @@ def test_the_seed_script_is_written_into_the_throwaway_data_dir():
 
 
 def test_no_seed_script_is_left_in_synced_folders():
-    pub = ROOT / "github"
-    places = [ROOT / "tools"] + ([pub / "tools"] if pub.is_dir() else [])
+    from tools.repo_paths import public_root
+    places = {ROOT / "tools", public_root(ROOT) / "tools"}    # 開發樹另有公開樹那一層；clone 下來是同一個
     left = [str(p) for d in places for p in d.glob("_zap_seed*")]
     assert not left, f"掃描的種子腳本留在要同步的資料夾裡：{left}"

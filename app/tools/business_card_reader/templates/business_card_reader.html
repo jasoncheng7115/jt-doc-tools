@@ -1893,7 +1893,8 @@
   if (location.hash === '#books') showView('books');
   // 從「我的作業」按「開啟」回來：#batch=<批次編號> 直接打開那一批
   const hb = /^#batch=([0-9a-f]{32})$/.exec(location.hash || '');
-  if (hb) openBatch(hb[1]);
+  // 網址列來的值一律先驗格式再編碼才接進 API 路徑（CodeQL js/client-side-request-forgery）
+  if (hb) openBatch(encodeURIComponent(hb[1]));
 
   // 用手機接續：開著的時候每 5 秒看一次有沒有新批次（手機那邊送出的），關掉或切回這個分頁時再讀一次
   let handoffTimer = null;

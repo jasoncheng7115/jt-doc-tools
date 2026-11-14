@@ -5,11 +5,18 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (971 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (972 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.43] - 2026-11-14
+
+### Fixes
+
+- **PDF to slides produced no file with newer LibreOffice (26.2 and later)**: the new version writes ODF 1.4 when importing a PDF, while some parts of the rebuilt presentation were still marked 1.3, and the mismatch made the whole file unreadable. All parts now carry the same version (OxOffice and older LibreOffice are unaffected).
+- Business card reader: the batch id in the link back from My jobs is checked and encoded before it is used in a request (CodeQL finding).
 
 ## [1.17.42] - 2026-11-14
 

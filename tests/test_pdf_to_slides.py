@@ -55,6 +55,58 @@ def test_output_is_presentation_not_drawing(tmp_path):
     assert "opendocument.graphics" not in manifest
 
 
+def _odg_like_lo26(path: Path) -> None:
+    """LibreOffice 26.2 起 Draw 匯入寫出來的 .odg：五個檔全部標 ODF 1.4（不需要 soffice）。"""
+    ns = ('xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+          'xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" '
+          'xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" '
+          'xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" '
+          'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
+          'xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"')
+    content = (f'<?xml version="1.0" encoding="UTF-8"?><office:document-content {ns} office:version="1.4">'
+               '<office:automatic-styles/><office:body><office:drawing><draw:page draw:name="p1">'
+               '<draw:frame svg:x="1cm" svg:y="1cm" svg:width="5cm" svg:height="1cm"><draw:text-box>'
+               '<text:p>SLIDE1</text:p></draw:text-box></draw:frame></draw:page></office:drawing>'
+               '</office:body></office:document-content>')
+    styles = (f'<?xml version="1.0" encoding="UTF-8"?><office:document-styles {ns} office:version="1.4">'
+              '<office:styles/><office:automatic-styles/><office:master-styles/></office:document-styles>')
+    meta = ('<?xml version="1.0" encoding="UTF-8"?><office:document-meta '
+            'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" office:version="1.4">'
+            '<office:meta/></office:document-meta>')
+    settings = ('<?xml version="1.0" encoding="UTF-8"?><office:document-settings '
+                'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" office:version="1.4">'
+                '<office:settings/></office:document-settings>')
+    manifest = (f'<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="{_MNS}" '
+                'manifest:version="1.4"><manifest:file-entry manifest:full-path="/" manifest:version="1.4" '
+                'manifest:media-type="application/vnd.oasis.opendocument.graphics"/>'
+                '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>'
+                '<manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>'
+                '<manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>'
+                '<manifest:file-entry manifest:full-path="settings.xml" manifest:media-type="text/xml"/>'
+                '</manifest:manifest>')
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("mimetype", "application/vnd.oasis.opendocument.graphics", zipfile.ZIP_STORED)
+        for n, s in (("content.xml", content), ("styles.xml", styles), ("meta.xml", meta),
+                     ("settings.xml", settings), ("META-INF/manifest.xml", manifest)):
+            z.writestr(n, s)
+
+
+def test_odf_version_is_the_same_in_every_part_even_from_lo26(tmp_path):
+    """LibreOffice 26.2 的 Draw 匯入結果是 ODF 1.4；我們把 content / styles 壓成 1.3，
+    meta / settings / manifest 原樣帶過去的話版本不一致 → 26.2 整份拒載
+    （「source file could not be loaded」；2026-11-14 CI 換成 Ubuntu 26.04 時抓到，變異驗證過）。"""
+    import re
+    odg = tmp_path / "x.odg"
+    _odg_like_lo26(odg)
+    out = tmp_path / "x.odp"
+    se._build_impress_odp(odg, out, [(25.4, 14.29)])
+    z = zipfile.ZipFile(out)
+    found = {}
+    for n in ("content.xml", "styles.xml", "meta.xml", "settings.xml", "META-INF/manifest.xml"):
+        found[n] = set(re.findall(r'(?:office|manifest):version="([0-9.]+)"', z.read(n).decode()))
+    assert all(v == {"1.3"} for v in found.values()), found
+
+
 def test_mimetype_is_first_and_stored(tmp_path):
     """ODF 規定 mimetype 必須是 zip 第一個項目且不壓縮。"""
     _soffice_or_skip()
