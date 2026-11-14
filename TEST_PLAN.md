@@ -699,7 +699,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **566 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **567 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -1272,6 +1272,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_workspace_save_button.py` | 「存至工作區」按鈕出現的條件，必須跟工作區真正收得下的格式一致 |
 | `test_workspace_thumb_pending.py` | 縮圖還沒做好時回的那張空白圖，不可以被瀏覽器快取 |
 | `test_zap_scan_records.py` | ZAP 掃描紀錄留存（使用者 2026-10-21：每次的報告都要留下來） |
+| `test_zap_seed_stays_out_of_the_public_tree.py` | ZAP 掃描的種子腳本不可以進公開樹 |
 | `test_zip_bomb_guard.py` | zip 炸彈：**每一條讀使用者 zip 的路徑都要擋得住** |
 | `test_zulip_link.py` | Zulip 私訊 Bot 綁定（v1.17.0，Zulip 維護人員 2026-10-18 建議的方案）—— 對假 Zulip 實際走 HTTP |
 

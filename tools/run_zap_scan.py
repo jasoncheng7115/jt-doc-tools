@@ -83,7 +83,9 @@ def _start_authenticated_instance(tmp: Path) -> tuple[subprocess.Popen, int, str
     port = _free_port()
     env = dict(os.environ, JTDT_DATA_DIR=str(tmp), JTDT_HOST="127.0.0.1",
                JTDT_PORT=str(port))
-    seed = ROOT / "tools" / "_zap_seed.py"
+    # 種子腳本放在拋棄式實例自己的暫存目錄，**不可以放在 `tools/`**：那個資料夾會同步進公開樹，
+    # 掃描跑到一半時同步的話，這支（含拋棄式管理員的隨機密碼）會被帶進去（2026-11-14 實際發生過）。
+    seed = tmp / "_zap_seed.py"
     seed.write_text(
         "import os, sys\n"
         "sys.path.insert(0, %r)\n"
