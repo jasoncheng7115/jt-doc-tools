@@ -294,6 +294,92 @@ DEMO_GROUPS = [
 ]
 
 
+#: 名片辨識的示範照片：**內容全部杜撰**（範例公司、example 網域、不存在的號碼段），
+#: 不可以換成真實名片 —— 截圖是要公開的。
+DEMO_CARDS = [
+    # (版型, 主色, [(文字, 字級, 粗體?)])
+    ("bar", (37, 99, 235), [("範例科技股份有限公司", 34, True), ("王小明", 64, True), ("業務經理", 30, False),
+                            ("電話 02-2345-6789 分機 302", 26, False), ("手機 0912-345-678", 26, False),
+                            ("kevin@example.com", 26, False)]),
+    ("side", (16, 185, 129), [("Example Labs Inc.", 32, True), ("Amy Example", 58, True),
+                              ("Product Designer", 28, False), ("+1 555 010 2233", 26, False),
+                              ("amy@example.org", 26, False), ("www.example.org", 26, False)]),
+    ("dark", (30, 41, 59), [("示範貿易有限公司", 34, True), ("陳美麗", 64, True), ("採購主任", 30, False),
+                            ("電話 04-2222-0000", 26, False), ("mei@example.net", 26, False),
+                            ("臺中市西區範例路 88 號", 24, False)]),
+    ("portrait", (147, 197, 253), [("樣本設計", 36, True), ("林志豪", 58, True), ("創意總監", 28, False),
+                                 ("0933-000-111", 26, False), ("hao@example.com", 22, False)]),
+    ("bar", (234, 179, 8), [("範例顧問有限公司", 34, True), ("張書豪", 64, True), ("資深顧問", 30, False),
+                            ("電話 07-555-0000", 26, False), ("手機 0922-000-333", 26, False),
+                            ("shu@example.com", 26, False)]),
+    ("side", (124, 58, 237), [("示範雲端服務", 34, True), ("黃怡君", 64, True), ("技術經理", 30, False),
+                              ("電話 02-8888-0000 分機 12", 26, False), ("yi@example.net", 26, False),
+                              ("統一編號 04595257", 24, False)]),
+]
+
+
+def _card_image(style: str, color, lines) -> "Image.Image":
+    from PIL import Image, ImageDraw, ImageFont
+    path, idx = _cjk_font()
+    portrait = style == "portrait"
+    w, h = (540, 900) if portrait else (900, 540)
+    bg = (24, 32, 48) if style == "dark" else (252, 251, 247)
+    fg = (240, 240, 240) if style == "dark" else (34, 34, 34)
+    im = Image.new("RGB", (w, h), bg)
+    d = ImageDraw.Draw(im)
+    if style in ("bar", "dark"):
+        d.rectangle([0, h - 26, w, h], fill=color if style == "bar" else (59, 130, 246))
+        x0, y = 60, 56
+    elif style == "side":
+        d.rectangle([0, 0, 34, h], fill=color)
+        x0, y = 84, 56
+    else:
+        d.rectangle([0, 0, w, 120], fill=color)
+        x0, y = 48, 160
+    for text, size, bold in lines:
+        f = ImageFont.truetype(path, size, index=idx)
+        if bold:
+            d.text((x0, y), text, fill=fg if style != "portrait" or y > 140 else (255, 255, 255), font=f,
+                   stroke_width=1, stroke_fill=fg)
+        else:
+            d.text((x0, y), text, fill=fg, font=f)
+        y += int(size * (1.75 if size >= 50 else 1.5))
+    return im
+
+
+def make_card_photo(dst: Path) -> Path:
+    """一張照片拍了 6 張名片（一張直式、各有角度與陰影），給「一張圖片多張名片」的截圖用。"""
+    import math
+    import random
+    import numpy as np
+    from PIL import Image, ImageFilter
+    sys.path.insert(0, str(REPO))
+    from tests import bc_synth as S
+    W, H = 2400, 1700
+    rng = np.random.default_rng(11)
+    # 木紋桌面：底色＋沿水平方向拉長的雜訊＋光線由左上往右下變暗
+    base = np.ones((H, W, 3), np.float32) * np.array((122, 86, 58), np.float32)
+    grain = rng.normal(0, 1, (H // 8, W // 64)).astype(np.float32)
+    grain = np.array(Image.fromarray(((grain - grain.min()) / (np.ptp(grain) + 1e-6) * 255).astype(np.uint8))
+                     .resize((W, H), Image.BICUBIC), np.float32) / 255.0
+    base *= (0.82 + 0.3 * grain)[:, :, None]
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+    base *= (1.08 - 0.25 * (xx / W + yy / H) / 2)[:, :, None]
+    base += rng.normal(0, 4, (H, W, 1)).astype(np.float32)
+    scene = Image.fromarray(np.clip(base, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.6))
+    r = random.Random(4)
+    slots = [(440, 380), (1205, 400), (1965, 440), (440, 1230), (1210, 1270), (1960, 1290)]
+    for i, ((cx, cy), (style, color, lines)) in enumerate(zip(slots, DEMO_CARDS)):
+        im = _card_image(style, color, lines)
+        cw, ch = (im.width * 0.8, im.height * 0.8)
+        q = S.rect_quad(cx + r.uniform(-25, 25), cy + r.uniform(-20, 20), cw, ch,
+                        r.uniform(-7, 7), r.uniform(0.0, 0.03))
+        S.place(scene, im, q)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    scene.save(dst, "JPEG", quality=90)
+    return dst
+
+
 def seed_users_and_groups() -> tuple[int, int]:
     """建立示範帳號與群組（**可以重複跑**：已經有的就跳過）。"""
     from app.core import auth_db, group_manager, permissions, roles, user_manager
@@ -534,6 +620,7 @@ def main() -> int:
           f" / {make_deident_doc(demo / 'deident.pdf', DEIDENT_LINES_EN).name}")
     print(f"掃描件：{make_scan(demo / 'scan.pdf', en).name}")
     print(f"會議逐字稿：{make_meeting_transcript(demo / 'meeting.vtt').name}")
+    print(f"名片照片：{make_card_photo(demo / 'cards.jpg').name}（6 張杜撰的名片）")
 
     print(f"事務機掃描取件：{seed_mfp_devices()} 台示範事務機（主機名稱都是 example.com）")
 

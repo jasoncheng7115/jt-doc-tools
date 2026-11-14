@@ -56,6 +56,7 @@ SHOTS: dict[str, str] = {
     "meeting-summary": "/tools/meeting-summary/",
     "official-doc": "/tools/official-doc/",
     "mfp-fetch": "/tools/mfp-fetch/",
+    "business-card": "/tools/business-card-reader/",
     "deident-1": "/tools/doc-deident/",
     "deident-2": "/tools/text-deident/",
     "fonts": "/admin/fonts",
@@ -162,6 +163,21 @@ RECIPES: dict[str, dict] = {
     "mfp-fetch": {"ready": """(() => !!document.querySelector('#mfListWrap table')
         && document.querySelectorAll('#mfScansWrap tbody tr').length >= 3)()""",
       "wait": 30, "scroll": False},
+    # 名片辨識：一張照片拍 6 張名片（`seed_demo_data.make_card_photo`，內容全部杜撰）→ 選「一張圖片多張名片」
+    # 上傳 → 停在確認範圍，每一張都框好並編號。上傳框是頁面自己的 `#bcFiles`。
+    # `DOM.setFileInputFiles` 本身就會觸發 change，再手動發一次會上傳兩次（多一個批次）。
+    "business-card": {"before": """(() => {
+        const r = document.querySelector('input[name=bcMode][value=multi]');
+        if (!r) return false;
+        r.click();
+        return true;
+      })()""",
+      "file": "cards", "input": "#bcFiles", "fires_change": True, "submit": False,
+      "ready": """(() => !document.getElementById('bcFrames').hidden
+        && document.querySelectorAll('#bcSvg polygon').length >= 6
+        && document.getElementById('bcPageImg').complete
+        && document.getElementById('bcPageImg').naturalWidth > 0)()""",
+      "wait": 60, "focus": "#bcFrames", "focus_block": "start"},
     "official-doc": {"before": """(() => {
         const s = document.getElementById('odExample');
         if (!s) return false;
@@ -199,10 +215,10 @@ RECIPES: dict[str, dict] = {
 }
 
 #: 範例檔的檔名前綴，全部由 `tools/seed_demo_data.py` 合成。
-SAMPLES = ("doc", "form", "scan", "deident", "meeting")
+SAMPLES = ("doc", "form", "scan", "deident", "meeting", "cards")
 _SAMPLE_FILE = {"doc": "quotation", "form": "vendor-form",
                 "scan": "scan", "deident": "deident",
-                "meeting": "meeting"}
+                "meeting": "meeting", "cards": "cards"}
 
 
 #: 瀏覽器是 snap 版時，**它讀不到 `/opt`，而且 `/tmp` 是它自己的那一個**
@@ -246,7 +262,7 @@ def sample_for(kind: str, locale: str) -> "Path | None":
     d = REPO / "temp" / "demo"
     # **副檔名不要寫死 `.pdf`** —— 會議摘要收的是逐字稿（`.vtt`），
     # 寫死的話它永遠找不到素材，而失敗的樣子是「截到一張空的上傳頁」。
-    for ext in (".pdf", ".vtt", ".txt", ".docx"):
+    for ext in (".pdf", ".vtt", ".txt", ".docx", ".jpg"):
         for f in (d / f"{base}.{locale}{ext}", d / f"{base}{ext}"):
             if f.is_file():
                 return f
@@ -470,9 +486,10 @@ async def _capture(base: str, cdp_port: int, locale: str, only=None) -> list[str
                         else:
                             await cmd("DOM.setFileInputFiles", {
                                 "files": [str(sample)], "nodeId": node["nodeId"]})
-                            await cmd("Runtime.evaluate", {"expression":
-                                f"document.querySelector({sel!r})"
-                                ".dispatchEvent(new Event('change',{bubbles:true}))"})
+                            if not r.get("fires_change"):
+                                await cmd("Runtime.evaluate", {"expression":
+                                    f"document.querySelector({sel!r})"
+                                    ".dispatchEvent(new Event('change',{bubbles:true}))"})
                             await asyncio.sleep(4.0)
                     submit = r.get("submit")
                     if submit is True:

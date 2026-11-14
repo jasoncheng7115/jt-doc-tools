@@ -599,5 +599,13 @@
  "別再把公司文件丟到線上 PDF 工具<br>\n      <span class=\"hero-title-accent\">這有 54 工具，自架、開源、可控</span>": "Stop uploading company documents to online PDF tools<br>\n      <span class=\"hero-title-accent\">54 tools here: self-hosted, open source, under your control</span>",
  "名片辨識（選用的 AI 協助）": "Business card reader (optional AI assist)",
  "預設只用 OCR 與規則。管理員打開 AI 協助之後：整合聯絡人清單時判斷規則判斷不了的兩筆是不是同一人（只送那兩筆的欄位文字）；校對時建議欄位歸類（文字模式只送那一張的 OCR 文字，看圖模式送那一張裁好的名片圖）。": "By default only OCR and rules are used. Once an administrator turns on AI assist: when merging a contact list, it judges whether two entries the rules cannot decide are the same person (only those two entries' field text is sent); during review it suggests which field each item belongs to (text mode sends only that card's OCR text, image mode sends that one cropped card image).",
- "<b>效果</b>：AI 只給建議、一律要人確認，跟 OCR 原文不同時會標出來": "<b>Result</b>: AI only makes suggestions, a person always confirms them, and anything that differs from the OCR text is flagged"
+ "<b>效果</b>：AI 只給建議、一律要人確認，跟 OCR 原文不同時會標出來": "<b>Result</b>: AI only makes suggestions, a person always confirms them, and anything that differs from the OCR text is flagged",
+ "一張照片多張名片": "Several cards per photo",
+ "個人與共用名片簿": "Personal and shared card books",
+ "合併去除重複": "Merge without duplicates",
+ "名片辨識（Beta）": "Business card reader (Beta)",
+ "名片辨識：一張照片裡的 6 張名片都自動框出並編號，右邊可以新增、旋轉、移除範圍，下方按「辨識全部 6 張」": "Business card reader: the 6 cards in one photo are framed and numbered automatically; on the right you can add, rotate or remove frames, and below is \"Recognise all 6 cards\"",
+ "展覽、拜訪收到的一疊名片，<b>平放在桌上拍一張就好</b>：自動找出每一張名片並編號（直式、歪斜、透視都可以），框不準可以拖四角修正，再一次辨識全部。也可以每張照片一張名片、用手機連拍。辨識出姓名、公司、職稱、電話、分機、Email、統編、地址，<b>逐欄對照原圖校對</b>，匯出試算表或通訊錄（VCF）；存進<b>個人或共用名片簿</b>長期查詢，或跟之前匯出的檔案合併並去除重複。不需要 AI（另有選用的 AI 協助）。": "A stack of cards from a trade show or a visit? <b>Lay them on the desk and take one photo</b>: every card is found and numbered automatically (portrait, tilted and angled shots are fine); drag the corners if a frame is off, then recognise them all at once. You can also shoot one card per photo or use burst shooting on a phone. Name, company, title, phone, extension, email, VAT number and address are read and <b>reviewed field by field against the image</b>, then exported as a spreadsheet or address book (VCF); keep them in a <b>personal or shared card book</b> for later lookup, or merge them with a previous export with duplicates removed. No AI needed (optional AI assist is available).",
+ "自動切卡與編號": "Automatic card splitting and numbering",
+ "逐欄對照原圖校對": "Field-by-field review against the image"
 }
