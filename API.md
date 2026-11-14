@@ -2485,6 +2485,11 @@ POST   /tools/business-card-reader/api/books/{book_id}/people/{person_id}/intera
 PUT    /tools/business-card-reader/api/books/{book_id}/people/{person_id}/interactions/{id}
 DELETE /tools/business-card-reader/api/books/{book_id}/people/{person_id}/interactions/{id}
 POST   /tools/business-card-reader/api/books/{book_id}/export                  # 參數同批次匯出，另有 ids / q / tag
+POST   /tools/business-card-reader/api/books/{book_id}/import                  # multipart file：匯入檔案（先比對、自動去重）
+POST   /tools/business-card-reader/api/books/{book_id}/import/{token}/preview  # {"mapping"} 改了欄位對應後重新比對
+POST   /tools/business-card-reader/api/books/{book_id}/import/{token}/apply    # {"mapping"?, "decisions": {列號: add|merge|skip}}
+DELETE /tools/business-card-reader/api/books/{book_id}/import/{token}
+GET    /tools/business-card-reader/api/books/{book_id}/duplicates              # 名片簿裡可能是同一人的幾組
 POST   /tools/business-card-reader/api/batches/{batch_id}/save-to-book/preview # {"book", "scope" | "ids"} → 每位可能是同一人的
 POST   /tools/business-card-reader/api/batches/{batch_id}/save-to-book         # {"book", "items": [{"contact_id", "action": new|merge|skip, "person_id"?}]}
 ```
@@ -2496,6 +2501,14 @@ POST   /tools/business-card-reader/api/batches/{batch_id}/save-to-book         #
 保留期限每本各自設（依最後更新起算，0 ＝永久），個人名片簿受管理員的上限限制。稽核：`business_card_book_query`（不記關鍵字）、
 `business_card_book_view`、`business_card_book_save`、`business_card_book_edit`、`business_card_book_merge`、`business_card_book_delete`、
 `business_card_book_export`、`business_card_interaction`。共用名片簿與成員由管理員在「設定 → 名片簿」管理（`/admin/business-cards/api/…`）。
+
+**匯入檔案到名片簿**（要可編修）：檔案格式同「合併之前匯出的檔案」（XLSX / ODS / CSV / VCF / JSON，上限相同），上傳回 `token`、`kind`、
+`headers`、前 5 列、`mapping`、`targets` 與**自動去重**的比對結果 `items`：每一列 `{"row", "kind", "default", "who", "match", "dup_of"}`，
+`kind`＝`new`（名片簿裡沒有，預設 `add`）/ `match`（Email → 手機 → 姓名＋公司 找到名片簿裡的人，預設 `merge`：那個人多一筆來源 `import` 的紀錄、
+目前資料補上檔案多的值）/ `dup`（跟同一個檔案第 `dup_of` 列是同一人，預設 `skip`；選 `merge` 併進那一列匯入後的人）/ `empty`（整列空白，略過）。
+比對當下不寫入；`apply` 才寫進去並刪掉暫存檔，回 `added` / `merged` / `skipped`。暫存檔約 2 小時，過期回 410，別人的或別本名片簿的 `token` 一律 404。
+**檢查重複**：`duplicates` 回 `groups`（每組 `people` 與 `reasons`：Email / 手機 / 姓名與公司相同；A 跟 B 同手機、B 跟 C 同 Email 算同一組）與 `can_edit`；
+合併用 `people/merge`。稽核：`business_card_book_import_upload`、`business_card_book_import`（只記筆數）、`business_card_book_duplicates`。
 
 #### 合併之前匯出的檔案或名片清單
 

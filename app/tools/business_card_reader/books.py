@@ -540,6 +540,126 @@ def find_matches(book: dict, fields: list, limit: int = 3) -> list[dict]:
     return out
 
 
+# --------------------------------------------------------------------------- 匯入檔案、找重複
+
+IMPORT_ACTIONS = ("add", "merge", "skip")
+
+
+def _has_value(fields: list) -> bool:
+    return any(str(f.get("value") or "").strip() for f in fields or [] if f.get("status") != "deleted")
+
+
+def import_preview(book: dict, contacts: list[dict]) -> list[dict]:
+    """匯入前先比對（**自動去重**）：每一列跟名片簿已有的人比（Email → 手機 → 姓名＋公司），
+    也跟檔案裡前面的列比（同一個檔案裡同一個人出現兩次）。
+
+    每一列回 `{"row", "kind", "default", "who", "match", "dup_of"}`：
+    `kind`＝`new`（新的人，預設加入）/ `match`（名片簿已有，預設合併）/ `dup`（跟檔案第 `dup_of` 列是同一人，
+    預設不加入）/ `empty`（整列沒有資料，略過）。
+    """
+    seen: dict[str, int] = {}
+    out = []
+    for c in contacts or []:
+        fields = c.get("fields") or []
+        row = c.get("row")
+        who = {"name": _val(fields, "name") or _val(fields, "name_en"), "company": _val(fields, "company"),
+               "email": _val(fields, "email"), "mobile": _val(fields, "mobile")}
+        if not _has_value(fields):
+            out.append({"row": row, "kind": "empty", "default": "skip", "who": who, "match": None, "dup_of": None})
+            continue
+        keys = _keys(_clean_card_fields(fields)).split()
+        dup_of = next((seen[k] for k in keys if k in seen), None)
+        for k in keys:
+            seen.setdefault(k, row)
+        m = find_matches(book, fields, 1)
+        if dup_of is not None:
+            kind, default = "dup", "skip"
+        elif m:
+            kind, default = "match", "merge"
+        else:
+            kind, default = "new", "add"
+        out.append({"row": row, "kind": kind, "default": default, "who": who, "match": m[0] if m else None,
+                    "dup_of": dup_of})
+    return out
+
+
+def import_apply(book: dict, contacts: list[dict], decisions: dict, by: str) -> dict:
+    """照使用者的選擇匯入。`decisions`＝{列號: add | merge | skip}，沒給的用預設。
+    `merge`：名片簿已有的那位多一筆紀錄（來源 `import`）、目前資料補上檔案多的值；檔案裡重複的那一列併進
+    前面那一列匯入後的人。比對以**匯入前**的名片簿為準（同一個檔案裡的人不會彼此誤配）。"""
+    plan = {p["row"]: p for p in import_preview(book, contacts)}
+    for v in (decisions or {}).values():
+        if v not in IMPORT_ACTIONS:
+            raise BookError("處理方式只能是 add / merge / skip")
+    counts = {"added": 0, "merged": 0, "skipped": 0}
+    pid_of: dict[int, str] = {}
+    for c in contacts or []:
+        row = c.get("row")
+        pl = plan.get(row) or {}
+        act = (decisions or {}).get(str(row), (decisions or {}).get(row, pl.get("default", "add")))
+        if pl.get("kind") == "empty" or act == "skip":
+            counts["skipped"] += 1
+            continue
+        fields, notes = c.get("fields") or [], c.get("notes") or {}
+        target = None
+        if act == "merge":
+            if pl.get("kind") == "match" and pl.get("match"):
+                target = pl["match"]["person"]["id"]
+            elif pl.get("kind") == "dup":
+                target = pid_of.get(pl.get("dup_of"))
+        if target:
+            add_card(book, target, fields, notes, by, source="import")
+            pid_of[row] = target
+            counts["merged"] += 1
+        else:
+            pid_of[row] = add_person(book, fields, notes, by, source="import")
+            counts["added"] += 1
+    return counts
+
+
+def duplicate_groups(book: dict, limit: int = 100) -> list[dict]:
+    """名片簿裡可能是同一人的幾組：Email、手機、或姓名＋公司相同的人連成一組（A 跟 B 同手機、B 跟 C 同 Email
+    也算同一組）。回 `[{"people": [摘要…], "reasons": ["Email 相同", …]}]`，人數多的排前面。"""
+    c = conn()
+    rows = c.execute("SELECT id, match_keys FROM bc_people WHERE book_id=?", (book["id"],)).fetchall()
+    parent = {r["id"]: r["id"] for r in rows}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+    by_key: dict[str, str] = {}
+    why: dict[str, set] = {}
+    reason = {"e": "Email 相同", "m": "手機相同", "n": "姓名與公司相同"}
+    for r in rows:
+        for k in (r["match_keys"] or "").split():
+            if k in by_key:
+                a, b = find(r["id"]), find(by_key[k])
+                if a != b:
+                    parent[a] = b
+                why.setdefault(r["id"], set()).add(reason.get(k[0], k[0]))
+                why.setdefault(by_key[k], set()).add(reason.get(k[0], k[0]))
+            else:
+                by_key[k] = r["id"]
+    groups: dict[str, list[str]] = {}
+    for r in rows:
+        groups.setdefault(find(r["id"]), []).append(r["id"])
+    out = []
+    for ids in groups.values():
+        if len(ids) < 2:
+            continue
+        people = []
+        for i in ids:
+            pp = get_person(book, i)
+            people.append(_summary({**pp, "cards": len(pp["cards"])}))
+        people.sort(key=lambda p: -(p.get("updated_at") or 0))
+        rs = sorted(set().union(*(why.get(i, set()) for i in ids)))
+        out.append({"people": people, "reasons": rs})
+    out.sort(key=lambda g: -len(g["people"]))
+    return out[:limit]
+
+
 # --------------------------------------------------------------------------- 互動紀錄
 
 def _interaction(kind, note, at) -> tuple[str, str, float]:

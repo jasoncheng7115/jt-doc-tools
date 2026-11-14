@@ -343,3 +343,95 @@ def test_upgrade_from_v1_keeps_batches(tmp_path, monkeypatch):
     assert store.conn().execute("PRAGMA user_version").fetchone()[0] == 2
     v = books.Viewer(owner="local", auth=False)
     assert books.list_books(v)[0]["kind"] == "personal"
+
+
+# --------------------------------------------------------------------------- 匯入檔案、自動去重、檢查重複
+
+def _vcf(*cards):
+    out = []
+    for name, email, mobile in cards:
+        out += ["BEGIN:VCARD", "VERSION:3.0", f"FN:{name}", f"N:{name};;;;", "ORG:範例科技股份有限公司"]
+        if email:
+            out.append(f"EMAIL;TYPE=INTERNET:{email}")
+        if mobile:
+            out.append(f"TEL;TYPE=CELL:{mobile}")
+        out.append("END:VCARD")
+    return ("\r\n".join(out) + "\r\n").encode()
+
+
+def test_import_into_book_checks_duplicates_automatically(people):
+    """匯入檔案進名片簿：先比對（名片簿已有的預設合併、檔案裡重複的預設不加入），按 apply 才寫進去。資料杜撰。"""
+    clients, _bid, _ids, _ = people
+    alice = clients["alice"]
+    pa = _personal(alice)
+    _save_all_new(alice, _batch(alice), pa["id"])            # 名片簿已有王小明（kevin@example.com）
+    data = _vcf(("王小明", "kevin@example.com", ""),          # 名片簿已有 → 合併
+                ("林小華", "hua@example.net", "0922-000-111"),  # 新的人
+                ("林小華", "hua@example.net", ""),              # 檔案裡重複 → 不加入
+                ("陳大文", "", "0933-000-222"))                 # 新的人
+    r = alice.post(f"{API}/books/{pa['id']}/import", files={"file": ("之前匯出.vcf", data, "text/vcard")})
+    assert r.status_code == 200, r.text
+    up = r.json()
+    assert up["kind"] == "vcf" and up["rows"] == 4
+    kinds = [it["kind"] for it in up["items"]]
+    assert kinds == ["match", "new", "dup", "new"], kinds
+    assert [it["default"] for it in up["items"]] == ["merge", "add", "skip", "add"]
+    assert up["items"][0]["match"]["reason"] == "Email 相同" and up["items"][2]["dup_of"] == 1
+    assert alice.get(f"{API}/books/{pa['id']}/people").json()["total"] == 1, "比對時不可以先寫進去"
+    r = alice.post(f"{API}/books/{pa['id']}/import/{up['token']}/apply", json={})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"added": 2, "merged": 1, "skipped": 1}
+    lst = alice.get(f"{API}/books/{pa['id']}/people").json()
+    assert lst["total"] == 3, "同一個人不會變兩筆"
+    kevin = next(p for p in lst["items"] if p["name"] == "王小明")
+    person = alice.get(f"{API}/books/{pa['id']}/people/{kevin['id']}").json()
+    assert [c["source"] for c in person["cards"]].count("import") == 1, "合併的那一位多一筆匯入紀錄"
+    # 做完暫存檔就刪掉
+    assert alice.post(f"{API}/books/{pa['id']}/import/{up['token']}/apply", json={}).status_code == 410
+
+
+def test_import_decisions_and_access(people):
+    clients, bid, _ids, _ = people
+    alice, bob, carol = clients["alice"], clients["bob"], clients["carol"]
+    data = _vcf(("林小華", "hua@example.net", ""), ("林小華", "hua@example.net", "0922-000-111"))
+    up = alice.post(f"{API}/books/{bid}/import", files={"file": ("a.vcf", data, "text/vcard")}).json()
+    # 檔案裡重複的那一列選「合併」→ 併進前一列匯入後的那位
+    r = alice.post(f"{API}/books/{bid}/import/{up['token']}/apply", json={"decisions": {"1": "merge"}})
+    assert r.json() == {"added": 1, "merged": 1, "skipped": 0}
+    lst = alice.get(f"{API}/books/{bid}/people").json()
+    assert lst["total"] == 1 and lst["items"][0]["mobile"] == "0922-000-111", "第二列多的手機補上"
+    # 只能查詢的成員不能匯入；不是成員看不到；別人的暫存檔拿不到；處理方式要合法
+    assert bob.post(f"{API}/books/{bid}/import", files={"file": ("a.vcf", data, "text/vcard")}).status_code == 403
+    assert carol.post(f"{API}/books/{bid}/import", files={"file": ("a.vcf", data, "text/vcard")}).status_code == 404
+    up2 = alice.post(f"{API}/books/{bid}/import", files={"file": ("a.vcf", data, "text/vcard")}).json()
+    pc = _personal(carol)
+    assert carol.post(f"{API}/books/{pc['id']}/import/{up2['token']}/apply", json={}).status_code == 404
+    assert alice.post(f"{API}/books/{bid}/import/{up2['token']}/apply",
+                      json={"decisions": {"0": "delete"}}).status_code == 400
+    assert alice.post(f"{API}/books/{bid}/import/not-a-token/apply", json={}).status_code == 404
+    assert alice.request("DELETE", f"{API}/books/{bid}/import/{up2['token']}").status_code == 200
+    assert alice.post(f"{API}/books/{bid}/import", files={"file": ("a.pdf", b"%PDF", "application/pdf")}).status_code == 400
+
+
+def test_duplicates_in_a_book_are_found_and_can_be_merged(people):
+    """名片簿裡已經有的重複（Email / 手機 / 姓名＋公司相同）：「檢查重複」列出來，合併成一位。"""
+    clients, _bid, _ids, _ = people
+    alice = clients["alice"]
+    pa = _personal(alice)
+    data = _vcf(("林小華", "hua@example.net", ""), ("陳大文", "", "0933-000-222"),
+                ("林小華", "hua@example.net", "0922-000-111"), ("陳大文", "", "+886 933 000 222"),
+                ("張書豪", "shu@example.com", ""))
+    up = alice.post(f"{API}/books/{pa['id']}/import", files={"file": ("a.vcf", data, "text/vcard")}).json()
+    # 硬是全部加成新的（模擬以前重複存進來的）
+    alice.post(f"{API}/books/{pa['id']}/import/{up['token']}/apply",
+               json={"decisions": {str(i): "add" for i in range(5)}})
+    g = alice.get(f"{API}/books/{pa['id']}/duplicates").json()
+    assert g["can_edit"] is True and len(g["groups"]) == 2
+    by_name = {grp["people"][0]["name"]: set(grp["reasons"]) for grp in g["groups"]}
+    assert by_name == {"林小華": {"Email 相同", "姓名與公司相同"}, "陳大文": {"手機相同", "姓名與公司相同"}}, by_name
+    assert all(len(grp["people"]) == 2 for grp in g["groups"]), "張書豪只有一筆，不算重複"
+    grp = g["groups"][0]
+    keep, others = grp["people"][0]["id"], [p["id"] for p in grp["people"][1:]]
+    assert alice.post(f"{API}/books/{pa['id']}/people/merge", json={"keep": keep, "others": others}).status_code == 200
+    assert len(alice.get(f"{API}/books/{pa['id']}/duplicates").json()["groups"]) == 1
+    assert clients["bob"].get(f"{API}/books/{pa['id']}/duplicates").status_code == 404

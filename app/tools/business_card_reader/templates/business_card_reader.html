@@ -41,12 +41,12 @@
 
   <div class="bc-src">
     <button type="button" class="btn btn-primary" id="bcPick">{{ icon('image', size=16) }}<span>{{ tr('選擇檔案') }}</span></button>
-    <button type="button" class="btn" id="bcCamera">{{ icon('smartphone', size=16) }}<span>{{ tr('手機拍攝') }}</span></button>
-    <button type="button" class="btn bc-handoff-btn" id="bcHandoff" title="{{ tr('顯示 QR Code，用手機開這一頁接著拍') }}">{{ icon('qr', size=16) }}<span>{{ tr('用手機接續') }}</span></button>
+    <button type="button" class="btn" id="bcCamera" hidden title="{{ tr('開啟手機或平板的相機，拍好就上傳') }}">{{ icon('smartphone', size=16) }}<span>{{ tr('拍照') }}</span></button>
+    <button type="button" class="btn bc-handoff-btn" id="bcHandoff" title="{{ tr('顯示 QR Code：用手機掃描打開這一頁，在手機上拍名片，拍好的會出現在這台電腦') }}">{{ icon('qr', size=16) }}<span>{{ tr('改用手機拍（掃 QR Code）') }}</span></button>
     {% if workspace_enabled(request) %}<button type="button" class="btn ws-load-btn" id="bcWs" data-ws-exts="{{ workspace_extensions() }}">{{ icon('archive', size=16) }}<span>{{ tr('從工作區載入') }}</span></button>{% endif %}
     <input type="file" id="bcFiles" accept="{{ accept }},image/*,application/pdf" multiple hidden>
     <input type="file" id="bcCam" accept="image/*" capture="environment" multiple hidden>
-    <button type="button" class="btn" id="bcBurst" hidden>{{ icon('image', size=16) }}<span>{{ tr('連拍') }}</span></button>
+    <button type="button" class="btn" id="bcBurst" hidden title="{{ tr('在頁面裡開相機，一次拍好幾張再一起上傳') }}">{{ icon('image', size=16) }}<span>{{ tr('連拍') }}</span></button>
   </div>
   <div class="bc-drop" id="bcDrop" tabindex="0">{{ icon('upload', size=22) }}<span>{{ tr('或把照片 / PDF 拖到這裡') }}</span></div>
   <p class="muted bc-small">{{ tr('支援 JPEG、PNG、PDF') }}{% if heif %}{{ tr('、HEIC（iPhone 照片）') }}{% endif %}{{ tr('；一批最多 {0} 個檔、{1} 頁、{2} 張名片。').replace('{0}', max_files|string).replace('{1}', max_pages|string).replace('{2}', max_cards|string) }}
@@ -204,46 +204,79 @@
     <div class="bc-subh">{{ icon('eye', size=14) }} <span id="bcPvTitle"></span></div>
     <div class="bc-preview" id="bcPreview"></div>
   </div>
+  <div class="bc-exblock">
   <div class="bc-subh">{{ icon('download', size=14) }} {{ tr('下載') }}</div>
-  <div class="bc-fmts">
+  <div class="bc-fmts" id="bcFmts">
     <button type="button" class="btn bc-fmt" data-fmt="xlsx">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">XLSX</span><span class="bc-fmt-d">{{ tr('Excel 試算表') }}</span></button>
-    <button type="button" class="btn bc-fmt" data-fmt="ods">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">ODS</span><span class="bc-fmt-d">{{ tr('OxOffice、LibreOffice 試算表') }}</span></button>
+    <button type="button" class="btn bc-fmt" data-fmt="ods">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">ODS</span><span class="bc-fmt-d">OxOffice / LibreOffice</span></button>
     <button type="button" class="btn bc-fmt" data-fmt="csv">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">CSV</span><span class="bc-fmt-d">{{ tr('純文字，逗號分隔') }}</span></button>
-    <button type="button" class="btn bc-fmt" data-fmt="vcf">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">VCF</span><span class="bc-fmt-d">{{ tr('匯入手機或郵件通訊錄') }}</span></button>
+    <button type="button" class="btn bc-fmt" data-fmt="vcf">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">VCF</span><span class="bc-fmt-d">{{ tr('手機、郵件通訊錄') }}</span></button>
     <button type="button" class="btn bc-fmt" data-fmt="json">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">JSON</span><span class="bc-fmt-d">{{ tr('給其他系統讀取') }}</span></button>
   </div>
   <label class="bc-wssave" id="bcWsSaveRow" hidden><input type="checkbox" id="bcWsSave"> {{ tr('下載時同時存一份到我的工作區（XLSX、ODS、JSON；工作區不收 CSV 與 VCF）') }}</label>
+  </div>
+  <div class="bc-exblock">
   <div class="bc-subh" id="bcLmHead">{{ icon('merge', size=14) }} {{ tr('合併之前匯出的檔案或名片清單（去除重複）') }}</div>
+  <div class="bc-lm-intro" id="bcLmIntro">
   <p class="muted bc-small">{{ tr('上傳之前從這裡匯出的檔案（XLSX、ODS、CSV、VCF、JSON），或你原本就有的聯絡人清單，跟這一批比對：同一個人不重複、清單缺的補上、新的人接在最後、兩邊不一樣的由你決定，再下載一份合併後的檔案。上傳的檔案只暫存在伺服器約 2 小時，不會存進名片簿。') }}</p>
-  <div class="bc-src">
+  <div class="bc-lm-pick">
     <button type="button" class="btn" id="bcLmPick">{{ icon('upload', size=15) }}<span>{{ tr('上傳之前匯出的檔案或名片清單') }}</span></button>
     <input type="file" id="bcLmFile" accept=".csv,.tsv,.txt,.xlsx,.ods,.vcf,.json" hidden>
   </div>
+  </div>
   <div class="bc-lm" id="bcLm" hidden>
-    <p class="bc-small"><b id="bcLmName"></b>　<span class="muted" id="bcLmRows"></span></p>
-    <div class="bc-subh">{{ tr('欄位對應（自動對好了，不對的請改）') }}</div>
-    <div class="bc-lm-map" id="bcLmMap"></div>
-    <div class="bc-lm-acts"><button type="button" class="btn btn-primary" id="bcLmPlanBtn">{{ icon('search', size=15) }}<span>{{ tr('比對') }}</span></button>
-      <button type="button" class="btn" id="bcLmDone">{{ icon('trash', size=15) }}<span>{{ tr('完成並刪除暫存的清單') }}</span></button></div>
-    <div id="bcLmPlan" hidden>
-      <p class="bc-small" id="bcLmCounts"></p>
-      <div class="bc-lm-items" id="bcLmItems"></div>
-      <div id="bcLmPairsBox" hidden>
-        <div class="bc-subh">{{ icon('warn', size=14) }} {{ tr('可能是同一人（規則判斷不了）') }}
-          <button type="button" class="btn btn-small" id="bcLmAi" hidden>{{ icon('sparkles', size=13) }}<span>{{ tr('請 AI 判斷') }}</span></button></div>
-        <p class="muted bc-small" id="bcLmAiInfo" hidden></p>
-        <div class="bc-lm-items" id="bcLmPairs"></div>
+    <div class="bc-lm-step">
+      <span class="bc-lm-n">1</span>
+      <div class="bc-lm-bd">
+        <div class="bc-lm-t">{{ tr('上傳的檔案') }}</div>
+        <p class="bc-small"><b id="bcLmName"></b>　<span class="muted" id="bcLmRows"></span></p>
       </div>
-      <div class="bc-subh">{{ icon('download', size=14) }} {{ tr('下載整合後的清單') }}</div>
-      <div class="bc-fmts" id="bcLmFmts">
-        <button type="button" class="btn bc-fmt" data-fmt="xlsx">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">XLSX</span><span class="bc-fmt-d">{{ tr('Excel 試算表') }}</span></button>
-        <button type="button" class="btn bc-fmt" data-fmt="ods">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">ODS</span><span class="bc-fmt-d">{{ tr('OxOffice、LibreOffice 試算表') }}</span></button>
-        <button type="button" class="btn bc-fmt" data-fmt="csv">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">CSV</span><span class="bc-fmt-d">{{ tr('純文字，逗號分隔') }}</span></button>
-        <button type="button" class="btn bc-fmt" data-fmt="vcf">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">VCF</span><span class="bc-fmt-d">{{ tr('匯入手機或郵件通訊錄') }}</span></button>
-        <button type="button" class="btn bc-fmt" data-fmt="json">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">JSON</span><span class="bc-fmt-d">{{ tr('給其他系統讀取') }}</span></button>
-      </div>
-      <p class="muted bc-small">{{ tr('存成 VCF / JSON 時，試算表裡對應不到欄位的欄不會帶過去；要保留全部欄位請存成試算表。') }}</p>
+      <button type="button" class="btn btn-small" id="bcLmAgain">{{ icon('upload', size=13) }}<span>{{ tr('換一個檔案') }}</span></button>
     </div>
+    <div class="bc-lm-step">
+      <span class="bc-lm-n">2</span>
+      <div class="bc-lm-bd">
+        <div class="bc-lm-t">{{ tr('欄位對應') }}</div>
+        <details class="bc-lm-mapbox" id="bcLmMapBox"><summary id="bcLmMapSum"></summary>
+          <p class="muted bc-small">{{ tr('左邊是檔案裡的欄名與內容範例，右邊選它是哪一個欄位；選「不使用」的欄會原樣留在檔案裡。改完按「重新比對」。') }}</p>
+          <div class="bc-lm-map" id="bcLmMap"></div>
+          <div class="bc-lm-acts"><button type="button" class="btn btn-small btn-primary" id="bcLmPlanBtn">{{ icon('refresh', size=13) }}<span>{{ tr('重新比對') }}</span></button></div>
+        </details>
+      </div>
+    </div>
+    <div class="bc-lm-step" id="bcLmPlan" hidden>
+      <span class="bc-lm-n">3</span>
+      <div class="bc-lm-bd">
+        <div class="bc-lm-t">{{ tr('比對結果') }}</div>
+        <div class="bc-lm-sum" id="bcLmCounts"></div>
+        <p class="bc-small" id="bcLmScope"></p>
+        <p class="muted bc-small" id="bcLmHow">{{ tr('需要你決定的排在最上面；每一位右邊可以改怎麼處理。') }}</p>
+        <div class="bc-lm-items" id="bcLmItems"></div>
+        <div id="bcLmPairsBox" hidden>
+          <div class="bc-subh">{{ icon('warn', size=14) }} {{ tr('可能是同一人（規則判斷不了）') }}
+            <button type="button" class="btn btn-small" id="bcLmAi" hidden>{{ icon('sparkles', size=13) }}<span>{{ tr('請 AI 判斷') }}</span></button></div>
+          <p class="muted bc-small" id="bcLmAiInfo" hidden></p>
+          <div class="bc-lm-items" id="bcLmPairs"></div>
+        </div>
+      </div>
+    </div>
+    <div class="bc-lm-step" id="bcLmDl" hidden>
+      <span class="bc-lm-n">4</span>
+      <div class="bc-lm-bd">
+        <div class="bc-lm-t">{{ tr('下載合併後的檔案') }}</div>
+        <p class="muted bc-small" id="bcLmRec"></p>
+        <div class="bc-fmts" id="bcLmFmts">
+          <button type="button" class="btn bc-fmt" data-fmt="xlsx">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">XLSX</span><span class="bc-fmt-d">{{ tr('Excel 試算表') }}</span></button>
+          <button type="button" class="btn bc-fmt" data-fmt="ods">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">ODS</span><span class="bc-fmt-d">OxOffice / LibreOffice</span></button>
+          <button type="button" class="btn bc-fmt" data-fmt="csv">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">CSV</span><span class="bc-fmt-d">{{ tr('純文字，逗號分隔') }}</span></button>
+          <button type="button" class="btn bc-fmt" data-fmt="vcf">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">VCF</span><span class="bc-fmt-d">{{ tr('手機、郵件通訊錄') }}</span></button>
+          <button type="button" class="btn bc-fmt" data-fmt="json">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">JSON</span><span class="bc-fmt-d">{{ tr('給其他系統讀取') }}</span></button>
+        </div>
+        <p class="muted bc-small">{{ tr('存成 VCF / JSON 時，試算表裡對應不到欄位的欄不會帶過去；要保留全部欄位請存成試算表。') }}</p>
+      </div>
+    </div>
+    <div class="bc-lm-end"><button type="button" class="btn" id="bcLmDone">{{ icon('check', size=15) }}<span>{{ tr('完成，刪除上傳的檔案') }}</span></button></div>
+  </div>
   </div>
   <details class="bc-fmtnote"><summary>{{ icon('info', size=13) }} {{ tr('各格式的注意事項') }}</summary>
     <p class="muted bc-small">{{ tr('電話、分機、郵遞區號與統編在 XLSX、ODS 裡都是文字，不會被吃掉開頭的 0。CSV 沒有型別：直接點兩下用試算表打開時開頭的 0 可能不見，請改用 XLSX / ODS，或在試算表裡用「匯入文字」並把這幾欄設成文字。CSV 預設會在 =、+、-、@ 開頭的值前面加單引號，避免被當成公式（原值仍在 JSON 匯出裡）。') }}</p>
@@ -261,6 +294,34 @@
   </div>
   <p class="muted bc-small bk-info"><span id="bkRole"></span><span id="bkKeep"></span>
     <button type="button" class="btn btn-small" id="bkKeepEdit" hidden>{{ icon('clock', size=13) }}<span>{{ tr('變更保留期限') }}</span></button></p>
+  <div class="bk-tools">
+    <button type="button" class="btn btn-small" id="bkImportBtn" hidden>{{ icon('upload', size=13) }}<span>{{ tr('匯入檔案') }}</span></button>
+    <button type="button" class="btn btn-small" id="bkDupBtn">{{ icon('merge', size=13) }}<span>{{ tr('檢查重複') }}</span></button>
+    <input type="file" id="bkImportFile" accept=".csv,.tsv,.txt,.xlsx,.ods,.vcf,.json" hidden>
+  </div>
+  <div class="bc-exblock bk-imp" id="bkImport" hidden>
+    <div class="bc-subh">{{ icon('upload', size=14) }} {{ tr('匯入檔案到這本名片簿') }}</div>
+    <p class="muted bc-small">{{ tr('會先自動比對：名片簿裡已經有的人預設合併（補上缺的資料）、同一個檔案裡重複的不重複加入。確認下面的處理方式之後才會寫進名片簿。') }}</p>
+    <p class="bc-small"><b id="bkImpName"></b>　<span class="muted" id="bkImpRows"></span>
+      <button type="button" class="btn btn-small" id="bkImpAgain">{{ icon('upload', size=13) }}<span>{{ tr('換一個檔案') }}</span></button></p>
+    <details class="bc-lm-mapbox" id="bkImpMapBox"><summary id="bkImpMapSum"></summary>
+      <p class="muted bc-small">{{ tr('左邊是檔案裡的欄名與內容範例，右邊選它是哪一個欄位；選「不使用」的欄不會匯入。改完按「重新比對」。') }}</p>
+      <div class="bc-lm-map" id="bkImpMap"></div>
+      <div class="bc-lm-acts"><button type="button" class="btn btn-small btn-primary" id="bkImpRecheck">{{ icon('refresh', size=13) }}<span>{{ tr('重新比對') }}</span></button></div>
+    </details>
+    <div class="bc-lm-sum" id="bkImpCounts"></div>
+    <div class="bc-lm-items" id="bkImpItems"></div>
+    <div class="bk-imp-acts">
+      <button type="button" class="btn btn-primary" id="bkImpGo">{{ icon('check', size=15) }}<span id="bkImpGoText">{{ tr('匯入') }}</span></button>
+      <button type="button" class="btn" id="bkImpCancel">{{ icon('close', size=15) }}<span>{{ tr('取消') }}</span></button>
+    </div>
+  </div>
+  <div class="bc-exblock bk-dup" id="bkDup" hidden>
+    <div class="bc-subh">{{ icon('merge', size=14) }} {{ tr('可能重複的人') }}</div>
+    <p class="muted bc-small" id="bkDupInfo"></p>
+    <div class="bk-dup-list" id="bkDupList"></div>
+    <div class="bk-imp-acts"><button type="button" class="btn" id="bkDupClose">{{ icon('close', size=15) }}<span>{{ tr('關閉') }}</span></button></div>
+  </div>
   <div class="bk-body">
     <div class="bk-list">
       <div class="bk-count muted" id="bkCount"></div>
@@ -310,9 +371,9 @@
   <div class="bc-subh">{{ icon('download', size=14) }} {{ tr('匯出這本（有搜尋條件時只匯出查到的）') }}</div>
   <div class="bc-fmts" id="bkFmts">
     <button type="button" class="btn bc-fmt" data-fmt="xlsx">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">XLSX</span><span class="bc-fmt-d">{{ tr('Excel 試算表') }}</span></button>
-    <button type="button" class="btn bc-fmt" data-fmt="ods">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">ODS</span><span class="bc-fmt-d">{{ tr('OxOffice、LibreOffice 試算表') }}</span></button>
+    <button type="button" class="btn bc-fmt" data-fmt="ods">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">ODS</span><span class="bc-fmt-d">OxOffice / LibreOffice</span></button>
     <button type="button" class="btn bc-fmt" data-fmt="csv">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">CSV</span><span class="bc-fmt-d">{{ tr('純文字，逗號分隔') }}</span></button>
-    <button type="button" class="btn bc-fmt" data-fmt="vcf">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">VCF</span><span class="bc-fmt-d">{{ tr('匯入手機或郵件通訊錄') }}</span></button>
+    <button type="button" class="btn bc-fmt" data-fmt="vcf">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">VCF</span><span class="bc-fmt-d">{{ tr('手機、郵件通訊錄') }}</span></button>
     <button type="button" class="btn bc-fmt" data-fmt="json">{{ icon('file-text', size=18) }}<span class="bc-fmt-t">JSON</span><span class="bc-fmt-d">{{ tr('給其他系統讀取') }}</span></button>
   </div>
 </section>
@@ -354,8 +415,12 @@
 
 <div class="bc-handoff" id="bcHandoffBox" hidden role="dialog" aria-modal="true" aria-labelledby="bcHandoffT">
   <div class="bc-handoff-card">
-    <h3 id="bcHandoffT">{{ icon('qr', size=16) }} {{ tr('用手機接續') }}</h3>
-    <p class="muted">{{ tr('用手機相機掃下方 QR Code 開這一頁，用同一個帳號登入後按「手機拍攝」。手機上辨識的批次，這裡的「之前的辨識批次」會自動出現。') }}</p>
+    <h3 id="bcHandoffT">{{ icon('qr', size=16) }} {{ tr('改用手機拍名片') }}</h3>
+    <ol class="bc-handoff-steps">
+      <li>{{ tr('用手機相機掃下面的 QR Code，打開這一頁（用同一個帳號登入）。') }}</li>
+      <li>{{ tr('在手機上按「拍照」或「連拍」拍名片。') }}</li>
+      <li>{{ tr('拍好的那一批會自動出現在這台電腦的「之前的辨識批次」，在電腦上校對就好。') }}</li>
+    </ol>
     <img id="bcHandoffImg" alt="QR Code" width="220" height="220">
     <div class="bc-handoff-url" id="bcHandoffUrl"></div>
     <button type="button" class="btn btn-primary" id="bcHandoffClose">{{ tr('關閉') }}</button>
@@ -387,6 +452,15 @@
 .bc-tabbtn.active { color: var(--primary, #2563eb); border-bottom-color: var(--primary, #2563eb); }
 .bk-bar { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(220px, 2fr) minmax(120px, 1fr); gap: 10px; }
 .bk-bar label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.bk-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.bk-imp-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.bk-dup-list { display: flex; flex-direction: column; gap: 10px; }
+.bk-dup-group { border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.bk-dup-why { display: flex; gap: 6px; flex-wrap: wrap; }
+.bk-dup-why span { background: #fffbeb; color: #92400e; border-radius: 999px; padding: 1px 8px; font-size: 12px; }
+.bk-dup-p { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.bk-dup-p small { color: var(--text-muted, #64748b); }
+.bk-dup-group > .btn { align-self: flex-start; }
 .bk-list { min-width: 0; }   /* 名片簿清單在 grid 裡：表格太寬時捲動表格，不撐開整頁 */
 .bk-info { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 !important; }
 .bk-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
@@ -444,6 +518,7 @@
   .bk-iform { grid-template-columns: 1fr 1fr; }
   .bk-save-row { grid-template-columns: 1fr; }
 }
+.bc-handoff-steps { margin: 4px 0 12px; padding-left: 20px; text-align: left; font-size: 13.5px; line-height: 1.7; }
 .bc-handoff { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center;
   justify-content: center; z-index: 1000; padding: 16px; }
 .bc-handoff[hidden] { display: none; }
@@ -465,7 +540,24 @@
 .bc-alt { grid-column: 2 / -1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px;
   color: var(--text-muted, #475569); margin-top: 2px; }
 .bc-alt b { color: var(--text, #0f172a); font-weight: 600; }
-.bc-lm { border: 1px solid var(--border, #e5e7eb); border-radius: 10px; padding: 12px; margin-top: 10px; }
+.bc-lm { margin-top: 4px; display: flex; flex-direction: column; gap: 14px; }
+.bc-lm-step { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 4px 12px; align-items: start; }
+.bc-lm-n { width: 24px; height: 24px; border-radius: 50%; background: var(--primary, #2563eb); color: #fff; font-weight: 700;
+  font-size: 13px; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+.bc-lm-bd { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.bc-lm-t { font-weight: 600; font-size: 14px; }
+.bc-lm-bd > p { margin: 0; }
+.bc-lm-mapbox summary { cursor: pointer; font-size: 13px; color: var(--text-muted, #475569); }
+.bc-lm-mapbox[open] summary { margin-bottom: 8px; }
+.bc-lm-sum { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 210px)); gap: 8px; }
+.bc-lm-chip { border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; font-size: 13px; }
+.bc-lm-chip b { font-size: 20px; line-height: 1.1; }
+.bc-lm-chip small { font-size: 12px; opacity: .85; }
+.bc-lm-chip.new { background: #ecfdf5; color: #047857; } .bc-lm-chip.update { background: #eff6ff; color: #1d4ed8; }
+.bc-lm-chip.conflict { background: #fffbeb; color: #92400e; } .bc-lm-chip.same { background: #f1f5f9; color: #475569; }
+.bc-lm-chip.untouched { background: #f8fafc; color: #64748b; border: 1px dashed var(--border, #e2e8f0); }
+.bc-lm-end { display: flex; justify-content: flex-end; }
+.bc-fmt.rec { border-color: var(--primary, #2563eb); box-shadow: 0 0 0 1px var(--primary, #2563eb) inset; }
 .bc-lm-map { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
 .bc-lm-col { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 6px; align-items: center;
   border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 6px 8px; font-size: 13px; }
@@ -473,7 +565,7 @@
 .bc-lm-col .ex { grid-column: 1 / -1; color: var(--text-muted, #64748b); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bc-lm-acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
 .bc-lm-items { display: flex; flex-direction: column; gap: 6px; max-height: 420px; overflow-y: auto; }
-.bc-lm-item { display: grid; grid-template-columns: 70px minmax(0, 1fr) minmax(0, 1fr) 190px; gap: 8px; align-items: start;
+.bc-lm-item { display: grid; grid-template-columns: 92px minmax(0, 1fr) minmax(0, 1fr) 200px; gap: 8px; align-items: start;
   border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
 .bc-lm-item .k { font-weight: 600; border-radius: 999px; padding: 1px 8px; text-align: center; font-size: 12px; }
 .bc-lm-item .k.new { background: #ecfdf5; color: #047857; } .bc-lm-item .k.update { background: #eff6ff; color: #1d4ed8; }
@@ -605,7 +697,9 @@
   .bc-addfield select { max-width:200px; }
   .bc-exrow { display:flex; gap:14px; flex-wrap:wrap; }
   .bc-exrow label { display:flex; flex-direction:column; gap:4px; font-size:13px; }
-  .bc-exsum { margin:12px 0 0; display:flex; gap:6px; align-items:flex-start; line-height:1.55; }
+  .bc-exsum { margin:12px 0 0; font-size:13.5px; line-height:1.55; }
+  .bc-exsum.empty { text-align:left; color:var(--warning-text, #92400e); background:var(--warning-bg, #fffbeb);
+                    border:1px solid #fde68a; border-radius:8px; padding:8px 12px; }
   .bc-subh { display:flex; align-items:center; gap:6px; font-weight:600; font-size:13.5px; margin:16px 0 8px; }
   .bc-pvbox .bc-subh .muted { font-weight:400; }
   .bc-preview { overflow-x:auto; border:1px solid var(--border, #e5e7eb); border-radius:8px; }
@@ -619,16 +713,27 @@
     background:var(--bg-panel, #fff); box-shadow:1px 0 0 var(--border, #e5e7eb); font-weight:600; }
   .bc-preview th:first-child { background:var(--bg-subtle, #f8fafc); }
   .bc-preview td.empty { color:var(--text-muted, #94a3b8); }
-  .bc-fmts { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; }
+  /* 五種格式平均分滿一整列（auto-fill 在寬畫面會留空欄，卡片擠在左邊） */
+  .bc-fmts { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:10px; }
+  .bc-exblock { border:1px solid var(--border, #e5e7eb); border-radius:10px; padding:4px 16px 14px; margin-top:14px; }
+  .bc-exblock > .bc-subh:first-child { margin-top:10px; }
+  .bc-lm-intro { display:flex; align-items:center; gap:16px; }
+  .bc-lm-intro > p { flex:1; margin:0; line-height:1.6; }
+  .bc-lm-pick { flex:none; }
   .bc-fmt { display:grid; grid-template-columns:auto 1fr; grid-template-rows:auto auto; column-gap:8px; row-gap:1px;
     align-items:center; justify-items:start; text-align:left; padding:10px 12px; height:auto; }
   .bc-fmt > svg { grid-row:1 / span 2; }
   .bc-fmt-t { font-weight:700; font-size:14px; }
-  .bc-fmt-d { font-size:12px; color:var(--text-muted, #64748b); font-weight:400; white-space:normal; }
+  .bc-fmt-d { font-size:12px; color:var(--text-muted, #64748b); font-weight:400; white-space:nowrap;
+              overflow:hidden; text-overflow:ellipsis; }
+  .bc-fmt { min-width:0; }
   .bc-fmtnote { margin-top:10px; }
   .bc-fmtnote summary { cursor:pointer; font-size:12.5px; color:var(--text-muted, #64748b); display:flex; align-items:center; gap:5px; }
   .bc-fmtnote p { margin-top:6px; }
+  @media (max-width: 1100px) { .bc-fmts { grid-template-columns:repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 800px) {
+    .bc-fmts { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .bc-lm-intro { flex-direction:column; align-items:flex-start; }
     .bc-modes { grid-template-columns:1fr; }
     .bc-ill { width:96px; height:58px; }
     .bc-notes-grid { grid-template-columns:1fr; }
@@ -678,6 +783,8 @@
   // ------------------------------------------------------------------ 1. 匯入
   const mode = () => document.querySelector('input[name="bcMode"]:checked').value;
   $('bcPick').addEventListener('click', () => $('bcFiles').click());
+  // 「拍照」只在手機、平板顯示：電腦沒有相機選項，它會跟「選擇檔案」一模一樣
+  $('bcCamera').hidden = !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   $('bcCamera').addEventListener('click', () => $('bcCam').click());
   $('bcFiles').addEventListener('change', e => upload([...e.target.files]));
   $('bcCam').addEventListener('change', e => upload([...e.target.files]));
@@ -1208,6 +1315,7 @@
     try {
       const pv = await (await api('POST', '/batches/' + S.batch.id + '/export/preview', exportBody())).json();
       const skip = $('bcScope').value === 'confirmed' ? pv.skipped_check : 0;
+      $('bcExSum').classList.toggle('empty', !pv.count);
       $('bcExSum').textContent = pv.count
         ? tr('會匯出 {0} 位聯絡人').replace('{0}', pv.count) + (skip ? tr('；另有 {0} 位待確認不會匯出（要一起匯出請把範圍改成「全部」）').replace('{0}', skip) : '') + (pv.excluded ? tr('；{0} 位已排除').replace('{0}', pv.excluded) : '') + '。'
         : tr('目前沒有可以匯出的聯絡人：還沒有確認任何一位。請先校對，或把範圍改成「全部，包含待確認」。');
@@ -1230,10 +1338,12 @@
       const hidden = keep.filter(x => !x).length;
       $('bcPvTitle').textContent = tr('預覽前 {0} 位').replace('{0}', pv.rows.length)
         + (hidden ? tr('（{0} 個空白欄位不列，下載的檔案照樣有）').replace('{0}', hidden) : '');
-      document.querySelectorAll('.bc-fmts .btn').forEach(b => b.disabled = !pv.count);
+      // 只動這一批的匯出按鈕（`.bc-fmts` 另外還有名片簿與合併那兩組，不可以一起被反灰）
+      document.querySelectorAll('#bcFmts .btn').forEach(b => b.disabled = !pv.count);
     } catch (e) { $('bcExSum').textContent = e.message; }
   }
   ['bcScope', 'bcLang'].forEach(id => $(id).addEventListener('change', refreshExport));
+  $('bcScope').addEventListener('change', () => { if (LM.token) lmPlan(); });
   // 工作區有開才顯示（管理員停用時按下去只會 404）；只收工作區認得的格式
   const WS_FMTS = ['xlsx', 'ods', 'json'];
   const wsMeta = document.querySelector('meta[name="jt-workspace"]');
@@ -1294,7 +1404,7 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
   let menuW = window.innerWidth;
   window.addEventListener('resize', () => { if (window.innerWidth !== menuW) { menuW = window.innerWidth; closeMenu(); } });
-  document.querySelectorAll('.bc-fmts .btn').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#bcFmts .btn').forEach(b => b.addEventListener('click', () => {
     const fmt = b.dataset.fmt;
     if (document.getElementById('bcMenu') && S.menuFor === fmt) { closeMenu(); return; }
     S.menuFor = fmt;
@@ -1402,7 +1512,9 @@
   $('bcRetryDiffClose').addEventListener('click', () => { $('bcRetryDiff').hidden = true; });
   // 連拍：瀏覽器支援相機（要 HTTPS 或本機）時，在頁面裡一張一張拍，最後一次上傳
   const CAM = { stream: null, shots: [] };
-  $('bcBurst').hidden = !(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  // 連拍跟「拍照」一樣只在手機、平板顯示（電腦請用「改用手機拍」）
+  $('bcBurst').hidden = !(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia
+    && window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   $('bcBurst').addEventListener('click', async () => {
     try {
       CAM.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 2560 }, height: { ideal: 1920 } }, audio: false });
@@ -1432,11 +1544,12 @@
   });
 
   // ================================================================== 跟手上的名片清單整合
-  const LM = { token: null, headers: [], sample: [], mapping: {}, targets: [], plan: null, decisions: {}, pairs: [], name: '' };
-  const KIND_TEXT = { new: tr('新增'), update: tr('補上'), conflict: tr('不同'), same: tr('相同') };
-  const DEC_TEXT = { add: tr('加成新的一列'), merge: tr('補上清單缺的'), keep_list: tr('補上缺的，不同的保留清單的'),
-                     use_card: tr('補上缺的，不同的改用名片的'), skip: tr('不動') };
+  const LM = { token: null, headers: [], sample: [], mapping: {}, targets: [], plan: null, decisions: {}, pairs: [], name: '', kind: '' };
+  const KIND_TEXT = { new: tr('新的人'), update: tr('補上'), conflict: tr('不一樣'), same: tr('相同') };
+  const DEC_TEXT = { add: tr('加成新的一位'), merge: tr('補上檔案缺的'), keep_list: tr('補上缺的，不一樣的保留檔案的'),
+                     use_card: tr('補上缺的，不一樣的改用這一批的'), skip: tr('不加入、不改') };
   $('bcLmPick').addEventListener('click', () => $('bcLmFile').click());
+  $('bcLmAgain').addEventListener('click', () => $('bcLmFile').click());
   // 校對區的捷徑：捲到「合併之前匯出的檔案」並直接開選檔
   $('bcToLm').addEventListener('click', () => {
     $('bcLmHead').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1447,11 +1560,14 @@
     const fd = new FormData(); fd.append('file', f, f.name);
     try {
       const r = await (await api('POST', '/batches/' + S.batch.id + '/list-merge', fd, true)).json();
+      if (LM.token && LM.token !== r.token) { try { await api('DELETE', '/batches/' + S.batch.id + '/list-merge/' + LM.token); } catch (_e) {} }
       Object.assign(LM, { token: r.token, headers: r.headers, sample: r.sample, mapping: r.mapping, targets: r.targets,
-                          plan: null, decisions: {}, pairs: [], name: f.name });
+                          plan: null, decisions: {}, pairs: [], name: f.name, kind: r.kind || '' });
       $('bcLmName').textContent = f.name;
       $('bcLmRows').textContent = tr('{0} 列、{1} 欄').replace('{0}', r.rows).replace('{1}', r.headers.length);
-      renderLmMap(); $('bcLm').hidden = false; $('bcLmPlan').hidden = true;
+      renderLmMap(); $('bcLm').hidden = false; $('bcLmIntro').hidden = true;
+      $('bcLmPlan').hidden = true; $('bcLmDl').hidden = true;
+      await lmPlan();             // 上傳完直接比對，不必再按一次
     } catch (err_) { showAlert(err_.message); }
     finally { $('bcLmFile').value = ''; }
   });
@@ -1469,26 +1585,50 @@
       return d;
     }));
     if (window.enhanceJtSelects) window.enhanceJtSelects($('bcLmMap'));
+    const used = Object.keys(LM.mapping).length, skip = LM.headers.length - used;
+    $('bcLmMapSum').textContent = (used ? tr('自動認出 {0} 欄').replace('{0}', used) : tr('沒有認出任何欄位，請展開選每一欄是什麼'))
+      + (used && skip ? tr('，{0} 欄不使用（原樣保留）').replace('{0}', skip) : '') + tr('（按這裡檢查或修改）');
+    $('bcLmMapBox').open = !used;
   }
   const lmBody = extra => Object.assign({ mapping: LM.mapping, scope: $('bcScope').value, pairs: LM.pairs }, extra || {});
   async function lmPlan() {
     try {
       LM.plan = await (await api('POST', '/batches/' + S.batch.id + '/list-merge/' + LM.token + '/plan', lmBody())).json();
-      renderLmPlan(); $('bcLmPlan').hidden = false;
+      renderLmPlan(); $('bcLmPlan').hidden = false; $('bcLmDl').hidden = false;
     } catch (e) { showAlert(e.message); }
   }
   $('bcLmPlanBtn').addEventListener('click', lmPlan);
   const whoText = w => w ? [w.name || '—', w.company, w.email || w.mobile].filter(Boolean).join('・') : '—';
   function renderLmPlan() {
     const c = LM.plan.counts || {};
-    $('bcLmCounts').textContent = tr('新增 {0} 位、補上 {1} 位、不同 {2} 位、相同 {3} 位；清單裡其他 {4} 列照原樣保留。')
-      .replace('{0}', c.new || 0).replace('{1}', c.update || 0).replace('{2}', c.conflict || 0).replace('{3}', c.same || 0).replace('{4}', c.untouched || 0);
-    const items = LM.plan.items.filter(it => it.kind !== 'untouched');
+    const CHIPS = [['conflict', tr('兩邊資料不一樣'), tr('預設保留檔案裡的，可以改')],
+                   ['update', tr('檔案裡已有，補上缺的'), tr('同一個人不重複')],
+                   ['new', tr('新的人'), tr('加在檔案最後')],
+                   ['same', tr('完全相同'), tr('不會重複加入')],
+                   ['untouched', tr('只在檔案裡'), tr('原樣保留')]];
+    $('bcLmCounts').replaceChildren(...CHIPS.filter(([k]) => c[k]).map(([k, label, hint]) => {
+      const d = el('div', 'bc-lm-chip ' + k); d.append(el('b', null, String(c[k])), el('span', null, label), el('small', null, hint));
+      return d;
+    }));
+    const ORDER = { conflict: 0, update: 1, new: 2, same: 3 };
+    const items = LM.plan.items.filter(it => it.kind !== 'untouched').sort((x, y) => (ORDER[x.kind] ?? 9) - (ORDER[y.kind] ?? 9));
+    $('bcLmHow').hidden = !items.length;
+    // 比對的是這一批的哪幾位（跟上面「匯出聯絡人」的範圍一樣）；一位都沒有時講清楚怎麼辦
+    const nCard = items.length;
+    const scopeAll = $('bcScope').value === 'all';
+    $('bcLmScope').textContent = nCard
+      ? tr('比對的是這一批的 {0} 位（{1}；範圍可以在上面的「範圍」改）。').replace('{0}', nCard).replace('{1}', scopeAll ? tr('全部，包含待確認') : tr('已確認'))
+      : (scopeAll ? tr('這一批沒有可以比對的聯絡人。')
+                  : tr('這一批還沒有確認任何一位，所以沒有可以比對的：請先校對確認，或把上面的「範圍」改成「全部，包含待確認」。'));
+    $('bcLmScope').classList.toggle('bc-exsum', !nCard); $('bcLmScope').classList.toggle('empty', !nCard);
+    const kindUp = (LM.kind || '').toUpperCase();
+    $('bcLmRec').textContent = kindUp ? tr('建議存成跟上傳的檔案一樣的格式（{0}）。').replace('{0}', kindUp) : '';
+    document.querySelectorAll('#bcLmFmts .bc-fmt').forEach(b => b.classList.toggle('rec', b.dataset.fmt === LM.kind));
     $('bcLmItems').replaceChildren(...items.map(it => {
       const row = el('div', 'bc-lm-item');
       row.append(el('span', 'k ' + it.kind, KIND_TEXT[it.kind] || it.kind));
-      const a = el('div', 'who'); a.append(el('b', null, tr('名片')), el('span', null, whoText(it.card)));
-      const b = el('div', 'who'); b.append(el('b', null, tr('清單')), el('span', null, it.list ? whoText(it.list) : tr('（沒有這個人）')));
+      const a = el('div', 'who'); a.append(el('b', null, tr('這一批')), el('span', null, whoText(it.card)));
+      const b = el('div', 'who'); b.append(el('b', null, tr('上傳的檔案')), el('span', null, it.list ? whoText(it.list) : tr('（檔案裡沒有）')));
       const sel = el('select', 'field jt-select');
       const opts = it.kind === 'new' ? ['add', 'skip'] : it.kind === 'conflict' ? ['keep_list', 'use_card', 'add', 'skip']
         : it.kind === 'update' ? ['merge', 'add', 'skip'] : ['skip', 'add'];
@@ -1498,7 +1638,7 @@
       row.append(a, b, sel);
       if (it.diffs && it.diffs.length) {
         row.append(el('div', 'diffs', it.diffs.map(d => (LABEL[d.key] || d.key) + '：' + (d.kind === 'conflict'
-          ? tr('名片「{0}」、清單「{1}」').replace('{0}', d.card || '').replace('{1}', d.list || '') : tr('補上「{0}」').replace('{0}', d.card || ''))).join('；')));
+          ? tr('這一批「{0}」、檔案「{1}」').replace('{0}', d.card || '').replace('{1}', d.list || '') : tr('補上「{0}」').replace('{0}', d.card || ''))).join('；')));
       }
       return row;
     }));
@@ -1508,8 +1648,8 @@
     $('bcLmPairs').replaceChildren(...pairs.map(pr => {
       const row = el('div', 'bc-lm-item');
       row.append(el('span', 'k conflict', tr('可能')));
-      const a = el('div', 'who'); a.append(el('b', null, tr('名片')), el('span', null, whoText(pr.card)));
-      const b = el('div', 'who'); b.append(el('b', null, tr('清單第 {0} 列').replace('{0}', pr.row + 1)), el('span', null, whoText(pr.list)));
+      const a = el('div', 'who'); a.append(el('b', null, tr('這一批')), el('span', null, whoText(pr.card)));
+      const b = el('div', 'who'); b.append(el('b', null, tr('檔案第 {0} 列').replace('{0}', pr.row + 1)), el('span', null, whoText(pr.list)));
       const btn = el('button', 'btn btn-small'); btn.type = 'button'; btn.append(el('span', null, tr('是同一人，合併')));
       btn.addEventListener('click', () => { LM.pairs.push({ contact_id: pr.contact_id, row: pr.row }); lmPlan(); });
       row.append(a, b, btn);
@@ -1567,7 +1707,7 @@
   $('bcLmDone').addEventListener('click', async () => {
     if (!LM.token) return;
     try { await api('DELETE', '/batches/' + S.batch.id + '/list-merge/' + LM.token); } catch (_e) {}
-    LM.token = null; $('bcLm').hidden = true; showToast && showToast(tr('已刪除暫存的清單'), 'ok');
+    LM.token = null; $('bcLm').hidden = true; $('bcLmIntro').hidden = false; showToast && showToast(tr('已刪除暫存的清單'), 'ok');
   });
 
   // ================================================================== AI 建議欄位（選用）
@@ -1640,9 +1780,149 @@
     const d = B.book.effective_keep_days;
     $('bkKeep').textContent = '・' + (d > 0 ? tr('最後更新超過 {0} 天的人會自動刪除').replace('{0}', d) : tr('永久保留'));
     $('bkKeepEdit').hidden = B.book.kind !== 'personal';
+    $('bkImportBtn').hidden = !['owner', 'edit'].includes(B.book.role);
+    closeImport(); $('bkDup').hidden = true;
     closePerson(); searchPeople(true);
   }
   $('bkBook').addEventListener('change', () => selectBook($('bkBook').value));
+
+  // ------------------------------------------------------------------ 名片簿：匯入檔案（自動去重）、檢查重複
+  const IMP = { token: null, headers: [], sample: [], mapping: {}, targets: [], items: [], decisions: {} };
+  function closeImport() {
+    if (IMP.token && B.book) { api('DELETE', '/books/' + B.book.id + '/import/' + IMP.token).catch(() => {}); }
+    IMP.token = null; $('bkImport').hidden = true;
+  }
+  $('bkImportBtn').addEventListener('click', () => $('bkImportFile').click());
+  $('bkImpAgain').addEventListener('click', () => $('bkImportFile').click());
+  $('bkImpCancel').addEventListener('click', closeImport);
+  $('bkImportFile').addEventListener('change', async e => {
+    const f = e.target.files[0]; if (!f || !B.book) return;
+    const fd = new FormData(); fd.append('file', f, f.name);
+    try {
+      const r = await (await api('POST', '/books/' + B.book.id + '/import', fd, true)).json();
+      if (IMP.token) { api('DELETE', '/books/' + B.book.id + '/import/' + IMP.token).catch(() => {}); }
+      Object.assign(IMP, { token: r.token, headers: r.headers, sample: r.sample, mapping: r.mapping, targets: r.targets,
+                           items: r.items, decisions: {} });
+      $('bkImpName').textContent = f.name;
+      $('bkImpRows').textContent = tr('{0} 列、{1} 欄').replace('{0}', r.rows).replace('{1}', r.headers.length);
+      renderImpMap(); renderImp(r.counts);
+      $('bkDup').hidden = true; $('bkImport').hidden = false;
+      $('bkImport').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err_) { showAlert(err_.message); }
+    finally { $('bkImportFile').value = ''; }
+  });
+  function renderImpMap() {
+    $('bkImpMap').replaceChildren(...IMP.headers.map((h, i) => {
+      const d = el('div', 'bc-lm-col');
+      d.append(el('span', 'h', h || tr('（沒有欄名）')));
+      const sel = el('select', 'field jt-select');
+      const o0 = el('option', null, tr('不使用')); o0.value = ''; sel.append(o0);
+      IMP.targets.forEach(x => { const o = el('option', null, tr(x.label)); o.value = x.key; sel.append(o); });
+      sel.value = IMP.mapping[String(i)] || '';
+      sel.addEventListener('change', () => { if (sel.value) IMP.mapping[String(i)] = sel.value; else delete IMP.mapping[String(i)]; });
+      const ex = IMP.sample.map(r => r[i]).filter(Boolean).slice(0, 2).join('、');
+      d.append(sel, el('span', 'ex', ex ? tr('例：{0}').replace('{0}', ex) : ''));
+      return d;
+    }));
+    if (window.enhanceJtSelects) window.enhanceJtSelects($('bkImpMap'));
+    const used = Object.keys(IMP.mapping).length;
+    $('bkImpMapSum').textContent = (used ? tr('自動認出 {0} 欄').replace('{0}', used) : tr('沒有認出任何欄位，請展開選每一欄是什麼'))
+      + tr('（按這裡檢查或修改）');
+    $('bkImpMapBox').open = !used;
+  }
+  $('bkImpRecheck').addEventListener('click', async () => {
+    try {
+      const r = await (await api('POST', '/books/' + B.book.id + '/import/' + IMP.token + '/preview', { mapping: IMP.mapping })).json();
+      IMP.items = r.items; IMP.decisions = {}; renderImp(r.counts);
+    } catch (e) { showAlert(e.message); }
+  });
+  const IMP_KIND = { new: [tr('新的人'), 'new'], match: [tr('名片簿已有'), 'update'], dup: [tr('檔案裡重複'), 'conflict'],
+                     empty: [tr('空白列'), 'same'] };
+  const impAct = it => IMP.decisions[it.row] || it.default;
+  function renderImpGo() {
+    let add = 0, merge = 0;
+    IMP.items.forEach(it => { const a = impAct(it); if (it.kind === 'empty' || a === 'skip') return; if (a === 'merge' && it.kind !== 'new') merge++; else add++; });
+    $('bkImpGoText').textContent = tr('匯入：新增 {0} 位、合併 {1} 位').replace('{0}', add).replace('{1}', merge);
+    $('bkImpGo').disabled = !(add + merge);
+  }
+  function renderImp(counts) {
+    const c = counts || {};
+    const CH = [['match', tr('名片簿已有'), tr('預設合併，補上缺的資料'), 'update'], ['new', tr('新的人'), tr('預設加入'), 'new'],
+                ['dup', tr('檔案裡重複'), tr('預設不重複加入'), 'conflict'], ['empty', tr('空白列'), tr('略過'), 'same']];
+    $('bkImpCounts').replaceChildren(...CH.filter(([k]) => c[k]).map(([k, label, hint, cls]) => {
+      const d = el('div', 'bc-lm-chip ' + cls); d.append(el('b', null, String(c[k])), el('span', null, label), el('small', null, hint));
+      return d;
+    }));
+    const ORDER = { match: 0, dup: 1, new: 2, empty: 3 };
+    const items = IMP.items.filter(it => it.kind !== 'empty').slice().sort((x, y) => ORDER[x.kind] - ORDER[y.kind] || x.row - y.row);
+    $('bkImpItems').replaceChildren(...items.map(it => {
+      const row = el('div', 'bc-lm-item');
+      const [label, cls] = IMP_KIND[it.kind] || [it.kind, 'same'];
+      row.append(el('span', 'k ' + cls, label));
+      const a = el('div', 'who'); a.append(el('b', null, tr('檔案第 {0} 列').replace('{0}', it.row + 1)), el('span', null, whoText(it.who)));
+      const b = el('div', 'who');
+      if (it.kind === 'match') b.append(el('b', null, tr('名片簿裡的（{0}）').replace('{0}', tr(it.match.reason))), el('span', null, whoText(it.match.person)));
+      else if (it.kind === 'dup') b.append(el('b', null, tr('跟第 {0} 列是同一人').replace('{0}', it.dup_of + 1)));
+      else b.append(el('span', 'muted', tr('名片簿裡沒有')));
+      const sel = el('select', 'field jt-select');
+      const opts = it.kind === 'match' ? [['merge', tr('合併到名片簿裡的那位')], ['add', tr('加成新的一位')], ['skip', tr('不匯入')]]
+        : it.kind === 'dup' ? [['skip', tr('不匯入')], ['merge', tr('併進第 {0} 列那位').replace('{0}', it.dup_of + 1)], ['add', tr('加成新的一位')]]
+        : [['add', tr('加成新的一位')], ['skip', tr('不匯入')]];
+      opts.forEach(([v, txt]) => { const o = el('option', null, txt); o.value = v; sel.append(o); });
+      sel.value = impAct(it);
+      sel.addEventListener('change', () => { IMP.decisions[it.row] = sel.value; renderImpGo(); });
+      row.append(a, b, sel);
+      return row;
+    }));
+    if (window.enhanceJtSelects) window.enhanceJtSelects($('bkImpItems'));
+    renderImpGo();
+  }
+  $('bkImpGo').addEventListener('click', async () => {
+    $('bkImpGo').disabled = true;
+    try {
+      const r = await (await api('POST', '/books/' + B.book.id + '/import/' + IMP.token + '/apply',
+                                 { mapping: IMP.mapping, decisions: IMP.decisions })).json();
+      IMP.token = null; $('bkImport').hidden = true;
+      showToast && showToast(tr('已匯入：新增 {0} 位、合併 {1} 位、略過 {2} 列').replace('{0}', r.added).replace('{1}', r.merged).replace('{2}', r.skipped), 'ok');
+      searchPeople(true);
+    } catch (e) { showAlert(e.message); renderImpGo(); }
+  });
+
+  async function loadDup() {
+    try {
+      const r = await (await api('GET', '/books/' + B.book.id + '/duplicates')).json();
+      $('bkDupInfo').textContent = r.groups.length
+        ? tr('找到 {0} 組可能是同一人（Email、手機、或姓名與公司相同）。選要保留哪一位，其他的名片紀錄與互動會一起搬過去。').replace('{0}', r.groups.length)
+        : tr('沒有找到重複的人。');
+      $('bkDupList').replaceChildren(...r.groups.map((g, gi) => {
+        const box = el('div', 'bk-dup-group');
+        const why = el('div', 'bk-dup-why'); g.reasons.forEach(x => why.append(el('span', null, tr(x)))); box.append(why);
+        g.people.forEach((pp, i) => {
+          const lab = el('label', 'bk-dup-p');
+          const rd = el('input'); rd.type = 'radio'; rd.name = 'bkdup' + gi; rd.value = pp.id; rd.checked = i === 0; rd.disabled = !r.can_edit;
+          lab.append(rd, el('span', null, whoText(pp)), el('small', null, (pp.updated_at ? tr('最後更新 {0}').replace('{0}', jtTime.dt(pp.updated_at)) : '')));
+          box.append(lab);
+        });
+        if (r.can_edit) {
+          const btn = el('button', 'btn btn-small btn-primary'); btn.type = 'button';
+          btn.append(el('span', null, tr('合併成一位（保留勾選的那位）')));
+          btn.addEventListener('click', async () => {
+            const keep = box.querySelector('input[type=radio]:checked').value;
+            const others = g.people.map(x => x.id).filter(x => x !== keep);
+            btn.disabled = true;
+            try { await api('POST', '/books/' + B.book.id + '/people/merge', { keep, others }); showToast && showToast(tr('已合併'), 'ok'); loadDup(); searchPeople(true); }
+            catch (e) { showAlert(e.message); btn.disabled = false; }
+          });
+          box.append(btn);
+        }
+        return box;
+      }));
+      closeImport(); $('bkDup').hidden = false;
+      $('bkDup').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) { showAlert(e.message); }
+  }
+  $('bkDupBtn').addEventListener('click', loadDup);
+  $('bkDupClose').addEventListener('click', () => { $('bkDup').hidden = true; });
   $('bkKeepEdit').addEventListener('click', async () => {
     const cap = B.book.personal_max_days || 0;
     const v = await showPrompt(cap ? tr('保留幾天（1～{0}；依每個人的最後更新起算）').replace('{0}', cap) : tr('保留幾天（0 ＝永久；依每個人的最後更新起算）'),

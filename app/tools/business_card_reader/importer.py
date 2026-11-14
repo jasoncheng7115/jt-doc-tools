@@ -710,6 +710,9 @@ def parse_table(data: bytes, filename: str) -> tuple[list[str], list[list[str]]]
         if len(contacts) > MAX_ROWS:
             raise TableError(MSG_TOO_MANY_ROWS)
         headers, rows = ex.build_rows(contacts, lang="zh")
+        # 整欄都空的不列（VCF / JSON 沒有欄的概念，排成表時每一種欄位都會出現）
+        keep = [i for i in range(len(headers)) if any(str(r[i]).strip() for r in rows)] or [0]
+        headers, rows = [headers[i] for i in keep], [[r[i] for i in keep] for r in rows]
         if len(headers) > MAX_COLS:
             raise TableError(MSG_TOO_MANY_COLS)
         return headers, rows

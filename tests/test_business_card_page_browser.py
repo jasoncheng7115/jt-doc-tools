@@ -273,3 +273,106 @@ def test_forgot_the_mode_switch_without_reuploading(site):
         "改成多張後停在確認範圍、找出 6 張"
     assert ev("document.getElementById('bcReview').hidden") is True
     assert ev("!!document.getElementById('bcToSingle')")
+
+
+_VCF_JS = r"""((sel, cards) => {
+  const lines = [];
+  cards.forEach(([n, e, m]) => { lines.push('BEGIN:VCARD', 'VERSION:3.0', 'FN:' + n, 'N:' + n + ';;;;', 'ORG:範例科技股份有限公司');
+    if (e) lines.push('EMAIL;TYPE=INTERNET:' + e); if (m) lines.push('TEL;TYPE=CELL:' + m); lines.push('END:VCARD'); });
+  const dt = new DataTransfer();
+  dt.items.add(new File([lines.join('\r\n') + '\r\n'], 'previous.vcf', { type: 'text/vcard' }));
+  const inp = document.querySelector(sel); inp.files = dt.files;
+  inp.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+})"""
+
+
+def test_book_import_dedupe_and_the_export_buttons_of_each_section(site):
+    """使用者回報：名片簿的匯出按鈕不能按（這一批沒有可匯出的時候，連名片簿那組也被反灰；按名片簿的匯出
+    還會連帶觸發這一批的匯出）。另外：名片簿匯入檔案自動去重、檢查重複、合併之前匯出的檔案一步一步走。資料杜撰。"""
+    port, send, info = site
+    ev, wait, shot = _tools(send)
+    send("Page.navigate", {"url": f"http://127.0.0.1:{port}/tools/business-card-reader/"})
+    assert wait("document.querySelectorAll('.bc-batch').length >= 3")
+    # 重現使用者的情況：這一批一位都還沒確認（沒有可匯出的）
+    sid = info["single"]
+    ev(f"""(async () => {{
+      const b = await (await fetch('/tools/business-card-reader/api/batches/{sid}')).json();
+      for (const c of b.contacts) await fetch('/tools/business-card-reader/api/batches/{sid}/contacts/' + c.id,
+        {{method: 'PUT', headers: {{'Content-Type': 'application/json'}}, body: JSON.stringify({{status: 'check'}})}});
+      return true; }})()""")
+    send("Page.navigate", {"url": f"http://127.0.0.1:{port}/tools/business-card-reader/?r=1#batch={sid}"})
+    assert wait("!!document.getElementById('bcExport') && !document.getElementById('bcExport').hidden"
+                " && document.getElementById('bcExSum').textContent.length > 0")
+    assert ev("document.querySelector('#bcFmts .btn').disabled") is True
+    assert ev("document.getElementById('bcExSum').classList.contains('empty')"), "沒有可匯出時提示要明顯"
+    # 匯出的五種格式平均分滿一整列
+    ws = ev("[...document.querySelectorAll('#bcFmts .bc-fmt')].map(b => Math.round(b.getBoundingClientRect().width))")
+    assert len(ws) == 5 and max(ws) - min(ws) <= 2, ws
+    # 合併之前匯出的檔案：上傳完直接比對，四個步驟都出來，建議存成同格式
+    ev(_VCF_JS + "('#bcLmFile', [['王小明', 'kevin@example.com', ''], ['林小華', 'hua@example.net', '']])")
+    assert wait("!document.getElementById('bcLmPlan').hidden && !document.getElementById('bcLmDl').hidden", 30), \
+        "上傳完要直接比對，不必再按"
+    assert ev("document.getElementById('bcLmIntro').hidden") is True
+    assert ev("document.querySelectorAll('#bcLmCounts .bc-lm-chip').length") >= 1
+    assert ev("document.querySelector('#bcLmFmts .bc-fmt.rec').dataset.fmt") == "vcf"
+    shot("bc-listmerge")
+    ev("document.getElementById('bcLmDone').click()")
+    assert wait("document.getElementById('bcLm').hidden && !document.getElementById('bcLmIntro').hidden")
+    # 名片簿：匯入檔案 → 自動比對（檔案裡重複的那一列預設不加入）→ 匯入
+    ev("document.getElementById('bcTabBooks').click()")
+    assert wait("!document.getElementById('bcBookView').hidden && !document.getElementById('bkImportBtn').hidden")
+    ev(_VCF_JS + "('#bkImportFile', [['林小華', 'hua@example.net', ''], ['陳大文', '', '0933-000-222'], "
+                 "['林小華', 'hua@example.net', '0922-000-111']])")
+    assert wait("!document.getElementById('bkImport').hidden && document.querySelectorAll('#bkImpItems .bc-lm-item').length === 3", 30)
+    assert "2" in ev("document.getElementById('bkImpGoText').textContent"), "新增 2 位（重複的那列預設不加入）"
+    shot("bc-book-import")
+    ev("document.getElementById('bkImpGo').click()")
+    assert wait("document.getElementById('bkImport').hidden && /2/.test(document.getElementById('bkCount').textContent)", 30)
+    # 名片簿的匯出按鈕可以按，而且只開名片簿自己的選單（不會連帶開這一批的）
+    assert ev("[...document.querySelectorAll('#bkFmts .btn')].every(b => !b.disabled)"), "名片簿有人時匯出要能按"
+    ev("document.querySelector('#bkFmts [data-fmt=xlsx]').click()")
+    assert wait("document.querySelectorAll('#bcMenu').length === 1")
+    assert ev("document.querySelectorAll('.bc-menu').length") == 1
+    ev("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))")
+    # VCF 直接下載：只可以打名片簿的匯出，不可以連帶打這一批的（以前按鈕事件綁到三組，會兩個都下載）
+    ev("""(() => { window.__reqs = []; const f = window.fetch;
+      window.fetch = (u, o) => { window.__reqs.push(String(u)); return f(u, o); }; return true; })()""")
+    ev("document.querySelector('#bkFmts [data-fmt=vcf]').click()")
+    assert wait("window.__reqs.some(u => /\\/books\\/[^/]+\\/export/.test(u))", 20), "名片簿的 VCF 要打名片簿的匯出"
+    time.sleep(1.0)
+    assert not ev("window.__reqs.some(u => /\\/batches\\/[^/]+\\/export/.test(u))"), "按名片簿的匯出不可以連帶匯出這一批"
+    # 同一個檔案再匯入一次、全部硬是「加成新的一位」→ 檢查重複找得到，合併之後就沒了
+    ev(_VCF_JS + "('#bkImportFile', [['林小華', 'hua@example.net', ''], ['陳大文', '', '0933-000-222']])")
+    assert wait("!document.getElementById('bkImport').hidden && document.querySelectorAll('#bkImpItems select').length === 2", 30)
+    assert ev("[...document.querySelectorAll('#bkImpItems .k')].every(k => k.textContent.length > 0)")
+    ev("document.querySelectorAll('#bkImpItems select').forEach(s => { s.value = 'add'; s.dispatchEvent(new Event('change')); })")
+    ev("document.getElementById('bkImpGo').click()")
+    assert wait("document.getElementById('bkImport').hidden && /4/.test(document.getElementById('bkCount').textContent)", 30)
+    ev("document.getElementById('bkDupBtn').click()")
+    assert wait("!document.getElementById('bkDup').hidden && document.querySelectorAll('#bkDupList .bk-dup-group').length === 2", 30)
+    shot("bc-book-dup")
+    ev("document.querySelector('#bkDupList .bk-dup-group button').click()")
+    assert wait("document.querySelectorAll('#bkDupList .bk-dup-group').length === 1", 30)
+
+
+def test_camera_buttons_only_on_touch_devices(site):
+    """「拍照」在電腦上跟「選擇檔案」一模一樣（電腦沒有相機選項），「連拍」會開電腦的攝影機 —— 這兩顆只在
+    手機、平板顯示；電腦上用「改用手機拍（掃 QR Code）」（使用者 2026-11-14：用途看不懂）。"""
+    port, send, info = site
+    ev, wait, shot = _tools(send)
+    send("Page.navigate", {"url": f"http://127.0.0.1:{port}/tools/business-card-reader/"})
+    assert wait("!!document.getElementById('bcCamera') && document.querySelectorAll('.bc-batch').length > 0")
+    assert ev("document.getElementById('bcCamera').hidden && document.getElementById('bcBurst').hidden"), \
+        "電腦上不顯示拍照 / 連拍"
+    assert "QR" in ev("document.getElementById('bcHandoff').textContent")
+    send("Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 5})
+    send("Emulation.setDeviceMetricsOverride", {"width": 390, "height": 800, "deviceScaleFactor": 2, "mobile": True})
+    try:
+        send("Page.navigate", {"url": f"http://127.0.0.1:{port}/tools/business-card-reader/?m=1"})
+        assert wait("!!document.getElementById('bcCamera') && document.querySelectorAll('.bc-batch').length > 0")
+        assert ev("matchMedia('(pointer: coarse)').matches"), "觸控模擬沒有生效"
+        assert ev("!document.getElementById('bcCamera').hidden"), "手機上要有「拍照」"
+    finally:
+        send("Emulation.setTouchEmulationEnabled", {"enabled": False})
+        send("Emulation.clearDeviceMetricsOverride")

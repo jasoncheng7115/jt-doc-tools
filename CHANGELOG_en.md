@@ -5,11 +5,21 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (972 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (973 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.44] - 2026-11-14
+
+### Business card reader
+
+- **Card books can import a file, with an automatic duplicate check**: upload a previous export (XLSX, ODS, CSV, VCF, JSON) or a contact list you already have. It is compared first: people already in the card book are merged by default (missing details filled in), and people repeated within the file are not added twice; nothing is written until you confirm. There is also "Check for duplicates", which lists people in the card book with the same email, mobile, or name and company so you can merge them into one.
+- **Fixed: the card book's export buttons could not be clicked**: when the current batch had nothing to export, the card book's export buttons were greyed out too, and clicking the card book's VCF / JSON also exported the batch.
+- **Merging a previous export is now step by step**: uploaded file → column mapping (collapsed when matched automatically) → comparison result (plain counts of new, filled-in, differing and identical people, with items needing a decision at the top) → download the merged file (same format as the upload suggested). It compares right after upload, and says what to do when the batch has nobody to compare. Reading VCF / JSON no longer lists columns that are entirely empty.
+- Export area layout: the five formats share the full row evenly, "Download" and "Merge a previous export" are separate blocks, and an empty export shows a clear notice.
+- "Continue on a phone" is now "Shoot with your phone (scan QR code)" with three-step instructions; "Phone camera" is renamed "Take photo" and, like "Burst", only appears on phones and tablets (on a computer it was the same as "Choose files").
 
 ## [1.17.43] - 2026-11-14
 

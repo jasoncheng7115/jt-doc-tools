@@ -902,6 +902,129 @@ async def book_export(request: Request, book_id: str):
     return _download(data, o, "名片簿")
 
 
+# ------------------------------------------------------------------ 名片簿：匯入檔案、找重複
+
+def _book_import_path(token: str):
+    from ...config import settings
+    if not isinstance(token, str) or not LIST_TOKEN_RE.fullmatch(token):
+        raise store.NotFound()
+    return settings.temp_dir / f"bcbook_{token}.json"
+
+
+def _book_import_load(owner: str, book_id: str, token: str) -> dict:
+    try:
+        d = json.loads(_book_import_path(token).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise HTTPException(410, "上傳的檔案已經過期，請重新上傳")
+    if d.get("owner") != owner or d.get("book") != book_id:
+        raise store.NotFound()
+    return d
+
+
+def _book_import_contacts(d: dict, mapping_in) -> tuple[dict, list[dict]]:
+    from . import importer
+    mapping = importer.clean_mapping(mapping_in or importer.auto_map(d["headers"]), len(d["headers"]))
+    return mapping, importer.rows_to_contacts(d["headers"], d["rows"], mapping)
+
+
+def _book_import_view(book: dict, contacts: list[dict]) -> dict:
+    items = books.import_preview(book, contacts)
+    counts: dict[str, int] = {}
+    for it in items:
+        counts[it["kind"]] = counts.get(it["kind"], 0) + 1
+    return {"items": items, "counts": counts}
+
+
+@router.post("/api/books/{book_id}/import")
+async def book_import_upload(request: Request, book_id: str, file: UploadFile = File(...)):
+    """把檔案匯入名片簿（之前匯出的 XLSX / ODS / CSV / VCF / JSON，或手上的聯絡人清單）。先回欄位對應與
+    **自動去重**的比對結果（每一列：新的人 / 名片簿已有 / 檔案裡重複），按 `apply` 才真的寫進去。"""
+    from . import importer
+    from ...config import settings
+    from ...core.atomic_json import write_json
+    v = viewer_of(request)
+    data = await file.read(importer.MAX_BYTES + 1)
+    name = file.filename or "list"
+
+    def work():
+        book, _ = books.get_book(v, book_id, "edit")
+        try:
+            headers, rows = importer.parse_table(data, name)
+        except importer.TableError as e:
+            raise HTTPException(400, str(e))
+        token = store.new_id()
+        settings.temp_dir.mkdir(parents=True, exist_ok=True)
+        d = {"owner": v.owner, "book": book_id, "headers": headers, "rows": rows, "filename": name[:200],
+             "ts": time.time()}
+        write_json(_book_import_path(token), d, indent=0)
+        mapping, contacts = _book_import_contacts(d, None)
+        return {"token": token, "kind": importer.source_kind(name), "headers": headers, "sample": rows[:5],
+                "rows": len(rows), "mapping": {str(k): x for k, x in mapping.items()}, "targets": _list_targets(),
+                **_book_import_view(book, contacts)}
+    out = await asyncio.to_thread(lambda: _wrap(work))
+    _audit(request, "business_card_book_import_upload", book_id, rows=out["rows"], columns=len(out["headers"]))
+    return out
+
+
+@router.post("/api/books/{book_id}/import/{token}/preview")
+async def book_import_preview(request: Request, book_id: str, token: str):
+    """改了欄位對應之後重新比對：`{"mapping": {欄號: 欄位}}`。"""
+    v = viewer_of(request)
+    body = await _json(request)
+
+    def work():
+        book, _ = books.get_book(v, book_id, "edit")
+        _, contacts = _book_import_contacts(_book_import_load(v.owner, book_id, token), body.get("mapping"))
+        return _book_import_view(book, contacts)
+    return await asyncio.to_thread(lambda: _wrap(work))
+
+
+@router.post("/api/books/{book_id}/import/{token}/apply")
+async def book_import_apply(request: Request, book_id: str, token: str):
+    """真的匯入：`{"mapping"?, "decisions": {列號: "add" | "merge" | "skip"}}`（沒給的用比對的預設）。
+    做完刪掉暫存的檔案，回 `added` / `merged` / `skipped`。"""
+    v = viewer_of(request)
+    body = await _json(request)
+    decisions = body.get("decisions") or {}
+    if not isinstance(decisions, dict) or any(x not in books.IMPORT_ACTIONS for x in decisions.values()):
+        raise HTTPException(400, "decisions 的值只能是 add / merge / skip")
+
+    def work():
+        book, _ = books.get_book(v, book_id, "edit")
+        _, contacts = _book_import_contacts(_book_import_load(v.owner, book_id, token), body.get("mapping"))
+        out = books.import_apply(book, contacts, decisions, v.label or v.owner)
+        _book_import_path(token).unlink(missing_ok=True)
+        return out
+    out = await asyncio.to_thread(lambda: _wrap(work))
+    _audit(request, "business_card_book_import", book_id, **out)
+    return out
+
+
+@router.delete("/api/books/{book_id}/import/{token}")
+async def book_import_discard(request: Request, book_id: str, token: str):
+    v = viewer_of(request)
+
+    def work():
+        books.get_book(v, book_id, "edit")
+        _book_import_load(v.owner, book_id, token)
+        _book_import_path(token).unlink(missing_ok=True)
+        return {"ok": True}
+    return await asyncio.to_thread(lambda: _wrap(work))
+
+
+@router.get("/api/books/{book_id}/duplicates")
+async def book_duplicates(request: Request, book_id: str):
+    """名片簿裡可能是同一人的幾組（Email、手機、姓名＋公司相同），給「檢查重複」用；合併走 `people/merge`。"""
+    v = viewer_of(request)
+
+    def work():
+        book, role = books.get_book(v, book_id)
+        return {"groups": books.duplicate_groups(book), "can_edit": role in ("owner", "edit")}
+    out = await asyncio.to_thread(lambda: _wrap(work))
+    _audit(request, "business_card_book_duplicates", book_id, groups=len(out["groups"]))
+    return out
+
+
 # ------------------------------------------------------------------ 存進名片簿
 
 def _save_targets(owner: str, bid: str, body: dict) -> list[dict]:

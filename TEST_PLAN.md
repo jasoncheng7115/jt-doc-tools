@@ -2218,6 +2218,10 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] 同一批正反面：一張名片正反面兩張照片 → 出現「可能是同一張的正反面」→ 合併 → 英文面姓名進外文欄位；「解除合併」回到原樣
 - [ ] AI 協助（管理員打開、全站 LLM 啟用）：校對時「AI 建議」只出現在那一位、每欄要按才套用、畫面寫出模型與主機；關掉任一道開關按鈕消失
 - [ ] 低信心的字出現「另一種讀法」、按了才換；手機「連拍」一次拍多張、每張都進同一批
+- [ ] 🆕 v1.17.44 名片簿「匯入檔案」：匯入一份含名片簿已有的人、新的人、檔案裡重複的人的 XLSX / VCF → 比對結果三種各自標示、預設處理正確 → 匯入後名片簿沒有重複；
+      「檢查重複」列出 Email / 手機 / 姓名＋公司相同的人，選保留的那位合併；只能查詢的成員看不到「匯入檔案」
+- [ ] 🆕 v1.17.44 這一批沒有可以匯出的聯絡人時，名片簿的匯出照樣能按；按名片簿的 VCF 只下載名片簿那份
+- [ ] 🆕 v1.17.44 電腦上沒有「拍照」「連拍」、有「改用手機拍（掃 QR Code）」；手機上有「拍照」「連拍」
 - [ ] 合併之前匯出的檔案：同一批先匯出 VCF、JSON、XLSX 各一份 → 校對區按「合併之前匯出的檔案」各上傳一次 → 比對全部是「相同」→ 下載（試算表 / VCF / JSON 都試）沒有重複的人；
       再拿手機通訊錄匯出的 .vcf 試一次，英文名在外文姓名
 - [ ] 校對畫面「辨識引擎」後面有耗時（整張與文字辨識秒數）；匯入的兩種模式各有示意圖（桌機與手機寬度）；校對區標題靠左；
@@ -2776,6 +2780,10 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
       `GET/PUT/DELETE /tools/business-card-reader/api/books/{book_id}/people/{pid}`、`GET /tools/business-card-reader/api/books/{book_id}/people/{pid}/cards/{cid}/image`、
       `GET/POST /tools/business-card-reader/api/books/{book_id}/people/{pid}/interactions`、`PUT/DELETE /tools/business-card-reader/api/books/{book_id}/people/{pid}/interactions/{iid}`
       （看不到的名片簿 404、只能查詢卻要修改 403）；
+      `POST /tools/business-card-reader/api/books/{book_id}/import`、`POST /tools/business-card-reader/api/books/{book_id}/import/{token}/preview`、
+      `POST /tools/business-card-reader/api/books/{book_id}/import/{token}/apply`、`DELETE /tools/business-card-reader/api/books/{book_id}/import/{token}`
+      （匯入檔案到名片簿，自動去重：名片簿已有預設合併、檔案裡重複預設不加入；只能查詢 403、不是成員 404、別本或別人的 token 404、過期 410）、
+      `GET /tools/business-card-reader/api/books/{book_id}/duplicates`（Email / 手機 / 姓名＋公司相同的連成一組）；
       `POST /tools/business-card-reader/api/batches/{bid}/list-merge`、`DELETE /tools/business-card-reader/api/batches/{bid}/list-merge/{token}`、
       `POST /tools/business-card-reader/api/batches/{bid}/list-merge/{token}/plan`、`POST /tools/business-card-reader/api/batches/{bid}/list-merge/{token}/download`、
       `POST /tools/business-card-reader/api/batches/{bid}/list-merge/{token}/ai-check`（暫存約 2 小時、過期 410、別人的 token 404；
@@ -6510,6 +6518,7 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 - [ ] 擷取改動前後跑真實樣本比對（開發機 scratchpad 的比較腳本），欄位數不可減少。
 - [ ] 之前匯出的檔（VCF / JSON / XLSX）上傳回來跟同一批合併，同一個人不會變兩份（`test_previous_export_merges_without_duplicates`）。
 - [ ] 校對區標題靠左、下載選單在視窗底部往上開（`test_business_card_page_browser.py`，兩處都變異驗證過）。
+- [ ] 名片簿匯入與檢查重複（`test_business_card_books.py` 匯入三支）；名片簿匯出按鈕不受這一批影響（`test_business_card_page_browser.py::test_book_import_dedupe_and_the_export_buttons_of_each_section`，反灰與連帶匯出兩處都變異驗證過）；電腦上不顯示拍照 / 連拍（`::test_camera_buttons_only_on_touch_devices`）。
 - [ ] 網址 `#batch=` 帶進來的編號先驗格式再編碼（`test_business_card_url_ids.py`，CodeQL #234）。
 - [ ] **PDF 轉簡報在 LibreOffice 26.2 起**：產出的 .odp 五個部分 ODF 版本一致（`test_pdf_to_slides.py::test_odf_version_is_the_same_in_every_part_even_from_lo26`，變異驗證過）；有 Ubuntu 26.04 / LibreOffice 26.2 的機器時實際轉一份 .odp 與 .pptx 打開看。
 
