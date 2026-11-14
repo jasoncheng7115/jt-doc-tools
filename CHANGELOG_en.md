@@ -5,11 +5,17 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (973 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (974 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.45] - 2026-11-14
+
+### Fixes
+
+- Settings → Card books: the AI assist checkbox was stretched with its label pushed to the middle; the dropdowns on this page now use the site style.
 
 ## [1.17.44] - 2026-11-14
 

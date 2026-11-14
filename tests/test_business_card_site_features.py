@@ -212,3 +212,12 @@ def test_pipeline_notifies_once_after_the_batch(auth_off, monkeypatch):
     owner, done, failed, elapsed, origin = calls[0]
     assert (owner, done, failed, origin) == ("local", 2, 0, "https://cards.example.com")
     store.delete_batch("local", bid)
+
+
+def test_admin_page_uses_the_site_dropdown_and_a_one_line_checkbox():
+    """設定 → 名片簿：下拉要是本站樣式（要載 custom_select.js），AI 協助的勾選框跟文字同一行
+    （使用者 2026-11-14 截圖：勾選框被撐寬、文字跑到中間，下拉是瀏覽器原生的）。"""
+    t = (Path(__file__).resolve().parents[1] / "app/admin/templates/admin_business_cards.html").read_text(encoding="utf-8")
+    assert '<script src="/static/js/custom_select.js"></script>' in t
+    assert ".bca-row input { width: 160px; }" not in t, "寬度只給數字欄，不可以套到勾選框"
+    assert ".bca-row label.bca-check input { width: auto;" in t

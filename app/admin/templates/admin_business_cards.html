@@ -96,11 +96,14 @@
 .bca-note b { display: block; margin-bottom: 2px; }
 .bca-note p { margin: 0; font-size: 13px; color: var(--text-muted, #475569); line-height: 1.55; }
 .bca-note-ic { color: var(--primary, #2563eb); margin-top: 2px; }
-.bc-warn { color: var(--warning-text, #92400e); display: flex; align-items: center; gap: 6px; margin: 0; }
+.bc-warn { color: var(--warning-text, #92400e); display: flex; align-items: center; gap: 6px; margin: 0 0 12px; font-size: 13.5px; }
 .bca-auth { margin-top: 12px; }
-.bca-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.bca-row { display: flex; align-items: flex-end; gap: 10px 16px; flex-wrap: wrap; margin-top: 4px; }
 .bca-row label, .bca-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-.bca-row input { width: 160px; }
+.bca-row input[type=number] { width: 160px; }
+/* 勾選框那一格橫排、跟右邊的欄位底部對齊（原本跟著上一條變成上下兩行、勾選框還被撐成 160px 寬） */
+.bca-row label.bca-check { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; min-height: 38px; }
+.bca-row label.bca-check input { width: auto; margin: 0; }
 .bca-small { font-size: 12.5px; margin: 8px 0 0; }
 .bca-h { display: flex; align-items: center; gap: 10px; }
 .bca-h .btn { margin-left: auto; }
@@ -140,6 +143,7 @@
 @media (max-width: 760px) { .bca-notes { grid-template-columns: 1fr; } .bca-form { grid-template-columns: 1fr; } }
 </style>
 
+<script src="/static/js/custom_select.js"></script>
 <script nonce="{{ request.state.csp_nonce }}">
 (function () {
   const API = '/admin/business-cards/api';
