@@ -432,9 +432,16 @@ def test_someone_elses_case_is_404_alone_and_in_a_batch(admin_session):
     # 管理員可以下載別人的，寫稽核
     assert admin.post(f"{BASE}/cases/di", json={"case_ids": [cid]}).status_code == 200
     from app.core import audit_db
-    rows = audit_db.conn().execute(
-        "SELECT target FROM audit_events WHERE event_type='admin_file_override'").fetchall()
-    assert f"official-doc:{cid}" in [x[0] for x in rows]
+    import time as _time
+    # 稽核是非同步寫入：等那一筆真的出現（直接讀的話機器一忙就撞上還沒寫進去的窗口；CI 偶發過）
+    want, targets = f"official-doc:{cid}", []
+    for _ in range(50):
+        targets = [x[0] for x in audit_db.conn().execute(
+            "SELECT target FROM audit_events WHERE event_type='admin_file_override'").fetchall()]
+        if want in targets:
+            break
+        _time.sleep(0.1)
+    assert want in targets
 
 
 def test_a_deleted_case_cannot_be_downloaded_by_its_owner(admin_session):
