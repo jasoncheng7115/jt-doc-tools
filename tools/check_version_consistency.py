@@ -13,6 +13,7 @@ Sources audited:
     3. uv.lock                jt-doc-tools entry version
     4. github/README.md       First H1 line `# ... vX.Y.Z`
     5. github/CHANGELOG.md    First `## [X.Y.Z] - YYYY-MM-DD` heading
+    6. github/sbom.cdx.json   CycloneDX `metadata.component.version`（`tools/make_sbom.py` 重產）
 
 Exit 0 if all match, exit 1 with a clear diff table otherwise.
 
@@ -92,12 +93,25 @@ def read_changelog_version() -> Optional[str]:
     return None
 
 
+def read_sbom_version() -> Optional[str]:
+    """`sbom.cdx.json`（CycloneDX）的產品版本 —— 每一版都要重產（`python tools/make_sbom.py`）。"""
+    import json
+    f = PUB / "sbom.cdx.json"
+    if not f.exists():
+        return None
+    try:
+        return json.loads(f.read_text(encoding="utf-8"))["metadata"]["component"]["version"]
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
 SOURCES = [
     ("app/main.py:VERSION",        read_main_version),
     ("pyproject.toml:version",     read_pyproject_version),
     ("uv.lock:jt-doc-tools",       read_uv_lock_version),
     ("README.md heading",          read_readme_version),
     ("CHANGELOG.md latest",        read_changelog_version),
+    ("sbom.cdx.json component",    read_sbom_version),
 ]
 
 

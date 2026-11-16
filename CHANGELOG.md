@@ -6,6 +6,12 @@
 
 ---
 
+## [1.17.46] - 2026-11-16
+
+### 新增
+
+- **SBOM（軟體物料清單）**：每一版附 `sbom.cdx.json`（CycloneDX 1.5），列出隨產品安裝的 Python 套件（照 `uv.lock` 的確切版本，只有測試用的另外標示不隨產品安裝）、前端元件（pdf.js、Fabric.js、marked、DOMPurify、jsQR 等，附 SHA-256）與 Windows 服務包裝 WinSW。說明見 SECURITY.md。
+
 ## [1.17.45] - 2026-11-14
 
 ### 修正

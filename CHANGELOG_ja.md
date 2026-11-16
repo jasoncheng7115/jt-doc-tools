@@ -5,12 +5,18 @@
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に従い、バージョンは [Semantic Versioning](https://semver.org/lang/ja/) に従います。
 
 > **収録の範囲。** 本プロジェクトの主要言語は繁体字中国語で、
-> **[CHANGELOG.md](CHANGELOG.md) が完全な履歴です**（974 リリース）。
+> **[CHANGELOG.md](CHANGELOG.md) が完全な履歴です**（975 リリース）。
 > この日本語のファイルは**直近のリリース**をまとめたもので、何が変わったか、
 > アップグレードすべきかを判断できる程度の内容です。それより古いものは
 > 中国語のファイルをご覧ください。
 
 ---
+
+## [1.17.46] - 2026-11-16
+
+### 追加
+
+- **SBOM（ソフトウェア部品表）**：各リリースに `sbom.cdx.json`（CycloneDX 1.5）を添付。製品と一緒にインストールされる Python パッケージ（`uv.lock` の正確なバージョン。テスト専用のものは同梱しないと明記）、フロントエンドのコンポーネント（pdf.js、Fabric.js、marked、DOMPurify、jsQR など、SHA-256 付き）、Windows サービスラッパー WinSW を記載。詳しくは SECURITY.md を参照。
 
 ## [1.17.45] - 2026-11-14
 

@@ -5,11 +5,17 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (974 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (975 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.46] - 2026-11-16
+
+### Added
+
+- **SBOM (software bill of materials)**: every release includes `sbom.cdx.json` (CycloneDX 1.5), listing the Python packages installed with the product (exact versions from `uv.lock`; test-only packages are marked as not shipped), the front-end components (pdf.js, Fabric.js, marked, DOMPurify, jsQR and others, with SHA-256) and the Windows service wrapper WinSW. See SECURITY.md.
 
 ## [1.17.45] - 2026-11-14
 

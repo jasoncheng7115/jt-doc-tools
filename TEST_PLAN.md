@@ -699,7 +699,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **568 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **569 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -1160,6 +1160,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_safe_paths_and_owner.py` | Tests for app.core.safe_paths and app.core.upload_owner. |
 | `test_same_as_ref.py` | 把「同上」「同登記地址」展開成實際內容 |
 | `test_save_queue.py` | Tests for app.core.save_queue (v1.7.17). |
+| `test_sbom.py` | SBOM（`sbom.cdx.json`，CycloneDX 1.5）：每一版都要重產（使用者 2026-11-16：「以後每一版都要產 sbom」） |
 | `test_scan_merge_api.py` | 掃描拼合 (scan-merge) — 端點 / ACL / 公開 API 測試 |
 | `test_scan_merge_detector.py` | 掃描拼合 — 內容偵測 + 背景淨白 單元測試 |
 | `test_scan_merge_layout.py` | 掃描拼合「自動排列」：互不重疊、照上傳順序、放不下等比例縮小 |
@@ -6507,6 +6508,11 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > **最高原則：加 i18n 不可以改壞現有功能。** 所以每一個階段的第一條驗收都是
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
+
+### 6.150 v1.17.46 — SBOM（**每次發版必過**）
+
+- [ ] 升版號之後重產 `sbom.cdx.json`（`python tools/make_sbom.py`）；`tools/check_version_consistency.py` 六項一致、`tests/test_sbom.py` 全綠（內容跟 `uv.lock` / `static/vendor/` 一致；變異驗證過：改 `uv.lock` 裡一個版本沒重產就紅）。
+- [ ] 用 CycloneDX 的工具（例如 `cyclonedx validate`）或線上檢視器開一次，格式合法、元件數對得上。
 
 ### 6.149 v1.17.41 — 名片簿、清單整合、AI 協助（**每次發版必過**）
 

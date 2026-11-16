@@ -283,7 +283,7 @@
  "<b>A.5.18</b> 存取權限": "<b>A.5.18</b> アクセス権",
  "停用帳號時該帳號的登入與 API Token 立即失效；「權限矩陣」頁檢視誰能用哪些工具；權限變更寫入稽核記錄（<code>perm_change</code>、<code>role_*</code>）": "アカウントを無効にすると、そのログインと API トークンは即時に無効になります。「権限マトリクス」ページで誰がどのツールを使えるかを確認でき、権限の変更は監査記録に残ります（<code>perm_change</code>、<code>role_*</code>）",
  "<b>A.5.19、A.5.21</b> 供應者關係、ICT 供應鏈": "<b>A.5.19・A.5.21</b> 供給者関係、ICT サプライチェーン",
- "原始碼公開；用到的套件與授權列在 <a href=\"https://github.com/jasoncheng7115/jt-doc-tools/blob/main/THIRD-PARTY-NOTICES.md\" target=\"_blank\" rel=\"noopener\"><code>THIRD-PARTY-NOTICES.md</code></a>": "ソースコードは公開。使用しているパッケージとライセンスは <a href=\"https://github.com/jasoncheng7115/jt-doc-tools/blob/main/THIRD-PARTY-NOTICES.md\" target=\"_blank\" rel=\"noopener\"><code>THIRD-PARTY-NOTICES.md</code></a> に記載",
+ "原始碼公開；用到的套件與授權列在 <a href=\"https://github.com/jasoncheng7115/jt-doc-tools/blob/main/THIRD-PARTY-NOTICES.md\" target=\"_blank\" rel=\"noopener\"><code>THIRD-PARTY-NOTICES.md</code></a>；每一版附 SBOM <code>sbom.cdx.json</code>（CycloneDX 1.5，元件的確切版本與雜湊）": "ソースコードは公開。使用しているパッケージとライセンスは <a href=\"https://github.com/jasoncheng7115/jt-doc-tools/blob/main/THIRD-PARTY-NOTICES.md\" target=\"_blank\" rel=\"noopener\"><code>THIRD-PARTY-NOTICES.md</code></a> に記載。各リリースに SBOM <code>sbom.cdx.json</code>（CycloneDX 1.5、コンポーネントの正確なバージョンとハッシュ）を添付",
  "<b>A.5.23</b> 使用雲端服務的資訊安全": "<b>A.5.23</b> クラウドサービスの利用における情報セキュリティ",
  "<b>A.5.33</b> 紀錄保護": "<b>A.5.33</b> 記録の保護",
  "<b>A.5.34</b> 隱私與個人可識別資訊保護": "<b>A.5.34</b> プライバシー及び PII の保護",

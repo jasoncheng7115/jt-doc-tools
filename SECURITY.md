@@ -138,6 +138,17 @@ uv run pytest tests/test_owasp_top10.py
 
 掃描結果會出現在 repo 的 **Security** tab。CodeQL alerts 直接標 source line，open 一條 alert 等同 open 一個漏洞 ticket。
 
+### SBOM（軟體物料清單）
+
+每一版都附 [`sbom.cdx.json`](sbom.cdx.json)（CycloneDX 1.5），列出隨產品安裝的元件：
+
+- **Python 套件**：照 `uv.lock` 的確切版本（`pkg:pypi/…`）；只有開發 / 測試用的（pytest 等）標成 `excluded`，不隨產品安裝。
+- **前端元件**：`static/vendor/` 裡的 pdf.js、Fabric.js、marked、DOMPurify、jsQR、qrcode-generator、shamir-secret-sharing，附檔案的 SHA-256。
+- **Windows 服務包裝** WinSW（附 SHA-256）。
+- OxOffice / LibreOffice、Tesseract 是安裝時另外安裝的系統套件，不在清單裡（寫在 `metadata.properties`）。
+
+清單由 `tools/make_sbom.py` 從 `uv.lock` 與 `static/vendor/` 產生；`tests/test_sbom.py` 會比對清單跟目前的相依是否一致、版本是否是這一版，沒重產就無法發版。
+
 ## 額外資安特性
 
 - **緊急復原 CLI**（防鎖死）：`jtdt auth show / disable / set-local`、`jtdt reset-password <user>`、`jtdt audit-user create`，全部離線可跑、不需服務啟動，且 admin（含 LDAP user）忘記密碼或設錯設定不會掉資料

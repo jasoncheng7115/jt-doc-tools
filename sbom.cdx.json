@@ -1,0 +1,3893 @@
+{
+ "bomFormat": "CycloneDX",
+ "specVersion": "1.5",
+ "serialNumber": "urn:uuid:0f2221c6-eb70-5b9d-b0d6-27931a416b38",
+ "version": 1,
+ "metadata": {
+  "component": {
+   "type": "application",
+   "bom-ref": "pkg:github/jasoncheng7115/jt-doc-tools@1.17.46",
+   "name": "jt-doc-tools",
+   "version": "1.17.46",
+   "purl": "pkg:github/jasoncheng7115/jt-doc-tools@1.17.46",
+   "licenses": [
+    {
+     "license": {
+      "id": "AGPL-3.0-or-later"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "vcs",
+     "url": "https://github.com/jasoncheng7115/jt-doc-tools"
+    }
+   ]
+  },
+  "tools": {
+   "components": [
+    {
+     "type": "application",
+     "name": "tools/make_sbom.py"
+    }
+   ]
+  },
+  "properties": [
+   {
+    "name": "jt-doc-tools:python",
+    "value": "CPython 3.11+（Linux 安裝用安裝目錄裡的 3.12）"
+   },
+   {
+    "name": "jt-doc-tools:not-bundled",
+    "value": "OxOffice 或 LibreOffice、Tesseract OCR：安裝時另外安裝（系統套件），不包含在本清單"
+   },
+   {
+    "name": "jt-doc-tools:source-of-truth",
+    "value": "uv.lock（Python 套件的確切版本與每個檔案的雜湊）、static/vendor/（前端元件）"
+   }
+  ]
+ },
+ "components": [
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/annotated-doc@0.0.4",
+   "name": "annotated-doc",
+   "version": "0.0.4",
+   "purl": "pkg:pypi/annotated-doc@0.0.4",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "fbcda96e87e9c92ad167c2e53839e57503ecfda18804ea28102353485033faa4"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/annotated-types@0.7.0",
+   "name": "annotated-types",
+   "version": "0.7.0",
+   "purl": "pkg:pypi/annotated-types@0.7.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "MIT License"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "aff07c09a53a08bc8cfccb9c85b05f1aa9a2a6f23728d790723543408344ce89"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/anyio@4.14.2",
+   "name": "anyio",
+   "version": "4.14.2",
+   "purl": "pkg:pypi/anyio@4.14.2",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "cfa139f3ed1a23ee8f88a145ddb5ac7605b8bbfd8592baacd7ce3d8bb4313c7f"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/bandit@1.9.4",
+   "name": "bandit",
+   "version": "1.9.4",
+   "purl": "pkg:pypi/bandit@1.9.4",
+   "scope": "excluded",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "b589e5de2afe70bd4d53fa0c1da6199f4085af666fde00e8a034f152a52cd628"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/certifi@2026.10.19",
+   "name": "certifi",
+   "version": "2026.10.19",
+   "purl": "pkg:pypi/certifi@2026.10.19",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MPL-2.0"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "035c1e85572b141bf1c3a3eff0e33a8eb74917522f2559075ff8d2fea780a1ae"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/cffi@2.0.0",
+   "name": "cffi",
+   "version": "2.0.0",
+   "purl": "pkg:pypi/cffi@2.0.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "44d1b5909021139fe36001ae048dbdde8214afa20200eda0f64c068cac5d5529"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/charset-normalizer@3.4.7",
+   "name": "charset-normalizer",
+   "version": "3.4.7",
+   "purl": "pkg:pypi/charset-normalizer@3.4.7",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "ae89db9e5f98a11a4bf50407d4363e7b09b31e55bc117b4f7d80aab97ba009e5"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/click@8.3.3",
+   "name": "click",
+   "version": "8.3.3",
+   "purl": "pkg:pypi/click@8.3.3",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "398329ad4837b2ff7cbe1dd166a4c0f8900c3ca3a218de04466f38f6497f18a2"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/colorama@0.4.6",
+   "name": "colorama",
+   "version": "0.4.6",
+   "purl": "pkg:pypi/colorama@0.4.6",
+   "scope": "required",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/cryptography@50.0.0",
+   "name": "cryptography",
+   "version": "50.0.0",
+   "purl": "pkg:pypi/cryptography@50.0.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "expression": "Apache-2.0 OR BSD-3-Clause"
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "eeac2acb5a20ed25e0ad6d1df9891a520b78b404266b6d11778f25d5d691a6c9"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/cuda-bindings@13.2.0",
+   "name": "cuda-bindings",
+   "version": "13.2.0",
+   "purl": "pkg:pypi/cuda-bindings@13.2.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LicenseRef-NVIDIA-SOFTWARE-LICENSE"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/cuda-pathfinder@1.5.4",
+   "name": "cuda-pathfinder",
+   "version": "1.5.4",
+   "purl": "pkg:pypi/cuda-pathfinder@1.5.4",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/cuda-toolkit@13.0.3.0",
+   "name": "cuda-toolkit",
+   "version": "13.0.3.0",
+   "purl": "pkg:pypi/cuda-toolkit@13.0.3.0",
+   "scope": "required"
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/defusedxml@0.7.1",
+   "name": "defusedxml",
+   "version": "0.7.1",
+   "purl": "pkg:pypi/defusedxml@0.7.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "PSFL"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/dnspython@2.9.2",
+   "name": "dnspython",
+   "version": "2.9.2",
+   "purl": "pkg:pypi/dnspython@2.9.2",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "8d4d39a513e649d634004ce4d39ade2352efcea472a0247535a5c2d18a9d7ba9"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/easyocr@1.7.2",
+   "name": "easyocr",
+   "version": "1.7.2",
+   "purl": "pkg:pypi/easyocr@1.7.2",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "Apache License 2.0"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/et-xmlfile@2.0.0",
+   "name": "et-xmlfile",
+   "version": "2.0.0",
+   "purl": "pkg:pypi/et-xmlfile@2.0.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/fastapi@0.136.1",
+   "name": "fastapi",
+   "version": "0.136.1",
+   "purl": "pkg:pypi/fastapi@0.136.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "7af665ad7acfa0a3baf8983d393b6b471b9da10ede59c60045f49fbc89a0fa7f"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/filelock@4.2.4",
+   "name": "filelock",
+   "version": "4.2.4",
+   "purl": "pkg:pypi/filelock@4.2.4",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "c6d8663535e1650ee430507b4ffbac7b464dd64b7647ea0112a9f406499d163d"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/fire@0.7.1",
+   "name": "fire",
+   "version": "0.7.1",
+   "purl": "pkg:pypi/fire@0.7.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "3b208f05c736de98fb343310d090dcc4d8c78b2a89ea4f32b837c586270a9cbf"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/fonttools@4.63.0",
+   "name": "fonttools",
+   "version": "4.63.0",
+   "purl": "pkg:pypi/fonttools@4.63.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "caeb583deeb5168e694b65cda8b4ee62abedfa66cf88488734466f2366b9c4e0"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/fsspec@2026.9.0",
+   "name": "fsspec",
+   "version": "2026.9.0",
+   "purl": "pkg:pypi/fsspec@2026.9.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "0f08147951c8cb31d844c3547d631053b127863b60be04cf06e121333ee0e2fe"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/h11@0.16.0",
+   "name": "h11",
+   "version": "0.16.0",
+   "purl": "pkg:pypi/h11@0.16.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/httpcore@1.0.9",
+   "name": "httpcore",
+   "version": "1.0.9",
+   "purl": "pkg:pypi/httpcore@1.0.9",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "6e34463af53fd2ab5d807f399a9b45ea31c3dfa2276f15a2c3f00afff6e176e8"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/httptools@0.7.1",
+   "name": "httptools",
+   "version": "0.7.1",
+   "purl": "pkg:pypi/httptools@0.7.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "abd72556974f8e7c74a259655924a717a2365b236c882c3f6f8a45fe94703ac9"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/httpx@0.28.1",
+   "name": "httpx",
+   "version": "0.28.1",
+   "purl": "pkg:pypi/httpx@0.28.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/idna@3.16",
+   "name": "idna",
+   "version": "3.16",
+   "purl": "pkg:pypi/idna@3.16",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "d7a6da03db833450fca25d2358ac9ff06cd624577a4aea3a596d5c0f77b8e03d"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/imageio@2.37.3",
+   "name": "imageio",
+   "version": "2.37.3",
+   "purl": "pkg:pypi/imageio@2.37.3",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-2-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "bbb37efbfc4c400fcd534b367b91fcd66d5da639aaa138034431a1c5e0a41451"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/iniconfig@2.3.0",
+   "name": "iniconfig",
+   "version": "2.3.0",
+   "purl": "pkg:pypi/iniconfig@2.3.0",
+   "scope": "excluded",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/isodate@0.7.2",
+   "name": "isodate",
+   "version": "0.7.2",
+   "purl": "pkg:pypi/isodate@0.7.2",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "BSD License"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "4cd1aa0f43ca76f4a6c6c0292a85f40b35ec2e43e315b59f06e6d32171a953e6"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/jinja2@3.1.6",
+   "name": "jinja2",
+   "version": "3.1.6",
+   "purl": "pkg:pypi/jinja2@3.1.6",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "BSD License"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/lazy-loader@0.5",
+   "name": "lazy-loader",
+   "version": "0.5",
+   "purl": "pkg:pypi/lazy-loader@0.5",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "717f9179a0dbed357012ddad50a5ad3d5e4d9a0b8712680d4e687f5e6e6ed9b3"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/ldap3@2.9.1",
+   "name": "ldap3",
+   "version": "2.9.1",
+   "purl": "pkg:pypi/ldap3@2.9.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LGPL v3"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "f3e7fc4718e3f09dda568b57100095e0ce58633bcabbed8667ce3f8fbaa4229f"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/lxml@6.1.0",
+   "name": "lxml",
+   "version": "6.1.0",
+   "purl": "pkg:pypi/lxml@6.1.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "bfd57d8008c4965709a919c3e9a98f76c2c7cb319086b3d26858250620023b13"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/markdown-it-py@3.0.0",
+   "name": "markdown-it-py",
+   "version": "3.0.0",
+   "purl": "pkg:pypi/markdown-it-py@3.0.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "MIT License"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "e3f60a94fa066dc52ec76661e37c851cb232d92f9886b15cb560aaada2df8feb"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/markupsafe@3.0.3",
+   "name": "markupsafe",
+   "version": "3.0.3",
+   "purl": "pkg:pypi/markupsafe@3.0.3",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "722695808f4b6457b320fdc131280796bdceb04ab50fe1795cd540799ebe1698"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/mdurl@0.1.2",
+   "name": "mdurl",
+   "version": "0.1.2",
+   "purl": "pkg:pypi/mdurl@0.1.2",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "MIT License"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/mpmath@1.3.0",
+   "name": "mpmath",
+   "version": "1.3.0",
+   "purl": "pkg:pypi/mpmath@1.3.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "BSD"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "7a28eb2a9774d00c7bc92411c19a89209d5da7c4c9a9e227be8330a23a25b91f"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/networkx@3.6.1",
+   "name": "networkx",
+   "version": "3.6.1",
+   "purl": "pkg:pypi/networkx@3.6.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/ninja@1.13.0",
+   "name": "ninja",
+   "version": "1.13.0",
+   "purl": "pkg:pypi/ninja@1.13.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "Apache Software License"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "4a40ce995ded54d9dc24f8ea37ff3bf62ad192b547f6c7126e7e25045e76f978"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/numpy@2.4.4",
+   "name": "numpy",
+   "version": "2.4.4",
+   "purl": "pkg:pypi/numpy@2.4.4",
+   "scope": "required",
+   "licenses": [
+    {
+     "expression": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "2d390634c5182175533585cc89f3608a4682ccb173cc9bb940b2881c8d6f8fa0"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-cublas@13.1.1.3",
+   "name": "nvidia-cublas",
+   "version": "13.1.1.3",
+   "purl": "pkg:pypi/nvidia-cublas@13.1.1.3",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LicenseRef-NVIDIA-Proprietary"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-cuda-cupti@13.0.85",
+   "name": "nvidia-cuda-cupti",
+   "version": "13.0.85",
+   "purl": "pkg:pypi/nvidia-cuda-cupti@13.0.85",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LicenseRef-NVIDIA-Proprietary"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-cuda-nvrtc@13.0.88",
+   "name": "nvidia-cuda-nvrtc",
+   "version": "13.0.88",
+   "purl": "pkg:pypi/nvidia-cuda-nvrtc@13.0.88",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LicenseRef-NVIDIA-Proprietary"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-cuda-runtime@13.0.96",
+   "name": "nvidia-cuda-runtime",
+   "version": "13.0.96",
+   "purl": "pkg:pypi/nvidia-cuda-runtime@13.0.96",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LicenseRef-NVIDIA-Proprietary"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-cudnn-cu13@9.24.0.43",
+   "name": "nvidia-cudnn-cu13",
+   "version": "9.24.0.43",
+   "purl": "pkg:pypi/nvidia-cudnn-cu13@9.24.0.43",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LicenseRef-NVIDIA-Proprietary"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-cufft@12.0.0.61",
+   "name": "nvidia-cufft",
+   "version": "12.0.0.61",
+   "purl": "pkg:pypi/nvidia-cufft@12.0.0.61",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LicenseRef-NVIDIA-Proprietary"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-cufile@1.15.1.6",
+   "name": "nvidia-cufile",
+   "version": "1.15.1.6",
+   "purl": "pkg:pypi/nvidia-cufile@1.15.1.6",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LicenseRef-NVIDIA-Proprietary"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-curand@10.4.0.35",
+   "name": "nvidia-curand",
+   "version": "10.4.0.35",
+   "purl": "pkg:pypi/nvidia-curand@10.4.0.35",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LicenseRef-NVIDIA-Proprietary"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-cusolver@12.0.4.66",
+   "name": "nvidia-cusolver",
+   "version": "12.0.4.66",
+   "purl": "pkg:pypi/nvidia-cusolver@12.0.4.66",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LicenseRef-NVIDIA-Proprietary"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-cusparse@12.6.3.3",
+   "name": "nvidia-cusparse",
+   "version": "12.6.3.3",
+   "purl": "pkg:pypi/nvidia-cusparse@12.6.3.3",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LicenseRef-NVIDIA-Proprietary"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-cusparselt-cu13@0.8.1",
+   "name": "nvidia-cusparselt-cu13",
+   "version": "0.8.1",
+   "purl": "pkg:pypi/nvidia-cusparselt-cu13@0.8.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "NVIDIA Proprietary Software"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-nccl-cu13@2.30.7",
+   "name": "nvidia-nccl-cu13",
+   "version": "2.30.7",
+   "purl": "pkg:pypi/nvidia-nccl-cu13@2.30.7",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LicenseRef-NVIDIA-Proprietary"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-nvjitlink@13.0.88",
+   "name": "nvidia-nvjitlink",
+   "version": "13.0.88",
+   "purl": "pkg:pypi/nvidia-nvjitlink@13.0.88",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LicenseRef-NVIDIA-Proprietary"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-nvshmem-cu13@3.4.5",
+   "name": "nvidia-nvshmem-cu13",
+   "version": "3.4.5",
+   "purl": "pkg:pypi/nvidia-nvshmem-cu13@3.4.5",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "LicenseRef-NVIDIA-Proprietary"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/nvidia-nvtx@13.0.85",
+   "name": "nvidia-nvtx",
+   "version": "13.0.85",
+   "purl": "pkg:pypi/nvidia-nvtx@13.0.85",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "Apache 2.0"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/odfpy@1.4.1",
+   "name": "odfpy",
+   "version": "1.4.1",
+   "purl": "pkg:pypi/odfpy@1.4.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "Apache Software License"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "db766a6e59c5103212f3cc92ec8dd50a0f3a02790233ed0b52148b70d3c438ec"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/opencv-python-headless@4.13.0.92",
+   "name": "opencv-python-headless",
+   "version": "4.13.0.92",
+   "purl": "pkg:pypi/opencv-python-headless@4.13.0.92",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "Apache 2.0"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/openpyxl@3.1.5",
+   "name": "openpyxl",
+   "version": "3.1.5",
+   "purl": "pkg:pypi/openpyxl@3.1.5",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/packaging@26.2",
+   "name": "packaging",
+   "version": "26.2",
+   "purl": "pkg:pypi/packaging@26.2",
+   "scope": "required",
+   "licenses": [
+    {
+     "expression": "Apache-2.0 OR BSD-2-Clause"
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "ff452ff5a3e828ce110190feff1178bb1f2ea2281fa2075aadb987c2fb221661"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pdf2docx@0.5.13",
+   "name": "pdf2docx",
+   "version": "0.5.13",
+   "purl": "pkg:pypi/pdf2docx@0.5.13",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "75eff485d4fdcd28237783a65c1bc5e9eaf9fbc747fcacee6c5c16c8ffa7a6a9"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pdfminer-six@20251230",
+   "name": "pdfminer-six",
+   "version": "20251230",
+   "purl": "pkg:pypi/pdfminer-six@20251230",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "e8f68a14c57e00c2d7276d26519ea64be1b48f91db1cdc776faa80528ca06c1e"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pdfplumber@0.11.9",
+   "name": "pdfplumber",
+   "version": "0.11.9",
+   "purl": "pkg:pypi/pdfplumber@0.11.9",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "MIT License"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "481224b678b2bbdbf376e2c39bf914144eef7c3d301b4a28eebf0f7f6109d6dc"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pillow@13.0.0",
+   "name": "pillow",
+   "version": "13.0.0",
+   "purl": "pkg:pypi/pillow@13.0.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "MIT-CMU"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "cdcd1ba258178f7356d74170c9a81ba4eab6a5d55748bc402a5a2a6fe6be3510"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pillow-heif@1.5.0",
+   "name": "pillow-heif",
+   "version": "1.5.0",
+   "purl": "pkg:pypi/pillow-heif@1.5.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "16b11a37b762ff42da2d36527bb5cb14bd9194c24c389ee911155d6e23c53065"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pluggy@1.6.0",
+   "name": "pluggy",
+   "version": "1.6.0",
+   "purl": "pkg:pypi/pluggy@1.6.0",
+   "scope": "excluded",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/psutil@6.1.1",
+   "name": "psutil",
+   "version": "6.1.1",
+   "purl": "pkg:pypi/psutil@6.1.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "cf8496728c18f2d0b45198f06895be52f36611711746b7f30c464b422b50e2f5"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pyasn1@0.6.5",
+   "name": "pyasn1",
+   "version": "0.6.5",
+   "purl": "pkg:pypi/pyasn1@0.6.5",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-2-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "6b11616a6bcf3a40e635f082bb232fa57b5e0dd7f517bd7ddd69ec3794508a47"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pyclipper@1.4.0",
+   "name": "pyclipper",
+   "version": "1.4.0",
+   "purl": "pkg:pypi/pyclipper@1.4.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "9882bd889f27da78add4dd6f881d25697efc740bf840274e749988d25496c8e1"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pycparser@3.0",
+   "name": "pycparser",
+   "version": "3.0",
+   "purl": "pkg:pypi/pycparser@3.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "600f49d217304a5902ac3c37e1281c9fe94e4d0489de643a9504c5cdfdfc6b29"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pycryptodomex@3.23.0",
+   "name": "pycryptodomex",
+   "version": "3.23.0",
+   "purl": "pkg:pypi/pycryptodomex@3.23.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "BSD, Public Domain"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "71909758f010c82bc99b0abf4ea12012c98962fbf0583c2164f8b84533c2e4da"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pydantic@2.13.3",
+   "name": "pydantic",
+   "version": "2.13.3",
+   "purl": "pkg:pypi/pydantic@2.13.3",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "af09e9d1d09f4e7fe37145c1f577e1d61ceb9a41924bf0094a36506285d0a84d"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pydantic-core@2.46.3",
+   "name": "pydantic-core",
+   "version": "2.46.3",
+   "purl": "pkg:pypi/pydantic-core@2.46.3",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "41c178f65b8c29807239d47e6050262eb6bf84eb695e41101e62e38df4a5bc2c"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pydantic-settings@2.14.2",
+   "name": "pydantic-settings",
+   "version": "2.14.2",
+   "purl": "pkg:pypi/pydantic-settings@2.14.2",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "c19dd64b19097f1de80184f0cc7b0272a13ae6e170cbf240a3e27e381ed14a5f"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pygments@2.20.0",
+   "name": "pygments",
+   "version": "2.20.0",
+   "purl": "pkg:pypi/pygments@2.20.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-2-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "6757cd03768053ff99f3039c1a36d6c0aa0b263438fcab17520b30a303a82b5f"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pyjwt@2.15.1",
+   "name": "pyjwt",
+   "version": "2.15.1",
+   "purl": "pkg:pypi/pyjwt@2.15.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "4f259e80cdfb6b3fc18a7de51fd1ef9ec79652f25019bae68975ca2468a34df8"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pymupdf@1.27.2.3",
+   "name": "pymupdf",
+   "version": "1.27.2.3",
+   "purl": "pkg:pypi/pymupdf@1.27.2.3",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "Dual Licensed - GNU AFFERO GPL 3.0 or Artifex Commercial License"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "7a92faa25129e8bbec5e50eeb9214f187665428c31b05c4ef6e36c58c0b1c6d2"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pymupdf4llm@0.3.4",
+   "name": "pymupdf4llm",
+   "version": "0.3.4",
+   "purl": "pkg:pypi/pymupdf4llm@0.3.4",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "Dual Licensed - GNU AFFERO GPL 3.0 or Artifex Commercial License"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "48d396a5fb3c14351493c7f1dd25b2a843efdbdc4526e489ee100643a2cebec1"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pyotp@2.9.0",
+   "name": "pyotp",
+   "version": "2.9.0",
+   "purl": "pkg:pypi/pyotp@2.9.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "MIT License"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "346b6642e0dbdde3b4ff5a930b664ca82abfa116356ed48cc42c7d6590d36f63"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pypdfium2@5.7.1",
+   "name": "pypdfium2",
+   "version": "5.7.1",
+   "purl": "pkg:pypi/pypdfium2@5.7.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "BSD-3-Clause, Apache-2.0, dependency licenses"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "3b3b20a56048dbe3fd4bf397f9bec854c834668bc47ef6a7d9041b23bb04317b"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pypinyin@0.55.0",
+   "name": "pypinyin",
+   "version": "0.55.0",
+   "purl": "pkg:pypi/pypinyin@0.55.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "b5711b3a0c6f76e67408ec6b2e3c4987a3a806b7c528076e7c7b86fcf0eaa66b"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pysmb@1.2.15",
+   "name": "pysmb",
+   "version": "1.2.15",
+   "purl": "pkg:pypi/pysmb@1.2.15",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "zlib/libpng"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "1c12eb0e251152e80b4bde5d816b33cab14d04b261b5f790cb4a5d9fd9653881"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pytesseract@0.3.13",
+   "name": "pytesseract",
+   "version": "0.3.13",
+   "purl": "pkg:pypi/pytesseract@0.3.13",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "Apache License 2.0"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "4bf5f880c99406f52a3cfc2633e42d9dc67615e69d8a509d74867d3baddb5db9"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pytest@9.0.3",
+   "name": "pytest",
+   "version": "9.0.3",
+   "purl": "pkg:pypi/pytest@9.0.3",
+   "scope": "excluded",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "b86ada508af81d19edeb213c681b1d48246c1a91d304c6c81a427674c17eb91c"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/python-bidi@0.6.9",
+   "name": "python-bidi",
+   "version": "0.6.9",
+   "purl": "pkg:pypi/python-bidi@0.6.9",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "GNU Library or Lesser General Public License (LGPL)"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "001c1769893fd859216b0dc39dd4679c7260bf292c3637b727a928402a254322"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/python-docx@1.2.0",
+   "name": "python-docx",
+   "version": "1.2.0",
+   "purl": "pkg:pypi/python-docx@1.2.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "7bc9d7b7d8a69c9c02ca09216118c86552704edc23bac179283f2e38f86220ce"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/python-dotenv@1.2.2",
+   "name": "python-dotenv",
+   "version": "1.2.2",
+   "purl": "pkg:pypi/python-dotenv@1.2.2",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/python-multipart@0.0.32",
+   "name": "python-multipart",
+   "version": "0.0.32",
+   "purl": "pkg:pypi/python-multipart@0.0.32",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "be54b7f3fa167bb83e4fcd936b887b708f4e57fe75911c02aebf53efaf8d938e"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/python3-saml@1.16.0",
+   "name": "python3-saml",
+   "version": "1.16.0",
+   "purl": "pkg:pypi/python3-saml@1.16.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "97c9669aecabc283c6e5fb4eb264f446b6e006f5267d01c9734f9d8bffdac133"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pyyaml@6.0.3",
+   "name": "pyyaml",
+   "version": "6.0.3",
+   "purl": "pkg:pypi/pyyaml@6.0.3",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pyzbar@0.1.9",
+   "name": "pyzbar",
+   "version": "0.1.9",
+   "purl": "pkg:pypi/pyzbar@0.1.9",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/pyzipper@0.4.0",
+   "name": "pyzipper",
+   "version": "0.4.0",
+   "purl": "pkg:pypi/pyzipper@0.4.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "a4b96afcac04c5589d5abdc6158dd362166374e3cc6810aa441e65f8a17cb9e3"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/qrcode@8.2",
+   "name": "qrcode",
+   "version": "8.2",
+   "purl": "pkg:pypi/qrcode@8.2",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "BSD"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "35c3f2a4172b33136ab9f6b3ef1c00260dd2f66f858f24d88418a015f446506c"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/rapidfuzz@3.14.5",
+   "name": "rapidfuzz",
+   "version": "3.14.5",
+   "purl": "pkg:pypi/rapidfuzz@3.14.5",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "ba10ac57884ce82112f7ed910b67e7fb6072d8ef2c06e30dc63c0f604a112e0e"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/rich@15.0.0",
+   "name": "rich",
+   "version": "15.0.0",
+   "purl": "pkg:pypi/rich@15.0.0",
+   "scope": "excluded",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/scikit-image@0.26.0",
+   "name": "scikit-image",
+   "version": "0.26.0",
+   "purl": "pkg:pypi/scikit-image@0.26.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "BSD License"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "f5f970ab04efad85c24714321fcc91613fcb64ef2a892a13167df2f3e59199fa"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/scipy@1.17.1",
+   "name": "scipy",
+   "version": "1.17.1",
+   "purl": "pkg:pypi/scipy@1.17.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "BSD License"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "95d8e012d8cb8816c226aef832200b1d45109ed4464303e997c5b13122b297c0"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/setuptools@84.2.1",
+   "name": "setuptools",
+   "version": "84.2.1",
+   "purl": "pkg:pypi/setuptools@84.2.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "3ff8b3b5492a0aa66960f4419365a86b84e013070d4313e4d4a6894f5d64d6bc"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/shapely@2.1.2",
+   "name": "shapely",
+   "version": "2.1.2",
+   "purl": "pkg:pypi/shapely@2.1.2",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "BSD 3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "2ed4ecb28320a433db18a5bf029986aa8afcfd740745e78847e330d5d94922a9"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/starlette@1.3.1",
+   "name": "starlette",
+   "version": "1.3.1",
+   "purl": "pkg:pypi/starlette@1.3.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "05d0213193f2fbaae60e2ecb593b4add4262ad4e46536b54abe36f11a71724e0"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/stevedore@5.9.1",
+   "name": "stevedore",
+   "version": "5.9.1",
+   "purl": "pkg:pypi/stevedore@5.9.1",
+   "scope": "excluded",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "e97a2667923efda926e8713fde6a73616df68210a3cbc6f02b48967b676fd8bf"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/sympy@1.14.0",
+   "name": "sympy",
+   "version": "1.14.0",
+   "purl": "pkg:pypi/sympy@1.14.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "BSD"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "d3d3fe8df1e5a0b42f0e7bdf50541697dbe7d23746e894990c030e2b05e72517"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/tabulate@0.10.0",
+   "name": "tabulate",
+   "version": "0.10.0",
+   "purl": "pkg:pypi/tabulate@0.10.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "e2cfde8f79420f6deeffdeda9aaec3b6bc5abce947655d17ac662b126e48a60d"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/termcolor@3.3.0",
+   "name": "termcolor",
+   "version": "3.3.0",
+   "purl": "pkg:pypi/termcolor@3.3.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "348871ca648ec6a9a983a13ab626c0acce02f515b9e1983332b17af7979521c5"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/tifffile@2026.3.3",
+   "name": "tifffile",
+   "version": "2026.3.3",
+   "purl": "pkg:pypi/tifffile@2026.3.3",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "d9a1266bed6f2ee1dd0abde2018a38b4f8b2935cb843df381d70ac4eac5458b7"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/tifffile@2026.5.2",
+   "name": "tifffile",
+   "version": "2026.5.2",
+   "purl": "pkg:pypi/tifffile@2026.5.2",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "21b10227ede8493814a34676774797f721f487e36cb0530e7c3bd882caa87f5a"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/torch@2.14.0",
+   "name": "torch",
+   "version": "2.14.0",
+   "purl": "pkg:pypi/torch@2.14.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "expression": "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/torchvision@0.29.0",
+   "name": "torchvision",
+   "version": "0.29.0",
+   "purl": "pkg:pypi/torchvision@0.29.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "BSD"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/tqdm@4.70.1",
+   "name": "tqdm",
+   "version": "4.70.1",
+   "purl": "pkg:pypi/tqdm@4.70.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "expression": "MPL-2.0 AND MIT"
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "cefd0eca11b2a37a3aee776544d4f4ae913f02688135b5556b8788dfa474afc4"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/triton@3.8.0",
+   "name": "triton",
+   "version": "3.8.0",
+   "purl": "pkg:pypi/triton@3.8.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/truststore@0.10.4",
+   "name": "truststore",
+   "version": "0.10.4",
+   "purl": "pkg:pypi/truststore@0.10.4",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "9d91bd436463ad5e4ee4aba766628dd6cd7010cf3e2461756b3303710eebc301"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/typing-extensions@4.15.0",
+   "name": "typing-extensions",
+   "version": "4.15.0",
+   "purl": "pkg:pypi/typing-extensions@4.15.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "PSF-2.0"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/typing-inspection@0.4.2",
+   "name": "typing-inspection",
+   "version": "0.4.2",
+   "purl": "pkg:pypi/typing-inspection@0.4.2",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "ba561c48a67c5958007083d386c3295464928b01faa735ab8547c5692e87f464"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/uvicorn@0.32.0",
+   "name": "uvicorn",
+   "version": "0.32.0",
+   "purl": "pkg:pypi/uvicorn@0.32.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "f78b36b143c16f54ccdb8190d0a26b5f1901fe5a3c777e1ab29f26391af8551e"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/uvloop@0.22.1",
+   "name": "uvloop",
+   "version": "0.22.1",
+   "purl": "pkg:pypi/uvloop@0.22.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "name": "MIT License"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "6c84bae345b9147082b17371e3dd5d42775bddce91f885499017f4607fdaf39f"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/watchfiles@1.1.1",
+   "name": "watchfiles",
+   "version": "1.1.1",
+   "purl": "pkg:pypi/watchfiles@1.1.1",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "a173cb5c16c4f40ab19cecf48a534c409f7ea983ab8fed0741304a1c0a31b3f2"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/websockets@16.0",
+   "name": "websockets",
+   "version": "16.0",
+   "purl": "pkg:pypi/websockets@16.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "5f6261a5e56e8d5c42a4497b364ea24d94d9563e8fbd44e78ac40879c60179b5"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:pypi/xmlsec@1.3.17",
+   "name": "xmlsec",
+   "version": "1.3.17",
+   "purl": "pkg:pypi/xmlsec@1.3.17",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "f3fac9ae679f66585925cc00c5f6839ae36c1d03157619571dee18acc05b9c01"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:hash-of",
+     "value": "sdist（uv.lock 另外鎖住每一個 wheel 的雜湊）"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/pdfjs-dist@5.7.284",
+   "name": "pdfjs-dist",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "version": "5.7.284",
+   "purl": "pkg:npm/pdfjs-dist@5.7.284",
+   "properties": [
+    {
+     "name": "jt-doc-tools:location",
+     "value": "static/vendor/pdfjs"
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/mozilla/pdf.js"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/fabric@5.3.0",
+   "name": "fabric",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "version": "5.3.0",
+   "purl": "pkg:npm/fabric@5.3.0",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "48f8f0915beb512fc7fe1b48c0eeb075dd0803c790efdfd75cd007f9c3eea2ca"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:location",
+     "value": "static/vendor/fabric/fabric.min.js"
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fabricjs/fabric.js"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/marked@14.1.3",
+   "name": "marked",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "version": "14.1.3",
+   "purl": "pkg:npm/marked@14.1.3",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "1092c3ce33dd737edd02e780263f1476bf18278d81817af6403df6840f8034ab"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:location",
+     "value": "static/vendor/marked/marked.min.js"
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/markedjs/marked"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/dompurify@3.4.11",
+   "name": "dompurify",
+   "scope": "required",
+   "licenses": [
+    {
+     "expression": "MPL-2.0 OR Apache-2.0"
+    }
+   ],
+   "version": "3.4.11",
+   "purl": "pkg:npm/dompurify@3.4.11",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "dbabb5b205a333ec49c8c09e7fca30ef66df0523bb8bc0fa9ea843841f111dbd"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:location",
+     "value": "static/vendor/marked/purify.min.js"
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/cure53/DOMPurify"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "jt-doc-tools-vendor:jsqr",
+   "name": "jsqr",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:location",
+     "value": "static/vendor/jsqr/jsQR.js"
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/cozmo/jsQR"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/shamir-secret-sharing@0.0.3",
+   "name": "shamir-secret-sharing",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "version": "0.0.3",
+   "purl": "pkg:npm/shamir-secret-sharing@0.0.3",
+   "properties": [
+    {
+     "name": "jt-doc-tools:location",
+     "value": "static/vendor/shamir-secret-sharing-0.0.3"
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/privy-io/shamir-secret-sharing"
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "72a97c39b95ef7d83c0b17becd0072ba36ae9b02df5a89bfc789c53cde358bd3"
+    },
+    {
+     "alg": "SHA-256",
+     "content": "f2c1edf24cc08db39e12e969990924e84694ddc70d04bc13c2c0baed8a5b6444"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "pkg:npm/qrcode-generator@2.0.4",
+   "name": "qrcode-generator",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "version": "2.0.4",
+   "purl": "pkg:npm/qrcode-generator@2.0.4",
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "ea91d7118a5395289170da848b7c6758b996163bfbccf312591ab65a4911b7c0"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:location",
+     "value": "static/vendor/qrcode-generator-2.0.4/qrcode.mjs"
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/kazuhikoarase/qrcode-generator"
+    }
+   ]
+  },
+  {
+   "type": "application",
+   "bom-ref": "pkg:github/winsw/winsw@v2.12.0",
+   "name": "winsw",
+   "version": "2.12.0",
+   "purl": "pkg:github/winsw/winsw@v2.12.0",
+   "scope": "required",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "hashes": [
+    {
+     "alg": "SHA-256",
+     "content": "b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f"
+    }
+   ],
+   "properties": [
+    {
+     "name": "jt-doc-tools:location",
+     "value": "packaging/windows/winsw.exe（只有 Windows 安裝）"
+    }
+   ]
+  }
+ ],
+ "dependencies": [
+  {
+   "ref": "pkg:github/jasoncheng7115/jt-doc-tools@1.17.46",
+   "dependsOn": [
+    "jt-doc-tools-vendor:jsqr",
+    "pkg:github/winsw/winsw@v2.12.0",
+    "pkg:npm/dompurify@3.4.11",
+    "pkg:npm/fabric@5.3.0",
+    "pkg:npm/marked@14.1.3",
+    "pkg:npm/pdfjs-dist@5.7.284",
+    "pkg:npm/qrcode-generator@2.0.4",
+    "pkg:npm/shamir-secret-sharing@0.0.3",
+    "pkg:pypi/certifi@2026.10.19",
+    "pkg:pypi/cryptography@50.0.0",
+    "pkg:pypi/defusedxml@0.7.1",
+    "pkg:pypi/dnspython@2.9.2",
+    "pkg:pypi/easyocr@1.7.2",
+    "pkg:pypi/fastapi@0.136.1",
+    "pkg:pypi/fonttools@4.63.0",
+    "pkg:pypi/httpx@0.28.1",
+    "pkg:pypi/idna@3.16",
+    "pkg:pypi/jinja2@3.1.6",
+    "pkg:pypi/ldap3@2.9.1",
+    "pkg:pypi/lxml@6.1.0",
+    "pkg:pypi/markdown-it-py@3.0.0",
+    "pkg:pypi/numpy@2.4.4",
+    "pkg:pypi/odfpy@1.4.1",
+    "pkg:pypi/opencv-python-headless@4.13.0.92",
+    "pkg:pypi/openpyxl@3.1.5",
+    "pkg:pypi/pdf2docx@0.5.13",
+    "pkg:pypi/pdfplumber@0.11.9",
+    "pkg:pypi/pillow-heif@1.5.0",
+    "pkg:pypi/pillow@13.0.0",
+    "pkg:pypi/psutil@6.1.1",
+    "pkg:pypi/pyasn1@0.6.5",
+    "pkg:pypi/pydantic-settings@2.14.2",
+    "pkg:pypi/pydantic@2.13.3",
+    "pkg:pypi/pygments@2.20.0",
+    "pkg:pypi/pyjwt@2.15.1",
+    "pkg:pypi/pymupdf4llm@0.3.4",
+    "pkg:pypi/pymupdf@1.27.2.3",
+    "pkg:pypi/pyotp@2.9.0",
+    "pkg:pypi/pypinyin@0.55.0",
+    "pkg:pypi/pysmb@1.2.15",
+    "pkg:pypi/pytesseract@0.3.13",
+    "pkg:pypi/python-docx@1.2.0",
+    "pkg:pypi/python-multipart@0.0.32",
+    "pkg:pypi/python3-saml@1.16.0",
+    "pkg:pypi/pyzbar@0.1.9",
+    "pkg:pypi/pyzipper@0.4.0",
+    "pkg:pypi/qrcode@8.2",
+    "pkg:pypi/rapidfuzz@3.14.5",
+    "pkg:pypi/starlette@1.3.1",
+    "pkg:pypi/torch@2.14.0",
+    "pkg:pypi/truststore@0.10.4",
+    "pkg:pypi/uvicorn@0.32.0",
+    "pkg:pypi/xmlsec@1.3.17"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/annotated-doc@0.0.4",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/annotated-types@0.7.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/anyio@4.14.2",
+   "dependsOn": [
+    "pkg:pypi/idna@3.16",
+    "pkg:pypi/typing-extensions@4.15.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/bandit@1.9.4",
+   "dependsOn": [
+    "pkg:pypi/colorama@0.4.6",
+    "pkg:pypi/pyyaml@6.0.3",
+    "pkg:pypi/rich@15.0.0",
+    "pkg:pypi/stevedore@5.9.1"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/certifi@2026.10.19",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/cffi@2.0.0",
+   "dependsOn": [
+    "pkg:pypi/pycparser@3.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/charset-normalizer@3.4.7",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/click@8.3.3",
+   "dependsOn": [
+    "pkg:pypi/colorama@0.4.6"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/colorama@0.4.6",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/cryptography@50.0.0",
+   "dependsOn": [
+    "pkg:pypi/cffi@2.0.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/cuda-bindings@13.2.0",
+   "dependsOn": [
+    "pkg:pypi/cuda-pathfinder@1.5.4"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/cuda-pathfinder@1.5.4",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/cuda-toolkit@13.0.3.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/defusedxml@0.7.1",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/dnspython@2.9.2",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/easyocr@1.7.2",
+   "dependsOn": [
+    "pkg:pypi/ninja@1.13.0",
+    "pkg:pypi/numpy@2.4.4",
+    "pkg:pypi/opencv-python-headless@4.13.0.92",
+    "pkg:pypi/pillow@13.0.0",
+    "pkg:pypi/pyclipper@1.4.0",
+    "pkg:pypi/python-bidi@0.6.9",
+    "pkg:pypi/pyyaml@6.0.3",
+    "pkg:pypi/scikit-image@0.26.0",
+    "pkg:pypi/scipy@1.17.1",
+    "pkg:pypi/shapely@2.1.2",
+    "pkg:pypi/torch@2.14.0",
+    "pkg:pypi/torchvision@0.29.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/et-xmlfile@2.0.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/fastapi@0.136.1",
+   "dependsOn": [
+    "pkg:pypi/annotated-doc@0.0.4",
+    "pkg:pypi/pydantic@2.13.3",
+    "pkg:pypi/starlette@1.3.1",
+    "pkg:pypi/typing-extensions@4.15.0",
+    "pkg:pypi/typing-inspection@0.4.2"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/filelock@4.2.4",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/fire@0.7.1",
+   "dependsOn": [
+    "pkg:pypi/termcolor@3.3.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/fonttools@4.63.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/fsspec@2026.9.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/h11@0.16.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/httpcore@1.0.9",
+   "dependsOn": [
+    "pkg:pypi/certifi@2026.10.19",
+    "pkg:pypi/h11@0.16.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/httptools@0.7.1",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/httpx@0.28.1",
+   "dependsOn": [
+    "pkg:pypi/anyio@4.14.2",
+    "pkg:pypi/certifi@2026.10.19",
+    "pkg:pypi/httpcore@1.0.9",
+    "pkg:pypi/idna@3.16"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/idna@3.16",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/imageio@2.37.3",
+   "dependsOn": [
+    "pkg:pypi/numpy@2.4.4",
+    "pkg:pypi/pillow@13.0.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/iniconfig@2.3.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/isodate@0.7.2",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/jinja2@3.1.6",
+   "dependsOn": [
+    "pkg:pypi/markupsafe@3.0.3"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/lazy-loader@0.5",
+   "dependsOn": [
+    "pkg:pypi/packaging@26.2"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/ldap3@2.9.1",
+   "dependsOn": [
+    "pkg:pypi/pyasn1@0.6.5"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/lxml@6.1.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/markdown-it-py@3.0.0",
+   "dependsOn": [
+    "pkg:pypi/mdurl@0.1.2"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/markupsafe@3.0.3",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/mdurl@0.1.2",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/mpmath@1.3.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/networkx@3.6.1",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/ninja@1.13.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/numpy@2.4.4",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/nvidia-cublas@13.1.1.3",
+   "dependsOn": [
+    "pkg:pypi/nvidia-cuda-nvrtc@13.0.88"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/nvidia-cuda-cupti@13.0.85",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/nvidia-cuda-nvrtc@13.0.88",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/nvidia-cuda-runtime@13.0.96",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/nvidia-cudnn-cu13@9.24.0.43",
+   "dependsOn": [
+    "pkg:pypi/nvidia-cublas@13.1.1.3"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/nvidia-cufft@12.0.0.61",
+   "dependsOn": [
+    "pkg:pypi/nvidia-nvjitlink@13.0.88"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/nvidia-cufile@1.15.1.6",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/nvidia-curand@10.4.0.35",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/nvidia-cusolver@12.0.4.66",
+   "dependsOn": [
+    "pkg:pypi/nvidia-cublas@13.1.1.3",
+    "pkg:pypi/nvidia-cusparse@12.6.3.3",
+    "pkg:pypi/nvidia-nvjitlink@13.0.88"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/nvidia-cusparse@12.6.3.3",
+   "dependsOn": [
+    "pkg:pypi/nvidia-nvjitlink@13.0.88"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/nvidia-cusparselt-cu13@0.8.1",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/nvidia-nccl-cu13@2.30.7",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/nvidia-nvjitlink@13.0.88",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/nvidia-nvshmem-cu13@3.4.5",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/nvidia-nvtx@13.0.85",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/odfpy@1.4.1",
+   "dependsOn": [
+    "pkg:pypi/defusedxml@0.7.1"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/opencv-python-headless@4.13.0.92",
+   "dependsOn": [
+    "pkg:pypi/numpy@2.4.4"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/openpyxl@3.1.5",
+   "dependsOn": [
+    "pkg:pypi/et-xmlfile@2.0.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/packaging@26.2",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pdf2docx@0.5.13",
+   "dependsOn": [
+    "pkg:pypi/fire@0.7.1",
+    "pkg:pypi/fonttools@4.63.0",
+    "pkg:pypi/numpy@2.4.4",
+    "pkg:pypi/opencv-python-headless@4.13.0.92",
+    "pkg:pypi/pymupdf@1.27.2.3",
+    "pkg:pypi/python-docx@1.2.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/pdfminer-six@20251230",
+   "dependsOn": [
+    "pkg:pypi/charset-normalizer@3.4.7",
+    "pkg:pypi/cryptography@50.0.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/pdfplumber@0.11.9",
+   "dependsOn": [
+    "pkg:pypi/pdfminer-six@20251230",
+    "pkg:pypi/pillow@13.0.0",
+    "pkg:pypi/pypdfium2@5.7.1"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/pillow@13.0.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pillow-heif@1.5.0",
+   "dependsOn": [
+    "pkg:pypi/pillow@13.0.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/pluggy@1.6.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/psutil@6.1.1",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pyasn1@0.6.5",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pyclipper@1.4.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pycparser@3.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pycryptodomex@3.23.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pydantic@2.13.3",
+   "dependsOn": [
+    "pkg:pypi/annotated-types@0.7.0",
+    "pkg:pypi/pydantic-core@2.46.3",
+    "pkg:pypi/typing-extensions@4.15.0",
+    "pkg:pypi/typing-inspection@0.4.2"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/pydantic-core@2.46.3",
+   "dependsOn": [
+    "pkg:pypi/typing-extensions@4.15.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/pydantic-settings@2.14.2",
+   "dependsOn": [
+    "pkg:pypi/pydantic@2.13.3",
+    "pkg:pypi/python-dotenv@1.2.2",
+    "pkg:pypi/typing-inspection@0.4.2"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/pygments@2.20.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pyjwt@2.15.1",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pymupdf@1.27.2.3",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pymupdf4llm@0.3.4",
+   "dependsOn": [
+    "pkg:pypi/pymupdf@1.27.2.3",
+    "pkg:pypi/tabulate@0.10.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/pyotp@2.9.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pypdfium2@5.7.1",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pypinyin@0.55.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pysmb@1.2.15",
+   "dependsOn": [
+    "pkg:pypi/pyasn1@0.6.5",
+    "pkg:pypi/tqdm@4.70.1"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/pytesseract@0.3.13",
+   "dependsOn": [
+    "pkg:pypi/packaging@26.2",
+    "pkg:pypi/pillow@13.0.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/pytest@9.0.3",
+   "dependsOn": [
+    "pkg:pypi/colorama@0.4.6",
+    "pkg:pypi/iniconfig@2.3.0",
+    "pkg:pypi/packaging@26.2",
+    "pkg:pypi/pluggy@1.6.0",
+    "pkg:pypi/pygments@2.20.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/python-bidi@0.6.9",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/python-docx@1.2.0",
+   "dependsOn": [
+    "pkg:pypi/lxml@6.1.0",
+    "pkg:pypi/typing-extensions@4.15.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/python-dotenv@1.2.2",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/python-multipart@0.0.32",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/python3-saml@1.16.0",
+   "dependsOn": [
+    "pkg:pypi/isodate@0.7.2",
+    "pkg:pypi/lxml@6.1.0",
+    "pkg:pypi/xmlsec@1.3.17"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/pyyaml@6.0.3",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pyzbar@0.1.9",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/pyzipper@0.4.0",
+   "dependsOn": [
+    "pkg:pypi/pycryptodomex@3.23.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/qrcode@8.2",
+   "dependsOn": [
+    "pkg:pypi/colorama@0.4.6"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/rapidfuzz@3.14.5",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/rich@15.0.0",
+   "dependsOn": [
+    "pkg:pypi/markdown-it-py@3.0.0",
+    "pkg:pypi/pygments@2.20.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/scikit-image@0.26.0",
+   "dependsOn": [
+    "pkg:pypi/imageio@2.37.3",
+    "pkg:pypi/lazy-loader@0.5",
+    "pkg:pypi/networkx@3.6.1",
+    "pkg:pypi/numpy@2.4.4",
+    "pkg:pypi/packaging@26.2",
+    "pkg:pypi/pillow@13.0.0",
+    "pkg:pypi/scipy@1.17.1",
+    "pkg:pypi/tifffile@2026.3.3",
+    "pkg:pypi/tifffile@2026.5.2"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/scipy@1.17.1",
+   "dependsOn": [
+    "pkg:pypi/numpy@2.4.4"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/setuptools@84.2.1",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/shapely@2.1.2",
+   "dependsOn": [
+    "pkg:pypi/numpy@2.4.4"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/starlette@1.3.1",
+   "dependsOn": [
+    "pkg:pypi/anyio@4.14.2",
+    "pkg:pypi/typing-extensions@4.15.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/stevedore@5.9.1",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/sympy@1.14.0",
+   "dependsOn": [
+    "pkg:pypi/mpmath@1.3.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/tabulate@0.10.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/termcolor@3.3.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/tifffile@2026.3.3",
+   "dependsOn": [
+    "pkg:pypi/numpy@2.4.4"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/tifffile@2026.5.2",
+   "dependsOn": [
+    "pkg:pypi/numpy@2.4.4"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/torch@2.14.0",
+   "dependsOn": [
+    "pkg:pypi/cuda-bindings@13.2.0",
+    "pkg:pypi/cuda-toolkit@13.0.3.0",
+    "pkg:pypi/filelock@4.2.4",
+    "pkg:pypi/fsspec@2026.9.0",
+    "pkg:pypi/jinja2@3.1.6",
+    "pkg:pypi/networkx@3.6.1",
+    "pkg:pypi/nvidia-cudnn-cu13@9.24.0.43",
+    "pkg:pypi/nvidia-cusparselt-cu13@0.8.1",
+    "pkg:pypi/nvidia-nccl-cu13@2.30.7",
+    "pkg:pypi/nvidia-nvshmem-cu13@3.4.5",
+    "pkg:pypi/setuptools@84.2.1",
+    "pkg:pypi/sympy@1.14.0",
+    "pkg:pypi/triton@3.8.0",
+    "pkg:pypi/typing-extensions@4.15.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/torchvision@0.29.0",
+   "dependsOn": [
+    "pkg:pypi/numpy@2.4.4",
+    "pkg:pypi/pillow@13.0.0",
+    "pkg:pypi/torch@2.14.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/tqdm@4.70.1",
+   "dependsOn": [
+    "pkg:pypi/colorama@0.4.6"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/triton@3.8.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/truststore@0.10.4",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/typing-extensions@4.15.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/typing-inspection@0.4.2",
+   "dependsOn": [
+    "pkg:pypi/typing-extensions@4.15.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/uvicorn@0.32.0",
+   "dependsOn": [
+    "pkg:pypi/click@8.3.3",
+    "pkg:pypi/h11@0.16.0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/uvloop@0.22.1",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/watchfiles@1.1.1",
+   "dependsOn": [
+    "pkg:pypi/anyio@4.14.2"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/websockets@16.0",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/xmlsec@1.3.17",
+   "dependsOn": [
+    "pkg:pypi/lxml@6.1.0"
+   ]
+  }
+ ]
+}
