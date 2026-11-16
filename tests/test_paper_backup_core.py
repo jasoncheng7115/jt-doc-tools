@@ -13,6 +13,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import struct
@@ -298,8 +299,13 @@ def test_printed_main_document_scans_back_completely(tmp_path, density):
         for page in doc:
             assert not list(page.links()) and not list(page.annots() or [])
         assert doc.embfile_count() == 0
-    raw = pdf.read_bytes()
-    assert b"/JavaScript" not in raw and b"/JS" not in raw and b"/EmbeddedFile" not in raw
+        # 只看每個物件的字典（不含資料串流）：串流裡是壓縮過的隨機資料，偶爾會剛好湊出「/JS」三個位元組
+        # （CI 偶發過；原本是在整個檔案的位元組裡找）
+        for x in range(1, doc.xref_length()):
+            obj = doc.xref_object(x, compressed=False)
+            assert "/JavaScript" not in obj and not re.search(r"/JS\b", obj) and "/EmbeddedFile" not in obj, obj[:200]
+        cat = doc.xref_object(doc.pdf_catalog(), compressed=False)
+        assert "/OpenAction" not in cat and not re.search(r"/AA\b", cat), cat
     pages = _render_and_scan(tmp_path, pdf)
     assert pages[0] == []                                               # 封面沒有 QR
     got = [t for p in pages[1:] for t in p]

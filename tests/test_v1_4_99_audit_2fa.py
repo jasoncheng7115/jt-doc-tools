@@ -60,11 +60,13 @@ def test_totp_new_secret_format():
 
 def test_totp_provision_uri_contents():
     from app.core import totp
-    uri = totp.provision_uri("JBSWY3DPEHPK3PXP", "alice", "MyApp")
+    # 32 字元（160 位元），跟產品自己產的一樣長；pyotp 2.12 起少於 112 位元的密鑰直接拒絕（CI 抓到）
+    secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+    uri = totp.provision_uri(secret, "alice", "MyApp")
     assert uri.startswith("otpauth://totp/")
     assert "alice" in uri
     assert "MyApp" in uri
-    assert "secret=JBSWY3DPEHPK3PXP" in uri
+    assert f"secret={secret}" in uri
 
 
 def test_totp_verify_code_happy_and_skew():
