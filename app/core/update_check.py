@@ -212,7 +212,8 @@ def notice_for(request) -> Optional[dict]:
 
 def dismiss(request, version: str) -> None:
     from . import notify_settings
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", str(version or "")):
+    version = str(version or "")
+    if len(version) > 32 or not re.fullmatch(r"[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}", version):
         raise ValueError("version 格式不正確")
     notify_settings.save_prefs(_pref_key(request), {"update_dismissed": version})
 

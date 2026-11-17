@@ -134,6 +134,11 @@ def test_dismiss_hides_the_banner_until_the_next_version(admin_session, monkeypa
     _fake_latest(monkeypatch, newer)
     uc.check_now(notify=False)
     assert c.post("/api/update-notice/dismiss", json={"version": "x"}).status_code == 400
+    # 版號每段最多 6 位、整串先截長度（CodeQL py/polynomial-redos #235 #236）
+    assert c.post("/api/update-notice/dismiss", json={"version": "1.2." + "3" * 7}).status_code == 400
+    assert c.post("/api/update-notice/dismiss", json={"version": "0" * 200_000 + ".1.1"}).status_code == 400
+    from app.core import notify_settings
+    assert notify_settings.save_prefs("uc-redos", {"update_dismissed": "1.2." + "3" * 50})["update_dismissed"] == ""
     assert c.post("/api/update-notice/dismiss", json={"version": newer}).status_code == 200
     page = c.get("/").text
     assert 'id="updBanner"' not in page, "這一版不再提醒"

@@ -368,8 +368,8 @@ def save_prefs(key: str, new: dict) -> dict:
             # 在存檔時就清乾淨，他填的東西才會真的能用。
             cur[f] = _strip_ctrl(str(new[f] or ""))[:200]
     if "update_dismissed" in new:
-        v = str(new["update_dismissed"] or "")
-        cur["update_dismissed"] = v if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", v) else ""
+        v = str(new["update_dismissed"] or "")[:32]      # 先截長度，正規式的每段也有上限（不讓超長字串拖慢）
+        cur["update_dismissed"] = v if re.fullmatch(r"[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}", v) else ""
     if "inbox_seen_at" in new:
         try:
             cur["inbox_seen_at"] = float(new["inbox_seen_at"] or 0)

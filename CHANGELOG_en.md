@@ -5,11 +5,18 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (976 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (977 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.48] - 2026-11-17
+
+### Fixed
+
+- The sidebar "New version" label now takes its colours from the sidebar theme variables instead of fixed values.
+- Version check for "don't remind me about this version": the length is capped first and each part allows at most 6 digits.
 
 ## [1.17.47] - 2026-11-17
 
