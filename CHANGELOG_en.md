@@ -5,11 +5,19 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (975 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (976 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.47] - 2026-11-17
+
+### Added
+
+- **Scheduled check for new versions**: Settings → Dependency check has a new "Check for new versions daily" switch, **off by default**. When on, it contacts GitHub once a day and only reads the latest version number (no host or user information is sent); the page shows when the last check ran and its result.
+- **Administrators are told about new versions**: a notice bar appears at the top of the home page (what's new, how to update, don't remind me about this version) and a small "New version" label sits next to the version in the sidebar; only administrators see them (in single-user mode, whoever opens the page). Each administrator is also notified once through their own notification channels, never twice for the same version.
+- The "Check the latest version on GitHub" hint now names the host it really contacts, `raw.githubusercontent.com`.
 
 ## [1.17.46] - 2026-11-16
 

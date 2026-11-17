@@ -3431,7 +3431,8 @@ GET /api/speech/audio/{file_id}?exp=<到期的 unix 秒數>&sig=<簽章>
 
 | 端點 | 方法 | 對應的管理頁 |
 |---|---|---|
-| `/admin/api/check-latest-version` | POST | 系統狀態 —— 檢查有沒有新版 |
+| `/admin/api/check-latest-version` | POST | 相依套件檢查 —— 立刻檢查有沒有新版（結果也給首頁提示用，手動檢查不寄通知） |
+| `/admin/api/update-check` | GET / PUT | 每天自動檢查新版：`{"enabled": true}`（預設關閉）與最近一次檢查結果（`last_check_at`、`last_ok`、`last_error`、`latest`、`is_outdated`） |
 | `/admin/api/upload-limit/probe` | POST | 系統狀態 —— 量反向代理的上傳上限 |
 | `/admin/api/llm/context-variant` | POST | LLM 設定 —— 在 Ollama 上建一個上下文較大的版本（`model` 與 `num_ctx`，回新名字，例如 `gemma4:26b-ctx32k`；只對已存檔的伺服器建，原本的模型不動）|
 | `/admin/api/ocr-langs/set-engine` | POST | OCR 語言包 —— 切換預設引擎 |
@@ -3643,6 +3644,7 @@ sudo systemctl start jt-doc-tools
 | `/api/my/notify` | POST | 存自己的通知設定 |
 | `/api/my/inbox` | GET | 站內通知列表（未讀優先）|
 | `/api/my/inbox/seen` | POST | 標記已讀（`id` 或 `all=1`）|
+| `/api/update-notice/dismiss` | POST | 首頁「有新版」提示條按「這一版不再提醒」：`{"version": "x.y.z"}`，記在這位管理員自己的偏好；只有管理員（單機模式＝開網頁的人）可以用 |
 | `/api/my/zulip-link` | GET | Zulip 綁定狀態：已綁定的帳號（`linked`）、進行中的綁定（`pending`：代碼、到期時間、要私訊的 Bot、等待確認的 Zulip 帳號 `candidate`）|
 | `/api/my/zulip-link/start` | POST | 產生一次性綁定代碼（10 分鐘有效）；把它在 Zulip 私訊給通知 Bot |
 | `/api/my/zulip-link/confirm` | POST | 確認綁定 `candidate`（`{"code": "..."}`）；綁定與代碼消耗一次完成 |

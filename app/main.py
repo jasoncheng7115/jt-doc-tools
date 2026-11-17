@@ -28,7 +28,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.17.46"
+VERSION = "1.17.47"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -289,6 +289,16 @@ def _tpl_is_auditor(request) -> bool:
 
 templates.env.globals["is_admin"] = _tpl_is_admin
 templates.env.globals["is_auditor"] = _tpl_is_auditor
+
+
+def _tpl_update_notice(request):
+    """Jinja global：這位管理員要不要看到「有新版」（首頁提示條、側欄版本號旁的小標籤）；
+    不是管理員、或沒有比目前新的版本 → None。"""
+    from .core import update_check as _upd
+    return _upd.notice_for(request)
+
+
+templates.env.globals["update_notice"] = _tpl_update_notice
 
 
 def _tpl_net_exposed() -> bool:
@@ -2002,6 +2012,25 @@ async def my_jobs_page(request: Request):
                                       {"request": request})
 
 
+@app.post("/api/update-notice/dismiss")
+async def api_update_notice_dismiss(request: Request):
+    """首頁「有新版」提示條按「這一版不再提醒」：`{"version": "x.y.z"}`，記在這位管理員自己的偏好；
+    出下一版時才會再出現（側欄的小標籤照樣在）。只有管理員（單機模式＝開網頁的人）可以用。"""
+    from fastapi import HTTPException
+    from .core import update_check as _upd
+    if not _upd.viewer_is_admin(request):
+        raise HTTPException(403, "只有管理員可以使用")
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    try:
+        _upd.dismiss(request, (body or {}).get("version") if isinstance(body, dict) else None)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
 @app.get("/api/my/inbox")
 async def api_my_inbox(request: Request, limit: int = 10):
     """站內通知：我最近完成的作業 + 未讀數。
@@ -2858,6 +2887,13 @@ async def _startup():
             _jtlw_ack.start_scheduler()
         except Exception:
             logger.exception("jtlw_ack scheduler start failed")
+        # 定期檢查新版（預設關閉；打開後每天一次，只讀 GitHub 上的版本號）
+        try:
+            from .core import update_check as _upd
+            if _upd.get()["enabled"]:
+                _upd.start_scheduler()
+        except Exception:
+            logger.exception("update_check scheduler start failed")
     except Exception as exc:
         logger.exception("auth/audit init failed: %s", exc)
     # Background sweeper for ephemeral uploads

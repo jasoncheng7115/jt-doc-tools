@@ -17,10 +17,15 @@
     <div class="ver-card" id="latestVerBox">
       <div class="ver-label">{{ tr('GitHub 最新版本') }}</div>
       <div class="ver-num ver-num-pending" id="latestVer">{{ tr('尚未檢查') }}</div>
-      <div class="ver-hint" id="latestVerHint">{{ tr('點右側按鈕主動偵測（不會自動連網）') }}</div>
+      <div class="ver-hint" id="latestVerHint">{{ tr('點右側按鈕檢查；或打開下面的「每天自動檢查新版」') }}</div>
     </div>
   </div>
   <button class="btn ver-btn" type="button" id="btnCheckLatest">{{ icon('refresh', size=14) }} {{ tr('檢查 GitHub 最新版本') }}</button>
+  <div class="ver-auto">
+    <label class="ver-auto-l"><input type="checkbox" id="verAuto"> {{ tr('每天自動檢查新版') }}</label>
+    <span class="ver-auto-last" id="verAutoLast"></span>
+    <p class="ver-auto-hint">{{ tr('預設關閉。打開後每天連 GitHub 一次，只讀最新的版本號（不送出主機或使用者資訊）；有新版時，首頁與側欄會提示管理員，並用每位管理員自己設定的通知管道通知一次。連不上 GitHub 時只在這裡顯示，不會打擾任何人。') }}</p>
+  </div>
   {# 授權與原始碼取得管道。本程式以 AGPL-3.0 釋出，第 13 條要求「透過網路與
      軟體互動的使用者」拿得到對應的原始碼 —— 固定放在這一頁，這裡本來就是
      講版本與相依套件授權的地方（v1.14.58 從側欄搬過來）。 #}
@@ -168,6 +173,12 @@
     background:#f1f5f9; padding:1px 6px; border-radius:3px;
     font-size:11px; color:#0f172a;
   }
+  .ver-auto { flex-basis:100%; display:flex; flex-wrap:wrap; align-items:center; gap:4px 14px;
+              border-top:1px solid var(--border, #e5e7eb); padding-top:12px; }
+  .ver-auto-l { display:flex; align-items:center; gap:6px; font-weight:600; font-size:14px; }
+  .ver-auto-last { font-size:12.5px; color:#64748b; }
+  .ver-auto-last.bad { color:#b45309; }
+  .ver-auto-hint { flex-basis:100%; margin:0; font-size:12.5px; color:#64748b; line-height:1.6; }
   .ver-card.is-outdated .ver-num { color:#dc2626; }
   .ver-card.is-current  .ver-num { color:#10b981; }
   .ver-card.is-newer    .ver-num { color:#3b82f6; }
@@ -423,10 +434,25 @@
     btn.innerHTML = tr('查詢中…');
     verEl.textContent = tr('查詢中…');
     verEl.className = 'ver-num ver-num-pending';
-    if (hintEl) hintEl.textContent = tr('正在連線到 api.github.com，最多 8 秒…');
+    if (hintEl) hintEl.textContent = tr('正在連線到 raw.githubusercontent.com，最多 8 秒…');
     try {
       const r = await fetch('/admin/api/check-latest-version', {method: 'POST'});
       const j = await r.json();
+      showLatest(j);
+      loadAuto();
+    } catch (e) {
+      verEl.textContent = tr('查詢失敗');
+      if (hintEl) hintEl.textContent = e.message;
+    } finally {
+      btn.innerHTML = orig;
+      btn.disabled = false;
+    }
+  });
+  function showLatest(j) {
+    const verBox = document.getElementById('latestVerBox');
+    const verEl = document.getElementById('latestVer');
+    const hintEl = document.getElementById('latestVerHint');
+    {
       if (!j.ok) {
         verEl.textContent = tr('查詢失敗');
         verEl.className = 'ver-num ver-num-pending';
@@ -467,12 +493,41 @@
         verEl.innerHTML = 'v' + j.latest + pillHtml + linkHtml;
         if (hintEl) hintEl.innerHTML = hintHtml;
       }
-    } catch (e) {
-      verEl.textContent = tr('查詢失敗');
-      if (hintEl) hintEl.textContent = e.message;
-    } finally {
-      btn.innerHTML = orig;
-      btn.disabled = false;
+    }
+  }
+  // 每天自動檢查新版：開關＋最近一次結果；載入時用存下來的結果先把「GitHub 最新版本」畫出來
+  async function loadAuto() {
+    try {
+      const st = await (await fetch('/admin/api/update-check')).json();
+      document.getElementById('verAuto').checked = !!st.enabled;
+      const last = document.getElementById('verAutoLast');
+      if (st.last_check_at) {
+        last.textContent = tr('最近一次檢查：{0}').replace('{0}', jtTime.dt(st.last_check_at))
+          + '・' + (st.last_ok ? tr('成功') : tr('失敗：{0}').replace('{0}', st.last_error || ''));
+        last.classList.toggle('bad', !st.last_ok);
+      } else {
+        last.textContent = tr('還沒有檢查過');
+        last.classList.remove('bad');
+      }
+      return st;
+    } catch (_e) { return null; }
+  }
+  document.getElementById('verAuto').addEventListener('change', async (e) => {
+    const cb = e.target;
+    cb.disabled = true;
+    try {
+      const r = await fetch('/admin/api/update-check', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                                                         body: JSON.stringify({ enabled: cb.checked }) });
+      if (!r.ok) throw new Error(await window.friendlyServerError(r, tr('儲存失敗')));
+      if (window.showToast) showToast(cb.checked ? tr('已開啟每天自動檢查新版') : tr('已關閉每天自動檢查新版'), 'ok');
+      await loadAuto();
+    } catch (err) { cb.checked = !cb.checked; (window.showAlert || alert)(err.message); }
+    finally { cb.disabled = false; }
+  });
+  loadAuto().then(st => {
+    if (st && st.latest) {
+      showLatest({ ok: true, current: st.current, latest: st.latest, is_outdated: st.is_outdated,
+                   html_url: st.changelog_url });
     }
   });
 </script>

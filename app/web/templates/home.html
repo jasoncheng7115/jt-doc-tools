@@ -2,6 +2,25 @@
 {% from "components/icons.html" import icon %}
 {% block title %}工具首頁 · {{ app_name }}{% endblock %}
 {% block content %}
+{# 有新版：只給管理員（單機模式＝開網頁的人）；「這一版不再提醒」記在這位管理員自己的偏好，出下一版才會再出現 #}
+{% set _upd = update_notice(request) %}
+{% if _upd and not _upd.dismissed %}
+<div class="upd-banner" id="updBanner" data-version="{{ _upd.latest }}" role="status">
+  <div class="upd-main">{{ icon('bell', size=16) }}
+    <b>{{ tr('有新版 v{0} 可以更新').replace('{0}', _upd.latest) }}</b>
+    <span class="upd-cur">{{ tr('（目前 v{0}）').replace('{0}', _upd.current) }}</span></div>
+  <div class="upd-acts">
+    <a class="btn btn-small" href="{{ _upd.changelog_url }}" target="_blank" rel="noopener">{{ icon('file-text', size=13) }}<span>{{ tr('看更新內容') }}</span></a>
+    <button type="button" class="btn btn-small" id="updHowBtn" aria-expanded="false">{{ icon('info', size=13) }}<span>{{ tr('怎麼更新') }}</span></button>
+    <button type="button" class="btn btn-small" id="updDismiss">{{ icon('close', size=13) }}<span>{{ tr('這一版不再提醒') }}</span></button>
+  </div>
+  <div class="upd-how" id="updHow" hidden>
+    {% if _upd.update_cmd.os == 'windows' %}{{ tr('以系統管理員身分開啟 PowerShell，再執行') }} <code>jtdt update</code>
+    {% else %}{{ tr('在主機上執行') }} <code>sudo jtdt update</code>{% endif %}
+    <br>{{ tr('更新前先確認沒有作業在跑；更新時服務會重新啟動，大約一分鐘。') }}
+  </div>
+</div>
+{% endif %}
 <section class="hero">
   <div class="hero-logo">
     <img src="{{ brand_logo('page') }}" alt="{{ app_name }}" />
@@ -90,6 +109,13 @@
 {% endfor %}
 
 <style nonce="{{ request.state.csp_nonce }}">
+.upd-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 18px; padding: 12px 16px;
+  border: 1px solid #fcd34d; background: #fffbeb; color: #78350f; border-radius: 10px; }
+.upd-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 240px; font-size: 14.5px; }
+.upd-cur { font-size: 13px; opacity: .8; }
+.upd-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.upd-how { flex-basis: 100%; font-size: 13px; line-height: 1.7; }
+.upd-how code { background: #fef3c7; padding: 1px 6px; border-radius: 4px; }
 .hero { text-align: center; padding: 40px 16px 28px; }
 .hero-logo {
   display: inline-block;
@@ -197,6 +223,26 @@
 .tool-name { font-size: 15.5px; font-weight: 600; }
 .tool-desc { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
 </style>
+<script nonce="{{ request.state.csp_nonce }}">
+// 有新版的提示條：「怎麼更新」展開指令；「這一版不再提醒」記在伺服器（這位管理員自己的偏好）
+(function () {
+  const box = document.getElementById('updBanner');
+  if (!box) return;
+  const how = document.getElementById('updHowBtn');
+  how.addEventListener('click', () => {
+    const el = document.getElementById('updHow');
+    el.hidden = !el.hidden; how.setAttribute('aria-expanded', String(!el.hidden));
+  });
+  document.getElementById('updDismiss').addEventListener('click', async () => {
+    try {
+      const r = await fetch('/api/update-notice/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                            body: JSON.stringify({ version: box.dataset.version }) });
+      if (!r.ok) throw new Error(await window.friendlyServerError(r, tr('處理失敗')));
+      box.remove();
+    } catch (e) { (window.showAlert || alert)(e.message); }
+  });
+})();
+</script>
 <script nonce="{{ request.state.csp_nonce }}">
 // 首頁釘選 — 同 sidebar 用 localStorage['jtdt:pinned']
 (function(){

@@ -1640,57 +1640,56 @@ def build_router(templates) -> APIRouter:
 
     @router.post("/api/check-latest-version")
     async def check_latest_version():
-        """Admin 主動點按時才呼叫，從 GitHub raw 抓 main branch 的
-        pyproject.toml 解析 version。比 Releases API 可靠（repo 沒打 release
-        tag 時 /releases/latest 會 404）。timeout 8 秒避免卡住。"""
+        """管理員按「檢查 GitHub 最新版本」：從 GitHub raw 讀 main 分支 `pyproject.toml` 的版本號
+        （比 Releases API 可靠：沒打 release tag 時 /releases/latest 會 404），逾時 8 秒。
+        結果記在 `update_check`（首頁的「有新版」提示也用它）；手動檢查不另外寄通知。"""
+        from ..core import update_check
         from ..main import VERSION as _app_version
-        import urllib.request
-        import urllib.error
-        import re as _re
-        import logging as _lg
-        url = "https://raw.githubusercontent.com/jasoncheng7115/jt-doc-tools/main/pyproject.toml"
-        try:
-            req = urllib.request.Request(
-                url,
-                headers={"User-Agent": f"jt-doc-tools/{_app_version} (sys-deps version check)"},
-            )
-            with _safe_fetch.urlopen(req, timeout=8) as resp:
-                content = resp.read().decode("utf-8", errors="replace")
-            # 解析 [project] version = "x.y.z"
-            m = _re.search(r'^\s*version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"', content, _re.M)
-            if not m:
-                return {"ok": False, "error": "解析 pyproject.toml 失敗（找不到 version 欄位）",
-                        "current": _app_version}
-            tag = m.group(1).strip()
+        st = await asyncio.to_thread(lambda: update_check.check_now(notify=False))
+        if not st["last_ok"]:
+            return {"ok": False, "error": st["last_error"] or "無法連到 GitHub", "current": _app_version}
+        latest = st["latest"]
+        if st["is_outdated"]:
+            status = "outdated"
+        elif latest == _app_version:
+            status = "current"
+        elif update_check.is_newer(_app_version, latest):
+            status = "newer"
+        else:
+            status = "unknown"
+        return {"ok": True, "current": _app_version, "latest": latest, "html_url": st["changelog_url"],
+                "published_at": "", "is_outdated": st["is_outdated"], "status": status,
+                "checked_at": st["last_check_at"]}
 
-            def _parse(v: str):
-                try:
-                    return tuple(int(x) for x in v.split(".")[:3])
-                except Exception:
-                    return ()
-            cur_t = _parse(_app_version)
-            latest_t = _parse(tag)
-            if cur_t and latest_t:
-                if latest_t > cur_t:    is_outdated = True; status = "outdated"
-                elif latest_t < cur_t:  is_outdated = False; status = "newer"  # dev build
-                else:                    is_outdated = False; status = "current"
-            else:
-                is_outdated = False
-                status = "unknown"
-            return {
-                "ok": True,
-                "current": _app_version,
-                "latest": tag,
-                "html_url": "https://github.com/jasoncheng7115/jt-doc-tools/blob/main/CHANGELOG.md",
-                "published_at": "",
-                "is_outdated": is_outdated,
-                "status": status,
-            }
-        except urllib.error.HTTPError as e:
-            return {"ok": False, "error": f"GitHub raw HTTP {e.code}", "current": _app_version}
+    @router.get("/api/update-check")
+    async def update_check_get():
+        """定期檢查新版的設定與最近一次結果。"""
+        from ..core import update_check
+        return JSONResponse(update_check.status(), headers={"Cache-Control": "no-store"})
+
+    @router.put("/api/update-check")
+    async def update_check_put(request: Request):
+        """`{"enabled": true | false}`：打開後背景每天檢查一次（預設關閉；會連 GitHub 讀版本號）。"""
+        from ..core import update_check
+        try:
+            body = await request.json()
         except Exception:
-            _lg.getLogger("app.admin").exception("check_latest_version failed")
-            return {"ok": False, "error": "無法連到 GitHub（網路 / DNS 問題）", "current": _app_version}
+            body = None
+        if not isinstance(body, dict) or not isinstance(body.get("enabled"), bool):
+            raise HTTPException(400, "enabled 要是 true / false")
+        before = update_check.get()["enabled"]
+        st = update_check.set_enabled(body["enabled"])
+        try:
+            from ..core import audit_db
+            from ..core.sessions import user_label
+            from ..core.client_ip import real_client_ip
+            audit_db.log_event("settings_change", username=user_label(getattr(request.state, "user", None)) or "",
+                               ip=real_client_ip(request), target="update_check",
+                               details={"enabled": [before, body["enabled"]]})
+        except Exception:
+            import logging as _lg
+            _lg.getLogger("app.admin").warning("update_check audit failed", exc_info=True)
+        return JSONResponse(st, headers={"Cache-Control": "no-store"})
 
     # ---- 企業 logo / 識別 -----------------------------------------------------
     def _br_default_app_name() -> str:

@@ -1,15 +1,15 @@
 {
  "bomFormat": "CycloneDX",
  "specVersion": "1.5",
- "serialNumber": "urn:uuid:0f2221c6-eb70-5b9d-b0d6-27931a416b38",
+ "serialNumber": "urn:uuid:14ddfd5b-7804-5eea-b38b-97dd23ca4342",
  "version": 1,
  "metadata": {
   "component": {
    "type": "application",
-   "bom-ref": "pkg:github/jasoncheng7115/jt-doc-tools@1.17.46",
+   "bom-ref": "pkg:github/jasoncheng7115/jt-doc-tools@1.17.47",
    "name": "jt-doc-tools",
-   "version": "1.17.46",
-   "purl": "pkg:github/jasoncheng7115/jt-doc-tools@1.17.46",
+   "version": "1.17.47",
+   "purl": "pkg:github/jasoncheng7115/jt-doc-tools@1.17.47",
    "licenses": [
     {
      "license": {
@@ -3177,7 +3177,7 @@
  ],
  "dependencies": [
   {
-   "ref": "pkg:github/jasoncheng7115/jt-doc-tools@1.17.46",
+   "ref": "pkg:github/jasoncheng7115/jt-doc-tools@1.17.47",
    "dependsOn": [
     "jt-doc-tools-vendor:jsqr",
     "pkg:github/winsw/winsw@v2.12.0",

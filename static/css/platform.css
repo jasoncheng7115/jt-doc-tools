@@ -198,6 +198,12 @@ body {
   color: var(--sb-soft); margin-top: -10px; padding-right: 4px;
   display: flex; justify-content: flex-end; align-items: baseline; gap: 8px;
 }
+/* 有新版的小標籤：只有管理員看得到（`update_notice`），點了到相依套件頁的版本區 */
+.sidebar .brand-update {
+  font-size: 10.5px; font-weight: 700; line-height: 1; padding: 3px 7px; border-radius: 999px;
+  background: #fbbf24; color: #422006; text-decoration: none; letter-spacing: .02em;
+}
+.sidebar .brand-update:hover { background: #f59e0b; }
 /* AGPL 第 13 條要的「Source 連結」。刻意做得低調但**可見**（不是 hover 才出現、
    也不是只有管理員看得到）—— 條文要求的是網路使用者拿得到原始碼。 */
 .sidebar .brand-src {

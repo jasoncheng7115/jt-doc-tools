@@ -126,6 +126,9 @@
              與軟體互動的使用者」拿得到對應原始碼。改放在「相依套件」那一頁，
              那裡本來就是講版本與授權的地方，取得管道仍然在，只是不佔用側欄。 #}
           <div class="brand-version">
+            {# 有新版時給管理員一顆常駐小標籤（首頁的提示條按了「這一版不再提醒」之後這顆照樣在） #}
+            {% set _upd = update_notice(request) %}{% if _upd %}<a class="brand-update" href="/admin/sys-deps#versionPanel"
+               title="{{ tr('有新版 v{0} 可以更新').replace('{0}', _upd.latest) }}">{{ tr('有新版') }}</a>{% endif %}
             <span>v{{ version }}</span>
           </div>
         </div>

@@ -226,6 +226,7 @@ _NEW_CATEGORY_ITEMS = {
     "scheduled_export": "scheduled_export.json",
     "ocr": "ocr_settings.json",
     "mfp": "mfp_settings.json",          # v1.16.89：允許使用者自行新增事務機
+    "update_check": "update_check.json",  # v1.17.47：每天自動檢查新版
 }
 
 

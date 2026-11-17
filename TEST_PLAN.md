@@ -699,7 +699,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **569 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **570 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -1239,6 +1239,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_ttc_subfont.py` | `.ttc` 要挑對子字型，否則寫進 PDF 的中文是**日文字形** |
 | `test_ui_locale.py` | 介面語言切換端點 `/ui-locale` 的安全性（開放重導） |
 | `test_update_backup.py` | 升級前的備份：**該留的要留、空間不夠要在停服務之前就擋下來** |
+| `test_update_check.py` | 定期檢查新版＋「有新版」提示（使用者 2026-11-17） |
 | `test_update_fetch_survives_moved_tags.py` | `jtdt update` 的 fetch 不可以被「移動過的標籤」擋死 |
 | `test_upgrade_notice_stays.py` | 改寫歷史之後的升級注意事項**要一直留著**（使用者 2026-09-13 指示） |
 | `test_upgrade_v1_14_6.py` | 升級到 v1.14.6：既有客戶的資料目錄要能無痛接上 |
@@ -2854,7 +2855,8 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 > `temp/sec-audit/pentest.py` 自動涵蓋；下面列的是**功能**驗收。
 
 ### 管理區設定 API
-- [ ] `POST /admin/api/check-latest-version` — 回目前版本與最新版本；連不到網路時要回錯誤訊息，不可讓頁面一直轉
+- [ ] `POST /admin/api/check-latest-version` — 回目前版本與最新版本；連不到網路時要回錯誤訊息，不可讓頁面一直轉；結果記下來給首頁提示用，手動檢查不寄通知
+- [ ] `GET/PUT /admin/api/update-check` — 🆕 v1.17.47 每天自動檢查新版：預設關閉、非布林 400、非管理員擋、開關寫稽核；最近一次檢查時間與結果（`tests/test_update_check.py`）
 - [ ] `GET|POST /admin/api/llm/settings` — 存檔後重新整理值要留著；數值欄位（逾時、並行數、句數上限）超範圍要被 clamp
   - [ ] **API 金鑰加密存放**（v1.16.17）：`llm_settings.json` 裡看不到明文、權限 600；
         設定頁原始碼、GET 與 POST 的回應都**不出現金鑰本身**（只有 `__KEPT__`）；
@@ -2894,6 +2896,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 ### 通知 / 其他
 - [ ] `GET /api/my/inbox` — 只回自己的通知
 - [ ] `POST /api/my/inbox/seen` — 標記已讀；別人的通知 id 標不動
+- [ ] `POST /api/update-notice/dismiss` — 🆕 v1.17.47 「這一版不再提醒」：只有管理員（單機模式＝開網頁的人），一般使用者與稽核員 403、版本格式錯 400；出下一版提示條再出現、側欄小標籤一直在
 - [ ] `GET /api/my/zulip-link` — 自己的 Zulip 綁定狀態（已綁定 / 等私訊 / 等確認）；未登入 401（v1.17.0）
 - [ ] `POST /api/my/zulip-link/start` — 產生一次性代碼（10 分鐘）；每人 10 分鐘最多 5 組；Zulip 沒設好回 409
 - [ ] `POST /api/my/zulip-link/confirm` — 只有產生代碼的本人能確認；代碼用過 / 過期回 410；綁定與消耗一次完成
@@ -6509,10 +6512,18 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
 
+### 6.151 v1.17.47 — 定期檢查新版與「有新版」提示（**每次發版必過**）
+
+- [ ] 「每天自動檢查新版」預設關閉；打開後背景每天一次；連不上 GitHub 只在相依套件頁顯示（`tests/test_update_check.py`）。
+- [ ] 有新版：首頁提示條＋側欄版本號旁的小標籤**只給管理員**（一般使用者、稽核員都看不到；變異驗證過）；單機模式開網頁的人看得到；
+      「這一版不再提醒」只藏提示條、出下一版再出現；管理員的通知管道每一版只通知一次。
+- [ ] 實機：在開了「每天自動檢查新版」的站台，把 `update_check.json` 的 `latest` 改大一號重新整理首頁，提示條與側欄標籤出現；「怎麼更新」顯示這台主機的指令。
+
 ### 6.150 v1.17.46 — SBOM（**每次發版必過**）
 
 - [ ] 升版號之後重產 `sbom.cdx.json`（`python tools/make_sbom.py`）；`tools/check_version_consistency.py` 六項一致、`tests/test_sbom.py` 全綠（內容跟 `uv.lock` / `static/vendor/` 一致；變異驗證過：改 `uv.lock` 裡一個版本沒重產就紅）。
-- [ ] 用 CycloneDX 的工具（例如 `cyclonedx validate`）或線上檢視器開一次，格式合法、元件數對得上。
+- [ ] 用 CycloneDX 官方程式庫驗格式（臨時環境，不動專案相依；2026-11-17 v1.17.46 驗過 VALID）：
+      `uvx --from "cyclonedx-python-lib[validation]" --with "cyclonedx-python-lib[validation]" python -c "from cyclonedx.validation.json import JsonStrictValidator; from cyclonedx.schema import SchemaVersion; print(JsonStrictValidator(SchemaVersion.V1_5).validate_str(open('github/sbom.cdx.json').read()) or 'VALID')"`
 
 ### 6.149 v1.17.41 — 名片簿、清單整合、AI 協助（**每次發版必過**）
 

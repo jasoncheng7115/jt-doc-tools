@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import logging
 import threading
 import time
@@ -300,6 +301,8 @@ _PREF_DEFAULTS: dict[str, Any] = {
     # 站內通知「上次查看」的時間戳 —— 未讀數由它與作業的完成時間推導，
     # 不逐筆記已讀狀態（見 /api/my/inbox）
     "inbox_seen_at": 0.0,
+    # 首頁「有新版」提示條按了「這一版不再提醒」的版本（`update_check`）；出下一版才會再出現
+    "update_dismissed": "",
 }
 
 
@@ -364,6 +367,9 @@ def save_prefs(key: str, new: dict) -> dict:
             # 注入被擋住了），但使用者只會看到「通知都沒收到」而找不到原因。
             # 在存檔時就清乾淨，他填的東西才會真的能用。
             cur[f] = _strip_ctrl(str(new[f] or ""))[:200]
+    if "update_dismissed" in new:
+        v = str(new["update_dismissed"] or "")
+        cur["update_dismissed"] = v if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", v) else ""
     if "inbox_seen_at" in new:
         try:
             cur["inbox_seen_at"] = float(new["inbox_seen_at"] or 0)
