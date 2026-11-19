@@ -564,17 +564,20 @@ def _contact(r) -> dict:
 def merge_contacts(owner: str, bid: str, keep_id: str, other_id: str) -> dict:
     """同一批裡把 other 併進 keep（正反面、同一人拿到兩張）：欄位合併、卡面都算 keep 的，other 刪掉。
 
-    中文面與英文面：keep 已經有中文姓名 / 公司時，other 的英文姓名 / 公司放進外文欄位；其他單值欄位以 keep 為準；
+    中文面與英文面：keep 已經有中文的姓名 / 公司 / 職稱 / 部門時，other 的英文值放進外文欄位；其他單值欄位以 keep 為準；
     電話、Email 這類多值欄位合併、不重複。合併前的兩位原樣存在 `merged`，解除合併時還原。
     """
     from .extract import normalize_phone
     keep, other = get_contact(owner, bid, keep_id), get_contact(owner, bid, other_id)
     if keep_id == other_id:
         raise ValueError("same")
-    latin = lambda v: bool(re.search(r"[A-Za-z]", v or "")) and not re.search(r"[一-鿿]", v or "")
-    single = ("name", "name_en", "title", "department", "company", "company_en", "vat")
+    from .extract import BILINGUAL_KEYS, FIELD_KEYS, is_latin_text
+    single = tuple(k for k in FIELD_KEYS if k not in ("mobile", "phone", "fax", "email", "url", "address", "im", "note"))
     fields = [dict(f) for f in keep["fields"]]
     have = {f["key"] for f in fields if f.get("status") != "deleted" and (f.get("value") or "").strip()}
+    # keep 這一欄是中文的（例如中文職稱）：other 同一欄的英文值才搬到外文欄位
+    zh_have = {f["key"] for f in fields if f.get("status") != "deleted" and f["key"] in BILINGUAL_KEYS
+               and (f.get("value") or "").strip() and not is_latin_text(f["value"])}
 
     def nkey(f):
         v = f.get("value") or ""
@@ -584,7 +587,7 @@ def merge_contacts(owner: str, bid: str, keep_id: str, other_id: str) -> dict:
         if f.get("status") == "deleted" or not (f.get("value") or "").strip():
             continue
         g = dict(f)
-        if g["key"] in ("name", "company") and g["key"] in have and latin(g["value"]):
+        if g["key"] in zh_have and is_latin_text(g["value"]):
             g["key"] = g["key"] + "_en"
         if g["key"] in single and g["key"] in have:
             continue

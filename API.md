@@ -2434,7 +2434,7 @@ curl -X POST http://localhost:8765/tools/business-card-reader/api/batches \
 `single` 直接在背景辨識。背景還在辨識時會先等手上那一張做完（最多 60 秒，否則 409）。單卡模式下 `pages[].multi_hint=true` 表示那張圖看起來有好幾張名片。
 
 **聯絡人**：`fields` 是清單，每一項 `{"id", "key", "value", "status", "reason", "source", "ext"?, "label"?, "zip"?, "norm"?}`，
-`key` 是 `name`、`name_en`、`title`、`department`、`company`、`company_en`、`vat`、`mobile`、`phone`、`fax`、`email`、`url`、`address`、`im`；
+`key` 是 `name`、`name_en`、`title`、`title_en`、`department`、`department_en`、`company`、`company_en`、`vat`、`mobile`、`phone`、`fax`、`email`、`url`、`address`、`im`；
 電話、Email、地址這類可以有好幾筆。`status`：`auto`（辨識值）、`check`（需確認，`reason` 寫原因）、`confirmed`（人工確認）、`deleted`。
 `source.method` 是 `ocr` / `qr` / `manual`，`source.box` 是那一行在卡面圖上的位置（`[left, top, width, height]`）。
 存檔：`PUT …/contacts/{id}` 帶 `fields`（整份）、`notes`（`event` / `source` / `tags` / `memo`）、`status`（`check` / `confirmed` / `excluded`）；

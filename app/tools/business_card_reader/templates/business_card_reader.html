@@ -353,7 +353,7 @@
       </div>
       <h4 class="bk-h4">{{ icon('id-card', size=15) }} {{ tr('歷史名片') }}</h4>
       <p class="muted bc-small">{{ tr('每一次存進來的名片都留著，換公司、升職都看得到。') }}</p>
-      <div class="bk-cards" id="bkCards"></div>
+      <div class="bk-cards" id="bkCards" data-lightbox></div>
       <h4 class="bk-h4">{{ icon('clock', size=15) }} {{ tr('互動紀錄') }}</h4>
       <div class="bk-iform bk-edit">
         <select id="bkIKind" class="field jt-select">
@@ -432,6 +432,7 @@
   <span data-icon="check">{{ icon('check', size=14) }}</span>
   <span data-icon="trash">{{ icon('trash', size=13) }}</span>
   <span data-icon="x">{{ icon('close', size=13) }}</span>
+  <span data-icon="plus">{{ icon('plus', size=13) }}</span>
   <span data-icon="open">{{ icon('eye', size=13) }}</span>
 </template>
 
@@ -484,6 +485,8 @@
 .bk-frow { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; }
 .bk-frow input { width: 100%; }
 .bk-frow button { border: none; background: none; cursor: pointer; color: var(--text-muted, #64748b); }
+.bk-facts { display: flex; align-items: center; }
+.bk-more[hidden] { display: none; }
 .bk-notes { margin-top: 10px; }
 .bk-merge { margin-top: 10px; border: 1px dashed var(--border, #cbd5e1); border-radius: 8px; padding: 10px; }
 .bk-merge-list button { display: flex; width: 100%; justify-content: space-between; gap: 8px; border: none; background: none;
@@ -492,7 +495,7 @@
 .bk-h4 { display: flex; align-items: center; gap: 6px; margin: 18px 0 4px; font-size: 14px; }
 .bk-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 8px; }
 .bk-card { border: 1px solid var(--border, #e5e7eb); border-radius: 8px; overflow: hidden; font-size: 12.5px; background: var(--bg-panel, #fff); }
-.bk-card img { display: block; width: 100%; aspect-ratio: 1.7; object-fit: cover; background: var(--bg-subtle, #f1f5f9); }
+.bk-card img { display: block; width: 100%; aspect-ratio: 1.7; object-fit: contain; background: var(--bg-subtle, #f1f5f9); cursor: zoom-in; }
 .bk-card .noimg { aspect-ratio: 1.7; display: flex; align-items: center; justify-content: center; color: var(--text-muted, #94a3b8);
   background: var(--bg-subtle, #f1f5f9); }
 .bk-card div.meta { padding: 6px 8px; line-height: 1.5; }
@@ -693,6 +696,8 @@
   .bc-reason { grid-column:2 / -1; font-size:12px; color:#92400e; background:#fffbeb; border:1px solid #fde68a; border-radius:6px;
                padding:3px 8px; display:flex; gap:6px; align-items:center; }
   .bc-fdel { border:none; background:none; color:var(--muted, #6b7280); cursor:pointer; padding:4px; }
+  .bc-facts { display:flex; align-items:center; }
+  .bc-fmore[hidden] { display:none; }
   .bc-addfield { display:flex; gap:8px; margin-top:8px; }
   .bc-addfield select { max-width:200px; }
   .bc-exrow { display:flex; gap:14px; flex-wrap:wrap; }
@@ -749,6 +754,7 @@
 
 {% block scripts %}
 <script src="/static/js/custom_select.js"></script>
+<script src="/static/js/lightbox.js"></script>
 <script nonce="{{ request.state.csp_nonce }}">
 (function () {
   const API = '/tools/business-card-reader/api';
@@ -757,7 +763,8 @@
   const ICONS = $('bcIcons').content;
   const iconOf = name => { const s = ICONS.querySelector('[data-icon="' + name + '"] svg'); return s ? s.cloneNode(true) : document.createTextNode(''); };
   const KEYS = [
-    ['name', tr('姓名')], ['name_en', tr('外文姓名')], ['title', tr('職稱')], ['department', tr('部門')],
+    ['name', tr('姓名')], ['name_en', tr('外文姓名')], ['title', tr('職稱')], ['title_en', tr('外文職稱')],
+    ['department', tr('部門')], ['department_en', tr('外文部門')],
     ['company', tr('公司 / 機關')], ['company_en', tr('外文公司名稱')], ['vat', tr('統一編號')],
     ['mobile', tr('手機')], ['phone', tr('電話')], ['fax', tr('傳真')], ['email', 'Email'], ['url', tr('網址')],
     ['address', tr('地址')], ['im', tr('通訊帳號')],
@@ -854,6 +861,7 @@
   // ------------------------------------------------------------------ 共同
   function show(batch) {
     if (S.batch && S.batch.id !== batch.id) { S.drafts = {}; S.shown = ''; }
+    if (!S.batch || S.batch.id !== batch.id) S.scopeTouched = false;   // 換一批：匯出範圍重新依這一批決定
     S.batch = batch;
     const multiFrames = batch.mode === 'multi' && batch.status === 'frames';
     $('bcFrames').hidden = !multiFrames;
@@ -1113,6 +1121,7 @@
   }
   function fieldRow(f, label, placeholder) {
     const row = el('div', 'bc-frow' + (f.status === 'check' ? ' check' : ''));
+    row.dataset.key = f.key; row.dataset.fid = f.id;
     row.append(el('span', null, label));
     const wrap = el('div', 'bc-fval');
     // 地址常常很長：用會自動長高的多行框；其他欄位是一行但填滿整欄
@@ -1129,7 +1138,8 @@
     inp.addEventListener('focus', () => { focusRow(row, f); });
     inp.addEventListener('click', () => { focusRow(row, f); });
     inp.addEventListener('input', () => {
-      if (placeholder && !cur.fields.includes(f)) { f.id = Math.random().toString(16).slice(2, 14); cur.fields.push(f); placeholder = false; }
+      // 空白欄位（姓名、公司…還沒有值時先列出來的那一格）開始填：成為一筆人工確認的欄位（狀態不可以留 empty，伺服器不收）
+      if (placeholder && !cur.fields.includes(f)) { f.id = Math.random().toString(16).slice(2, 14); f.status = 'confirmed'; cur.fields.push(f); placeholder = false; }
       f.value = inp.value; if (f.source.method !== 'manual' && f.status !== 'confirmed') f.status = 'confirmed';
       markDirty();
     });
@@ -1144,7 +1154,13 @@
     const del = el('button', 'bc-fdel'); del.type = 'button'; del.title = tr('刪除這個值'); del.setAttribute('aria-label', tr('刪除這個值'));
     del.append(iconOf('x'));
     del.addEventListener('click', () => { if (cur.fields.includes(f)) { f.status = 'deleted'; markDirty(); } row.remove(); });
-    row.append(del);
+    // 手機、電話、Email…可以有好幾個：這一列旁邊直接再加一個（不用捲到下面選欄位）
+    const more = el('button', 'bc-fdel bc-fmore'); more.type = 'button';
+    more.title = tr('再加一個{0}').replace('{0}', LABEL[f.key] || f.key); more.setAttribute('aria-label', more.title);
+    more.append(iconOf('plus'));
+    more.hidden = !MULTI.has(f.key);
+    more.addEventListener('click', () => addFieldAfter(f.key, f));
+    const acts = el('div', 'bc-facts'); acts.append(more, del); row.append(acts);
     if (f.status === 'check' && f.reason) {
       const r = el('div', 'bc-reason'); r.append(iconOf('alert'), el('span', null, tr(f.reason)));
       // 自動修正過的值附上原本認成什麼（例如公司名稱的「股份」）
@@ -1285,15 +1301,22 @@
   $('bcAddKey').replaceChildren(...KEYS.map(([k, l]) => { const o = el('option', null, l); o.value = k; return o; }));
   // 本站樣式的下拉：程式先放好選項再套用（之後改選項文字要 refresh）
   if (window.enhanceJtSelects) window.enhanceJtSelects(document);
-  $('bcAddField').addEventListener('click', () => {
+  function addFieldAfter(key, after) {
     if (!cur) return;
-    const key = $('bcAddKey').value;
     if (!MULTI.has(key) && cur.fields.some(f => f.key === key && f.status !== 'deleted')) { showAlert(tr('這個欄位已經有了，直接改它就好。')); return; }
-    cur.fields.push({ id: Math.random().toString(16).slice(2, 14), key, value: '', status: 'confirmed', source: { method: 'manual' } });
+    const nf = { id: Math.random().toString(16).slice(2, 14), key, value: '', status: 'confirmed', source: { method: 'manual' } };
+    // 預先列出的空白格還沒填（不在 cur.fields 裡）：新的一筆接在同類欄位最後面
+    const at = after && cur.fields.includes(after) ? cur.fields.indexOf(after) + 1 : cur.fields.length;
+    cur.fields.splice(at, 0, nf);
     markDirty();
     const keep = cur; renderFields(keep); cur = keep;
-    const inputs = $('bcFields').querySelectorAll('input.field'); if (inputs.length) inputs[inputs.length - 1].focus();
-  });
+    // 游標放到新的那一格（欄位依種類排列，新的不一定在最後）
+    const rows = [...$('bcFields').querySelectorAll('.bc-frow')];
+    const same = rows.filter(r => r.dataset.key === key);
+    const target = same.find(r => r.dataset.fid === nf.id) || same[same.length - 1];
+    const inp = target && target.querySelector('input.field, textarea.field'); if (inp) inp.focus();
+  }
+  $('bcAddField').addEventListener('click', () => addFieldAfter($('bcAddKey').value, null));
   document.querySelectorAll('.bc-tab').forEach(t => t.addEventListener('click', () => {
     document.querySelectorAll('.bc-tab').forEach(x => x.classList.toggle('active', x === t));
     document.querySelectorAll('.bc-review [data-pane]').forEach(p => p.classList.toggle('active-pane', p.dataset.pane === t.dataset.pane));
@@ -1309,6 +1332,11 @@
   async function preview() {
     if (!S.batch) return;
     const k = S.batch.counts;
+    // 使用者還沒自己選過範圍：已確認 0 位但有聯絡人 → 先用「全部」（不然匯出按鈕全是灰的，看起來像不能匯出）
+    if (!S.scopeTouched) {
+      const want = k.confirmed ? 'confirmed' : (k.contacts ? 'all' : 'confirmed');
+      if ($('bcScope').value !== want) $('bcScope').value = want;
+    }
     $('bcScope').options[0].textContent = tr('已確認（{0} 位）').replace('{0}', k.confirmed);
     $('bcScope').options[1].textContent = tr('全部，包含待確認（{0} 位）').replace('{0}', k.contacts);
     if ($('bcScope')._jtSelect) $('bcScope')._jtSelect.refresh();
@@ -1343,6 +1371,7 @@
     } catch (e) { $('bcExSum').textContent = e.message; }
   }
   ['bcScope', 'bcLang'].forEach(id => $(id).addEventListener('change', refreshExport));
+  $('bcScope').addEventListener('change', () => { S.scopeTouched = true; });
   $('bcScope').addEventListener('change', () => { if (LM.token) lmPlan(); });
   // 工作區有開才顯示（管理員停用時按下去只會 404）；只收工作區認得的格式
   const WS_FMTS = ['xlsx', 'ods', 'json'];
@@ -1991,7 +2020,16 @@
       r.append(inp);
       const x = el('button'); x.type = 'button'; x.className = 'bk-edit'; x.setAttribute('aria-label', tr('刪除這個值')); x.append(iconOf('x'));
       x.addEventListener('click', () => { B.pfields.splice(i, 1); renderPerson(); });
-      r.append(x);
+      // 手機、Email…可以有好幾個：這一列旁邊直接再加一個
+      const more = el('button'); more.type = 'button'; more.className = 'bk-edit bk-more';
+      more.title = tr('再加一個{0}').replace('{0}', LABEL[f.key] || f.key); more.setAttribute('aria-label', more.title);
+      more.append(iconOf('plus')); more.hidden = !MULTI.has(f.key);
+      more.addEventListener('click', () => {
+        B.pfields.splice(i + 1, 0, { id: Math.random().toString(16).slice(2, 14), key: f.key, value: '', status: 'confirmed', source: { method: 'manual' } });
+        renderPerson();
+        const ins = $('bkFields').querySelectorAll('input'); if (ins[i + 1]) ins[i + 1].focus();
+      });
+      const acts = el('div', 'bk-facts'); acts.append(more, x); r.append(acts);
       return r;
     }));
     const n = p.notes || {};
@@ -2000,7 +2038,8 @@
     $('bkCards').replaceChildren(...(p.cards || []).map(c => {
       const d = el('div', 'bk-card');
       if (c.image) {
-        const img = el('img'); img.alt = ''; img.loading = 'lazy';
+        const img = el('img'); img.alt = tr('名片圖（點一下放大）'); img.loading = 'lazy';
+        img.dataset.caption = [fv(c.fields, 'company'), fv(c.fields, 'title'), jtTime.dt(c.captured_at)].filter(Boolean).join('・');
         img.src = API + '/books/' + B.book.id + '/people/' + p.id + '/cards/' + c.id + '/image';
         d.append(img);
       } else d.append(el('div', 'noimg', tr('沒有名片圖')));

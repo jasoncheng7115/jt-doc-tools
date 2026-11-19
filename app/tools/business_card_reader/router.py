@@ -141,7 +141,7 @@ def _merge_hints(contacts: list[dict], pages: list[dict], cards: list[dict]) -> 
         return ks
 
     def latin_share(c):
-        txt = "".join((f.get("value") or "") for f in c["fields"] if f["key"] in ("name", "name_en", "company", "company_en", "title"))
+        txt = "".join((f.get("value") or "") for f in c["fields"] if f["key"] in ("name", "name_en", "company", "company_en", "title", "title_en"))
         letters = sum(ch.isascii() and ch.isalpha() for ch in txt)
         cjk = sum("一" <= ch <= "鿿" for ch in txt)
         return letters / max(1, letters + cjk * 2)
@@ -461,6 +461,9 @@ def _clean_fields(fields) -> list[dict]:
         if not isinstance(f, dict) or f.get("key") not in FIELD_KEYS:
             raise HTTPException(400, "欄位不正確")
         st = f.get("status") or "confirmed"
+        if st == "empty":
+            # 舊版畫面送來的空白欄位（v1.17.48 以前填了預先列出的空白格會帶這個狀態）：當成人工填的
+            st = "confirmed"
         if st not in ("auto", "check", "confirmed", "deleted"):
             raise HTTPException(400, "欄位狀態不正確")
         src = f.get("source") if isinstance(f.get("source"), dict) else {"method": "manual"}

@@ -132,7 +132,9 @@ def _build_synonyms() -> dict[str, str]:
         "name.middle": ["middlename", "additionalname", "中間名"],
         "name.last": ["lastname", "familyname", "surname", "姓氏", "姓"],
         "title": ["職稱", "職位", "職務", "頭銜", "jobtitle", "position", "organizationtitle", "orgtitle"],
+        "title_en": ["外文職稱", "英文職稱", "英文職位", "職稱英文", "titleen", "englishtitle", "jobtitleen"],
         "department": ["部門", "部門名稱", "單位", "department", "dept", "organizationdepartment", "division"],
+        "department_en": ["外文部門", "英文部門", "英文部門名稱", "部門英文", "departmenten", "englishdepartment"],
         "company": ["公司", "公司名稱", "機關", "機關名稱", "公司機關", "廠商名稱", "客戶名稱", "組織", "服務單位", "單位名稱",
                     "company", "companyname", "organization", "organisation", "organizationname", "org"],
         "company_en": ["外文公司名稱", "英文公司名稱", "公司英文名稱", "companyen", "englishcompanyname",
@@ -582,6 +584,12 @@ def _read_vcf(data: bytes) -> list[dict]:
             if len(out) >= MAX_ROWS:
                 raise TableError(MSG_TOO_MANY_ROWS)
             fields = cur["fields"]
+            # 本工具匯出英文名片時，標準欄位（TITLE / ORG）放的是外文的值、另外記在 X-JTDT-*-EN：
+            # 讀回來只留外文欄位，不要中文欄位也多一份一樣的
+            for zh, en in (("title", "title_en"), ("department", "department_en"), ("company", "company_en")):
+                ev = {f["value"] for f in fields if f["key"] == en}
+                if ev:
+                    fields[:] = [f for f in fields if not (f["key"] == zh and f["value"] in ev)]
             have = {f["key"] for f in fields}
             nm = cur["fn"] or cur["n"]
             company = next((f["value"] for f in fields if f["key"] == "company"), "")
@@ -637,6 +645,8 @@ def _read_vcf(data: bytes) -> list[dict]:
             add(_f("name_en", _vunesc(value).strip()))
         elif name == "X-JTDT-COMPANY-EN" and _vunesc(value).strip():
             add(_f("company_en", _vunesc(value).strip()))
+        elif name in ("X-JTDT-TITLE-EN", "X-JTDT-DEPARTMENT-EN") and _vunesc(value).strip():
+            add(_f("title_en" if name == "X-JTDT-TITLE-EN" else "department_en", _vunesc(value).strip()))
         elif name == "X-JTDT-VAT" and _vunesc(value).strip():
             add(_f("vat", _vunesc(value).strip()))
         elif name in ("X-JTDT-IM", "IMPP", "X-SOCIALPROFILE") and _vunesc(value).strip():

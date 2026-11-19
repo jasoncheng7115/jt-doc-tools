@@ -618,7 +618,7 @@ SAML 由 `tests/test_sso_saml_e2e.py` 涵蓋（自架 IdP、真 xmlsec 簽章，
 會出現三條假失敗；②OU 的 subject key 是**精確字串比對**，要用目錄實際回傳的
 大小寫（管理介面指派時寫的也是目錄回來的那一份）。
 
-### 1.14 名片辨識（`tests/test_business_card_detect.py` + `tests/test_business_card_extract.py` + `tests/test_business_card_export.py` + `tests/test_business_card_api.py` + `tests/test_business_card_page_browser.py` + `tests/test_business_card_site_features.py` + `tests/test_business_card_books.py` + `tests/test_business_card_phase2.py` + `tests/test_business_card_importer.py` + `tests/test_business_card_messages_translated.py` + `tests/test_no_business_card_content_in_public.py`）🆕 v1.17.40（第 2、3 版 v1.17.41）
+### 1.14 名片辨識（`tests/test_business_card_detect.py` + `tests/test_business_card_extract.py` + `tests/test_business_card_export.py` + `tests/test_business_card_api.py` + `tests/test_business_card_page_browser.py` + `tests/test_business_card_site_features.py` + `tests/test_business_card_books.py` + `tests/test_business_card_phase2.py` + `tests/test_business_card_importer.py` + `tests/test_business_card_messages_translated.py` + `tests/test_no_business_card_content_in_public.py` + `tests/test_business_card_customer_feedback.py`）🆕 v1.17.40（第 2、3 版 v1.17.41）
 
 - 切卡（合成資料 `tests/bc_synth.py` 有標準答案；判準是角點誤差 ÷ 卡片短邊）：單卡斜拍＋透視 < 3%、一頁 6 張含 2 張直式全部找到且 < 4%、
   兩張緊貼沿交界拆開、卡面左藍右白的色塊分界不被當成交界、空背景回 0 張（不當成功）、卡片佔滿畫面時用整張圖、使用者框位不收 NaN / 無限大 / 太小 / 格式錯。
@@ -699,7 +699,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **570 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **572 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -765,6 +765,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_browser_profiles_are_cleaned_up.py` | 無頭瀏覽器每次啟動都要給**自己的**設定檔目錄，用完要刪 |
 | `test_business_card_api.py` | 名片辨識 API：流程、改框、輸入檢查、匯出範圍、立即清除、存取控制（別人的批次一律 404） |
 | `test_business_card_books.py` | 名片簿：個人 / 共用、查詢與編修權限、存進名片簿與找同一人、合併、互動紀錄、保留期限、刪除帳號、升級 |
+| `test_business_card_customer_feedback.py` | 名片辨識：客戶回報的幾件事（2026-11-19）。資料全部杜撰 |
 | `test_business_card_detect.py` | 名片辨識：切卡（四角框偵測、拉正、使用者框位檢查） |
 | `test_business_card_export.py` | 名片辨識：匯出（CSV / XLSX / ODS / vCard / JSON）。資料全部是杜撰的 |
 | `test_business_card_extract.py` | 名片辨識：OCR 行 → 欄位（規則擷取）、QR、行的組合。資料全部杜撰 |
@@ -1260,6 +1261,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_vc_runtime_repair_after_downgrade.py` | VC++ 執行階段被別的安裝程式換成舊版時，要看得出來、而且修得回來 |
 | `test_venv_python_changed.py` | 作業系統升級換掉系統 Python 之後（例如 Ubuntu 22.04 → 24.04，3.10 → 3.12） |
 | `test_version_consistency.py` | Release-time version consistency — every source agrees on `app/main.py:VERSION`. |
+| `test_windows_arm64_python.py` | Windows ARM64 用 x64 的 Python 建環境（issue #60） |
 | `test_windows_git_guidance.py` | Windows 缺 git 時的指引不可以只講 winget |
 | `test_windows_service_restart.py` | Windows 的 `jtdt restart` 必須真的把服務啟起來（2026-08-24 實機重現） |
 | `test_workspace.py` | Tests for the user-workspace core (app/core/workspace.py). |
@@ -6511,6 +6513,17 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > **最高原則：加 i18n 不可以改壞現有功能。** 所以每一個階段的第一條驗收都是
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
+
+### 6.152 v1.17.49 — 名片辨識客戶回報八項（**每次發版必過**）
+
+- [ ] 在預先列出的空白欄位（姓名、手機…）輸入後儲存不可以 400「欄位狀態不正確」（`test_business_card_page_browser.py::test_fill_a_blank_field_add_another_mobile_and_an_english_title`，畫面與伺服器兩處一起改回時變異驗證過）。
+- [ ] Email 的 @ 被認成 0 / O / Q：有標籤、常見信箱、同一張名片的網域時補回 @ 並標需確認；沒有佐證只提醒、不猜（`test_business_card_customer_feedback.py`）。
+- [ ] 外文職稱 `title_en`、外文部門 `department_en`：英文的職稱 / 部門自動放進去；同一批合併正反面、名片簿合併時中文不被英文蓋掉；匯出欄位、VCF（`X-JTDT-TITLE-EN` / `X-JTDT-DEPARTMENT-EN`）、匯入欄名都認得。
+- [ ] 手機、電話、Email 等多值欄位每一列有「＋」再加一個（要有圖示）；名片簿的名片圖可點開放大（`lightbox.js`）。
+- [ ] 掃描區一位都還沒確認時，匯出範圍自動用「全部」，按鈕可以按；使用者自己選回「已確認」才反灰。
+- [ ] 一張名片兩個公司名稱：都留、都標需確認、字最大的排第一；同一個名字印兩次只留一筆。
+- [ ] 中英文姓名在同一行（任一順序、斜線、括號）拆成姓名與外文姓名；中英職稱 / 部門同一行也拆；中英並列的品牌字、小寫英文字不當姓名（issue #59，`test_business_card_customer_feedback.py`，變異驗證過）。真實樣本回歸（`temp_pdfs/business_cards/_eval/eval_extract.py`）30 張有變化逐一看過：英文職稱 / 部門移到外文欄位、兩個公司名稱字大的排前面，沒有變差的。
+- [ ] Windows ARM64 用 x64 的 Python 建環境（`setup-python.cmd`，issue #60，`tests/test_windows_arm64_python.py`，變異驗證過）；Windows x64 測試機強制走 ARM64 分支實跑：`uv sync` 成功、主要模組與 EasyOCR 都載得起來；不強制時照舊。**ARM64 實機未測**（測試機離線）。
 
 ### 6.151 v1.17.47 — 定期檢查新版與「有新版」提示（**每次發版必過**）
 

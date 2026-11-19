@@ -5,7 +5,7 @@
 每個欄位都帶來源（哪一行、框位、方法）與狀態：`auto`（辨識值）、`check`（需確認，附原因）。
 
 欄位清單（`FIELD_KEYS`）：
-人員 name / name_en / title / department；組織 company / company_en / vat；
+人員 name / name_en / title / title_en / department / department_en；組織 company / company_en / vat；
 聯絡 mobile / phone（可帶分機 ext）/ fax / email / url / address（可帶郵遞區號 zip）/ im（通訊帳號：LINE、QQ、WeChat…）。
 多值（電話、Email、地址…）就是同一個 key 多筆，各自保留原標籤（`label`）與原值（`raw`）。
 """
@@ -15,7 +15,7 @@ import re
 import uuid
 from typing import Any, Iterable, Optional
 
-FIELD_KEYS = ("name", "name_en", "title", "department", "company", "company_en", "vat",
+FIELD_KEYS = ("name", "name_en", "title", "title_en", "department", "department_en", "company", "company_en", "vat",
               "mobile", "phone", "fax", "email", "url", "address", "im", "note")
 MULTI_KEYS = {"mobile", "phone", "fax", "email", "url", "address", "im"}
 #: 信心低於這個（0..100）標需確認
@@ -296,8 +296,42 @@ def _clean_url(u: str) -> str:
 _TLD = r"(?:com|net|org|gov|edu|idv|io|co|tw|biz|info|app|dev|shop|store|asia|uk|jp|hk|sg|me)"
 _WWW_START = re.compile(r"^(?:(ht[it]ps?)\s*[:;]?\s*[/l|\\]{0,2})?([wv]{3,4})(?=[.,\s]|[a-z0-9]|$)", re.I)
 _SCHEME_START = re.compile(r"^(ht[it]ps?)\s*[:;]?\s*[/l|\\]{1,2}", re.I)
-_LABEL_EMAIL = re.compile(r"(?:E\s*-?\s*mai[l1I]{1,2}|電子郵件|電郵|郵件|信箱)", re.I)
+_LABEL_EMAIL = re.compile(r"(?:(?<![A-Za-z])(?:E\s*-?\s*)?mai[l1I]{1,2}|電子郵件|電郵|郵件|信箱)", re.I)
 _MAIL_HOSTS = ("gmail.com", "yahoo.com", "yahoo.com.tw", "hotmail.com", "outlook.com", "msn.com", "icloud.com")
+
+
+#: OCR 常把 Email 的 @ 認成這幾個字
+_AT_LOOKALIKE = "0OQ©®"
+_LOCAL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._%+\-]{0,63}")
+_DOMAIN_RE = re.compile(r"[A-Za-z][A-Za-z0-9\-]*(?:\.[A-Za-z0-9\-]+)*\." + r"[A-Za-z]{2,6}")
+
+
+def fix_at(v: str, prefer: Iterable[str] = ()) -> Optional[str]:
+    """沒有 @ 的 Email（「kevin.wang0example.com.tw」）：@ 被認成 0 / O / Q / ©，找出是哪一個字補回 @。
+
+    每個像 @ 的字都試：左邊要像帳號、右邊要像網域（英文字開頭、有結尾）。`prefer` 是這張名片上已知的網域
+    （網址、別的 Email、常見信箱）：右邊剛好是其中一個就用它；沒有的話只有一種切法才補，猜不出來回 None。
+    """
+    v = (v or "").strip().strip(".,;:")
+    if not v or "@" in v or len(v) > 120:
+        return None
+    pref = {d.lower().strip(".") for d in prefer if d}
+    cands = []
+    for i, ch in enumerate(v):
+        if ch not in _AT_LOOKALIKE:
+            continue
+        left, right = v[:i], v[i + 1:]
+        if not _LOCAL_RE.fullmatch(left) or left.endswith(".") or not _DOMAIN_RE.fullmatch(right):
+            continue
+        cands.append((left, right))
+    if not cands:
+        return None
+    hit = [c for c in cands if c[1].lower() in pref or any(c[1].lower().endswith("." + d) for d in pref)]
+    if len(hit) == 1:
+        return hit[0][0] + "@" + hit[0][1].lower()
+    if not pref and len(cands) == 1:
+        return cands[0][0] + "@" + cands[0][1].lower()
+    return None
 
 
 def _host_fix(h: str) -> str:
@@ -373,6 +407,22 @@ def find_urls(text: str) -> list[tuple[str, str]]:
     return out
 
 
+def is_latin_text(v: str) -> bool:
+    """只有拉丁字母（英文、數字、標點），沒有中日文 —— 中英雙面名片的英文面。"""
+    return bool(re.search(r"[A-Za-z]", v or "")) and not re.search(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]", v or "")
+
+
+#: 有外文欄位的單值欄位：英文的值放進 `<key>_en`（中英雙面名片兩面的資料各放各的，合併時不互相蓋掉）
+BILINGUAL_KEYS = ("name", "title", "department", "company")
+
+
+def lang_key(key: str, value: str) -> str:
+    """職稱、部門是英文的 → 外文職稱 / 外文部門（姓名、公司另有自己的判斷，這裡不動）。"""
+    if key in ("title", "department") and is_latin_text(value):
+        return key + "_en"
+    return key
+
+
 def _cjk_ratio(s: str) -> float:
     s2 = re.sub(r"\s", "", s)
     if not s2:
@@ -406,6 +456,7 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
         if value and value.strip():
             if key == "vat" and any(f["key"] == "vat" and f["value"] == value.strip() for f in fields):
                 return                                  # 中英兩面各印一次統編：只留一筆
+            key = lang_key(key, value)
             fields.append(_field(key, value, line=line, **kw))
 
     for ln in lines:
@@ -425,11 +476,25 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
             used.add(ln["index"])
         # 「E-mail:」標籤後面沒有 @（OCR 把 @ 認成別的字）：留著但標需確認
         if "email" not in {f["key"] for f in fields if f["source"].get("line") == ln["index"]}:
-            em = re.search(r"(?:E\s*-?\s*mai[l1I]{1,2}|電子郵件|電郵|郵件|信箱)\s*[:：/]?\s*(@?[^\s@]+\.(?:com|net|org|gov|edu|tw|co|io|de|jp|uk)(?:\.[a-z]{2})?)\b", rest, re.I)
+            em = re.search(r"(?:(?<![A-Za-z])(?:E\s*-?\s*)?mai[l1I]{1,2}|電子郵件|電郵|郵件|信箱)\s*[:：/]?\s*(@?[^\s@]+\.(?:com|net|org|gov|edu|tw|co|io|de|jp|uk)(?:\.[a-z]{2})?)\b", rest, re.I)
             if em:
-                add("email", em.group(1), ln, status="check", reason="看起來是 Email 但沒有 @，請對照原圖")
+                fixed = fix_at(em.group(1))
+                if fixed:
+                    add("email", fixed, ln, status="check", reason="Email 的 @ 看起來被認成 0、O 或 Q，已補上，請對照原圖",
+                        raw=em.group(1), norm=fixed.lower(), part=em.group(1))
+                else:
+                    add("email", em.group(1), ln, status="check", reason="看起來是 Email 但沒有 @，請對照原圖")
                 rest = rest.replace(em.group(0), " ")
                 used.add(ln["index"])
+        # 沒有標籤：常見信箱（Gmail、Yahoo…）前面那個字其實是 @（「kevinwang0gmail.com」）
+        if "email" not in {f["key"] for f in fields if f["source"].get("line") == ln["index"]}:
+            for tok in re.findall(r"[A-Za-z0-9._%+\-©®]+\.[A-Za-z.]{2,}", rest):
+                fixed = fix_at(tok, _MAIL_HOSTS)
+                if fixed and fixed.split("@", 1)[1] in _MAIL_HOSTS:
+                    add("email", fixed, ln, status="check", reason="Email 的 @ 看起來被認成 0、O 或 Q，已補上，請對照原圖",
+                        raw=tok, norm=fixed.lower(), part=tok)
+                    rest = rest.replace(tok, " ")
+                    used.add(ln["index"])
         # 統編（標籤在上一行、號碼自己一行：上一行只有標籤）
         if vat_label_line is not None and ln["index"] == vat_label_line + 1:
             bm = re.match(r"^\s*([0-9OoIl|]{8})(?!\d)", rest)
@@ -647,6 +712,27 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
                 title_lines.append(ln)
                 add("name_en", en, ln, part=en)
                 continue
+        # 中英文寫在同一行（「王小明 Kevin Wang」「Kevin Wang 王小明」「王小明／Kevin」「業務經理 Sales Manager」）：
+        # 拆成中文與外文兩欄（不拆的話英文字母比較多，整行會被當成外文姓名）
+        bi = _bilingual_pair(t)
+        if bi:
+            zh, en = bi
+            if any(zh.endswith(w) for w in titles_by_len) and len(zh) <= 12 and TITLE_EN.search(en):
+                add("title", zh, ln, part=zh)
+                add("title_en", en, ln, part=en)
+                title_lines.append(ln)
+                continue
+            if 2 <= len(zh) <= 4 and looks_like_name(zh) and not TITLE_EN.search(en) and not DEPT_EN.search(en) \
+                    and not COMPANY_EN.search(en) and len(en.split()) <= 4 and all(w[0].isupper() for w in en.split()):
+                name_cands.append((ln, zh))
+                name_cands.append((dict(ln), en))
+                continue
+            if DEPT_RE.search(zh) and DEPT_EN.search(en):
+                add("department", zh, ln, part=zh)
+                add("department_en", en, ln, part=en)
+                continue
+            if not COMPANY_SUFFIX.search(zh) and not TITLE_EN.search(en):
+                continue                    # 中英並列的品牌字 / 標語（「範例科技 Example Tech」）：不是姓名
         if _cjk_ratio(t) >= 0.5:
             # 姓名＋職稱（職稱可以帶職務詞：「王小明 業務經理」「資訊經理 王小明」）：拆得出像姓名的那段才拆
             sp = _split_name_title(compact, titles_by_len)
@@ -717,7 +803,8 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
             add("company_en", t, ln)
             continue
         tm = TITLE_EN.search(t)
-        if DEPT_EN.search(t) and not tm:
+        # 「Sales Department」：Sales 也是職稱詞，但整行以 Department / Dept. / Division 結尾就是部門
+        if DEPT_EN.search(t) and (not tm or re.search(r"\b(?:Department|Dept\.?|Division|Div\.)\s*$", t, re.I)):
             add("department", t, ln)
             continue
         if tm and len(t.split()) <= 7:
@@ -784,9 +871,51 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
         add("name_en", v, ln)
 
     _reconcile_urls(fields)
+    _several_companies(fields, lines)
     fields.extend(qr_fields(qr_texts))
     _flag_conflicts(fields)
     return fields
+
+
+_BI_ZH = r"([\u4e00-\u9fff](?:[\u4e00-\u9fff\s]{0,14}[\u4e00-\u9fff])?)"
+_BI_EN = r"([A-Za-z][A-Za-z.'\-]*(?:\s+[A-Za-z][A-Za-z.'\-]*){0,4})"
+_BI_SEP = r"\s*[／/|｜]?\s*"
+
+
+def _bilingual_pair(t: str) -> Optional[tuple[str, str]]:
+    """一行是「中文＋外文」（任一順序，中間可以是空白、斜線、直線，外文可以包在括號裡）→ (中文（去空白）, 外文)。"""
+    t = t.strip()
+    for pat, zh_first in ((_BI_ZH + _BI_SEP + r"[(（]?\s*" + _BI_EN + r"\s*[)）]?", True),
+                          (r"[(（]?\s*" + _BI_EN + r"\s*[)）]?" + _BI_SEP + _BI_ZH, False)):
+        m = re.fullmatch(pat, t)
+        if m:
+            zh, en = (m.group(1), m.group(2)) if zh_first else (m.group(2), m.group(1))
+            return re.sub(r"\s+", "", zh), re.sub(r"\s+", " ", en).strip()
+    return None
+
+
+def _several_companies(fields: list[dict], lines: list[dict]) -> None:
+    """一張名片印了兩個以上的公司名稱（集團與子公司、總公司與分公司、合作單位）：
+    同一個名字印兩次的只留一筆；真的不同的都留著、都標需確認，字最大的排第一（匯出與名片簿用第一個）。"""
+    height = {ln["index"]: float(ln.get("height") or (ln.get("box") or [0, 0, 0, 0])[3] or 0) for ln in lines}
+    for key in ("company", "company_en"):
+        fs = [f for f in fields if f["key"] == key and f["source"].get("method") == "ocr"]
+        seen, dup = set(), []
+        for f in fs:
+            k = re.sub(r"\s+", "", f["value"]).lower()
+            if k in seen:
+                dup.append(f)
+            seen.add(k)
+        if dup:
+            fields[:] = [f for f in fields if all(f is not d for d in dup)]
+            fs = [f for f in fs if all(f is not d for d in dup)]
+        if len(fs) < 2:
+            continue
+        pos = [i for i, f in enumerate(fields) if any(f is g for g in fs)]
+        ordered = sorted(fs, key=lambda f: -height.get(f["source"].get("line"), 0))
+        for i, f in zip(pos, ordered):
+            fields[i] = f
+            f["status"], f["reason"] = "check", "名片上有兩個以上的公司名稱：匯出與名片簿用第一個，請確認，不需要的請刪除"
 
 
 def _reconcile_urls(fields: list[dict]) -> None:
@@ -819,7 +948,7 @@ def _reconcile_urls(fields: list[dict]) -> None:
                 f["status"], f["reason"] = "check", "網址的結尾依同一張名片的 Email 網域補上，請對照原圖"
         elif not has_tld:
             f["status"], f["reason"] = "check", "網址看起來不完整（沒有 .com / .tw 這類結尾），請對照原圖"
-    # 反過來：Email 的 @ 被認成 Q / O（「kevinQexample.com」），而同一張名片的網址就是那個網域 → 補回 @
+    # 反過來：Email 的 @ 被認成 Q / O / 0（「kevinQexample.com」），而同一張名片的網址就是那個網域 → 補回 @
     hosts = [re.sub(r"^(?:https?://)?(?:www\.)?", "", f["value"].lower()).split("/")[0]
              for f in fields if f["key"] == "url"]
     for f in fields:
@@ -827,11 +956,28 @@ def _reconcile_urls(fields: list[dict]) -> None:
             continue
         v = f["value"]
         for h in hosts:
-            if h and v.lower().endswith(h) and len(v) > len(h) + 1 and v[-len(h) - 1] in "QqOo0©":
+            if h and v.lower().endswith(h) and len(v) > len(h) + 1 and v[-len(h) - 1] in "QqOo0©®":
+                f.setdefault("raw", v)
                 f["value"] = v[:-len(h) - 1] + "@" + h
                 f["norm"] = f["value"].lower()
                 f["status"], f["reason"] = "check", "Email 的 @ 依同一張名片的網址補上，請對照原圖"
                 break
+    # 被當成網址的 Email（沒有 www、沒有 http，「kevin.wang0example.com.tw」）：
+    # 切開之後的網域剛好是這張名片另一個網址或 Email 的網域 → 改成 Email；猜得出一種切法但沒有佐證 → 只提醒
+    known = {re.sub(r"^www\.", "", h) for h in hosts} | {f["value"].split("@", 1)[1].lower() for f in fields
+                                                     if f["key"] == "email" and "@" in f["value"]}
+    for f in fields:
+        if f["key"] != "url" or f["source"].get("method") != "ocr" or re.match(r"^(?:https?://|www\.)", f["value"], re.I) \
+                or "/" in f["value"]:
+            continue
+        others = known - {f["value"].lower()}
+        fixed = fix_at(f["value"], others) if others else None
+        if fixed and fixed.split("@", 1)[1] in others:
+            f["raw"], f["key"], f["value"] = f["value"], "email", fixed
+            f["norm"] = fixed.lower()
+            f["status"], f["reason"] = "check", "這一行是 Email（@ 被認成 0、O 或 Q），已依同一張名片的網域補上，請對照原圖"
+        elif fix_at(f["value"]):
+            f["status"], f["reason"] = "check", "這個網址也可能是 Email（@ 被認成 0、O 或 Q），請對照原圖"
 
 
 # --------------------------------------------------------------------------- QR
@@ -858,9 +1004,9 @@ def parse_qr(text: str) -> list[tuple[str, str, dict]]:
                 if org:
                     out.append(("company" if _cjk_ratio(org[0]) >= 0.5 else "company_en", org[0], {}))
                 if len(org) > 1:
-                    out.append(("department", org[1], {}))
+                    out.append((lang_key("department", org[1]), org[1], {}))
             elif prop == "TITLE":
-                out.append(("title", val, {}))
+                out.append((lang_key("title", val), val, {}))
             elif prop == "TEL":
                 kind = "fax" if "FAX" in params else ("mobile" if "CELL" in params else "phone")
                 out.append((kind, val, {"norm": normalize_phone(val)}))

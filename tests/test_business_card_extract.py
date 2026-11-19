@@ -105,8 +105,8 @@ def test_english_card_and_two_line_address():
         ("No. 1, Sec. 2, Example Rd., Zhongzheng Dist.,", 16), ("Taipei City 100, Taiwan (R.O.C.)", 16),
     )))
     assert fs["name_en"][0]["value"] == "Kevin Sample"
-    assert fs["title"][0]["value"] == "Sales Manager"
-    assert fs["department"][0]["value"] == "Purchasing Dept."
+    assert fs["title_en"][0]["value"] == "Sales Manager" and "title" not in fs, "英文職稱放外文職稱"
+    assert fs["department_en"][0]["value"] == "Purchasing Dept."
     assert fs["company_en"][0]["value"] == "Example Tech Co., Ltd."
     assert len(fs["address"]) == 1 and "Taipei City" in fs["address"][0]["value"], "英文地址兩行接成一筆"
 
@@ -271,7 +271,7 @@ def test_small_title_next_to_big_name_on_the_same_row():
         _w("範例企業股份有限公司", 40, 260, 900, 60),
     ])
     assert fs["name"][0]["value"] == "王小明"
-    assert fs["title"][0]["value"] in ("資訊經理",) and "Manager" in [f["value"] for f in fs["title"]]
+    assert fs["title"][0]["value"] in ("資訊經理",) and [f["value"] for f in fs["title_en"]] == ["Manager"]
     assert fs["name_en"][0]["value"] == "Kevin Sample"
 
 
@@ -281,13 +281,13 @@ def test_small_title_next_to_big_name_on_the_same_row():
 ])
 def test_english_title_and_name_in_one_phrase_are_split(line, title, name):
     fs = kv(E.extract_fields(L((line, 30))))
-    assert fs["title"][0]["value"] == title and fs["name_en"][0]["value"] == name
+    assert fs["title_en"][0]["value"] == title and fs["name_en"][0]["value"] == name
 
 
 @pytest.mark.parametrize("line", ["Deputy Program Director", "Community Manager", "Director of Sales"])
 def test_multi_word_titles_stay_whole(line):
     fs = kv(E.extract_fields(L((line, 30))))
-    assert fs["title"][0]["value"] == line and "name_en" not in fs
+    assert fs["title_en"][0]["value"] == line and "name_en" not in fs
 
 
 def test_two_column_card_phone_left_english_address_right():

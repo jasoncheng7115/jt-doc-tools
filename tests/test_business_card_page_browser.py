@@ -304,7 +304,12 @@ def test_book_import_dedupe_and_the_export_buttons_of_each_section(site):
     send("Page.navigate", {"url": f"http://127.0.0.1:{port}/tools/business-card-reader/?r=1#batch={sid}"})
     assert wait("!!document.getElementById('bcExport') && !document.getElementById('bcExport').hidden"
                 " && document.getElementById('bcExSum').textContent.length > 0")
-    assert ev("document.querySelector('#bcFmts .btn').disabled") is True
+    # 客戶回報「掃描區的資料不能匯出」：一位都還沒確認時，範圍自動用「全部」，按鈕可以按
+    assert wait("document.getElementById('bcScope').value === 'all' && !document.querySelector('#bcFmts .btn').disabled"), \
+        "還沒確認任何一位時，匯出範圍要自動用「全部」"
+    # 使用者自己選回「已確認」：沒有可匯出的 → 按鈕反灰、提示要明顯（名片簿那組不受影響，下面驗）
+    ev("(() => { const s = document.getElementById('bcScope'); s.value = 'confirmed'; s.dispatchEvent(new Event('change')); })()")
+    assert wait("document.querySelector('#bcFmts .btn').disabled === true")
     assert ev("document.getElementById('bcExSum').classList.contains('empty')"), "沒有可匯出時提示要明顯"
     # 匯出的五種格式平均分滿一整列
     ws = ev("[...document.querySelectorAll('#bcFmts .bc-fmt')].map(b => Math.round(b.getBoundingClientRect().width))")
@@ -376,3 +381,53 @@ def test_camera_buttons_only_on_touch_devices(site):
     finally:
         send("Emulation.setTouchEmulationEnabled", {"enabled": False})
         send("Emulation.clearDeviceMetricsOverride")
+
+
+def test_fill_a_blank_field_add_another_mobile_and_an_english_title(site):
+    """客戶回報（2026-11-19）：掃描後在空白欄位輸入、按儲存出現「請求格式錯誤（400）：欄位狀態不正確」；
+    兩支手機手動加不太上去；英文職稱不知道放哪裡。資料杜撰。"""
+    port, send, info = site
+    ev, wait, shot = _tools(send)
+    sid = info["single"]
+    api = f"/tools/business-card-reader/api/batches/{sid}"
+    send("Page.navigate", {"url": f"http://127.0.0.1:{port}/tools/business-card-reader/?r=2#batch={sid}"})
+    assert wait("!!document.querySelector('#bcFields .bc-frow[data-key=mobile]') && !document.getElementById('bcReview').hidden")
+    # 先把手機刪掉存起來 → 重新整理後「手機」是預先列出的空白格
+    ev("document.querySelector('#bcFields .bc-frow[data-key=mobile] .bc-fdel:not(.bc-fmore)').click()")
+    ev("document.getElementById('bcSave').click()")
+    assert wait("(() => { const r = document.querySelector('#bcFields .bc-frow[data-key=mobile]'); "
+                "return r && r.querySelector('input').value === ''; })()"), "刪掉之後要列出空白的手機欄"
+    ev("""(() => { const i = document.querySelector('#bcFields .bc-frow[data-key=mobile] input');
+      i.value = '0911-222-333'; i.dispatchEvent(new Event('input', {bubbles: true})); return true; })()""")
+    ev("window.__errs = []; window.showAlert = (m) => window.__errs.push(String(m)); true")
+    ev("document.getElementById('bcSave').click()")
+    assert wait("document.getElementById('bcDirty').hidden"), "空白欄位填了要存得進去"
+    assert ev("window.__errs") == [], ev("window.__errs")
+    cid = ev(f"(async () => (await (await fetch('{api}')).json()).contacts[0].id)()")
+    mob = lambda: ev(f"(async () => (await (await fetch('{api}')).json()).contacts.find(c => c.id === '{cid}')"
+                     ".fields.filter(f => f.key === 'mobile' && f.status !== 'deleted').map(f => f.value))()")
+    assert mob() == ["0911-222-333"]
+    # 手機那一列的「＋」：再加一支
+    assert ev("!document.querySelector('#bcFields .bc-frow[data-key=mobile] .bc-fmore').hidden")
+    assert ev("!!document.querySelector('#bcFields .bc-frow[data-key=mobile] .bc-fmore svg')"), "＋ 要有圖示（不是空按鈕）"
+    assert ev("document.querySelector('#bcFields .bc-frow[data-key=name] .bc-fmore').hidden"), "姓名只有一個，不給＋"
+    ev("document.querySelector('#bcFields .bc-frow[data-key=mobile] .bc-fmore').click()")
+    assert wait("document.querySelectorAll('#bcFields .bc-frow[data-key=mobile]').length === 2")
+    assert ev("document.activeElement === document.querySelectorAll('#bcFields .bc-frow[data-key=mobile] input')[1]"), \
+        "游標要在新的那一格"
+    ev("""(() => { const i = document.activeElement; i.value = '0922-444-555';
+      i.dispatchEvent(new Event('input', {bubbles: true})); return true; })()""")
+    # 外文職稱：從「新增欄位」加
+    assert ev("[...document.getElementById('bcAddKey').options].some(o => o.value === 'title_en')")
+    ev("(() => { const s = document.getElementById('bcAddKey'); s.value = 'title_en'; return true; })()")
+    ev("document.getElementById('bcAddField').click()")
+    assert wait("!!document.querySelector('#bcFields .bc-frow[data-key=title_en] input')")
+    ev("""(() => { const i = document.querySelector('#bcFields .bc-frow[data-key=title_en] input'); i.value = 'Sales Manager';
+      i.dispatchEvent(new Event('input', {bubbles: true})); return true; })()""")
+    shot("bc-add-fields")
+    ev("document.getElementById('bcSave').click()")
+    assert wait("document.getElementById('bcDirty').hidden")
+    assert ev("window.__errs") == []
+    assert mob() == ["0911-222-333", "0922-444-555"]
+    assert ev(f"(async () => (await (await fetch('{api}')).json()).contacts.find(c => c.id === '{cid}')"
+              ".fields.filter(f => f.key === 'title_en').map(f => f.value))()") == ["Sales Manager"]

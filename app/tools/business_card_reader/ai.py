@@ -21,7 +21,8 @@ TOOL_ID = "business-card-reader"
 VISION_TOOL_ID = "business-card-reader-vision"
 MODES = ("text", "vision")
 MAX_PAIRS = 30
-_KEYS = ("name", "name_en", "title", "department", "company", "company_en", "vat", "mobile", "phone", "fax",
+_KEYS = ("name", "name_en", "title", "title_en", "department", "department_en", "company", "company_en", "vat",
+         "mobile", "phone", "fax",
          "email", "url", "address", "im")
 
 

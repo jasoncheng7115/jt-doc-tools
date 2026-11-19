@@ -30,7 +30,7 @@ MAX_MEMBERS = 500
 MAX_PEOPLE = 20000
 MAX_KEEP_DAYS = 36500
 INTERACTION_KINDS = ("meeting", "call", "email", "visit", "other")
-SINGLE_KEYS = ("name", "name_en", "title", "department", "company", "company_en", "vat")
+SINGLE_KEYS = ("name", "name_en", "title", "title_en", "department", "department_en", "company", "company_en", "vat")
 PERSONAL_NAME = "我的名片簿"
 
 
@@ -329,8 +329,10 @@ def _person(r, *, full: bool = False) -> dict:
 
 def _summary(p: dict) -> dict:
     f = p["fields"]
-    return {"id": p["id"], "name": _val(f, "name"), "name_en": _val(f, "name_en"), "company": _val(f, "company"),
-            "title": _val(f, "title"), "department": _val(f, "department"), "mobile": _val(f, "mobile"),
+    return {"id": p["id"], "name": _val(f, "name"), "name_en": _val(f, "name_en"),
+            "company": _val(f, "company") or _val(f, "company_en"),
+            "title": _val(f, "title") or _val(f, "title_en"),
+            "department": _val(f, "department") or _val(f, "department_en"), "mobile": _val(f, "mobile"),
             "email": _val(f, "email"), "phone": _val(f, "phone"), "tags": (p["notes"] or {}).get("tags") or [],
             "updated_at": p["updated_at"], "created_at": p["created_at"], "cards": p.get("cards", 0)}
 
@@ -383,20 +385,29 @@ def card_image_path(book: dict, card_id: str) -> Path:
 
 def _merge_fields(current: list, incoming: list) -> list:
     """新的名片進來：單值欄位（姓名、公司、職稱…）用新的（舊的留在那張名片的紀錄裡），
-    多值欄位（電話、Email、地址…）合併、同一個值不重複，新的排前面。"""
+    多值欄位（電話、Email、地址…）合併、同一個值不重複，新的排前面。
+    中英雙面名片：一邊是中文、一邊是英文的姓名 / 公司 / 職稱 / 部門，英文的放外文欄位（不互相蓋掉）。"""
     from .extract import normalize_phone
     def norm(f):
         v = f.get("value") or ""
         if f.get("key") in ("mobile", "phone", "fax"):
             return normalize_phone(v)
         return _norm_text(v)
+    from .extract import BILINGUAL_KEYS, is_latin_text
     inc = [dict(f) for f in incoming if f.get("status") != "deleted" and (f.get("value") or "").strip()]
+    cur = [dict(f) for f in current if f.get("status") != "deleted" and (f.get("value") or "").strip()]
+    # 中英雙面：一邊這一欄是中文、另一邊是英文（舊資料的英文職稱放在「職稱」）→ 英文的那一邊改放外文欄位，
+    # 兩面的資料各放各的，不互相蓋掉
+    zh_of = lambda fs: {f["key"] for f in fs if f["key"] in BILINGUAL_KEYS and not is_latin_text(f["value"])}
+    zh_inc, zh_cur = zh_of(inc), zh_of(cur)
+    for fs, other_zh, own_zh in ((inc, zh_cur, zh_inc), (cur, zh_inc, zh_cur)):
+        for f in fs:
+            if f["key"] in other_zh and f["key"] not in own_zh and is_latin_text(f["value"]):
+                f["key"] = f["key"] + "_en"
     inc_single = {f["key"] for f in inc if f["key"] in SINGLE_KEYS}
     out = list(inc)
     seen = {(f["key"], norm(f)) for f in inc}
-    for f in current:
-        if f.get("status") == "deleted" or not (f.get("value") or "").strip():
-            continue
+    for f in cur:
         if f["key"] in SINGLE_KEYS and f["key"] in inc_single:
             continue
         k = (f["key"], norm(f))

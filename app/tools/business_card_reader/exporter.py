@@ -35,13 +35,14 @@ from typing import Any, Iterable, Optional
 from app.core import csv_safe as _csv_safe
 
 #: 基本欄位（依序）
-COLUMNS = ["name", "name_en", "title", "department", "company", "company_en", "vat",
+COLUMNS = ["name", "name_en", "title", "title_en", "department", "department_en", "company", "company_en", "vat",
            "mobile", "phone", "ext", "fax", "email", "url", "address", "zip", "im",
            "event", "source", "tags", "memo"]
 
 #: 中文欄名
 LABELS_ZH = {
-    "name": "姓名", "name_en": "外文姓名", "title": "職稱", "department": "部門", "company": "公司 / 機關",
+    "name": "姓名", "name_en": "外文姓名", "title": "職稱", "title_en": "外文職稱", "department": "部門",
+    "department_en": "外文部門", "company": "公司 / 機關",
     "company_en": "外文公司名稱", "vat": "統一編號", "mobile": "手機", "phone": "電話", "ext": "分機",
     "fax": "傳真", "email": "Email", "url": "網址", "address": "地址", "zip": "郵遞區號", "im": "通訊帳號",
     "event": "活動", "source": "來源", "tags": "標籤", "memo": "備註",
@@ -55,7 +56,7 @@ _PAIR_OF = {v: k for k, v in _PAIRED.items()}          # 主欄位 → 附屬
 #: 人工輸入的備註（不是名片上的字）
 _NOTE_KEYS = ("event", "source", "tags", "memo")
 #: 單值欄位
-_SINGLE = ("name", "name_en", "title", "department", "company", "company_en", "vat")
+_SINGLE = ("name", "name_en", "title", "title_en", "department", "department_en", "company", "company_en", "vat")
 
 #: XML 1.0 不允許的控制字元（openpyxl 會丟 IllegalCharacterError，ODS 會產生壞檔）
 _XML_ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
@@ -423,13 +424,21 @@ def export_vcf(contacts) -> bytes:
         lines.append("N:" + _vesc(name or name_en) + ";;;;")
         if name and name_en:
             lines.append("X-JTDT-NAME-EN:" + _vesc(name_en))
-        dept = _single(c, "department")
-        if company or dept:
-            lines.append("ORG:" + _vesc(company) + (";" + _vesc(dept) if dept else ""))
-        if _single(c, "company_en"):
-            lines.append("X-JTDT-COMPANY-EN:" + _vesc(_single(c, "company_en")))
-        if _single(c, "title"):
-            lines.append("TITLE:" + _vesc(_single(c, "title")))
+        # 只有外文的（英文名片）：通訊錄標準欄位用外文的值，另外記在 X-JTDT-*-EN（讀回來時認得是外文欄位）
+        company_en, dept_en = _single(c, "company_en"), _single(c, "department_en")
+        title, title_en = _single(c, "title"), _single(c, "title_en")
+        dept = _single(c, "department") or dept_en
+        org = company or company_en
+        if org or dept:
+            lines.append("ORG:" + _vesc(org) + (";" + _vesc(dept) if dept else ""))
+        if company_en:
+            lines.append("X-JTDT-COMPANY-EN:" + _vesc(company_en))
+        if dept_en:
+            lines.append("X-JTDT-DEPARTMENT-EN:" + _vesc(dept_en))
+        if title or title_en:
+            lines.append("TITLE:" + _vesc(title or title_en))
+        if title_en:
+            lines.append("X-JTDT-TITLE-EN:" + _vesc(title_en))
         for key, typ in (("mobile", "CELL"), ("phone", "WORK,VOICE"), ("fax", "WORK,FAX")):
             for f in _values(c, key):
                 lines.append(f"TEL;TYPE={typ}:" + _vesc(_tel_value(f)))

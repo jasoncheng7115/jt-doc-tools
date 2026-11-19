@@ -5,11 +5,29 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (977 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (978 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.49] - 2026-11-19
+
+### Fixed (business card reader)
+
+- Typing into one of the blank fields listed on the review screen (name, mobile and so on) and saving no longer fails with `400` "invalid field status".
+- When the @ of an email is read as 0, O or Q, it is put back (and marked for checking) if the line has an E-mail / Mail label, the domain is a common mail provider, or the card shows a website or email on the same domain; without such evidence the value is only flagged, not changed.
+- New "Title (other language)" and "Department (other language)" fields: English titles and departments go there, so merging the Chinese front and English back of a card (in a batch or in a card book) no longer overwrites or drops the Chinese values. Exports (CSV / XLSX / ODS / VCF / JSON) and imports recognise both fields.
+- Fields that can repeat (mobile, phone, email…) have a "+" on each row to add another one.
+- Card images in a card book can be clicked to enlarge.
+- When nobody in a scanned batch has been confirmed yet, the export range switches to "All (including unconfirmed)" so the export buttons are not all greyed out.
+- A card with two or more company names keeps them all, marks them for checking and puts the largest one first (exports and card books use the first); the same name printed twice is kept once.
+- English department names (such as "... Department") are no longer taken as job titles.
+- A Chinese and an English name printed on the same line (either order, or separated by a slash or brackets) are split into "Name" and "Name (other language)" instead of the whole line going into the foreign-name field (issue #59); bilingual titles and departments on one line are split the same way.
+
+### Fixed (installation)
+
+- Installing on Windows ARM64 (e.g. Surface Pro) failed while installing dependencies, because some of them have no Windows ARM64 build. The environment now uses the x64 Python, which Windows 11 runs through its built-in x64 emulation, so every dependency (EasyOCR included) installs (issue #60). Machines where the install failed just need to run the installer again.
 
 ## [1.17.48] - 2026-11-17
 

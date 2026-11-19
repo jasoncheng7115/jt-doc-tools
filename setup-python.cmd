@@ -46,7 +46,19 @@ REM user's profile is removed the venv loses its base interpreter.
 REM The venv is rebuilt with --clear below, so a re-run moves old installs too.
 set "UV_PYTHON_INSTALL_DIR=%INSTALL_DIR%\python"
 set UV_PYTHON_PREFERENCE=only-managed
-"%UV_EXE%" python install 3.12
+REM Windows on ARM64: several dependencies (opencv-python-headless, torch) publish
+REM no win_arm64 wheels, so `uv sync` fails on a native ARM64 Python (issue #60).
+REM Use the x64 Python instead - Windows 11 on ARM runs x64 programs through its
+REM built-in emulation, and every dependency has win_amd64 wheels.
+REM PROCESSOR_ARCHITEW6432 is set when this runs from a 32-bit process (NSIS).
+set "PY_REQ=3.12"
+set "HOST_ARCH=%PROCESSOR_ARCHITEW6432%"
+if not defined HOST_ARCH set "HOST_ARCH=%PROCESSOR_ARCHITECTURE%"
+if /i "%HOST_ARCH%"=="ARM64" (
+    set "PY_REQ=cpython-3.12-windows-x86_64-none"
+    echo ==^> Windows ARM64: using the x64 Python 3.12 ^(runs through Windows x64 emulation^)
+)
+"%UV_EXE%" python install !PY_REQ!
 echo [debug] uv python install exit=!ERRORLEVEL!
 
 echo ==^> Creating venv via uv venv ...
@@ -56,7 +68,7 @@ REM `uv venv` fail outright with "A virtual environment already exists",
 REM so every later attempt dies the same way and the machine can never
 REM heal itself. Measured 2026-09-05 on a Win11 box whose install was
 REM interrupted mid-sync. Recreating is cheap; uv re-links from its cache.
-"%UV_EXE%" venv --clear --python 3.12 .venv
+"%UV_EXE%" venv --clear --python !PY_REQ! .venv
 set VENV_RC=!ERRORLEVEL!
 echo [debug] uv venv exit=!VENV_RC!
 REM NOTE: `( popd ^& exit /b 2 )` does NOT work -- inside parentheses the
