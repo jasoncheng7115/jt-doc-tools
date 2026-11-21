@@ -1,9 +1,11 @@
 """名片辨識：一張已拉正的卡面 → OCR → 文字行（含框位）。
 
 * 走共用的 `app/core/ocr_engine.recognize_image`（EasyOCR / Tesseract / 遠端 GPU，跟其他工具同一套設定與退路）。
-* **方向**：卡面可能倒放（拍照時拿反）或直式。橫式卡試 0° 與 180°，直式卡試 0° / 90° / 270°，挑「信心×字數」最高的。
+* **方向**：卡面可能倒放（拍照時拿反）或直式。橫式卡試 0° 與 180°，直式卡試 0° / 90° / 270°，挑「信心×字數」最高的；
+  橫的框兩個方向都讀不太出來時再試 90° / 270°（直式名片橫放掃描）。
   直式卡片本來就可能是直的（直書名片），所以直式不強制轉成橫式。
 * 字（word）依垂直重疊併成行；行的框位是卡面座標（拉正後的裁圖），校對畫面用來框出原文。
+* 日文名片的直書（縦書き）：直排的欄另外切字、排成橫的一行再讀（`vertical.py`、`_vertical_pass`）。
 """
 from __future__ import annotations
 
@@ -18,6 +20,46 @@ log = logging.getLogger(__name__)
 
 #: 首版驗收語言：繁中＋英文（規格第 3 節）
 DEFAULT_LANGS = "chi_tra+eng"
+#: 名片的辨識語言（使用者 2026-11-20：加入日文）。EasyOCR 的日文模型同時認得漢字與假名；
+#: 非拉丁語系的模型一次只能載一個，所以是「選一種」而不是全部一起認。
+LANGS = {"zh": "chi_tra+eng", "ja": "jpn+eng"}
+
+
+def langs_for(lang: str) -> str:
+    """`zh` / `ja` → OCR 語言碼；不認得的當預設（繁中＋英文）。也收已經是語言碼的值（批次裡存的）。"""
+    if lang in LANGS:
+        return LANGS[lang]
+    return lang if lang in LANGS.values() else DEFAULT_LANGS
+
+
+def lang_of(langs: str) -> str:
+    """OCR 語言碼 → `zh` / `ja`（擷取規則用）。"""
+    return next((k for k, v in LANGS.items() if v == langs), "zh")
+
+
+def lang_available(lang: str) -> dict:
+    """這台能不能辨識這種語言：EasyOCR（本機或遠端 GPU）認得的都可以（第一次用會下載模型）；
+    只有 Tesseract 時要裝了那個語言的訓練檔。回 `{"ok": bool, "via": "easyocr" / "tesseract" / "", "hint", "missing"?}`。"""
+    from ...core import ocr_engine
+    codes = langs_for(lang).split("+")
+    try:
+        from ...core import ocr_remote_settings
+        remote = ocr_remote_settings.is_enabled_and_configured()
+    except Exception:                                  # noqa: BLE001
+        remote = False
+    if ocr_engine.get_default_engine() == "easyocr" and (remote or ocr_engine.is_easyocr_available()) \
+            and all(c in ocr_engine._TESS_TO_EASYOCR for c in codes):
+        return {"ok": True, "via": "easyocr", "hint": ""}
+    try:
+        from ...core import tessdata_manager
+        have = tessdata_manager.get_installed_langs() if ocr_engine.is_tesseract_available() else set()
+    except Exception:                                  # noqa: BLE001
+        have = set()
+    missing = [c for c in codes if c not in have]
+    if not missing:
+        return {"ok": True, "via": "tesseract", "hint": ""}
+    return {"ok": False, "via": "", "missing": missing,
+            "hint": "這台的 OCR 沒有這個語言的辨識資料：請管理員到「設定 → OCR 引擎」安裝，或改用 EasyOCR"}
 
 
 @dataclass
@@ -29,6 +71,7 @@ class Line:
     words: list[dict] = field(default_factory=list)
     alt: str = ""                  # 信心低的行放大再讀一次的另一種讀法（只給人參考，不自動換）
     alt_conf: float = 0.0
+    vertical: bool = False         # 直書的一欄（已經排成橫的讀過；框是整欄，不可以再拿原圖的那一塊重讀）
 
     def to_dict(self) -> dict:
         d = {"text": self.text, "box": self.box, "conf": round(self.conf, 1), "height": self.height}
@@ -129,7 +172,10 @@ def ocr_card(img: Image.Image, *, langs: str = DEFAULT_LANGS, engine: str | None
     w, h = img.size
     rots = ([0, 180] if w >= h else [0, 90, 270]) if try_rotations else [0]
     best = None
-    for rot in rots:
+    tried = 0
+    while tried < len(rots):
+        rot = rots[tried]
+        tried += 1
         im = img.rotate(-rot, expand=True) if rot else img
         try:
             words, used = ocr_engine.recognize_image(
@@ -142,16 +188,145 @@ def ocr_card(img: Image.Image, *, langs: str = DEFAULT_LANGS, engine: str | None
         if best is None or q > best[0]:
             best = (q, rot, words, used, im)
         # 第一個方向就很好（大部分卡片沒拿反）：不用再試，省一半時間
-        if rot == 0 and q >= 30:
+        if (rot == 0 or (rot == 90 and w >= h)) and q >= 30:       # 橫放的直式名片 90° 就讀得好也不用再試 270°
             break
+        # 橫的框 0° 與 180° 都讀不太出來：可能是直式名片橫放（掃描時常見）→ 再試 90° 與 270°
+        if try_rotations and tried == len(rots) and w >= h and 90 not in rots and best[0] < 30:
+            rots = rots + [90, 270]
     q, rot, words, used, im = best
     lines = group_lines(words)
+    if used != "none" and "jpn" in langs.split("+"):
+        try:
+            lines = _vertical_pass(lines, im, langs, engine)
+        except Exception:                                  # noqa: BLE001 —— 直書那一輪失敗就用一般讀法
+            log.exception("名片 OCR 直書補讀失敗")
+    if used != "none" and "jpn" in langs.split("+"):
+        try:
+            _latin_pass(lines, im, engine)
+        except Exception:                                  # noqa: BLE001 —— 英文那一輪失敗就用日文模型讀的
+            log.exception("名片 OCR 英文補讀失敗")
     if used != "none":
         try:
             _reread_low_lines(lines, im, langs, engine)
         except Exception:                                  # noqa: BLE001 —— 補讀失敗就用第一次的結果
             log.exception("名片 OCR 補讀失敗")
     return {"lines": lines, "rotation": rot, "engine": used, "image": im, "quality": q}
+
+
+def _vertical_pass(lines: list[Line], im: Image.Image, langs: str, engine) -> list[Line]:
+    """直書（縦書き）名片：找出直排的欄、排成橫的一行再讀（見 `vertical.py`）。
+    至少兩欄讀出中日文字才算直書名片；被那些欄蓋住的原本的行（直排被切成的碎片）換掉。
+    直欄排在前面、由右到左（直書的閱讀順序），橫排的行（Email、網址）照原本的順序接在後面。"""
+    from . import vertical
+    # 橫排的字上下疊起來也像一條直欄（Email 與網址的字母、橫式名片上「公司／部門／姓名」幾行）：
+    # 跟「讀得好的橫排行」重疊的不算。直式名片上原本的讀法只有一兩個字的碎片，不會擋到真的直欄
+    # 證據用「單一個字框」：真的橫排字 EasyOCR 會整段框成一個（「有限会社アオバ」）；直書被切成的碎片一框只有
+    # 一兩個字 —— 相鄰幾欄同一高度的碎字會被併成一「行」，用行來看會誤擋真的直欄
+    wide = [ln.box for ln in lines if ln.box[2] >= 4 * max(1, ln.box[3]) and len(ln.text.strip()) >= 8]
+    wide += [[w["left"], w["top"], w["width"], w["height"]] for ln in lines for w in ln.words
+             if sum(1 for ch in (w.get("text") or "") if _is_cjk(ch)) >= 3 and float(w.get("conf") or 0) >= 50
+             and w["width"] >= w["height"]]
+    cols = [c for c in vertical.columns(im) if not any(
+        min(c.box[0] + c.box[2], x + w) > max(c.box[0], x) and min(c.box[1] + c.box[3], y + h) > max(c.box[1], y)
+        for x, y, w, h in wide)]
+    if len(cols) < 2:
+        return lines
+    read = _read_strips(im, cols, langs, engine)
+    keep = [(c, t, cf) for c, t, cf in read
+            if sum(1 for ch in t if _is_cjk(ch)) >= 2 or len(re.sub(r"\W", "", t)) >= 4]
+    if sum(1 for _c, t, _cf in keep if sum(1 for ch in t if _is_cjk(ch)) >= 2) < 2:
+        return lines
+    def covered(ln: Line) -> bool:
+        # 碰到任何一欄就換掉：直排被切成的碎片常常橫跨好幾欄（「童馨」是職稱與讀音兩欄的字拼起來的）
+        x, y, w, h = ln.box
+        for c, _t, _cf in keep:
+            cx, cy, cw, ch = c.box
+            m = c.size * 0.5
+            if min(x + w, cx + cw + m) > max(x, cx - m) and min(y + h, cy + ch + m) > max(y, cy - m):
+                return True
+        return False
+    # 直書的讀法要明顯比被換掉的原讀法好才換（信心 × 可讀字數）
+    qual = lambda t, cf: sum(1 for ch in t if ch.isalnum() or _is_cjk(ch)) * max(0.0, cf) / 100.0
+    q_new = sum(qual(t, cf) for _c, t, cf in keep)
+    q_old = sum(qual(ln.text, ln.conf) for ln in lines if covered(ln))
+    if q_new <= 1.3 * q_old:
+        return lines
+    out = [Line(text=t, box=list(c.box), conf=cf, height=int(round(c.size)), vertical=True) for c, t, cf in keep]
+    return out + [ln for ln in lines if not covered(ln)]
+
+
+def _read_strips(im: Image.Image, cols, langs: str, engine) -> list[tuple]:
+    """各欄排成的一行疊成一張圖讀一次，依上下位置分回各欄。回 [(欄, 文字, 信心)]（讀不到的欄不列）。"""
+    from ...core import ocr_engine
+    from . import vertical
+    strips = [vertical.strip_image(im, c) for c in cols]
+    gap = 40
+    cw = max(s.width for s in strips) + 40
+    canvas = Image.new("RGB", (cw, sum(s.height for s in strips) + gap * (len(strips) + 1)), (255, 255, 255))
+    spans, y = [], gap
+    for c, s in zip(cols, strips):
+        canvas.paste(s, (20, y))
+        spans.append((c, y, y + s.height))
+        y += s.height + gap
+    words, _used = ocr_engine.recognize_image(_png(canvas), langs, engine=engine,
+                                              allow_local_easyocr=ocr_engine.local_easyocr_safe())
+    out = []
+    for c, y0, y1 in spans:
+        got = sorted((w for w in words if (w.get("text") or "").strip()
+                      and y0 <= w["top"] + w["height"] / 2 <= y1), key=lambda w: w["left"])
+        if not got:
+            continue
+        text = ""
+        for w in got:
+            t = w["text"].strip()
+            text += ("" if not text or (_is_cjk(text[-1]) and _is_cjk(t[0])) else " ") + t
+        conf = sum(float(w.get("conf") or 0) for w in got) / len(got)
+        out.append((c, vertical.clean_text(text), conf))
+    return out
+
+
+def _latin_pass(lines: list[Line], im: Image.Image, engine) -> int:
+    """日文名片：整張再用英文模型讀一次，英數那幾行（英文姓名、Email、網址、電話）換成英文模型的讀法。
+
+    實測（遠端 GPU EasyOCR）：日文模型讀英數很差 —— 空格全不見（「NaokiKobayashi」）、M 認成「NI」、
+    m 認成「nn」、Email 與網址的點不見（「examplejp」）。英文模型讀同一行幾乎都對。只換「沒有漢字、假名」的行，
+    日文的行照樣用日文模型讀的。回換掉的行數。
+    """
+    from ...core import ocr_engine
+    words, _used = ocr_engine.recognize_image(_png(im), "eng", engine=engine,
+                                              allow_local_easyocr=ocr_engine.local_easyocr_safe())
+    return merge_latin(lines, group_lines(words))
+
+
+def merge_latin(lines: list[Line], en_lines: list[Line]) -> int:
+    """`lines`（日文模型）裡英數的行，換成位置重疊的 `en_lines`（英文模型）的讀法。"""
+    n = 0
+    for ln in lines:
+        if ln.vertical or sum(1 for ch in ln.text if _is_cjk(ch)) > 1:
+            continue
+        if not re.search(r"[A-Za-z@]", ln.text) or len(ln.text.strip()) < 3:
+            continue
+        x, y, w, h = ln.box
+        hits = []
+        for e in en_lines:
+            ex, ey, ew, eh = e.box
+            vo = min(y + h, ey + eh) - max(y, ey)
+            ho = min(x + w, ex + ew) - max(x, ex)
+            if vo >= 0.5 * min(h, eh) and ho > 0.3 * min(w, ew):
+                hits.append(e)
+        if not hits:
+            continue
+        hits.sort(key=lambda e: e.box[0])
+        text = " ".join(e.text for e in hits).strip()
+        if not text or text == ln.text or any(_is_cjk(ch) for ch in text):
+            continue
+        conf = sum(e.conf for e in hits) / len(hits)
+        # 網址與 Email：英文模型信心常只有 20～35（點與「//」讀不準），但字母幾乎都對；日文模型讀的通常更糟
+        if conf < (20 if re.search(r"https?|www|@", text, re.I) else 40):
+            continue
+        ln.text, ln.conf = text, conf              # 日文模型的讀法通常是錯的，不放進「另一種讀法」
+        n += 1
+    return n
 
 
 #: 信心低於這個的行再讀一次（跟擷取那邊標「辨識信心低」的門檻一致）
@@ -169,7 +344,8 @@ def _reread_low_lines(lines: list[Line], im: Image.Image, langs: str, engine) ->
     **幾行疊成一張圖只多讀一次**（一張卡多一次 OCR），讀完依上下位置分回各行。回有另一種讀法的行數。
     """
     from ...core import ocr_engine
-    todo = sorted((ln for ln in lines if ln.conf and ln.conf < REREAD_BELOW and len(ln.text.strip()) >= 2),
+    todo = sorted((ln for ln in lines if not ln.vertical and ln.conf and ln.conf < REREAD_BELOW
+                   and len(ln.text.strip()) >= 2),
                   key=lambda ln: ln.conf)[:REREAD_MAX]
     if not todo:
         return 0

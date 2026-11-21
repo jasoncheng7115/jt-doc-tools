@@ -209,7 +209,8 @@ def test_submission_check_web_flow_still_uses_llm_when_available(client, auth_of
     import time
     from app.core.job_manager import job_manager
     jid = r.json()["job_id"]
-    for _ in range(600):
+    deadline = time.monotonic() + 180          # 文字層 PDF 仍會跑一輪 OCR；主機忙時 30 秒等不到
+    while time.monotonic() < deadline:
         j = job_manager.get(jid)
         if j.status in ("done", "error"):
             break

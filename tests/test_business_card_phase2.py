@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main as app_main
-from app.tools.business_card_reader import card_ocr, pipeline
+from app.tools.business_card_reader import card_ocr, pipeline, store
 from tests import bc_synth as S
 
 API = "/tools/business-card-reader/api"
@@ -29,15 +29,23 @@ def ocr(monkeypatch):
         [("範例顧問有限公司", 32), ("陳大文", 44), ("Email: daming@example.org", 18)],
     ]
     state = {"i": 0, "seq": seq}
-    # 辨識是兩條執行緒同時跑（pipeline.WORKERS）：取號要上鎖，不然兩張卡可能拿到同一號
-    # （整批跑時偶發：三張變成「王小明、王小明、Kevin」，清單比對就沒有「新的人」）
+    # 辨識是兩條執行緒同時跑（pipeline.WORKERS），而且前一支測試的背景辨識可能還在跑：
+    # 依「第幾次被呼叫」給內容的話，卡片拿到哪一張不固定（整批跑時偶發：兩張一樣、或正反面順序對調）。
+    # 改成依「這張卡在批次裡排第幾」給 —— 跟執行緒順序無關。
     import threading
-    lock = threading.Lock()
+    here = threading.local()
+    real_recognize = pipeline._recognize
+
+    def recognize(owner, bid, cid):
+        try:
+            here.pos = [c["id"] for c in store.cards(bid)].index(cid)
+        except ValueError:
+            here.pos = 0
+        return real_recognize(owner, bid, cid)
+    monkeypatch.setattr(pipeline, "_recognize", recognize)
 
     def fake(img, **kw):
-        with lock:
-            lines = state["seq"][state["i"] % len(state["seq"])]
-            state["i"] += 1
+        lines = state["seq"][getattr(here, "pos", 0) % len(state["seq"])]
         ls = [card_ocr.Line(text=t, box=[20, 20 + i * 50, 500, 40], conf=95, height=h) for i, (t, h) in enumerate(lines)]
         return {"lines": ls, "rotation": 0, "engine": "fake", "image": img, "quality": 99}
     monkeypatch.setattr(card_ocr, "ocr_card", fake)

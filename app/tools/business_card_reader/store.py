@@ -212,7 +212,13 @@ def _m2_books(conn: sqlite3.Connection) -> None:
     """)
 
 
-_MIGRATIONS = [_m1_initial, _m2_books]
+def _m3_card_langs(conn: sqlite3.Connection) -> None:
+    """每一張卡可以用不同的語言重新辨識（一疊台灣名片裡夾一張日文的）：`bc_cards.langs`，空白＝跟著批次。
+    只加欄位，不動既有資料。"""
+    conn.executescript("ALTER TABLE bc_cards ADD COLUMN langs TEXT NOT NULL DEFAULT '';")
+
+
+_MIGRATIONS = [_m1_initial, _m2_books, _m3_card_langs]
 _INITED: set[str] = set()
 _INIT_LOCK = threading.Lock()
 
@@ -303,7 +309,7 @@ def list_batches(owner: str) -> list[dict]:
 
 def set_batch(owner: str, bid: str, **kw) -> None:
     get_batch(owner, bid)
-    allowed = {"status", "error", "notes", "mode"}
+    allowed = {"status", "error", "notes", "mode", "langs"}
     cols = {k: v for k, v in kw.items() if k in allowed}
     if "notes" in cols:
         cols["notes"] = _j(clean_notes(cols["notes"]))
@@ -509,7 +515,7 @@ def replace_page_cards(bid: str, pid: str, items: list[dict]) -> list[str]:
 
 
 def set_card(cid: str, **kw) -> None:
-    cols = {k: v for k, v in kw.items() if k in ("status", "error", "ocr", "memo", "rotate")}
+    cols = {k: v for k, v in kw.items() if k in ("status", "error", "ocr", "memo", "rotate", "langs")}
     if "ocr" in cols:
         cols["ocr"] = _j(cols["ocr"])
     cols["updated_at"] = time.time()

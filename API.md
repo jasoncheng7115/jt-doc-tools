@@ -2399,7 +2399,9 @@ GET    /tools/business-card-reader/api/batches/{batch_id}/cards/{card_id}/image?
 PUT    /tools/business-card-reader/api/batches/{batch_id}/pages/{page_id}/cards   # 改框
 POST   /tools/business-card-reader/api/batches/{batch_id}/mode         # 改收件模式（不用重新上傳）
 POST   /tools/business-card-reader/api/batches/{batch_id}/recognize    # 全部辨識（背景）
-POST   /tools/business-card-reader/api/batches/{batch_id}/cards/{card_id}/retry
+POST   /tools/business-card-reader/api/batches/{batch_id}/cards/{card_id}/retry   # 重新辨識（可改用另一種語言）
+POST   /tools/business-card-reader/api/batches/{batch_id}/lang         # 整批改用另一種語言重新辨識
+GET    /tools/business-card-reader/api/langs                           # 可選的辨識語言、這台能不能用
 POST   /tools/business-card-reader/api/batches/{batch_id}/cards/{card_id}/contacts  # 同一張卡再加一位
 POST   /tools/business-card-reader/api/batches/{batch_id}/contacts/save-all  # 全部儲存 / 全部確認
 POST   /tools/business-card-reader/api/batches/{batch_id}/contacts/merge          # 同一批合併兩位（正反面 / 同一人）
@@ -2413,7 +2415,7 @@ POST   /tools/business-card-reader/api/batches/{batch_id}/export
 
 **建立批次**（multipart）：`files`（可多個；JPEG、PNG、PDF，主機有解碼元件時另收 HEIC）、`mode`＝`single`（每張圖片一張名片，建立後直接在背景辨識）
 或 `multi`（每張圖片多張名片，先停在確認範圍，用 `PUT …/cards` 改框後再 `POST …/recognize`）；
-`event`、`source`、`tags`（逗號分隔）、`memo` 是人工補充，套用到這批每一位聯絡人（跟名片原文分開存）。
+`lang`＝`zh`（繁中＋英文，預設）/ `ja`（日文＋英文）；`event`、`source`、`tags`（逗號分隔）、`memo` 是人工補充，套用到這批每一位聯絡人（跟名片原文分開存）。
 一批最多 50 個檔、100 頁、300 張卡面，單檔 40 MB；超過回 400 / 413 並說明怎麼拆批。回 201 與批次內容。
 
 ```bash
@@ -2424,7 +2426,15 @@ curl -X POST http://localhost:8765/tools/business-card-reader/api/batches \
 
 批次內容的 `counts`：`files`、`pages`、`cards`（卡面）、`cards_done`、`cards_failed`、`cards_pending`、`contacts`（聯絡人，不含排除）、`confirmed`、`check`。
 `status`：`frames`（多卡模式等確認範圍）、`recognizing`、`review`。輪詢到 `cards_pending` 為 0 就辨識完了。
-每張卡面（`pages[].cards[]`）辨識完帶 `engine`（實際用的 OCR 引擎）、`secs`（這張從拉正到擷取完的秒數）與 `ocr_secs`（其中文字辨識的秒數）。
+每張卡面（`pages[].cards[]`）辨識完帶 `engine`（實際用的 OCR 引擎）、`secs`（這張從拉正到擷取完的秒數）與 `ocr_secs`（其中文字辨識的秒數），
+`lang`（這張用的語言：自己選過的優先，沒有就跟著批次）、`lang_own`（這張自己選過語言）、`lang_used`（上一次實際辨識用的語言）；批次本身另有 `lang`。
+
+**辨識語言**：`zh`（繁中＋英文）/ `ja`（日文＋英文）。日文名片另有日文的規則：公司（株式会社、（株）、一般社団法人…）、部門與職稱
+（「営業部 部長」）、姓名（「山田 太郎」，假名讀音那一行不當欄位）、郵遞區號（〒100-0005 → `zip`）與地址、手機（070 / 080 / 090 開頭 11 碼、+81）。
+EasyOCR（本機或遠端 GPU）認得的語言都能選（第一次用會下載模型）；只有 Tesseract 時要先在「設定 → OCR 引擎」裝日文訓練檔，否則建立批次回 400 並說明。
+`GET …/langs` 回 `{"zh": {"ok", "via", "hint"}, "ja": {…}}`。
+**改語言重新辨識**：`POST …/cards/{card_id}/retry` 帶 `{"lang": "ja"}` 只改這一張（一疊台灣名片裡夾一張日文的）；
+`POST …/batches/{batch_id}/lang` 帶 `{"lang": "ja"}` 整批改（辨識過的全部重新辨識）。兩者都保留人工改過、確認過的欄位，稽核 `business_card_relang`。
 
 **改框**（JSON）：`{"cards": [{"id"?, "quad": [[x,y]×4], "rotate": 0|90|180|270, "memo"?}], "recognize": true?}`，座標是頁影像的像素；
 沒帶 `id` 的是新增的框，清單裡沒有的框會刪除。框位或角度沒變的卡保留辨識結果，改過的才重新辨識。數值不收 NaN、無限大、太小的框；一頁最多 60 張。
@@ -2456,7 +2466,7 @@ curl -X POST http://localhost:8765/tools/business-card-reader/api/batches/BATCH_
 
 稽核：建立批次 `business_card_batch`、改收件模式 `business_card_mode`、全部確認 `business_card_confirm_all`、匯出 `business_card_export`、立即清除 `business_card_delete`（只記批次編號、筆數與格式，不記聯絡人內容）。
 
-**一次完成**（multipart，給程式與 MCP 用）：`files`、`mode`、`event` / `source` / `tags` / `memo` 同建立批次，另有 `wait`（10～600 秒，預設 120）。
+**一次完成**（multipart，給程式與 MCP 用）：`files`、`mode`、`lang`、`event` / `source` / `tags` / `memo` 同建立批次，另有 `wait`（10～600 秒，預設 120）。
 多卡模式自動找到的每一張直接辨識（沒有人確認範圍）。回 `batch_id`、`done`（`false` ＝還沒做完，之後用批次 API 接著讀）、`counts`、
 `contacts`（每位的 `fields`：`key` / `value` / `status` / `reason`）與 `review_url`。**結果未經人工校對**：`status` 是 `check` 的欄位要人確認。
 

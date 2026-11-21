@@ -154,7 +154,7 @@ def _build_batch_prompt(texts: list[str], source_lang: str, target_lang: str,
         f"請**逐段翻譯**，輸出時每段自成一行、並保留原本的 {_SEG_OPEN}編號{_SEG_CLOSE} 標記，"
         "編號與段數都要與原文完全一致，不可以合併、拆分、增加或省略任何一段。"
         "標記後面只放譯文，不要附上原文。\n\n"
-        + body
+        + "<source>\n" + body + "\n</source>"
     )
 
 
@@ -174,7 +174,8 @@ def _parse_batch_reply(reply: str, count: int) -> Optional[list[str]]:
     """
     got: dict[int, str] = {}
     cur: Optional[int] = None
-    for line in _BYTE_TOKEN_RE.sub("", reply or "").splitlines():
+    from app.tools.translate_doc.router import strip_source_tags
+    for line in strip_source_tags(_BYTE_TOKEN_RE.sub("", reply or "")).splitlines():
         m = _SEG_RE.match(line)
         if m:
             cur = int(m.group(1))

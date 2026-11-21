@@ -11,9 +11,13 @@
 """
 from __future__ import annotations
 
+import contextvars
 import re
 import uuid
 from typing import Any, Iterable, Optional
+
+#: 這一次擷取是不是日文名片（`find_phones` 判斷手機用；兩條辨識執行緒各自一份，不互相影響）
+_JP_CARD: contextvars.ContextVar[bool] = contextvars.ContextVar("bc_jp_card", default=False)
 
 FIELD_KEYS = ("name", "name_en", "title", "title_en", "department", "department_en", "company", "company_en", "vat",
               "mobile", "phone", "fax", "email", "url", "address", "im", "note")
@@ -36,7 +40,7 @@ TITLE_EN = re.compile(
     r"Specialist|Consultant|Officer|Assistant|Representative|Sales|Designer|Founder|Co-?founder|Partner|Owner|"
     r"Executive|Head|Lead|Leader|Architect|Analyst|Administrator|Coordinator|Professor|Lecturer|Researcher|Editor|"
     r"Reporter|Secretary|Attorney|Lawyer|Accountant|Doctor|Nurse|Technician|Agent|Advisor|Adviser|Associate|"
-    r"Principal|Chief|General Manager|Managing Director)\b", re.I)
+    r"Principal|Chief|Staff|Clerk|Intern|General Manager|Managing Director)\b", re.I)
 DEPT_RE = re.compile(r"([一-鿿]{1,10}(?:部|處|課|組|室|中心|事業群|事業部|科|股|辦公室|服務處|分處|營業所))$")
 #: 職稱前面常接的職務 / 單位詞（「採購副理」「業務經理」「行銷專員」）——前面那段是這些時不當姓名
 ROLE_HEADS = ("採購", "業務", "行銷", "財務", "會計", "人資", "行政", "研發", "技術", "工程", "品保", "品管", "生產", "製造",
@@ -101,9 +105,9 @@ COMPANY_EN = re.compile(
 
 # 電話類標籤（放在號碼前面）
 LABELS = [
-    ("fax", r"(?:傳真|傳\s*真|FAX|Fax|fax|F\s*a\s*x|F)\b"),
-    ("mobile", r"(?:手機|行動電話|行動|Mobile(?:\s*Phone)?|Mob\.?|Cell(?:\s*Phone)?|M|Ｍ)\b"),
-    ("phone", r"(?:電話|電\s*話|總機|直撥|直線|專線|市話|客服|服務專線|預約專線|免付費服務專線|免付費|"
+    ("fax", r"(?:傳真|傳\s*真|ファックス|ファクス|FAX|Fax|fax|F\s*a\s*x|F)\b"),
+    ("mobile", r"(?:手機|行動電話|行動|携帯電話|携帯|Mobile(?:\s*Phone)?|Mob\.?|Cell(?:\s*Phone)?|M|Ｍ)\b"),
+    ("phone", r"(?:電話|電\s*話|電話番号|総機|總機|直撥|直線|直通|代表|專線|市話|客服|服務專線|預約專線|免付費服務專線|免付費|"
               r"Tel\.?|TEL|T\s*e\s*[l|]|Phone|Office|Direct|Hotline|T|Ｔ)\b"),
 ]
 IM_RE = re.compile(r"\b(LINE|Line|line|QQ|Q\s*Q|WeChat|微信|WhatsApp|Skype|Telegram|Facebook|FB|IG|Instagram|Twitter|X)"
@@ -125,7 +129,7 @@ VAT_SEP = r"\s*[:：.·・•‧;；,，\-－—/／]*\s*"
 VAT_RE = re.compile(VAT_LABEL + VAT_SEP + r"([0-9OoIl|]{8})(?!\d)", re.I)
 VAT_LABEL_ONLY = re.compile(r"^\s*" + VAT_LABEL + VAT_SEP + r"$", re.I)
 _VAT_BEFORE = re.compile(VAT_LABEL + VAT_SEP + r"$", re.I)
-ADDR_LABEL = re.compile(r"^\s*(?:地址|住址|公司地址|通訊地址|地\s*址|會址|園址|廠址|門市地址|Add(?:ress)?\.?|ADD|Addr\.?)\s*[:：.]?\s*", re.I)
+ADDR_LABEL = re.compile(r"^\s*(?:地址|住址|住所|所在地|公司地址|通訊地址|地\s*址|會址|園址|廠址|門市地址|Add(?:ress)?\.?|ADD|Addr\.?)\s*[:：.]?\s*", re.I)
 TW_ADDR = re.compile(r"(?:台|臺)?(?:北|新北|桃園|台中|臺中|台南|臺南|高雄|基隆|新竹|苗栗|彰化|南投|雲林|嘉義|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江)"
                      r"(?:市|縣).{0,40}?(?:路|街|大道|巷|弄|號|樓|村|里)")
 #: 英文地址字樣。**縮寫帶句點的不可以接 `\b`**：句點後面接空白時不構成字界，`No.`、`Rd.` 會永遠比對不到
@@ -206,6 +210,10 @@ def normalize_phone(raw: str) -> str:
 def phone_complete(norm: str) -> bool:
     """台灣號碼長度合理嗎（遮掉 / 少幾碼的標需確認）。國際號碼只看長度 8～15。"""
     d = norm.lstrip("+")
+    from .extract_ja import jp_phone_complete
+    jp = jp_phone_complete(norm)                  # 日本號碼（手機 11 碼、+81）
+    if jp is not None:
+        return jp
     if norm.startswith("+886") or d.startswith("886"):
         rest = d[3:].lstrip("0")
         return 8 <= len(rest) <= 9
@@ -252,14 +260,23 @@ def find_phones(text: str) -> list[dict]:
             continue
         if re.match(r"^\d{4}[./]\d{1,2}[./]\d{1,2}$", raw):
             continue
+        from .extract_ja import zip_at
+        if zip_at(text, m.start(), m.end()):                      # 日本的郵遞區號（〒100-0005）
+            continue
         kind, label = _label_before(text, m.start())
         ext = ""
         em = EXT_RE.match(text[m.end():])
         if em:
             ext = em.group(1)
+        from .extract_ja import is_jp_mobile
+        if _JP_CARD.get():
+            # 日文名片：09 開頭 10 碼是福岡、長崎一帶的市話（092-771-7951），手機是 070 / 080 / 090 開頭 11 碼
+            mob = is_jp_mobile(digits) or digits.startswith("8869")
+        else:
+            mob = digits.startswith("09") or digits.startswith("8869") or is_jp_mobile(digits)
         if kind is None:
-            kind = "mobile" if digits.startswith("09") or digits.startswith("8869") else "phone"
-        elif kind == "phone" and (digits.startswith("09") or digits.startswith("8869")):
+            kind = "mobile" if mob else "phone"
+        elif kind == "phone" and mob and label not in ("代表", "直通"):
             kind = "mobile"
         out.append({"kind": kind, "raw": raw, "norm": norm, "ext": ext, "label": label,
                     "complete": phone_complete(norm), "span": (m.start(), m.end() + (em.end() if em else 0))})
@@ -296,7 +313,7 @@ def _clean_url(u: str) -> str:
 _TLD = r"(?:com|net|org|gov|edu|idv|io|co|tw|biz|info|app|dev|shop|store|asia|uk|jp|hk|sg|me)"
 _WWW_START = re.compile(r"^(?:(ht[it]ps?)\s*[:;]?\s*[/l|\\]{0,2})?([wv]{3,4})(?=[.,\s]|[a-z0-9]|$)", re.I)
 _SCHEME_START = re.compile(r"^(ht[it]ps?)\s*[:;]?\s*[/l|\\]{1,2}", re.I)
-_LABEL_EMAIL = re.compile(r"(?:(?<![A-Za-z])(?:E\s*-?\s*)?mai[l1I]{1,2}|電子郵件|電郵|郵件|信箱)", re.I)
+_LABEL_EMAIL = re.compile(r"(?:(?<![A-Za-z])(?:E\s*-?\s*)?mai[l1I]{1,2}|電子郵件|電郵|郵件|信箱|メール)", re.I)
 _MAIL_HOSTS = ("gmail.com", "yahoo.com", "yahoo.com.tw", "hotmail.com", "outlook.com", "msn.com", "icloud.com")
 
 
@@ -434,9 +451,66 @@ def _strip_label(s: str) -> str:
     return re.sub(r"^\s*[\w一-鿿]{1,6}\s*[:：]\s*", "", s)
 
 
-def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[dict]:
-    """OCR 行（`{"text","box","conf","height"}`）→ 欄位清單（一位聯絡人）。行的 `index` 會自動補上。"""
+def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = (), lang: str = "") -> list[dict]:
+    """OCR 行（`{"text","box","conf","height"}`）→ 欄位清單（一位聯絡人）。行的 `index` 會自動補上。
+
+    `lang`：辨識語言（`zh` / `ja`）。選日文、或卡面上有假名時，先用日文規則（`extract_ja`）處理公司、部門、職稱、姓名。"""
+    from . import extract_ja as JA
     lines = [dict(ln, index=i) for i, ln in enumerate(lines)]
+    ja = JA.is_japanese_card(lines, lang)
+    token = _JP_CARD.set(ja)
+    try:
+        return _extract(lines, qr_texts, ja)
+    finally:
+        _JP_CARD.reset(token)
+
+
+#: 日文名片：電話標籤後面的號碼片段（至少 5 個真的數字）裡，6 常被認成 G / b
+_JP_PHONE_G = re.compile(r"((?:TEL|FAX|PHONE|Tel|Fax|Phone|電話|携帯|Mobile)\s*[:：.]?\s*)([0-9OoDlI|Gb()（）\-\s]{6,}[0-9OoDlI|Gb])")
+
+
+def _jp_phone_g(m: re.Match) -> str:
+    num = m.group(2)
+    if "G" not in num and "b" not in num or sum(c.isdigit() for c in num) < 5:
+        return m.group(0)
+    return m.group(1) + num.replace("G", "6").replace("b", "6")
+
+
+def _extract(lines: list[dict], qr_texts: Iterable[str], ja: bool) -> list[dict]:
+    from . import extract_ja as JA
+    jp_repaired: dict[int, tuple[bool, bool]] = {}
+    if ja:
+        # 網址被拆成兩行（「https:/」＋「llwwwexample.co jp」）：接成一行
+        for a, b in zip(lines, lines[1:]):
+            ta, tb = (a.get("text") or "").strip(), (b.get("text") or "").strip()
+            if re.fullmatch(r"h[it]{1,3}ps?\s*[:;][\s/|Il(]*", ta, re.I) and re.match(r"[\s/|Il(]*[wvy]{3}", tb, re.I):
+                a["text"], b["text"] = ta + tb, ""
+        # 「misaki ito@example jp」「@examplecoyjp」「https: |Iwww example or:jp」：點與「//」補回來（之後標需確認）
+        for ln in lines:
+            t0 = ln.get("text") or ""
+            t0 = re.sub(r"(?<=[0-9OIl])】|】(?=[-0-9])", "1", t0)          # 號碼裡的 1 認成「】」
+            t0 = _JP_PHONE_G.sub(_jp_phone_g, t0)                           # 「FAXOG-5032-5017」的 6 認成 G
+            t0 = JA.fix_lookalikes(t0)                                      # 「ナ三キ」「~般社団法人」「梅田て-7-7」
+            ln["text"] = t0
+            if not any(JA.KANA.search(ch) or "\u4e00" <= ch <= "\u9fff" for ch in t0):
+                t0 = " ".join(JA.split_camel(w) for w in t0.split(" "))     # 「NaokiKobayashi」→「Naoki Kobayashi」
+                ln["text"] = t0
+            t1, mail = JA.repair_email_line(t0)
+            t2, url = JA.repair_url_line(t1)
+            if mail or url:
+                ln["text"] = t2
+                jp_repaired[ln["index"]] = (mail, url)
+        # 郵遞區號自己一行（「〒100-0005」，OCR 常把〒認成 7 / 1 / テ）、地址在下一行：接成同一行
+        for a, b in zip(lines, lines[1:]):
+            ta, tb = (a.get("text") or "").strip(), (b.get("text") or "").strip()
+            zm, zb = JA.ZIP_LINE.fullmatch(ta), JA.ZIP_LINE.fullmatch(tb)
+            if zm and JA.JP_ADDR.search(tb):
+                a["text"] = "〒" + zm.group(1).translate(JA.ZIP_DIGIT_FIX) + "-" + zm.group(2).translate(JA.ZIP_DIGIT_FIX) + " " + tb
+                b["text"] = ""
+            elif zb and JA.JP_ADDR.search(ta) and not JA.JP_ZIP.search(ta):
+                # 郵遞區號那一行排在地址後面（OCR 依上下位置排行，兩行很近時順序會對調）
+                a["text"] = "〒" + zb.group(1).translate(JA.ZIP_DIGIT_FIX) + "-" + zb.group(2).translate(JA.ZIP_DIGIT_FIX) + " " + ta
+                b["text"] = ""
     # Email 被拆成兩行（「…kevin.sample」下一行「@example.de」）：接回同一行
     for a, b in zip(lines, lines[1:]):
         ta, tb = (a.get("text") or "").rstrip(), (b.get("text") or "").strip()
@@ -463,6 +537,7 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
         t = (ln.get("text") or "").strip()
         if not t:
             continue
+        jp_mail_fixed = ln["index"] in jp_repaired and jp_repaired[ln["index"]][0]
         rest = t
         # Email（可能多個；OCR 常在 @ 兩邊多空白）
         for m in EMAIL_RE.finditer(t):
@@ -471,12 +546,16 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
             lab = re.match(r"^(?:e-?mai[l1I]|email)[:：]?(?=[\w.+\-]+@)", v, re.I)
             if lab and not re.match(r"(?:e-?mai[l1I]|email)[:：]?@", v, re.I):
                 v = v[lab.end():]
-            add("email", v, ln, norm=v.lower(), part=m.group(0))
+            if jp_mail_fixed:
+                add("email", v, ln, norm=v.lower(), part=m.group(0), status="check",
+                    reason="Email 的網域少了點，已依常見的日本網域（.co.jp 等）補上，請對照原圖")
+            else:
+                add("email", v, ln, norm=v.lower(), part=m.group(0))
             rest = rest.replace(m.group(0), " ")
             used.add(ln["index"])
         # 「E-mail:」標籤後面沒有 @（OCR 把 @ 認成別的字）：留著但標需確認
         if "email" not in {f["key"] for f in fields if f["source"].get("line") == ln["index"]}:
-            em = re.search(r"(?:(?<![A-Za-z])(?:E\s*-?\s*)?mai[l1I]{1,2}|電子郵件|電郵|郵件|信箱)\s*[:：/]?\s*(@?[^\s@]+\.(?:com|net|org|gov|edu|tw|co|io|de|jp|uk)(?:\.[a-z]{2})?)\b", rest, re.I)
+            em = re.search(r"(?:(?<![A-Za-z])(?:E\s*-?\s*)?mai[l1I]{1,2}|電子郵件|電郵|郵件|信箱|メール)\s*[:：/]?\s*(@?[^\s@]+\.(?:com|net|org|gov|edu|tw|co|io|de|jp|uk)(?:\.[a-z]{2})?)\b", rest, re.I)
             if em:
                 fixed = fix_at(em.group(1))
                 if fixed:
@@ -536,7 +615,11 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
                 continue
             st, rs = ("auto", "") if ph["complete"] else ("check", "號碼位數不對（可能被遮住或辨識漏字），請對照原圖")
             raw = rest[ph["span"][0]:ph["span"][1]].strip()
-            add(ph["kind"], ph["raw"], ln, norm=ph["norm"], ext=ph["ext"], label=ph["label"], raw=raw,
+            # 號碼裡被認成英文字母的數字（「OI1-808-6310」）顯示成數字；原本的讀法留在 raw
+            # 只在日文名片、而且是緊貼著數字的字母才換（台灣名片號碼前面常有「|」「l」這種分隔符號殘影，不可以變成 1）
+            value = re.sub(r"[OoDlI|]+(?=\d)|(?<=[\d-])[OoDlI|]+", lambda m: m.group(0).translate(_DIGIT_FIX),
+                           ph["raw"]) if ja else ph["raw"]
+            add(ph["kind"], value, ln, norm=ph["norm"], ext=ph["ext"], label=ph["label"], raw=raw,
                 status=st, reason=rs, part=raw)
             used.add(ln["index"])
         # 網址（不是 Email 的一部分）。Email 標籤那一行沒有 www / http 的「xxx.com」是認錯的 Email，不當網址
@@ -627,7 +710,7 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
         # 前後的分隔符號（名片常用 ▪ • · |，OCR 也常認成 ! 或 I）一起去掉，郵遞區號才認得到
         body = re.split(r"\s*(?:電話|TEL|Tel|傳真|FAX|Fax|Phone|統一編號|統編)(?![A-Za-z])", body)[0]
         body = body.strip(" ,，;；:：!！|｜▪■•·・●◆-–—").strip()
-        tw = TW_ADDR.search(body)
+        tw = TW_ADDR.search(body) or (JA.JP_ADDR.search(body) if ja else None)
         en_hits = len(EN_ADDR.findall(body))
         # 已經抓過電話 / Email 的行、或含電話號碼的行：只有明確的中文地址或帶地址標籤才算
         # （實測：電話與英文地址並排的一行被算成第二筆地址）
@@ -674,8 +757,8 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
         if not (tw or is_label or en_hits >= 2):
             continue
         addr = " ".join(parts)
-        zm = ZIP_RE.match(addr)
-        zipc = ""
+        zipc, addr = JA.zip_of(addr) if ja else ("", addr)
+        zm = None if zipc else ZIP_RE.match(addr)
         if zm:
             zipc = zm.group(1)
             addr = addr[zm.end():].strip()
@@ -697,6 +780,21 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
     name_cands: list[tuple[dict, str]] = list(left_names)
     title_lines: list[dict] = []
     titles_by_len = sorted(TITLE_WORDS, key=len, reverse=True)
+    if ja:
+        # 日文名片：公司（株式会社…）、部門、職稱、姓名先用日文規則；剩下的再走下面的通用規則
+        def en_kind(t):
+            if COMPANY_EN.search(t):
+                return "company_en"
+            if TITLE_EN.search(t):
+                return "title_en"
+            if DEPT_EN.search(t):
+                return "department_en"
+            words = t.split()
+            if 2 <= len(words) <= 4 and all(w[0].isupper() for w in words):
+                return "name_en"
+            return None
+        JA.handle_lines(rest_lines, used, add, name_cands, title_lines, en_kind=en_kind)
+        rest_lines = [ln for ln in rest_lines if ln["index"] not in used]
     for ln in rest_lines:
         t = re.sub(r"\s+", " ", ln["text"]).strip()
         compact = t.replace(" ", "")
@@ -722,7 +820,8 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
                 add("title_en", en, ln, part=en)
                 title_lines.append(ln)
                 continue
-            if 2 <= len(zh) <= 4 and looks_like_name(zh) and not TITLE_EN.search(en) and not DEPT_EN.search(en) \
+            if ((2 <= len(zh) <= 4 and looks_like_name(zh)) or (ja and JA.looks_like_ja_name(zh))) \
+                    and not TITLE_EN.search(en) and not DEPT_EN.search(en) \
                     and not COMPANY_EN.search(en) and len(en.split()) <= 4 and all(w[0].isupper() for w in en.split()):
                 name_cands.append((ln, zh))
                 name_cands.append((dict(ln), en))
@@ -834,7 +933,9 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
             name_cands.append((ln, t))
 
     # 地名、店名、單位名不是姓名（「範例東區」「西門店」「基隆站」）；出現在公司名、部門、網址、Email 裡的字是品牌，不是姓名
-    brand_text = " ".join(f["value"] for f in fields if f["key"] in ("company", "company_en", "department", "url", "email")).lower()
+    # Email 只看網域：帳號常常就是本人的英文名字（OCR 把點弄丟時「mayumiyamada@…」會讓英文姓名被當成品牌字刪掉）
+    brand_text = " ".join(f["value"] if f["key"] != "email" else f["value"].split("@")[-1]
+                          for f in fields if f["key"] in ("company", "company_en", "department", "url", "email")).lower()
     name_cands = [(ln, v) for ln, v in name_cands
                   if v not in TITLE_WORDS and v not in ROLE_HEADS
                   and not re.search(r"(區|市|縣|鄉|鎮|村|里|店|站|所|處|局|部|課|組|館|廠|路|街|號|樓|門市|分行|中心)$", v)
@@ -854,15 +955,17 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
             if dy <= 2.5 * max(ln["box"][3], tl["box"][3]):
                 near = max(near, 0.6)
         # 中文候選第一個字不是常見姓氏：大幅降分（多半是口號、品牌、部門名）
-        surname = 1.0 if _cjk_ratio(_v) < 0.5 or looks_like_name(_v) else 0.3
+        surname = 1.0 if _cjk_ratio(_v) < 0.5 or looks_like_name(_v) or (ja and JA.surname_of(_v)) else 0.3
         return h * (1.0 + near) * surname
 
     # 姓名：分數最高的候選（不是最大字就一定是姓名 —— 公司名、Logo、品牌字已經先排除）
-    cn = [(ln, v) for ln, v in name_cands if _cjk_ratio(v) >= 0.5]
-    en = [(ln, v) for ln, v in name_cands if _cjk_ratio(v) < 0.5]
+    # 日文姓名的名可以是假名（「山田 ゆかり」）：有假名的也算中日文姓名，不是外文姓名
+    native = lambda v: _cjk_ratio(v) >= 0.5 or (ja and JA.KANA.search(v) is not None)
+    cn = [(ln, v) for ln, v in name_cands if native(v)]
+    en = [(ln, v) for ln, v in name_cands if not native(v)]
     if cn:
         ln, v = max(cn, key=score)
-        if looks_like_name(v):
+        if looks_like_name(v) or (ja and JA.looks_like_ja_name(v) and JA.surname_of(v)):
             add("name", v, ln)
         else:
             add("name", v, ln, status="check", reason="第一個字不是常見的姓氏，請確認這是不是姓名")
@@ -871,6 +974,10 @@ def extract_fields(lines: Iterable[dict], qr_texts: Iterable[str] = ()) -> list[
         add("name_en", v, ln)
 
     _reconcile_urls(fields)
+    for f in fields:
+        r = jp_repaired.get(f["source"].get("line"))
+        if r and f["key"] == "url" and r[1] and f["status"] == "auto":
+            f["status"], f["reason"] = "check", "網址的「//」或點看起來沒認出來，已補上，請對照原圖"
     _several_companies(fields, lines)
     fields.extend(qr_fields(qr_texts))
     _flag_conflicts(fields)

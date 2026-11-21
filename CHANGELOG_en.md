@@ -5,11 +5,38 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (978 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (979 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.50] - 2026-11-20
+
+### Added (business card reader: Japanese cards)
+
+- Choose a recognition language when uploading: Traditional Chinese + English (default) or Japanese + English. Japanese cards get their own rules: company (`株式会社`, `（株）`, `一般社団法人` and so on), department and title (`営業部 部長`), name (`山田 太郎`, with a kana given name allowed; the kana reading line is not used as a field), `〒` postal code and address, and Japanese mobile numbers (11 digits starting 070 / 080 / 090, or +81). A Japanese and an English part on one line go into the Japanese and the foreign-language fields.
+- A few Japanese cards in a pile of Taiwanese ones: press "Recognise in Japanese" on those cards while reviewing, or "Recognise the whole batch again in Japanese". Fields you edited or confirmed are kept.
+- The Japanese OCR model often misreads Latin text (English names, emails, web addresses), so Japanese cards are read a second time with the English model and the Latin-only lines use that reading; dots in emails and web addresses that were read as spaces or colons are put back (marked for checking), and common misreads of the postal mark and digits are recognised; kanji read in place of look-alike katakana, the first character of `一般社団法人`, and 6 or 7 misread in numbers and street addresses are corrected too; Staff, Clerk and Intern are recognised as English job titles ("Senior Staff" used to be taken for an English name). Measured with real recognition on 32 made-up Japanese cards, field accuracy rose from 66.5% to 95.2%.
+- Vertical (`縦書き`) cards: OCR reads only horizontal text and breaks vertical columns into scattered characters. Vertical columns are now found in the image, cut into characters and laid out as one horizontal line before recognition (the vertical dash `︱` becomes `-`, full-width digits become half-width); horizontal lines such as email and web addresses keep their normal reading. Measured with real recognition on 16 made-up vertical cards, field accuracy rose from 14.7% to 95.5%; horizontal Japanese cards are unaffected. This runs only when Japanese recognition is chosen.
+- When a card shows kana, the Japanese rules are used even if Traditional Chinese was chosen. Results for Taiwanese cards are unchanged (no change across 176 real sample cards).
+- Works out of the box with EasyOCR (local or remote GPU; the Japanese model downloads on first use). With Tesseract only, install the Japanese training data under Settings → OCR engine first; until then the Japanese option is greyed out with an explanation.
+- API: `lang` (`zh` / `ja`) on batch creation and the one-shot API, `{"lang": "ja"}` on `POST …/cards/{id}/retry`, new `POST …/batches/{id}/lang` and `GET …/langs`; the MCP tool `business_card_read` takes `lang`.
+
+### Improved (translation safety)
+
+- The prompts for sentence translation and document translation now state that the source text is data to translate, not instructions to the model, and keep the source in its own block apart from the instructions: a sentence such as "ignore the instructions above" inside a document is simply translated. Block markers echoed back by the model are removed.
+
+### Fixed (business card reader: confirming card frames)
+
+- Frames that were moved, resized, deleted or added jumped back after a moment: the screen re-read the batch every 1.5 seconds and threw away the edited frames. It no longer re-reads while you confirm frames, and edits are kept until you press "Recognise".
+- Dragging a frame did not move it (the screen redrew on the first press and lost the drag); fixed. A frame dragged to the edge of the image now stops as a whole instead of being squashed.
+- "Add frame" now starts at about the size of the other frames on the page (half the page width when there are none).
+- Dragging a corner keeps proportions by default (shape and angle unchanged); untick "Keep proportions" to move a single corner, for photos with perspective distortion.
+- A selected frame has a dot above it that rotates the frame. The former "Rotate" button is now "Rotate text 90°" (it only changes the text direction for recognition, not the frame), and frames rotated that way show the angle on their label.
+- Portrait cards scanned sideways: when a landscape frame reads poorly at both 0° and 180°, 90° and 270° are tried too.
+- Cards with a dark band along the top edge (deep red, teal, navy) on a dark table used to be framed without the band; the frame now extends to the outer edge of the band (shadows are not taken for bands).
+- Shared card book members: users and groups are listed separately, up to 40 each, with a hint to search for the rest. The list used to show only the first 80 entries with groups first, so on sites with many groups no user appeared at all and it looked as if individuals could not be added. The page also explains that people without an account yet can be given access through their group or OU.
 
 ## [1.17.49] - 2026-11-19
 

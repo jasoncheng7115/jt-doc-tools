@@ -27,6 +27,12 @@
       <span class="bc-mode-d muted">{{ tr('把幾張名片平放一起拍或掃描，自動找出每一張；先確認範圍再一次辨識。') }}</span>
       <svg class="bc-ill" viewBox="0 0 120 72" aria-hidden="true" focusable="false"><rect class="bc-ill-photo" x="4" y="4" width="112" height="64" rx="4"/><g transform="rotate(-6 25.0 20.0)"><rect class="bc-ill-det" x="9" y="9" width="32" height="22" rx="2"/><rect class="bc-ill-card" x="12" y="12" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="16" y="16" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="16" y="22" width="18" height="2" rx="1"/></g><g transform="rotate(3 60.0 19.0)"><rect class="bc-ill-det" x="44" y="8" width="32" height="22" rx="2"/><rect class="bc-ill-card" x="47" y="11" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="51" y="15" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="51" y="21" width="18" height="2" rx="1"/></g><g transform="rotate(-2 95.0 21.0)"><rect class="bc-ill-det" x="79" y="10" width="32" height="22" rx="2"/><rect class="bc-ill-card" x="82" y="13" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="86" y="17" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="86" y="23" width="18" height="2" rx="1"/></g><g transform="rotate(4 26.0 51.0)"><rect class="bc-ill-det" x="10" y="40" width="32" height="22" rx="2"/><rect class="bc-ill-card" x="13" y="43" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="17" y="47" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="17" y="53" width="18" height="2" rx="1"/></g><g transform="rotate(-4 61.0 52.0)"><rect class="bc-ill-det" x="45" y="41" width="32" height="22" rx="2"/><rect class="bc-ill-card" x="48" y="44" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="52" y="48" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="52" y="54" width="18" height="2" rx="1"/></g><g transform="rotate(5 95.0 50.0)"><rect class="bc-ill-det" x="79" y="39" width="32" height="22" rx="2"/><rect class="bc-ill-card" x="82" y="42" width="26" height="16" rx="2"/><rect class="bc-ill-ln" x="86" y="46" width="13" height="3" rx="1"/><rect class="bc-ill-ln2" x="86" y="52" width="18" height="2" rx="1"/></g></svg></label>
   </div>
+  <div class="bc-ocrlang" role="radiogroup" aria-label="{{ tr('辨識語言') }}">
+    <span class="bc-ocrlang-h">{{ icon('globe', size=14) }} {{ tr('辨識語言') }}</span>
+    <label><input type="radio" name="bcOcrLang" value="zh" checked> {{ tr('繁中＋英文') }}</label>
+    <label><input type="radio" name="bcOcrLang" value="ja"> {{ tr('日文＋英文') }}</label>
+    <span class="muted bc-small" id="bcOcrLangHint">{{ tr('一疊名片裡夾著幾張日文的：照常用繁中辨識，校對時那幾張按「改用日文辨識」。') }}</span>
+  </div>
 
   <details class="bc-notes-box" id="bcNotesBox">
     <summary>{{ icon('edit', size=14) }} {{ tr('備註（選填，套用到這一批每一張）') }}</summary>
@@ -81,11 +87,12 @@
     <aside class="bc-side">
       <div class="bc-side-h">{{ tr('目前選取') }}：<b id="bcSelName">—</b></div>
       <button type="button" class="btn" id="bcAddBox">{{ icon('plus', size=15) }}<span>{{ tr('新增範圍') }}</span></button>
-      <button type="button" class="btn" id="bcRotate">{{ icon('rotate-cw', size=15) }}<span>{{ tr('旋轉') }}</span></button>
+      <button type="button" class="btn" id="bcRotate" title="{{ tr('卡片上的字是側的或倒的：辨識前把這張轉 90°（框不會動）') }}">{{ icon('rotate-cw', size=15) }}<span>{{ tr('文字方向轉 90°') }}</span></button>
       <button type="button" class="btn btn-danger-soft" id="bcRemoveBox">{{ icon('trash', size=15) }}<span>{{ tr('移除範圍') }}</span></button>
       <button type="button" class="btn" id="bcResetBoxes">{{ icon('refresh', size=15) }}<span>{{ tr('復原框位') }}</span></button>
       <label class="bc-side-memo">{{ tr('這張的備註') }}<input class="field" id="bcCardMemo" maxlength="500"></label>
-      <p class="muted bc-small">{{ tr('拖曳四個角可以修正範圍；點空白處取消選取。框位改過的名片才會重新辨識。') }}</p>
+      <label class="bc-side-chk"><input type="checkbox" id="bcKeepRatio" checked> {{ tr('等比例縮放') }}</label>
+      <p class="muted bc-small">{{ tr('拖曳框可以移動；拖曳四個角可以縮放（取消「等比例縮放」可以單獨拉一個角，照片有透視變形時用）；拖曳框上方的圓點可以旋轉。點空白處取消選取。框位改過的名片才會重新辨識。') }}</p>
     </aside>
   </div>
   <p class="muted bc-small bc-modeback">{{ tr('其實每張圖片只有一張名片？') }}
@@ -122,6 +129,8 @@
     <p class="muted bc-small">{{ tr('套用到這一批每一位：標籤會加上去（原本的留著），活動、來源、備註只填進還沒填的人。') }}</p>
     <button type="button" class="btn btn-small" id="bcApplyGo">{{ icon('check', size=13) }}<span>{{ tr('套用到這一批每一位') }}</span></button>
   </details>
+  <p class="muted bc-small bc-batchlang">{{ tr('這一批的辨識語言：') }}<b id="bcBatchLangName"></b>
+    <button type="button" class="btn btn-small" id="bcBatchRelang">{{ icon('globe', size=13) }}<span id="bcBatchRelangText"></span></button></p>
   <div class="bc-warn bc-multihint" id="bcMultiHint" hidden>
     {{ icon('warn', size=16) }}<span id="bcMultiHintText"></span>
     <button type="button" class="btn btn-small" id="bcMultiHintBtn">{{ icon('crop', size=13) }}<span>{{ tr('改成一張圖片多張名片') }}</span></button>
@@ -143,6 +152,7 @@
       <p class="muted bc-small" id="bcCardInfo"></p>
       <div class="bc-cardacts">
         <button type="button" class="btn btn-small" id="bcRetry">{{ icon('refresh', size=13) }}<span>{{ tr('重新辨識') }}</span></button>
+        <button type="button" class="btn btn-small" id="bcRetryLang">{{ icon('globe', size=13) }}<span id="bcRetryLangText"></span></button>
         <button type="button" class="btn btn-small" id="bcAddPerson">{{ icon('user', size=13) }}<span>{{ tr('同一張再加一位') }}</span></button>
         <button type="button" class="btn btn-small" id="bcPageMulti">{{ icon('crop', size=13) }}<span>{{ tr('這張圖片有好幾張名片') }}</span></button>
         <button type="button" class="btn btn-small" id="bcAiSuggest" hidden>{{ icon('sparkles', size=13) }}<span>{{ tr('請 AI 建議欄位') }}</span></button>
@@ -616,6 +626,11 @@
   .bc-mode input { grid-row:1 / span 2; align-self:center; }
   .bc-mode:has(input:checked) { border-color:var(--primary, #2563eb); background:var(--primary-soft, #eff6ff); }
   .bc-mode-t { font-weight:600; }
+  .bc-ocrlang { display:flex; flex-wrap:wrap; align-items:center; gap:6px 16px; margin:10px 0 2px; font-size:14px; }
+  .bc-ocrlang-h { display:inline-flex; align-items:center; gap:4px; font-weight:600; }
+  .bc-ocrlang label { display:inline-flex; align-items:center; gap:5px; }
+  .bc-ocrlang .bc-small { flex-basis:100%; }
+  .bc-batchlang { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:4px 0 8px; }
   .bc-mode-d { font-size:13px; }
   /* 兩種收件模式的示意圖：左邊三張照片各一張名片；右邊一張照片裡六張，虛線是自動找到的範圍 */
   .bc-mode { grid-template-columns:auto 1fr auto; }
@@ -651,6 +666,9 @@
   .bc-svg .q { fill:rgba(37, 99, 235, .10); stroke:#2563eb; stroke-width:3; vector-effect:non-scaling-stroke; cursor:pointer; }
   .bc-svg .q.sel { fill:rgba(37, 99, 235, .18); stroke:#f59e0b; }
   .bc-svg .h { fill:#fff; stroke:#2563eb; stroke-width:2; vector-effect:non-scaling-stroke; cursor:grab; }
+  .bc-svg .rh { fill:#f59e0b; stroke:#fff; stroke-width:2; vector-effect:non-scaling-stroke; cursor:grab; }
+  .bc-svg .rl { stroke:#f59e0b; stroke-width:2; vector-effect:non-scaling-stroke; pointer-events:none; }
+  .bc-side-chk { display:flex; align-items:center; gap:6px; font-size:13px; }
   .bc-svg .tag rect { fill:#2563eb; }
   .bc-svg .tag text { fill:#fff; font-weight:700; }
   .bc-side { display:flex; flex-direction:column; gap:8px; }
@@ -789,6 +807,25 @@
 
   // ------------------------------------------------------------------ 1. 匯入
   const mode = () => document.querySelector('input[name="bcMode"]:checked').value;
+  // 辨識語言：記住上次選的；這台辨識不了的語言（只有 Tesseract 又沒裝訓練檔）反灰並說明
+  const LANG_NAME = { zh: tr('繁中＋英文'), ja: tr('日文＋英文') };
+  const ocrLang = () => (document.querySelector('input[name="bcOcrLang"]:checked') || {}).value || 'zh';
+  try { const keep = localStorage.getItem('jtdt.bc.lang'); const r = keep && document.querySelector('input[name="bcOcrLang"][value="' + keep + '"]'); if (r) r.checked = true; } catch (_e) {}
+  document.querySelectorAll('input[name="bcOcrLang"]').forEach(r => r.addEventListener('change', () => { try { localStorage.setItem('jtdt.bc.lang', ocrLang()); } catch (_e) {} }));
+  S.langs = {};
+  (async () => {
+    try {
+      S.langs = await (await api('GET', '/langs')).json();
+      Object.entries(S.langs).forEach(([k, st]) => {
+        const r = document.querySelector('input[name="bcOcrLang"][value="' + k + '"]');
+        if (r && !st.ok) {
+          r.disabled = true; r.closest('label').title = tr(st.hint);
+          if (r.checked) document.querySelector('input[name="bcOcrLang"][value="zh"]').checked = true;
+          $('bcOcrLangHint').textContent = tr(st.hint);
+        }
+      });
+    } catch (_e) {}
+  })();
   $('bcPick').addEventListener('click', () => $('bcFiles').click());
   // 「拍照」只在手機、平板顯示：電腦沒有相機選項，它會跟「選擇檔案」一模一樣
   $('bcCamera').hidden = !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
@@ -810,6 +847,7 @@
     const fd = new FormData();
     files.forEach(f => fd.append('files', f, f.name));
     fd.append('mode', mode());
+    fd.append('lang', ocrLang());
     fd.append('event', $('bcEvent').value); fd.append('source', $('bcSource').value);
     fd.append('tags', $('bcTags').value); fd.append('memo', $('bcMemo').value);
     busy(tr('上傳 {0} 個檔案，找出名片中…').replace('{0}', files.length));
@@ -868,10 +906,17 @@
     const started = !multiFrames;
     $('bcReview').hidden = !started;
     $('bcExport').hidden = !started;
-    if (multiFrames) { S.page = Math.min(S.page, batch.pages.length - 1); S.edits = {}; renderPage(); }
+    // 改到一半的框位只在換了一批時才清掉（客戶回報：框移動 / 縮放 / 新增後一下子又跳回原位 ——
+    // 確認範圍時卡片還沒辨識、算「待辨識」，畫面每 1.5 秒重讀一次，原本每次都把改過的框清掉）
+    if (multiFrames) {
+      S.page = Math.min(S.page, batch.pages.length - 1);
+      if (S.editsFor !== batch.id) { S.edits = {}; S.editsFor = batch.id; }
+      renderPage();
+    }
     if (started) { renderReview(); refreshExport(); }
     clearTimeout(S.poll);
-    const busyNow = batch.status === 'recognizing' || batch.counts.cards_pending;
+    // 確認範圍的卡片還沒按「辨識」，不是在處理中：不輪詢
+    const busyNow = batch.status === 'recognizing' || (batch.status !== 'frames' && batch.counts.cards_pending);
     if (busyNow) {
       // 辨識中輪詢不帶 OCR 文字行（300 張的完整內容約 1 MB）；做完再讀一次完整的
       S.poll = setTimeout(async () => { try { S.wasLite = true; show(await (await api('GET', '/batches/' + batch.id + '?lite=1')).json()); } catch (_e) {} }, 1500);
@@ -921,12 +966,25 @@
       const g = document.createElementNS(NS, 'g'); g.setAttribute('class', 'tag');
       const rect = document.createElementNS(NS, 'rect');
       const x0 = b.quad[0][0], y0 = b.quad[0][1];
-      rect.setAttribute('x', x0); rect.setAttribute('y', y0); rect.setAttribute('width', r * 2.4); rect.setAttribute('height', r * 2.4); rect.setAttribute('rx', r * 0.4);
+      const label = String(i + 1) + (b.rotate ? ' ↻' + b.rotate + '°' : '');   // 文字方向轉過的看得出來
+      const tw = r * (b.rotate ? 6.4 : 2.4);
+      rect.setAttribute('x', x0); rect.setAttribute('y', y0); rect.setAttribute('width', tw); rect.setAttribute('height', r * 2.4); rect.setAttribute('rx', r * 0.4);
       const t = document.createElementNS(NS, 'text');
-      t.setAttribute('x', x0 + r * 1.2); t.setAttribute('y', y0 + r * 1.75); t.setAttribute('text-anchor', 'middle'); t.setAttribute('font-size', r * 1.6);
-      t.textContent = String(i + 1);
+      t.setAttribute('x', x0 + tw / 2); t.setAttribute('y', y0 + r * 1.75); t.setAttribute('text-anchor', 'middle'); t.setAttribute('font-size', r * 1.6);
+      t.textContent = label;
       g.append(rect, t); svg.append(g);
       if (S.sel === i) {
+        // 旋轉圓點：第一條邊（上緣）中點往框外推一段
+        const [cx, cy] = centroid(b.quad);
+        const mx = (b.quad[0][0] + b.quad[1][0]) / 2, my = (b.quad[0][1] + b.quad[1][1]) / 2;
+        const dl = Math.hypot(mx - cx, my - cy) || 1;
+        const hx = mx + (mx - cx) / dl * r * 3.5, hy = my + (my - cy) / dl * r * 3.5;
+        const ln = document.createElementNS(NS, 'line');
+        ln.setAttribute('x1', mx); ln.setAttribute('y1', my); ln.setAttribute('x2', hx); ln.setAttribute('y2', hy); ln.setAttribute('class', 'rl');
+        const rc = document.createElementNS(NS, 'circle');
+        rc.setAttribute('cx', hx); rc.setAttribute('cy', hy); rc.setAttribute('r', r); rc.setAttribute('class', 'rh');
+        rc.addEventListener('pointerdown', e => { e.stopPropagation(); startRotate(e, i); });
+        svg.append(ln, rc);
         b.quad.forEach((q, k) => {
           const c = document.createElementNS(NS, 'circle');
           c.setAttribute('cx', q[0]); c.setAttribute('cy', q[1]); c.setAttribute('r', r); c.setAttribute('class', 'h');
@@ -945,30 +1003,71 @@
     return pt.matrixTransform(svg.getScreenCTM().inverse());
   }
   function clamp(v, max) { return Math.max(0, Math.min(max, v)); }
+  function centroid(quad) { return [quad.reduce((a, q) => a + q[0], 0) / 4, quad.reduce((a, q) => a + q[1], 0) / 4]; }
+  const inPage = (quad, p) => quad.every(([x, y]) => x >= 0 && y >= 0 && x <= p.width && y <= p.height);
+  // 拖曳的移動與放開掛在 window：按下框時會先重畫（顯示選取），被按的那個元素已經換掉了，
+  // 掛在元素或用 pointer capture 的話之後的移動收不到（客戶回報：框不能移動）
+  function trackDrag(e, onMove) {
+    e.preventDefault();
+    const move = ev => { onMove(svgPoint(ev), ev); drawSvg(); };
+    const up = () => { ['pointermove', 'pointerup', 'pointercancel'].forEach((t, n) => window.removeEventListener(t, n ? up : move)); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  }
   function startDrag(e, i, k) {
-    const svg = $('bcSvg'); const p = page();
-    svg.setPointerCapture(e.pointerId);
-    const move = ev => { const q = svgPoint(ev); boxes()[i].quad[k] = [clamp(q.x, p.width), clamp(q.y, p.height)]; drawSvg(); };
-    const up = () => { svg.removeEventListener('pointermove', move); svg.removeEventListener('pointerup', up); };
-    svg.addEventListener('pointermove', move); svg.addEventListener('pointerup', up);
+    const p = page(); const orig = boxes()[i].quad.map(q => q.slice());
+    const keep = $('bcKeepRatio').checked;
+    trackDrag(e, (q) => {
+      if (!keep) { boxes()[i].quad[k] = [clamp(q.x, p.width), clamp(q.y, p.height)]; return; }
+      // 等比例：以對角為基準縮放整個框（形狀、角度不變）
+      const a = orig[(k + 2) % 4]; const v0 = [orig[k][0] - a[0], orig[k][1] - a[1]];
+      const len2 = v0[0] * v0[0] + v0[1] * v0[1] || 1;
+      let sc = ((q.x - a[0]) * v0[0] + (q.y - a[1]) * v0[1]) / len2;
+      sc = Math.max(sc, 40 / Math.sqrt(len2));                    // 不可以縮到看不見或翻過去
+      for (const pt of orig) for (const ax of [0, 1]) {            // 放大到碰到圖片邊緣就停
+        const d = pt[ax] - a[ax], lim = ax ? p.height : p.width;
+        if (d > 0) sc = Math.min(sc, (lim - a[ax]) / d); else if (d < 0) sc = Math.min(sc, a[ax] / -d);
+      }
+      boxes()[i].quad = orig.map(pt => [a[0] + (pt[0] - a[0]) * sc, a[1] + (pt[1] - a[1]) * sc]);
+    });
   }
   function startMove(e, i) {
-    const svg = $('bcSvg'); const p = page();
-    svg.setPointerCapture(e.pointerId);
-    let last = svgPoint(e);
-    const move = ev => {
-      const q = svgPoint(ev); const dx = q.x - last.x, dy = q.y - last.y; last = q;
-      boxes()[i].quad = boxes()[i].quad.map(([x, y]) => [clamp(x + dx, p.width), clamp(y + dy, p.height)]);
-      drawSvg();
-    };
-    const up = () => { svg.removeEventListener('pointermove', move); svg.removeEventListener('pointerup', up); };
-    svg.addEventListener('pointermove', move); svg.addEventListener('pointerup', up);
+    const p = page(); let last = svgPoint(e);
+    trackDrag(e, (q) => {
+      const quad = boxes()[i].quad;
+      const xs = quad.map(v => v[0]), ys = quad.map(v => v[1]);
+      // 整個框一起移動、碰到邊緣就停（原本逐點夾住，靠邊時框會被壓扁）
+      const dx = Math.max(-Math.min(...xs), Math.min(p.width - Math.max(...xs), q.x - last.x));
+      const dy = Math.max(-Math.min(...ys), Math.min(p.height - Math.max(...ys), q.y - last.y));
+      last = q;
+      boxes()[i].quad = quad.map(([x, y]) => [x + dx, y + dy]);
+    });
+  }
+  function startRotate(e, i) {
+    const p = page(); const orig = boxes()[i].quad.map(q => q.slice());
+    const [cx, cy] = centroid(orig); const s0 = svgPoint(e);
+    const a0 = Math.atan2(s0.y - cy, s0.x - cx);
+    trackDrag(e, (q) => {
+      let ang = Math.atan2(q.y - cy, q.x - cx) - a0;
+      const deg = ang * 180 / Math.PI;
+      const snap = Math.round(deg / 90) * 90;                      // 接近水平 / 垂直時吸附
+      if (Math.abs(deg - snap) < 2) ang = snap * Math.PI / 180;
+      const cs = Math.cos(ang), sn = Math.sin(ang);
+      const quad = orig.map(([x, y]) => [cx + (x - cx) * cs - (y - cy) * sn, cy + (x - cx) * sn + (y - cy) * cs]);
+      if (inPage(quad, p)) boxes()[i].quad = quad;                 // 轉出圖片外就停在上一個位置
+    });
   }
   function select(i) { S.sel = i; drawSvg(); }
   $('bcSvg').addEventListener('pointerdown', () => select(null));
   $('bcAddBox').addEventListener('click', () => {
     const p = page();
-    const w = p.width * 0.3, h = w * 0.6, x = (p.width - w) / 2, y = (p.height - h) / 2;
+    // 預設大小：這一頁已經有框 → 用它們的中位數（名片通常一樣大）；沒有 → 頁寬一半、名片比例
+    const sizes = boxes().map(b => [Math.max(...b.quad.map(q => q[0])) - Math.min(...b.quad.map(q => q[0])),
+                                    Math.max(...b.quad.map(q => q[1])) - Math.min(...b.quad.map(q => q[1]))]);
+    const med = arr => arr.slice().sort((a, b) => a - b)[Math.floor(arr.length / 2)];
+    let w = sizes.length ? med(sizes.map(z => z[0])) : p.width * 0.5;
+    let h = sizes.length ? med(sizes.map(z => z[1])) : w * 0.6;
+    w = Math.min(w, p.width * 0.95); h = Math.min(h, p.height * 0.95);
+    const x = (p.width - w) / 2, y = (p.height - h) / 2;
     boxes().push({ id: null, quad: [[x, y], [x + w, y], [x + w, y + h], [x, y + h]], rotate: 0, memo: '' });
     S.sel = boxes().length - 1; renderPage();
   });
@@ -1040,6 +1139,11 @@
   }
   function renderReview() {
     const b = S.batch; const k = b.counts;
+    $('bcBatchLangName').textContent = LANG_NAME[b.lang] || b.lang;
+    const otherLang = b.lang === 'ja' ? 'zh' : 'ja';
+    $('bcBatchRelang').dataset.lang = otherLang;
+    $('bcBatchRelangText').textContent = otherLang === 'ja' ? tr('整批改用日文重新辨識') : tr('整批改用繁中重新辨識');
+    $('bcBatchRelang').disabled = k.cards_pending > 0 || (S.langs[otherLang] && !S.langs[otherLang].ok);
     $('bcCounts').textContent = tr('共 {0} 位　已確認 {1} 位　待確認 {2} 位').replace('{0}', k.contacts).replace('{1}', k.confirmed).replace('{2}', k.check);
     const busyNow = k.cards_pending > 0;
     $('bcProgress').hidden = !busyNow;
@@ -1071,7 +1175,11 @@
           ? tr('耗時 {0} 秒（文字辨識 {1} 秒）').replace('{0}', c.secs.toFixed(1)).replace('{1}', c.ocr_secs.toFixed(1))
           : tr('耗時 {0} 秒').replace('{0}', c.secs.toFixed(1)))
       : '';
-    $('bcCardInfo').textContent = [c.engine ? tr('辨識引擎：{0}').replace('{0}', c.engine) : '', secs, flags.join('、'), c.memo ? tr('備註：{0}').replace('{0}', c.memo) : ''].filter(Boolean).join('　');
+    $('bcCardInfo').textContent = [tr('語言：{0}').replace('{0}', LANG_NAME[c.lang_used || c.lang] || c.lang), c.engine ? tr('辨識引擎：{0}').replace('{0}', c.engine) : '', secs, flags.join('、'), c.memo ? tr('備註：{0}').replace('{0}', c.memo) : ''].filter(Boolean).join('　');
+    const other = c.lang === 'ja' ? 'zh' : 'ja';
+    $('bcRetryLangText').textContent = other === 'ja' ? tr('改用日文辨識') : tr('改用繁中辨識');
+    $('bcRetryLang').dataset.lang = other;
+    $('bcRetryLang').disabled = c.status === 'ocr' || c.status === 'pending' || (S.langs[other] && !S.langs[other].ok);
     const st = $('bcCardState');
     st.hidden = c.status === 'done';
     st.textContent = c.status === 'failed' ? (c.error || tr('辨識失敗')) + tr('，可以按「重新辨識」或回去調整框位。')
@@ -1290,6 +1398,22 @@
     const before = contactsOf(v.card.id)[0];
     if (before) S.retrySnap[v.card.id] = Object.fromEntries(before.fields.filter(f => f.status !== 'deleted').map(f => [f.key + '#' + f.id, [f.key, f.value]]));
     try { await api('POST', '/batches/' + S.batch.id + '/cards/' + v.card.id + '/retry'); openBatch(S.batch.id); } catch (e) { showAlert(e.message); }
+  });
+  $('bcRetryLang').addEventListener('click', async () => {
+    const v = visibleCards()[S.cardIdx]; if (!v) return;
+    const lang = $('bcRetryLang').dataset.lang;
+    if (!(await showConfirm(tr('這一張改用「{0}」重新辨識。你改過或確認過的欄位會保留，其他欄位換成新的結果。').replace('{0}', LANG_NAME[lang]),
+                            { title: tr('改用其他語言辨識'), okText: tr('重新辨識') }))) return;
+    const before = contactsOf(v.card.id)[0];
+    if (before) S.retrySnap[v.card.id] = Object.fromEntries(before.fields.filter(f => f.status !== 'deleted').map(f => [f.key + '#' + f.id, [f.key, f.value]]));
+    try { await api('POST', '/batches/' + S.batch.id + '/cards/' + v.card.id + '/retry', { lang }); openBatch(S.batch.id); } catch (e) { showAlert(e.message); }
+  });
+  $('bcBatchRelang').addEventListener('click', async () => {
+    if (!S.batch) return;
+    const lang = $('bcBatchRelang').dataset.lang;
+    if (!(await showConfirm(tr('整批改用「{0}」重新辨識（{1} 張）。你改過或確認過的欄位會保留，其他欄位換成新的結果。')
+        .replace('{0}', LANG_NAME[lang]).replace('{1}', S.batch.counts.cards), { title: tr('改用其他語言辨識'), okText: tr('重新辨識') }))) return;
+    try { const r = await (await api('POST', '/batches/' + S.batch.id + '/lang', { lang })).json(); show(r.batch); } catch (e) { showAlert(e.message); }
   });
   $('bcAddPerson').addEventListener('click', async () => {
     const v = visibleCards()[S.cardIdx]; if (!v) return;

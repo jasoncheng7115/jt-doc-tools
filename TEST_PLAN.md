@@ -618,7 +618,7 @@ SAML 由 `tests/test_sso_saml_e2e.py` 涵蓋（自架 IdP、真 xmlsec 簽章，
 會出現三條假失敗；②OU 的 subject key 是**精確字串比對**，要用目錄實際回傳的
 大小寫（管理介面指派時寫的也是目錄回來的那一份）。
 
-### 1.14 名片辨識（`tests/test_business_card_detect.py` + `tests/test_business_card_extract.py` + `tests/test_business_card_export.py` + `tests/test_business_card_api.py` + `tests/test_business_card_page_browser.py` + `tests/test_business_card_site_features.py` + `tests/test_business_card_books.py` + `tests/test_business_card_phase2.py` + `tests/test_business_card_importer.py` + `tests/test_business_card_messages_translated.py` + `tests/test_no_business_card_content_in_public.py` + `tests/test_business_card_customer_feedback.py`）🆕 v1.17.40（第 2、3 版 v1.17.41）
+### 1.14 名片辨識（`tests/test_business_card_detect.py` + `tests/test_business_card_extract.py` + `tests/test_business_card_export.py` + `tests/test_business_card_api.py` + `tests/test_business_card_page_browser.py` + `tests/test_business_card_site_features.py` + `tests/test_business_card_books.py` + `tests/test_business_card_phase2.py` + `tests/test_business_card_importer.py` + `tests/test_business_card_messages_translated.py` + `tests/test_no_business_card_content_in_public.py` + `tests/test_business_card_customer_feedback.py` + `tests/test_business_card_admin_member_picker.py` + `tests/test_business_card_japanese.py` + `tests/test_business_card_vertical.py` + `tests/test_business_card_url_ids.py` + `tests/test_mcp_business_card.py` + `tests/test_windows_arm64_python.py`）🆕 v1.17.40（第 2、3 版 v1.17.41，客戶回報 v1.17.49，日文與直書 v1.17.50）
 
 - 切卡（合成資料 `tests/bc_synth.py` 有標準答案；判準是角點誤差 ÷ 卡片短邊）：單卡斜拍＋透視 < 3%、一頁 6 張含 2 張直式全部找到且 < 4%、
   兩張緊貼沿交界拆開、卡面左藍右白的色塊分界不被當成交界、空背景回 0 張（不當成功）、卡片佔滿畫面時用整張圖、使用者框位不收 NaN / 無限大 / 太小 / 格式錯。
@@ -651,6 +651,20 @@ SAML 由 `tests/test_sso_saml_e2e.py` 涵蓋（自架 IdP、真 xmlsec 簽章，
   新增 / 相同 / 補上 / 衝突 / 沒配到的列照原樣保留、**好幾列都符合時挑最像且沒被配走的那一列**（之前匯出的檔裡正反面是兩列時，
   合併完同一個人不會變兩份：`test_business_card_phase2.py::test_previous_export_merges_without_duplicates`，VCF / JSON / XLSX，變異驗證過）、人工指定配對、下載保留原本所有列與欄而且順序不變、公式中和、上限（20 MB、5,000 列、100 欄）、舊版 .xls 不收。
 - 伺服器訊息翻譯（`test_business_card_messages_translated.py`）：工具每一個錯誤訊息在英日介面都有翻譯（含帶數字與「」的訊息）。
+- 客戶回報八項（`test_business_card_customer_feedback.py`，細節見 §6.152）：空白欄位存檔不可以 400、@ 被認成 0 / O / Q（有佐證才補、沒佐證只提醒）、
+  外文職稱 `title_en` / 外文部門 `department_en`（擷取、同一批合併、名片簿合併、匯出、VCF、匯入）、多值欄位「＋」、一張名片兩個公司名稱都留並標需確認、
+  英文 Department 不當職稱、中英文姓名同一行拆開（issue #59）、沒確認任何一位時匯出範圍自動「全部」、橫的框讀不出來再試 90° / 270°；
+  Windows ARM64 用 x64 的 Python（`test_windows_arm64_python.py`，issue #60）。
+- 日文名片（`test_business_card_japanese.py`，細節見 §6.153）：辨識語言 `zh` / `ja` 一路帶到 OCR、日文規則（公司、部門＋職稱、姓名含假名、〒、日本手機、日英同一行）、
+  卡面有假名自動用日文規則、單張 / 整批改語言重新辨識且保留人工修改、只有 Tesseract 又沒裝 jpn 時 400、英文模型補讀、Email / 網址補點、形近字、`_m3_card_langs` 升級。
+- 直書（縦書き）名片（`test_business_card_vertical.py`）：找欄由右到左、等距切字（含全形空白）、「︱」轉 90° 而「１」不轉、讀完的整理、
+  假 OCR 整條流程（直式卡換成直欄讀法、橫式卡不被誤換、繁中模式不跑）；五處變異驗證。
+- 確認範圍的框位操作（`test_business_card_page_browser.py`，真的滑鼠事件）：第一次按下就拖得動、整框移動不變形、等比例縮放、上方圓點旋轉、
+  新增範圍跟同頁其他框差不多大、改過的框過幾秒不跳回（畫面不輪詢）；空白欄位按「＋」加一列、外文職稱存得進去；日文語言選項與「改用日文辨識」送出 `lang`。
+- 共用名片簿成員選單（`test_business_card_admin_member_picker.py`，用 Node 跑樣板裡的 `renderPick`）：使用者與群組分兩段各有上限，群組很多時使用者仍列得出來。
+- 網址列 `#batch=`（`test_business_card_url_ids.py`）：編號先驗格式、再編碼，才接進 API 路徑（CodeQL 類型的注入）。
+- MCP `business_card_read`（`test_mcp_business_card.py`）：經 `jtdt_run` 真的跑一次、回聯絡人與 `review_url`、`lang=ja` 帶到 OCR、不認得的語言擋在辨識之前、
+  預設不開放、開了登入時批次歸 Token 的擁有者（別人的帳號與共用的 `local` 都看不到）；兩處變異驗證。
 - 名片內容不外流（`test_no_business_card_content_in_public.py`）：真實樣本與實測名片上的號碼、Email、網域、姓名、公司不得出現在公開樹與 commit 訊息
   （`tools/check_card_content.py`，命中也不印出內容；`sync-to-github.sh` 與 commit-msg 檢查都會跑）。
 
@@ -685,6 +699,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - **`app/tools/business_card_reader/store.py`**（名片辨識；在工具資料夾裡，這裡手動列）：
   - [ ] **`_m2_books`**（v1.17.41）：新增名片簿、成員、人、名片紀錄、互動五張表，`bc_contacts` 加 `merged`（ADD COLUMN）；
         第 1 版的批次與聯絡人升上來都還在（`tests/test_business_card_books.py::test_upgrade_from_v1_keeps_batches`）
+  - [ ] **`_m3_card_langs`**（v1.17.50）：`bc_cards` 加 `langs`（ADD COLUMN，空白＝跟著批次）；第 2 版的卡升上來狀態不變（`tests/test_business_card_japanese.py::test_migration_adds_card_langs_without_touching_existing_rows`）
 
 ### 1.99 全部自動化測試一覽 🆕 v1.14.95
 
@@ -699,7 +714,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **572 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **577 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -763,6 +778,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_boxed_digits_and_sublabel.py` | 兩種讓欄位「有偵測到卻填不進去」的版型 |
 | `test_broken_input_no_500.py` | 任何工具端點收到壞輸入都不可以回 500 |
 | `test_browser_profiles_are_cleaned_up.py` | 無頭瀏覽器每次啟動都要給**自己的**設定檔目錄，用完要刪 |
+| `test_business_card_admin_member_picker.py` | 共用名片簿的成員選單：使用者與群組分兩段、各自有上限（客戶回報 2026-11-20：不能把個人加入名片簿） |
 | `test_business_card_api.py` | 名片辨識 API：流程、改框、輸入檢查、匯出範圍、立即清除、存取控制（別人的批次一律 404） |
 | `test_business_card_books.py` | 名片簿：個人 / 共用、查詢與編修權限、存進名片簿與找同一人、合併、互動紀錄、保留期限、刪除帳號、升級 |
 | `test_business_card_customer_feedback.py` | 名片辨識：客戶回報的幾件事（2026-11-19）。資料全部杜撰 |
@@ -770,11 +786,13 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_business_card_export.py` | 名片辨識：匯出（CSV / XLSX / ODS / vCard / JSON）。資料全部是杜撰的 |
 | `test_business_card_extract.py` | 名片辨識：OCR 行 → 欄位（規則擷取）、QR、行的組合。資料全部杜撰 |
 | `test_business_card_importer.py` | 名片辨識：匯入既有聯絡人清單、比對、合併。資料全部是杜撰的 |
+| `test_business_card_japanese.py` | 名片辨識：日文支援（使用者 2026-11-20）。資料全部杜撰 |
 | `test_business_card_messages_translated.py` | 名片辨識伺服器端的訊息（API 錯誤、欄位「需確認」的原因）英文、日文介面都要有翻譯 |
 | `test_business_card_page_browser.py` | 名片辨識畫面（真瀏覽器）：之前的批次、確認範圍（框、新增範圍）、校對（點欄位框出原文＋放大、儲存並確認）、 |
 | `test_business_card_phase2.py` | 名片辨識第 2 版：同一批合併（正反面 / 同一人）與解除、辨識走「我的作業」、跟手上的名片清單整合、AI 協助（選用） |
 | `test_business_card_site_features.py` | 名片辨識跟站內其他工具一樣該有的東西：保留期限（管理員設定）、刪除帳號一併清、存到工作區、 |
 | `test_business_card_url_ids.py` | 名片辨識頁：網址列 `#batch=` 帶進來的批次編號，先驗格式、再編碼，才接進 API 路徑 |
+| `test_business_card_vertical.py` | 名片辨識：直書（縦書き）的日文名片（2026-11-21） |
 | `test_button_icons_are_consistent.py` | 按鈕圖示的兩條檢查 |
 | `test_cancel_actually_stops_the_work.py` | 按下取消要**真的把工作停掉**，不是只把狀態改成「已停止」 |
 | `test_changelog_does_not_quote_people.py` | 公開的更新記錄裡不可以引述使用者 / 客戶說的話 |
@@ -947,6 +965,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_markdown_to_doc_formats.py` | Markdown 轉辦公文件：只轉使用者要的格式 ＋ 程式碼語法上色 |
 | `test_mcp_admin.py` | 設定 → MCP 管理頁（v1.17.1）：存設定、逐張允許 Token、寫稽核、一般使用者不能改、客戶端設定範例 |
 | `test_mcp_admin_browser.py` | 設定 → MCP 的「連線設定」排版 —— 在真的瀏覽器裡量（v1.17.6） |
+| `test_mcp_business_card.py` | MCP：名片辨識 `business_card_read`（v1.17.41 起；`lang` v1.17.50）經 `jtdt_run` 真的跑一次 |
 | `test_mcp_cross_user.py` | MCP：一個人的 Token 拿不到另一個人的檔案與作業（v1.17.6） |
 | `test_mcp_server.py` | MCP 伺服器（v1.17.1）：傳輸、認證授權、上下文大小、執行工具、一次性傳輸票證 |
 | `test_mcp_tools_batch2.py` | MCP 第二批工具（v1.17.4）：每一支都經 `jtdt_run` 真的跑一次，走原本的 API、結果存進工作區 |
@@ -1235,6 +1254,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_translate_doc_pagination.py` | 逐句翻譯：admin 可設定句數上限 + 分頁大小，前端分頁 |
 | `test_translation_glossary.py` | 翻譯對照字典：單位內部的專有名詞怎麼翻（或不要翻） |
 | `test_translation_glossary_e2e.py` | 字典在兩支翻譯工具上真的有作用（**驗產出，不驗中間狀態**） |
+| `test_translation_prompt_injection.py` | 翻譯的提示：原文是資料不是指令（逐句翻譯、文件翻譯共用同一份指令） |
 | `test_troubleshooting_page_is_reachable.py` | 安裝 / 升級失敗時，要給得出「接下來怎麼辦」 |
 | `test_troubleshooting_search.py` | 疑難排解頁的搜尋要真的會過濾（要真的瀏覽器才驗得到） |
 | `test_ttc_subfont.py` | `.ttc` 要挑對子字型，否則寫進 PDF 的中文是**日文字形** |
@@ -2230,6 +2250,14 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
       再拿手機通訊錄匯出的 .vcf 試一次，英文名在外文姓名
 - [ ] 校對畫面「辨識引擎」後面有耗時（整張與文字辨識秒數）；匯入的兩種模式各有示意圖（桌機與手機寬度）；校對區標題靠左；
       把頁面捲到下載按鈕在視窗底部 → 按 XLSX / CSV，選單往上開、整個看得到
+- [ ] 🆕 v1.17.49 客戶回報：校對時手動加一個原本空白的欄位 → 存檔不出錯；兩支手機用「＋」各加一列；英文職稱 / 英文部門有自己的欄位、匯出與 VCF 都帶到；
+      Email 的 @ 被讀成 0 時補回並標需確認；名片簿裡的名片圖點一下放大；這一批還沒確認任何一位時匯出範圍自動選「全部」
+- [ ] 🆕 v1.17.50 確認範圍：按住框直接拖得動、整框一起移動；拖四角預設等比例縮放（取消勾選可以單獨拉一個角）；上方圓點拖曳旋轉；
+      「新增範圍」跟同一頁其他框差不多大；改完等 5 秒以上框不會跳回原位；「文字方向轉 90°」只改辨識方向、框不動
+- [ ] 🆕 v1.17.50 日文名片：上傳時「辨識語言」選日文 → 公司、部門、職稱、姓名、〒、手機、Email 都對；一疊台灣名片裡夾一張日文的 → 校對時「改用日文辨識」只重跑那一張、
+      「整批改用日文重新辨識」整批重跑，改過的欄位都保留；只有 Tesseract 又沒裝日文訓練檔時日文選項反灰並說明
+- [ ] 🆕 v1.17.50 直式（縦書き）日文名片：選日文辨識 → 公司、職稱、姓名、地址、電話各自成欄，點欄位框出卡面上那一欄；同一批的橫式日文名片結果跟以前一樣
+- [ ] 🆕 v1.17.50 設定 → 名片簿 → 共用名片簿加成員：群組很多時使用者照樣列得出來、可以搜尋；有設定目錄同步時，同步進來還沒登入過的帳號也挑得到（沒設目錄同步的 AD / LDAP 帳號要先登入一次才會出現在本站）
 
 #### 乘車證明整理 (transit-proof) 🆕 v1.14.17
 - [ ] 上傳台鐵 / 高鐵乘車證明 PDF → 日期、交通工具、起訖、費用成表
@@ -2764,18 +2792,18 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `/api/vat-lookup/{vat}` (path-style GET in main.py)
 - [ ] `/tools/einvoice-scan/api/einvoice-scan` + `/api/backend-status`
 - [ ] `/tools/submission-check/api/self-entities` (CRUD)
-- [ ] `/tools/business-card-reader/api/batches`（Beta，v1.17.40）— POST files[] + mode（single / multi）→ 201 批次；
+- [ ] `/tools/business-card-reader/api/batches`（Beta，v1.17.40）— POST files[] + mode（single / multi）＋ `lang`（`zh` / `ja`，v1.17.50；不認得的 400）→ 201 批次；GET 只列自己的批次；
       多卡模式停在 `frames`，改框後再辨識；匯出五種格式、沒有可匯出的回 409。其餘端點（別人的批次每一支都 404）：
       `GET/PATCH/DELETE /tools/business-card-reader/api/batches/{bid}`、
       `GET /tools/business-card-reader/api/batches/{bid}/pages/{pid}/image`、`PUT /tools/business-card-reader/api/batches/{bid}/pages/{pid}/cards`、
       `POST /tools/business-card-reader/api/batches/{bid}/mode`（改收件模式：只動指定頁、辨識中先停）、
       `POST /tools/business-card-reader/api/batches/{bid}/contacts/save-all`（全部儲存 / 全部確認：先整份檢查、排除的不確認）、
       `POST /tools/business-card-reader/api/batches/{bid}/recognize`、`GET /tools/business-card-reader/api/batches/{bid}/cards/{cid}/image`、
-      `POST /tools/business-card-reader/api/batches/{bid}/cards/{cid}/retry`、`POST /tools/business-card-reader/api/batches/{bid}/cards/{cid}/contacts`、
+      `POST /tools/business-card-reader/api/batches/{bid}/cards/{cid}/retry`（可帶 `lang`）、`POST /tools/business-card-reader/api/batches/{bid}/lang`、`GET /tools/business-card-reader/api/langs`、`POST /tools/business-card-reader/api/batches/{bid}/cards/{cid}/contacts`、
       `PUT/DELETE /tools/business-card-reader/api/batches/{bid}/contacts/{ctid}`、
       `POST /tools/business-card-reader/api/batches/{bid}/export/preview`、`POST /tools/business-card-reader/api/batches/{bid}/export`
 - [ ] 名片辨識第 2、3 版（v1.17.41）：
-      `POST /tools/business-card-reader/api/business-card-reader`（一次完成：`wait` 10～600 秒、`done=false` 之後用批次 API 接著讀、結果未經人工校對）；
+      `POST /tools/business-card-reader/api/business-card-reader`（一次完成：`wait` 10～600 秒、`done=false` 之後用批次 API 接著讀、結果未經人工校對、可帶 `lang`）；MCP `business_card_read`（預設不開放、`lang`、批次歸 Token 的擁有者；`tests/test_mcp_business_card.py`）；
       `POST /tools/business-card-reader/api/batches/{bid}/contacts/merge`、`POST /tools/business-card-reader/api/batches/{bid}/contacts/{ctid}/unmerge`（沒合併過 409）、
       `POST /tools/business-card-reader/api/batches/{bid}/contacts/{ctid}/ai-suggest`、`GET /tools/business-card-reader/api/ai`（AI 沒開 409、建議一律 `status: check`）；
       `POST /tools/business-card-reader/api/batches/{bid}/save-to-book/preview`、`POST /tools/business-card-reader/api/batches/{bid}/save-to-book`；
@@ -6513,6 +6541,22 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > **最高原則：加 i18n 不可以改壞現有功能。** 所以每一個階段的第一條驗收都是
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
+
+### 6.153 v1.17.50 — 名片辨識：日文名片、確認範圍的框位操作（**每次發版必過**）
+
+- [ ] 翻譯提示的「原文是資料不是指令」與 `<source>` 區塊（逐句翻譯、文件翻譯共用；`tests/test_translation_prompt_injection.py`，變異驗證過）；回傳的標記去掉、批次解析不把標記黏進最後一段。
+
+- [ ] 日文名片（`tests/test_business_card_japanese.py`，三處變異驗證過：辨識沒帶語言、日文規則沒跑、不能用的語言沒擋）：辨識語言 `zh` / `ja`；日文規則（公司、部門＋職稱、姓名含假名與「々」、假名讀音不當欄位、〒 郵遞區號、日本手機 11 碼與 +81、日英同一行）；卡面有假名時自動用日文規則；單張 / 整批改語言重新辨識且保留人工修改；只有 Tesseract 又沒裝 jpn 時 400 並說明；資料庫第 3 版（`bc_cards.langs`）升級舊資料照讀。
+- [ ] 畫面：收件區有「辨識語言」兩個選項（預設繁中）、校對區顯示這一批用的語言、「改用日文辨識」送出 `{"lang": "ja"}`（`test_business_card_page_browser.py::test_japanese_language_choice_and_retry_in_another_language`，變異驗證過）。
+- [ ] 直書（縦書き）名片（`tests/test_business_card_vertical.py`，五處變異驗證過：沒呼叫直書處理、橫排字證據、品質比較、「︱」與「1」的判斷、切線靠空白）：找欄由右到左、每欄字數（含全形空白）、底部橫排 Email 不算直欄；「︱」轉 90°、全形「１」不轉（Noto Sans / Serif、14～24 px、模糊）；讀完的整理（破折號、數字空白、〒、（株）、FAX、TEL）；假 OCR 整條流程：直式卡換成直欄讀法並擷取出欄位、橫式卡幾行疊在一起不可以被換掉、繁中模式不跑。評估：`temp_pdfs/business_cards/_eval/make_ja_vertical.py` 產 16 張，`eval_extract_ja.py --lines … --truth ja_vertical/truth.json`，正式機（遠端 GPU OCR）實際辨識 14.7% → 95.5%，橫式 32 張同一流程前後都是 95.2%。
+- [ ] 台灣名片不受日文規則影響：真實樣本回歸（`temp_pdfs/business_cards/_eval/eval_extract.py`）176 張只有 1 張變化（三張名片被當成一張切的那張，英文姓名換成另一位，兩個都不是「對的」）。
+- [ ] 日文擷取評估（`temp_pdfs/business_cards/_eval/eval_extract_ja.py`，32 張杜撰卡的遠端 GPU EasyOCR 文字行快取在 `ja_lines.json`，產生器 `make_ja_synth.py`）：欄位正確率 95.2% 以上；英文職稱 Staff / Clerk / Intern 不當英文姓名（`test_staff_is_an_english_title_not_a_name`，變異驗證過）；形近字（片假名中間的漢字、「~般社団法人」、地址門牌的「て」、傳真區碼「OG」）有測試（`test_lookalike_misreads_on_japanese_cards`，兩處變異驗證過）；英文模型補讀（`card_ocr.merge_latin`）、Email / 網址補點、郵遞區號誤認、福岡區碼 092 在日文卡算市話都有測試（變異驗證過）。
+
+- [ ] 確認範圍改過的框（移動、縮放、旋轉、新增、刪除）過幾秒不可以跳回原位：這個畫面不輪詢、只有換一批才清掉（`test_business_card_page_browser.py::test_frames_move_scale_rotate_with_a_real_mouse`，真的滑鼠事件，變異驗證過）。
+- [ ] 第一次按下框就拖得動、整個框一起移動不變形；等比例縮放（預設）對角不動、長寬比不變；取消後單獨拉一個角；上方圓點旋轉（繞中心、大小不變）；新增範圍跟這一頁其他框差不多大。
+- [ ] 橫的框 0° / 180° 都讀不出來時再試 90° / 270°（直式名片橫放），0° 讀得好只讀一次（`test_business_card_customer_feedback.py`，變異驗證過）。
+- [ ] 深色上緣色帶放深色桌面：框補到色帶外緣（`test_business_card_detect.py::test_dark_top_band_on_a_dark_table_is_inside_the_frame`，變異驗證過）、影子不算色帶；真實樣本 176 張只有 1 張框位變（照片裡的白板，不是名片）。
+- [ ] 共用名片簿成員選單：使用者與群組分兩段各 40 筆、列不完提示搜尋；90 個群組＋38 個使用者時使用者全部列得出來（`tests/test_business_card_admin_member_picker.py`，用 Node 跑樣板裡的 `renderPick`，變異驗證過）。
 
 ### 6.152 v1.17.49 — 名片辨識客戶回報八項（**每次發版必過**）
 

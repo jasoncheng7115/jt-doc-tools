@@ -148,7 +148,7 @@ def test_job_produces_a_translated_file(tmp_path, monkeypatch):
                     if m:
                         segs.append((m.group(1), m.group(2)))
                 return "\n".join(f"⟦{n}⟧<{s}>" for n, s in segs)
-            src = prompt.rsplit("原文：", 1)[-1].strip()   # 單段請求
+            src = prompt.rsplit("<source>", 1)[-1].split("</source>")[0].strip()   # 單段請求
             return f"<{src}>"
 
     monkeypatch.setattr(R.llm_settings, "is_enabled", lambda: True)

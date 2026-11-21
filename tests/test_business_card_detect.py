@@ -114,3 +114,44 @@ def test_quality_hints():
     from PIL import ImageDraw
     ImageDraw.Draw(glare).ellipse([300, 150, 700, 450], fill=(255, 255, 255))
     assert D.glare_ratio(glare) > D.glare_ratio(im)
+
+
+def _band_scene(band: float, accents, seed: int = 3):
+    """六張卡放深色木紋桌上，上緣色帶佔卡高 `band`。回（影像, 標準答案）。"""
+    import random
+    from PIL import ImageDraw
+    rng = random.Random(seed)
+    W, H = 3000, 2200
+    sc = S.background(W, H, seed=seed)
+    truth = []
+    for i in range(6):
+        r, c = divmod(i, 3)
+        portrait = i in (1, 4)
+        cw, ch = (540, 900) if portrait else (900, 540)
+        q = S.rect_quad((c + 0.5) * W / 3 + rng.uniform(-40, 40), (r + 0.5) * H / 2 + rng.uniform(-30, 30), cw, ch,
+                        rng.uniform(-8, 8))
+        im = S.card(portrait=portrait, accent=accents[i % len(accents)])
+        ImageDraw.Draw(im).rectangle([0, 0, im.width, int(im.height * band)], fill=accents[i % len(accents)])
+        S.place(sc, im, q)
+        truth.append(q)
+    return sc, truth
+
+
+@pytest.mark.parametrize("band", [0.08, 0.18])
+def test_dark_top_band_on_a_dark_table_is_inside_the_frame(band):
+    """深紅 / 深青 / 深藍的上緣色帶放在木紋桌上：原本框只框到白色那塊（色帶被當成桌面），角落誤差 7%～30%。"""
+    sc, truth = _band_scene(band, [(150, 25, 25), (10, 80, 80), (25, 25, 70)])
+    found = D.sort_cards(D.detect_cards(sc))
+    assert len(found) == 6
+    errs = [min(S.corner_error(f.quad, t) for f in found) for t in truth]
+    assert max(errs) < 0.04, errs
+
+
+def test_band_extension_ignores_shadows_and_plain_edges():
+    """影子（比較暗的桌面、色相一樣）不是色帶：一般的卡框位不變。"""
+    import numpy as np
+    sc, truth = _band_scene(0.08, [(37, 99, 235), (16, 185, 129)])
+    work, scale = D._work(sc)
+    for f in D.detect_cards(sc):
+        q = np.asarray(f.quad, np.float32) * scale
+        assert np.abs(D._extend_bands(work, q) - D.order_quad(q)).max() < 1.5

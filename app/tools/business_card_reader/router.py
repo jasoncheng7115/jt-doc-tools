@@ -15,7 +15,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.routing import APIRoute
 
-from . import books, pipeline, store
+from . import books, card_ocr, pipeline, store
 
 
 class _LocalizedRoute(APIRoute):
@@ -97,9 +97,13 @@ def _batch_view(owner: str, bid: str, lite: bool = False) -> dict:
             "secs": c["ocr"].get("secs"), "ocr_secs": c["ocr"].get("ocr_secs"),
             "lines": [] if lite else (c["ocr"].get("lines") or []), "qr": [] if lite else (c["ocr"].get("qr") or []),
             "size": c["ocr"].get("size"),
+            # 這張用哪個語言辨識（自己選過的優先，沒有就跟著批次）；`lang_used` 是上一次實際辨識用的
+            "lang": card_ocr.lang_of(card_ocr.langs_for(c.get("langs") or b.get("langs") or "")),
+            "lang_own": bool(c.get("langs")), "lang_used": c["ocr"].get("lang"),
         })
     return {
         "id": b["id"], "mode": b["mode"], "status": b["status"], "notes": b["notes"],
+        "lang": card_ocr.lang_of(card_ocr.langs_for(b.get("langs") or "")),
         "created_at": b["created_at"], "updated_at": b["updated_at"], "expires_at": store.expires_at_of(b["created_at"]),
         "pages": [{"id": p["id"], "idx": p["idx"], "filename": p["filename"], "page_no": p["page_no"],
                    "width": p["width"], "height": p["height"], "status": p["status"],
@@ -208,18 +212,21 @@ async def _read_files(files: list[UploadFile]) -> list[tuple[str, bytes]]:
 
 @router.post("/api/batches")
 async def create_batch(request: Request, files: list[UploadFile] = File(...), mode: str = Form("single"),
-                       event: str = Form(""), source: str = Form(""), tags: str = Form(""), memo: str = Form("")):
+                       event: str = Form(""), source: str = Form(""), tags: str = Form(""), memo: str = Form(""),
+                       lang: str = Form("zh")):
     """建立辨識批次：`mode`＝`single`（每張圖片一張名片，直接辨識）/ `multi`（每張圖片多張名片，先確認框位）。
+    `lang`＝`zh`（繁中＋英文，預設）/ `ja`（日文＋英文）。
     `event` / `source` / `tags` / `memo` 是人工補充，套用到這批每一張（不是名片原文）。"""
     if mode not in ("single", "multi"):
         raise HTTPException(400, "mode 只能是 single 或 multi")
+    langs = _check_lang(lang)
     owner, label = owner_of(request)
     data = await _read_files(files)
     notes = {"event": event, "source": source, "tags": tags, "memo": memo}
-    bid = await asyncio.to_thread(lambda: _wrap(lambda: pipeline.create(owner, label, mode, data, notes,
+    bid = await asyncio.to_thread(lambda: _wrap(lambda: pipeline.create(owner, label, mode, data, notes, langs=langs,
                                                                                     origin=_origin(request), request=request)))
     view = await asyncio.to_thread(_batch_view, owner, bid)
-    _audit(request, "business_card_batch", TOOL_ID, batch=bid, mode=mode, files=len(data),
+    _audit(request, "business_card_batch", TOOL_ID, batch=bid, mode=mode, lang=lang, files=len(data),
            pages=view["counts"]["pages"], cards=view["counts"]["cards"])
     return JSONResponse(view, status_code=201)
 
@@ -227,7 +234,7 @@ async def create_batch(request: Request, files: list[UploadFile] = File(...), mo
 @router.post("/api/business-card-reader")
 async def recognize_once(request: Request, files: list[UploadFile] = File(...), mode: str = Form("single"),
                          event: str = Form(""), source: str = Form(""), tags: str = Form(""), memo: str = Form(""),
-                         wait: int = Form(120)):
+                         wait: int = Form(120), lang: str = Form("zh")):
     """一次完成：上傳 → 切卡 → 辨識 → 回聯絡人 JSON（給程式與 MCP 用，不經過畫面的確認範圍與校對）。
 
     `mode=multi` 時自動找到的每一張都直接辨識（沒有人確認範圍）。等最多 `wait` 秒（10～600）；
@@ -236,13 +243,14 @@ async def recognize_once(request: Request, files: list[UploadFile] = File(...), 
     """
     if mode not in ("single", "multi"):
         raise HTTPException(400, "mode 只能是 single 或 multi")
+    langs = _check_lang(lang)
     wait = max(10, min(600, int(wait or 120)))
     owner, label = owner_of(request)
     data = await _read_files(files)
     notes = {"event": event, "source": source, "tags": tags, "memo": memo}
 
     def work():
-        bid = pipeline.create(owner, label, mode, data, notes, origin=_origin(request), request=request)
+        bid = pipeline.create(owner, label, mode, data, notes, langs=langs, origin=_origin(request), request=request)
         if mode == "multi":
             pipeline.start(owner, bid, request=request)
         end = time.time() + wait
@@ -255,7 +263,7 @@ async def recognize_once(request: Request, files: list[UploadFile] = File(...), 
     bid = await asyncio.to_thread(lambda: _wrap(work))
     view = await asyncio.to_thread(_batch_view, owner, bid)
     done = view["status"] == "review" and view["counts"]["cards_pending"] == 0
-    _audit(request, "business_card_batch", TOOL_ID, batch=bid, mode=mode, files=len(data), via="api",
+    _audit(request, "business_card_batch", TOOL_ID, batch=bid, mode=mode, lang=lang, files=len(data), via="api",
            pages=view["counts"]["pages"], cards=view["counts"]["cards"])
 
     def slim(c):
@@ -445,12 +453,51 @@ async def recognize(request: Request, bid: str):
 
 @router.post("/api/batches/{bid}/cards/{cid}/retry")
 async def retry_card(request: Request, bid: str, cid: str):
+    """重新辨識一張。body 可帶 `{"lang": "ja"}`：這張改用那個語言（之後重試也照它）。"""
     owner, _ = owner_of(request)
-    await asyncio.to_thread(lambda: _wrap(lambda: pipeline.retry(owner, bid, cid, request=request)))
+    lang = None
+    if request.headers.get("content-type", "").startswith("application/json"):
+        body = await _json(request)
+        if body.get("lang") is not None:
+            lang = body["lang"]
+            _check_lang(lang)
+    await asyncio.to_thread(lambda: _wrap(lambda: pipeline.retry(owner, bid, cid, request=request, lang=lang)))
+    if lang:
+        _audit(request, "business_card_relang", bid, card=cid, lang=lang)
     return {"ok": True}
 
 
+@router.post("/api/batches/{bid}/lang")
+async def change_batch_lang(request: Request, bid: str):
+    """整批改用另一種語言（`{"lang": "zh" | "ja"}`）：還沒辨識的之後照新語言；辨識過的全部重新辨識
+    （人工改過、確認過的欄位保留）。"""
+    owner, _ = owner_of(request)
+    body = await _json(request)
+    lang = body.get("lang")
+    _check_lang(lang)
+    n = await asyncio.to_thread(lambda: _wrap(lambda: pipeline.relang(owner, bid, lang, request=request)))
+    _audit(request, "business_card_relang", bid, lang=lang, cards=n)
+    return {"queued": n, "batch": await asyncio.to_thread(_batch_view, owner, bid)}
+
+
+@router.get("/api/langs")
+async def lang_status(request: Request):
+    """可以選的辨識語言、這台能不能用（只有 Tesseract 又沒裝那個語言的訓練檔時不能用）。"""
+    owner_of(request)
+    return {k: card_ocr.lang_available(k) for k in card_ocr.LANGS}
+
+
 # --------------------------------------------------------------------------- 聯絡人
+
+def _check_lang(lang) -> str:
+    """`zh` / `ja` → OCR 語言碼；不認得回 400，這台辨識不了那個語言（只有 Tesseract 又沒裝訓練檔）也回 400 並說怎麼辦。"""
+    if lang not in card_ocr.LANGS:
+        raise HTTPException(400, "lang 只能是 zh 或 ja")
+    st = card_ocr.lang_available(lang)
+    if not st["ok"]:
+        raise HTTPException(400, st["hint"])
+    return card_ocr.langs_for(lang)
+
 
 def _clean_fields(fields) -> list[dict]:
     from .extract import FIELD_KEYS

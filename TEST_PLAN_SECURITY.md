@@ -418,6 +418,26 @@ MCP 讓 Claude Code、Codex CLI、OpenCode 這類 AI 客戶端用 API Token 呼�
 > 這一類的通則：**MCP 不可以比原本的 API 寬**。新增 MCP 工具一律走原本的 API 執行，
 > 權限、檔案擁有者、稽核都沿用；不要在 MCP 這層另寫一套檢查。
 
+### v1.17.41～v1.17.50 — 名片辨識：名片簿、AI 協助、MCP、日文（每次發版必過）
+
+- [ ] **名片簿的權限**：別人的個人名片簿每一支端點 404；共用名片簿不是成員 404、只能查詢的人改 / 合併 / 刪 / 記互動 / 匯入都 403；
+      管理員管得到名片簿與成員，但看不到裡面的人；查詢關鍵字逐字跳脫（`%` `_` 不當萬用字元）；稽核不含姓名與關鍵字
+      （`tests/test_business_card_books.py`）
+- [ ] **清單合併與匯入的暫存**：上傳的清單綁擁有者與那一批，別人的 token、別批的 token、亂填的 token 都 404，約 2 小時後 410；
+      不收的格式 400、上限 20 MB / 5,000 列 / 100 欄、下載的試算表公式中和
+      （`tests/test_business_card_phase2.py::test_list_merge_rejects_bad_files_and_strangers`、`tests/test_business_card_importer.py`、`tests/test_business_card_books.py`）
+- [ ] **AI 協助**：預設關閉，全站 LLM 與管理員開關兩道都要開（否則 409）；只送那一位（或要比對的那一組）的欄位文字，
+      名片上的字當資料不當指令；建議一律 `status: check`、按了才套用（`tests/test_business_card_phase2.py` 的 `test_ai_*`）
+- [ ] **用手機接續**：QR 裡只有這一頁的網址、不帶登入資訊；開了登入時沒登入拿不到；協定只收 http / https
+      （`tests/test_business_card_site_features.py` 的 `test_handoff_*`）
+- [ ] **MCP `business_card_read`**：預設不開放（名片是別人的聯絡資料，管理員另外勾）；開了登入時批次歸 Token 的擁有者，
+      別人的帳號與共用的 `local` 都看不到；不認得的 `lang` 擋在辨識之前（`tests/test_mcp_business_card.py`）。
+      回給 AI 客戶端的是聯絡人欄位，等於名片內容離開本站 —— 開放之前要跟使用者講清楚
+- [ ] **日文與直書（v1.17.50）**：沒有新的對外資料流（同一個 OCR 設定；直書是把卡面切字後排成一張圖再送同一個 OCR）；
+      辨識語言只收 `zh` / `ja`，其他 400（`tests/test_business_card_japanese.py`、`tests/test_business_card_vertical.py`）
+- [ ] **翻譯的提示注入（v1.17.50）**：逐句翻譯與文件翻譯的原文放在 `<source>` 區塊、提示講明是資料不是指令；
+      模型回傳的區塊標記去掉（`tests/test_translation_prompt_injection.py`）
+
 ### v1.17.40 — 名片辨識（別人的聯絡資料）（每次發版必過）
 
 - [ ] **水平越權**：批次依擁有者分開（`store` 每個查詢都帶擁有者條件），別人的批次、頁影像、卡面圖、改框、辨識、聯絡人、匯出、刪除一律 404，
@@ -426,7 +446,7 @@ MCP 讓 Claude Code、Codex CLI、OpenCode 這類 AI 客戶端用 API Token 呼�
       有密碼的 PDF、不支援的格式、HEIC 沒有解碼元件都 400；框位不收 NaN / 無限大 / 太小、一頁最多 60 張；欄位只收已知的 key 與狀態
 - [ ] **匯出**：XLSX / ODS 每格強制文字型別（`=1+1` 不會變公式）、CSV 預設中和公式開頭（含前置空白、tab、換行）、JSON 保留原值；不附名片影像
 - [ ] **資料保存**：批次預設 30 天後連原圖與裁圖刪除（`retention.sweep_all`），可立即清除；不進設定備份；稽核只記批次編號、筆數、格式
-- [ ] **對外資料流**：OCR 走站台設定（遠端 OCR 時裁好的卡面送到那台主機），不用 LLM；MCP 不開放
+- [ ] **對外資料流**：OCR 走站台設定（遠端 OCR 時裁好的卡面送到那台主機），不用 LLM（v1.17.41 起另有選用的 AI 協助與 MCP，見下一節）
 
 ### v1.16.54 — 資產庫的印章與簽名照用印權限給（每次發版必過）
 

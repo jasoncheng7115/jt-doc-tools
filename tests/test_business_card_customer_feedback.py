@@ -255,3 +255,30 @@ def test_bilingual_brand_line_or_lowercase_word_is_not_a_name():
     assert [f["value"] for f in fs["name"]] == ["王小明"] and "name_en" not in fs
     fs = kv(E.extract_fields(L(("車廂 car", 40), ("範例科技股份有限公司", 26))))
     assert "name_en" not in fs
+
+
+# --------------------------------------------------------------------------- 直式名片橫放（2026-11-20）
+
+def test_landscape_frame_that_reads_badly_also_tries_90_and_270(monkeypatch):
+    """橫的框 0° 與 180° 都讀不太出來 → 再試 90° / 270°（直式名片橫放掃描）；0° 就讀得好就不多花時間。"""
+    from PIL import Image
+    from app.core import ocr_engine
+    from app.tools.business_card_reader import card_ocr as O
+    calls = []
+
+    def fake(png, langs, engine=None, allow_local_easyocr=True):
+        im = Image.open(__import__("io").BytesIO(png))
+        calls.append(im.size)
+        good = im.size[0] < im.size[1]                      # 轉成直的才讀得出來
+        w = [{"text": "範例科技股份有限公司" * 4 if good else "~", "conf": 95 if good else 20,
+              "left": 10, "top": 10, "width": 100, "height": 20}]
+        return w, "fake"
+    monkeypatch.setattr(ocr_engine, "recognize_image", fake)
+    monkeypatch.setattr(O, "_reread_low_lines", lambda *a, **k: None)
+    r = O.ocr_card(Image.new("RGB", (900, 540), "white"))
+    assert r["rotation"] in (90, 270) and len(calls) == 3, calls
+    calls.clear()
+    monkeypatch.setattr(ocr_engine, "recognize_image", lambda png, langs, engine=None, allow_local_easyocr=True: (
+        calls.append(1) or [{"text": "範例科技股份有限公司" * 4, "conf": 95, "left": 0, "top": 0, "width": 9, "height": 9}], "fake"))
+    r = O.ocr_card(Image.new("RGB", (900, 540), "white"))
+    assert r["rotation"] == 0 and len(calls) == 1, "0° 就讀得好：只讀一次"

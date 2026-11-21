@@ -173,7 +173,8 @@ def test_frames_page_for_several_cards(site):
     assert ev("document.getElementById('bcReview').hidden") is True, "還沒辨識，不顯示校對"
     ev("document.getElementById('bcAddBox').click()")
     assert ev("document.querySelectorAll('#bcSvg polygon').length") == 7
-    assert ev("document.querySelectorAll('#bcSvg circle').length") == 4, "選取的框顯示四個角"
+    assert ev("document.querySelectorAll('#bcSvg circle.h').length") == 4, "選取的框顯示四個角"
+    assert ev("document.querySelectorAll('#bcSvg circle.rh').length") == 1, "選取的框有一個旋轉圓點"
     assert "7" in ev("document.getElementById('bcRecognizeText').textContent")
     shot("bc-frames")
     assert _no_hscroll(send, ev) <= 390, "手機寬度不可以橫向捲動"
@@ -431,3 +432,97 @@ def test_fill_a_blank_field_add_another_mobile_and_an_english_title(site):
     assert mob() == ["0911-222-333", "0922-444-555"]
     assert ev(f"(async () => (await (await fetch('{api}')).json()).contacts.find(c => c.id === '{cid}')"
               ".fields.filter(f => f.key === 'title_en').map(f => f.value))()") == ["Sales Manager"]
+
+
+def test_frames_move_scale_rotate_with_a_real_mouse(site):
+    """客戶回報（2026-11-20）：確認範圍的框拖不動（按下時重畫、被按的元素換掉，之後的移動收不到）；
+    新增範圍太小；要能等比例縮放、要能旋轉。用真的滑鼠事件（Input.dispatchMouseEvent）驗。"""
+    import math
+    port, send, info = site
+    ev, wait, shot = _tools(send)
+    mid = info["multi"]
+    send("Page.navigate", {"url": f"http://127.0.0.1:{port}/tools/business-card-reader/?r=7#batch={mid}"})
+    assert wait("!!document.querySelector('#bcSvg polygon') && !document.getElementById('bcFrames').hidden", 60)
+    ev("document.getElementById('bcStage').scrollIntoView({block: 'start'}); true")
+    time.sleep(0.8)
+
+    def rect(sel):
+        return ev(f"(() => {{ const r = document.querySelector('{sel}').getBoundingClientRect(); "
+                  "return [r.x + r.width / 2, r.y + r.height / 2]; })()")
+
+    def drag(x, y, x2, y2, steps=4):
+        send("Input.dispatchMouseEvent", {"type": "mousePressed", "x": x, "y": y, "button": "left", "buttons": 1, "clickCount": 1})
+        for n in range(1, steps + 1):
+            send("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x + (x2 - x) * n / steps,
+                                              "y": y + (y2 - y) * n / steps, "button": "left", "buttons": 1})
+        send("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": x2, "y": y2, "button": "left", "buttons": 0, "clickCount": 1})
+        time.sleep(0.3)
+
+    quad = lambda i=0: ev(f"S.edits[S.batch.pages[S.page].id][{i}].quad") if ev("typeof S !== 'undefined'") else None
+    pts = lambda: [[float(v) for v in p.split(",")] for p in ev("document.querySelectorAll('#bcSvg polygon')[0].getAttribute('points')").split()]
+    before = pts()
+    cx, cy = rect("#bcSvg polygon")
+    drag(cx, cy, cx + 40, cy + 25)
+    after = pts()
+    assert ev("document.getElementById('bcSelName').textContent") != "—", "按一下要選到這個框"
+    assert after != before and abs((after[0][0] - before[0][0]) - (after[2][0] - before[2][0])) < 1, \
+        "第一次按下去就要拖得動，而且整個框一起移動（不變形）"
+    # 等比例縮放（預設）：拉一個角，對角不動、長寬比不變
+    assert ev("document.getElementById('bcKeepRatio').checked") is True
+    hx, hy = rect("#bcSvg circle.h")
+    drag(hx, hy, hx - 30, hy - 30)
+    sc = pts()
+    w0, h0 = math.dist(after[0], after[1]), math.dist(after[1], after[2])
+    w1, h1 = math.dist(sc[0], sc[1]), math.dist(sc[1], sc[2])
+    assert sc[2] == after[2] and w1 > w0 and abs(w1 / h1 - w0 / h0) < 0.01, (after, sc)
+    # 取消等比例：只動那一個角
+    ev("document.getElementById('bcKeepRatio').click(); true")
+    hx, hy = rect("#bcSvg circle.h")
+    drag(hx, hy, hx + 15, hy + 5)
+    fr = pts()
+    assert fr[1:] == sc[1:] and fr[0] != sc[0]
+    ev("document.getElementById('bcKeepRatio').click(); true")
+    # 旋轉圓點：轉了以後上緣不再水平、框的大小不變
+    rx, ry = rect("#bcSvg circle.rh")
+    c = [sum(p[0] for p in fr) / 4, sum(p[1] for p in fr) / 4]
+    drag(rx, ry, rx + 60, ry + 10)
+    ro = pts()
+    assert abs(ro[0][1] - ro[1][1]) > 3, "旋轉後上緣要斜"
+    assert abs(math.dist(ro[0], ro[2]) - math.dist(fr[0], fr[2])) < 1, "旋轉不改變大小"
+    assert abs(sum(p[0] for p in ro) / 4 - c[0]) < 1, "繞中心轉"
+    time.sleep(3.5)
+    assert pts() == ro, "改過的框不可以過幾秒就跳回原位（原本畫面每 1.5 秒重讀、清掉改過的框）"
+    # 新增範圍：跟這一頁其他框差不多大（不是頁寬的三成）
+    n = ev("document.querySelectorAll('#bcSvg polygon').length")
+    ev("document.getElementById('bcAddBox').click(); true")
+    assert wait(f"document.querySelectorAll('#bcSvg polygon').length === {n + 1}")
+    sizes = ev("[...document.querySelectorAll('#bcSvg polygon')].map(p => p.getBBox().width)")
+    others = sorted(sizes[:-1])
+    assert abs(sizes[-1] - others[len(others) // 2]) / others[len(others) // 2] < 0.25, sizes
+    shot("bc-frames-edit")
+
+
+def test_japanese_language_choice_and_retry_in_another_language(site):
+    """日文名片（2026-11-20）：收件區有辨識語言、校對區「改用日文辨識」送出 `{"lang": "ja"}`。
+    這裡的伺服器沒有假 OCR，重新辨識那一下用攔截的 fetch 驗送出的內容，不真的辨識。"""
+    port, send, info = site
+    ev, wait, shot = _tools(send)
+    sid = info["single"]
+    send("Page.navigate", {"url": f"http://127.0.0.1:{port}/tools/business-card-reader/?r=8#batch={sid}"})
+    assert wait("!!document.querySelector('#bcFields .bc-frow') && !document.getElementById('bcReview').hidden")
+    assert ev("document.querySelectorAll('input[name=bcOcrLang]').length") == 2
+    assert ev("document.querySelector('input[name=bcOcrLang][value=zh]').checked") is True
+    assert "繁中" in ev("document.getElementById('bcBatchLangName').textContent")
+    assert wait("document.getElementById('bcRetryLangText').textContent.length > 0")
+    assert "日文" in ev("document.getElementById('bcRetryLangText').textContent")
+    ev("""(() => { window.__sent = null; const f = window.fetch;
+      window.fetch = (u, o) => { if (/\\/retry$/.test(String(u))) { window.__sent = [String(u), o && o.body];
+        return Promise.resolve(new Response('{"ok":true}', {status: 200, headers: {'Content-Type': 'application/json'}})); }
+        return f(u, o); }; return true; })()""")
+    ev("document.getElementById('bcRetryLang').click()")
+    assert wait("!!document.querySelector('.modal-ok')")
+    ev("document.querySelector('.modal-ok').click()")
+    assert wait("window.__sent !== null")
+    url, body = ev("window.__sent")
+    assert url.endswith("/retry") and '"lang":"ja"' in body.replace(" ", "")
+    shot("bc-lang")

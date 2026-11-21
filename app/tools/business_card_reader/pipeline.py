@@ -330,8 +330,10 @@ def _recognize(owner: str, bid: str, cid: str) -> None:
         page = Image.open(store.page_image_path(bid, card["page_id"]))
         page.load()
         crop = detector.warp_card(page, card["quad"], rotate=card["rotate"])
+        # 語言：這張自己選的（「改用日文重新辨識」）優先，沒有就跟著批次
+        langs = card_ocr.langs_for(card.get("langs") or store.get_batch(owner, bid).get("langs") or "")
         t_ocr = time.monotonic()
-        res = card_ocr.ocr_card(crop)
+        res = card_ocr.ocr_card(crop, langs=langs)
         ocr_secs = time.monotonic() - t_ocr
         img = res["image"]
         qr = _qr(img)
@@ -344,11 +346,12 @@ def _recognize(owner: str, bid: str, cid: str) -> None:
         out.parent.mkdir(parents=True, exist_ok=True)
         img.save(out, "JPEG", quality=90)
         lines = [ln.to_dict() for ln in res["lines"]]
-        fields = extract.extract_fields(lines, qr)
+        fields = extract.extract_fields(lines, qr, lang=card_ocr.lang_of(langs))
         if not lines and not qr:
             raise RuntimeError("這張卡沒有辨識出任何文字")
         store.set_card(cid, status="done", error="", ocr={
             "lines": lines, "engine": res["engine"], "rotation": res["rotation"], "quality": res["quality"],
+            "lang": card_ocr.lang_of(langs),
             "qr": qr, "flags": flags, "size": list(img.size),
             # 耗時（秒）：`ocr_secs` 只算文字辨識（含低信心行重讀），`secs` 是這張卡從拉正到擷取完的全部時間
             "ocr_secs": round(ocr_secs, 2), "secs": round(time.monotonic() - t0, 2)})
@@ -380,12 +383,34 @@ def _qr(img: Image.Image) -> list[str]:
         return []
 
 
-def retry(owner: str, bid: str, cid: str, request=None) -> None:
+def retry(owner: str, bid: str, cid: str, request=None, lang: Optional[str] = None) -> None:
+    """重新辨識一張；`lang`（`zh` / `ja`）＝這張改用那個語言（之後重試也照它），不給就照原本的。"""
     card = store.get_card(owner, bid, cid)
     if card["status"] in ("ocr",):
         return
+    if lang is not None:
+        store.set_card(cid, langs=card_ocr.langs_for(lang))
     store.set_card(cid, status="pending", error="")
     start(owner, bid, request=request)
+
+
+def relang(owner: str, bid: str, lang: str, request=None) -> int:
+    """整批改用另一種語言重新辨識：批次的語言改掉、每一張自己選的語言清掉，沒排除的卡全部重新辨識
+    （人工改過、確認過的欄位照樣保留，跟單張重新辨識一樣）。回排進去的張數。"""
+    b = store.get_batch(owner, bid)
+    if b["status"] in ("detecting", "frames"):
+        store.set_batch(owner, bid, langs=card_ocr.langs_for(lang))
+        return 0
+    store.set_batch(owner, bid, langs=card_ocr.langs_for(lang))
+    n = 0
+    for c in store.cards(bid):
+        if c["status"] in ("excluded", "ocr"):
+            continue
+        store.set_card(c["id"], langs="", status="pending", error="")
+        n += 1
+    if n:
+        start(owner, bid, request=request)
+    return n
 
 
 def resume_all() -> int:

@@ -39,7 +39,7 @@ class _Fake:
             segs = [m.groups() for line in prompt.splitlines()
                     if (m := re.match(r"^⟦(\d+)⟧(.*)$", line))]
             return "\n".join(f"⟦{n}⟧{self._one(s)}" for n, s in segs)
-        return self._one(prompt.rsplit("原文：", 1)[-1].strip())
+        return self._one(prompt.rsplit("<source>", 1)[-1].split("</source>")[0].strip())
 
 
 @pytest.fixture

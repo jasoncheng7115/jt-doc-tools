@@ -340,7 +340,7 @@ def test_upgrade_from_v1_keeps_batches(tmp_path, monkeypatch):
     assert c.execute("PRAGMA user_version").fetchone()[0] == 1
     store._INITED.discard(str(p))
     assert store.get_batch("local", "a" * 32)["status"] == "review"
-    assert store.conn().execute("PRAGMA user_version").fetchone()[0] == 2
+    assert store.conn().execute("PRAGMA user_version").fetchone()[0] == len(store._MIGRATIONS)
     v = books.Viewer(owner="local", auth=False)
     assert books.list_books(v)[0]["kind"] == "personal"
 

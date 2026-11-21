@@ -347,14 +347,92 @@ def detect_cards(img: Image.Image, *, min_area_frac: float = MIN_AREA_FRAC) -> l
     if min(work.shape[:2]) < 20:
         return []
     picked = _pick(_candidates(work, min_area_frac))
+    lab = cv2.cvtColor(cv2.GaussianBlur(work, (3, 3), 0), cv2.COLOR_RGB2LAB).astype(np.float32)
+    bg = _border_lab(lab)
     # 一個框幾乎完全包住另一個框 → 外框多半是兩張相貼或卡＋陰影，留內框（使用者可以再補）
     final = []
     for s, q, f in picked:
         inner = [k for k in picked if k[1] is not q and _contains(q, k[1])]
         if inner:
             continue
+        q = _extend_bands(work, q, lab, bg)             # 深色色帶被當成桌面時，框補到色帶外緣
         final.append(Card(quad=(q / scale).tolist(), score=s, flags=f))
     return sort_cards(final)
+
+
+def _border_lab(lab: np.ndarray) -> np.ndarray:
+    h, w = lab.shape[:2]
+    b = max(4, int(min(h, w) * 0.03))
+    border = np.concatenate([lab[:b].reshape(-1, 3), lab[-b:].reshape(-1, 3),
+                             lab[:, :b].reshape(-1, 3), lab[:, -b:].reshape(-1, 3)])
+    return np.median(border, axis=0)
+
+
+def _extend_bands(work: np.ndarray, q: np.ndarray, lab: Optional[np.ndarray] = None,
+                  bg: Optional[np.ndarray] = None) -> np.ndarray:
+    """卡緣有一條深色色帶（上緣紅色 / 深青色的名片放在木紋桌上）：遮罩把色帶當成桌面，框只框到白色那塊。
+    逐邊往外看：緊貼著框的是一條**顏色均勻、色相跟桌面明顯不同**的帶子、帶子外面又回到桌面 → 那一邊往外推到帶子外緣。
+
+    影子是「比較暗的桌面」（色相一樣），不算；帶子外面不是桌面（另一張卡、別的東西）也不推，框不會吃進隔壁。
+    """
+    if lab is None:
+        lab = cv2.cvtColor(cv2.GaussianBlur(work, (3, 3), 0), cv2.COLOR_RGB2LAB).astype(np.float32)
+    if bg is None:
+        bg = _border_lab(lab)
+    H, W = lab.shape[:2]
+    q = order_quad(q).astype(np.float64)
+    c = q.mean(axis=0)
+    out = q.copy()
+    for i in range(4):
+        a, b = q[i], q[(i + 1) % 4]
+        side = b - a
+        L = float(np.hypot(*side))
+        if L < 20:
+            continue
+        nrm = np.array([side[1], -side[0]]) / L
+        if np.dot((a + b) / 2 - c, nrm) < 0:
+            nrm = -nrm
+        # 這一邊的垂直方向有多長（色帶最多推到那麼寬的 45%）
+        other = q[(i + 2) % 4] - q[(i + 1) % 4]
+        maxd = int(0.45 * float(np.hypot(*other)))
+        ts = np.linspace(0.12, 0.88, 24)
+        base = a[None, :] + ts[:, None] * side[None, :]
+
+        def line(d):
+            pts = base + d * nrm
+            xs, ys = np.round(pts[:, 0]).astype(int), np.round(pts[:, 1]).astype(int)
+            if xs.min() < 0 or ys.min() < 0 or xs.max() >= W or ys.max() >= H:
+                return None
+            v = lab[ys, xs]
+            return v.mean(axis=0), float(np.linalg.norm(v.std(axis=0)))
+
+        first = line(3)
+        if first is None:
+            continue
+        c0, sd0 = first
+        dab = float(np.hypot(c0[1] - bg[1], c0[2] - bg[2]))
+        if sd0 > 14 or dab < 12 or float(np.linalg.norm(c0 - bg)) < 18:
+            continue                                   # 緊貼著框的不是均勻、跟桌面色相不同的帶子
+        thick = 3
+        for d in range(4, maxd):
+            r = line(d)
+            if r is None:
+                thick = 0
+                break
+            m, sd = r
+            if float(np.linalg.norm(m - c0)) <= 14 and sd <= 16:
+                thick = d
+                continue
+            break
+        # 色帶至少是卡片那個方向的 4%（名片的色帶通常 8% 以上；卡緣的細線、影子邊緣不算）
+        if thick < max(4, 0.04 * float(np.hypot(*other))) or thick >= maxd - 1:
+            continue
+        after = line(thick + 4)
+        if after is None or float(np.linalg.norm(after[0] - bg)) > 22 or float(np.linalg.norm(after[0] - c0)) < 18:
+            continue                                   # 帶子外面不是桌面、或跟帶子分不出來：不推（可能是相鄰的卡）
+        out[i] += (thick + 1) * nrm
+        out[(i + 1) % 4] += (thick + 1) * nrm
+    return out.astype(np.float32)
 
 
 def _contains(outer: np.ndarray, inner: np.ndarray, min_ratio: float = 1.3) -> bool:

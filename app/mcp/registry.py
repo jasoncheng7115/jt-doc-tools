@@ -710,6 +710,9 @@ TOOLS: tuple[McpTool, ...] = (
         params={"mode": {"type": "string", "enum": ["single", "multi"], "default": "single",
                          "description": "'single' = one card per image or PDF page; 'multi' = several cards laid out in "
                                         "one image (each found card is recognised without a person checking the frames)"},
+                "lang": {"type": "string", "enum": ["zh", "ja"], "default": "zh",
+                         "description": "Recognition language: 'zh' = Traditional Chinese + English, "
+                                        "'ja' = Japanese + English"},
                 "tags": {"type": "string", "maxLength": 400, "default": "", "description": "Comma-separated tags added to every contact"},
                 "event": {"type": "string", "maxLength": 120, "default": "", "description": "Where the cards were collected"},
                 "source": {"type": "string", "maxLength": 120, "default": "", "description": "How the cards were obtained"},
