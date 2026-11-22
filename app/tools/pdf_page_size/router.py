@@ -187,6 +187,7 @@ async def submit(request: Request, upload_id: str = Form(...),
 
     job = job_manager.submit("pdf-page-size", run, request=request,
                              meta={"filename": f"{stem}.pdf"})
+    job.meta["view_url"] = f"/tools/pdf-page-size/?job={job.id}"   # 「我的作業」的「開啟」回到這一頁、接回結果
     return {"job_id": job.id}
 
 

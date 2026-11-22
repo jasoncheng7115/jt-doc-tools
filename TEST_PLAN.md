@@ -714,7 +714,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **577 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **582 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -1022,6 +1022,8 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_migration_fk_cascade.py` | 重建資料表的 migration 一律要關掉外鍵，否則升級會**清空子表** |
 | `test_missing_office_engine_is_503.py` | 缺 Office 引擎要回 **503**，不可以回 500 |
 | `test_my_jobs_open_button_e2e.py` | 「我的作業」在**真的瀏覽器**裡：打得開的那一列才有「開啟」 |
+| `test_my_jobs_open_coverage.py` | 「我的作業」的「開啟」：每一個背景作業，要嘛回得到結果畫面，要嘛寫明為什麼只有下載（2026-11-22） |
+| `test_my_jobs_open_e2e.py` | 「我的作業」按「開啟」回到工具頁：**畫面上要真的看到那件作業的結果** |
 | `test_my_notify_zulip_browser.py` | 「我的作業 → 完成通知」的 Zulip 欄位 —— 在真的瀏覽器裡跑一次（v1.17.0） |
 | `test_nav_visibility_and_whoami.py` | Tests for v1.1.5 - v1.1.7 visibility / identity changes. |
 | `test_nested_group_permissions.py` | 巢狀群組的權限要往上繼承 |
@@ -1127,6 +1129,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_pdf_fill_positioning.py` | 表單自動填寫的定位規則 |
 | `test_pdf_form_detect.py` | Unit tests for the field detector. Builds tiny synthetic PDFs in memory |
 | `test_pdf_form_noline_rows.py` | 沒有格線的表單：整張只有一個外框、裡面一列一列的「標籤：」（v1.17.32） |
+| `test_pdf_form_vertical_labels.py` | 直排的標籤（一個字一行，寫在窄格裡）：表單自動填寫認得出來、值放在右邊的格子（2026-11-22） |
 | `test_pdf_isolate.py` | 解析器的行程隔離（外部稽核 F04） |
 | `test_pdf_ocr_preview_acl.py` | End-to-end ACL test for pdf-ocr `/preview/{uid}.pdf` endpoint (v1.7.6). |
 | `test_pdf_page_size.py` | 頁面尺寸統一 |
@@ -1205,6 +1208,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_security_reports.py` | 交付用資安報告（`tools/build_security_reports.py`；使用者 2026-10-21：客戶要弱點掃描與原始碼檢測報告） |
 | `test_seed_bootstrap_gap.py` | 新工具要真的到得了**既有客戶**，不是只有全新安裝看得到 |
 | `test_self_intro.py` | 從逐字稿的自我介紹找出發言者可能的名字（`app/core/self_intro.py`，2026-10-03 使用者要求） |
+| `test_service_unit_hardening.py` | Linux 服務的安全強化：一行安裝產生的 systemd unit 要跟附帶的範本有同一組限制（外部稽核 F02，v1.15.31） |
 | `test_sessions.py` | Tests for app.core.sessions (issue / lookup / revoke). |
 | `test_settings_atomic_write.py` | 設定檔一律原子寫入（`app/core/atomic_json.py`），不可以直接覆寫 |
 | `test_settings_export.py` | Category-based settings export / import (v1.12.54). |
@@ -1265,6 +1269,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_upgrade_notice_stays.py` | 改寫歷史之後的升級注意事項**要一直留著**（使用者 2026-09-13 指示） |
 | `test_upgrade_v1_14_6.py` | 升級到 v1.14.6：既有客戶的資料目錄要能無痛接上 |
 | `test_upload_413_says_which_layer.py` | 「檔案太大」要說得出是哪一段擋的（v1.16.34） |
+| `test_upload_filename_capture.py` | 上傳檔名記進稽核（`main._capture_upload_filename`），而且不可以弄壞後面讀請求內容與回檔案的流程 |
 | `test_upload_limits.py` | 這台機器實際能收多大的檔案 —— 系統狀態頁的「可上傳的檔案大小」 |
 | `test_upload_validation_parity.py` | 上傳的檔案不是 PDF 時要回 400，不是 500 |
 | `test_url_safety.py` | safe_next open-redirect sanitizer — including the encoded-slash hardening. |
@@ -1307,6 +1312,11 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 ### 2.1 填單用印
 
+#### 我的作業的「開啟」🆕 v1.17.51
+- [ ] PDF 壓縮、PDF 書籤、頁面尺寸統一、騎縫章、PDF 轉簡報、Markdown 轉文書、PDF 文字辨識、PDF 轉 Office 各跑一件 → 關掉分頁 → 「我的作業」按「開啟」→ 看得到那件的結果（數字、預覽、全文）與下載
+- [ ] 接回來之後直接選一個新檔案：原本的預覽、選項都回來，照常操作
+- [ ] 只有下載的工具（合併、加密、轉檔…）「我的作業」上只有下載，沒有「開啟」
+
 #### PDF 表單填寫 (pdf-fill)
 - [ ] 上傳廠商 PDF（`temp_pdfs/` 內的真實樣本，四種不同版型）
 - [ ] 自動偵測欄位且公司資料正確帶入
@@ -1315,6 +1325,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] 編輯模式 ↔ 合成模式切換
 - [ ] 下載 PDF / 下載 PNG 都可用
 - [ ] Office 來源（docx/xlsx/odt）自動先轉 PDF 再偵測
+- [ ] 🆕 v1.17.51 標籤直排寫在窄格裡的表單（一個字一行，例如「地／址」）：值填在右邊的格子、沒有壓到標籤
 
 #### PDF 用印與簽名 (pdf-stamp)
 - [ ] 同時看得到 印章/簽名/Logo 三類資產
@@ -2257,6 +2268,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] 🆕 v1.17.50 日文名片：上傳時「辨識語言」選日文 → 公司、部門、職稱、姓名、〒、手機、Email 都對；一疊台灣名片裡夾一張日文的 → 校對時「改用日文辨識」只重跑那一張、
       「整批改用日文重新辨識」整批重跑，改過的欄位都保留；只有 Tesseract 又沒裝日文訓練檔時日文選項反灰並說明
 - [ ] 🆕 v1.17.50 直式（縦書き）日文名片：選日文辨識 → 公司、職稱、姓名、地址、電話各自成欄，點欄位框出卡面上那一欄；同一批的橫式日文名片結果跟以前一樣
+- [ ] 🆕 v1.17.51 台灣直式（直書）名片：繁中辨識 → 公司、職稱、姓名、地址、電話各自成欄；有照片、商標、底紋的橫式名片不會多出亂碼欄位
 - [ ] 🆕 v1.17.50 設定 → 名片簿 → 共用名片簿加成員：群組很多時使用者照樣列得出來、可以搜尋；有設定目錄同步時，同步進來還沒登入過的帳號也挑得到（沒設目錄同步的 AD / LDAP 帳號要先登入一次才會出現在本站）
 
 #### 乘車證明整理 (transit-proof) 🆕 v1.14.17
@@ -3429,7 +3441,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 目前沒有自動化測試碰過，跑 `python tools/report_endpoint_test_coverage.py`，
 那份是**提示不是判決**。
 
-共 **327 支**（工具首頁不列，§2 已逐支驗收）。
+共 **329 支**（工具首頁不列，§2 已逐支驗收）。
 
 **全站（認證 / 帳號 / 工作區 / 介面語言）**
 
@@ -3894,6 +3906,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 - [ ] `GET /tools/pdf-ocr/download/{upload_id}`
 - [ ] `GET /tools/pdf-ocr/preview/{upload_id}.pdf`
+- [ ] `GET /tools/pdf-ocr/result/{upload_id}` —— 完整的辨識結果（統計、逐頁文字）；從「我的作業」按「開啟」回來時用。擁有者才讀得到、編號格式不對 400、結果檔不在 404（v1.17.51）
 - [ ] `POST /tools/pdf-ocr/run/{upload_id}`
 - [ ] `POST /tools/pdf-ocr/upload`
 
@@ -3973,6 +3986,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `GET /tools/pdf-to-office/preview/{job_id}/{kind}`
 - [ ] `GET /tools/pdf-to-office/preview/{job_id}/{kind}/{page}`
 - [ ] `GET /tools/pdf-to-office/report/{job_id}`
+- [ ] `GET /tools/pdf-to-office/result/{job_id}` —— 完整的轉換結果（預覽頁碼、診斷報告）；資料庫裡的作業結果被截掉時頁面讀這份。與預覽圖同一套歸屬判斷，非擁有者 404（v1.17.51）
 - [ ] `POST /tools/pdf-to-office/submit`
 - [ ] `POST /tools/pdf-to-office/upload`
 
@@ -6541,6 +6555,22 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > **最高原則：加 i18n 不可以改壞現有功能。** 所以每一個階段的第一條驗收都是
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
+
+### 6.154 v1.17.51 — 「我的作業」的「開啟」、台灣直式名片、直排的表單標籤、Starlette 放寬（**每次發版必過**）
+
+- [ ] 「我的作業」按「開啟」回到結果（`tests/test_my_jobs_open_e2e.py`，真的瀏覽器：送出作業 → 在「我的作業」按「開啟」→ 結果區看得到這件作業的數字，下載鈕看得到而且下載得到）：
+      PDF 壓縮（前後大小）、PDF 書籤（書籤數、頁數）、頁面尺寸統一（調整頁數）、騎縫章（組數、亂數種子）、PDF 轉簡報、Markdown 轉文書、PDF 文字辨識（全文與內嵌預覽）、PDF 轉 Office（引擎、格式）；
+      亂填的 `?job=`（`../x`、不存在的編號、`%2F%2Fevil.example`）頁面照常、結果區不出現；表單自動填寫的 API 作業不給「開啟」（填寫歷史頁已停用）。三處變異驗證過（拿掉 `resumeFromUrl()` / 不呼叫接回）。
+- [ ] 結果放在「上傳之後才打開」的面板裡的（書籤、頁面尺寸、騎縫章、壓縮）：接回時面板打開、預覽與選項先收起來；接著選新檔案或按「重新開始」時放回去。
+- [ ] 結構檢查（`tests/test_my_jobs_open_coverage.py`）：每一個背景作業要嘛有 `view_url`、要嘛列在「只有下載」並寫理由；清單沒有過時的項目；有 `?job=` 的頁面會接；`resumeFromUrl()` 先驗作業編號格式。變異驗證過。
+      「開啟」打得開的判斷表（`tests/test_job_view_ok.py` 的 `TABLE`）補上這八支：資料在就給、清掉就不給。
+- [ ] PDF 文字辨識與 PDF 轉 Office 的完整結果另外存成結果檔（`/tools/pdf-ocr/result/{upload_id}`、`/tools/pdf-to-office/result/{job_id}`，擁有者才讀得到）；資料庫裡的作業結果超過上限被截掉時頁面讀這份。PDF 文字辨識完成時不再把送出時記的檔名丟掉。
+- [ ] 台灣直式（直書）名片（`tests/test_business_card_vertical.py`）：繁中模式也跑直書處理；防線：太細（卡片短邊 1.5% 以下）、貼著卡片邊緣（2% 以內）、讀出來信心極低（20 以下）、一欄裡「圖」佔三分之一以上（紋理讀成的字）的都不算；讀得好的橫排行不換掉。各自變異驗證過。
+      評估：`temp_pdfs/business_cards/_eval/make_zh_vertical.py` 產 16 張，`eval_extract_ja.py --lang zh`；台灣真實樣本 183 張（`_eval/crops`）新舊各跑一次比對欄位。
+- [ ] 表單自動填寫：直排的標籤（一個字一行，寫在窄格裡）認得出來、值填在右邊的格子（`tests/test_pdf_form_vertical_labels.py`，變異驗證過）；直排的分區標題不變成欄位、隔太遠或對不齊的字不接。
+      全表單回歸（`temp_pdfs/_regress/run_fill_regress.py`）：新增合成樣本 `syn_vertical_text_label` 由 3 欄到 7 欄，其他 31 份不變、疊字 10 → 10；新基準 `v1_17_51`。
+- [ ] Starlette 上限由 `<1.8` 放寬為 `<2`（鎖檔仍是 1.3.1）：記上傳檔名的中介層不再自己重播請求內容（`tests/test_upload_filename_capture.py`：上傳照常、稽核記到檔名、多檔都列出；變異驗證過，舊寫法在 1.10 紅 3 支）。1.10 下 API / 上傳 / 認證 / 中介層等 3,269 支跑過。
+- [ ] 服務安全強化的檢查搬到 `tests/test_service_unit_hardening.py`（`install.sh` 註解指的檔名），並比對兩份設定的值（`ProtectSystem=full` 變異驗證過）。
 
 ### 6.153 v1.17.50 — 名片辨識：日文名片、確認範圍的框位操作（**每次發版必過**）
 

@@ -537,6 +537,51 @@ def _paren_value_slot(
     return lab, (sx0, y0, sx1, y1)
 
 
+def _vertical_label_lines(text_dict: dict) -> list[dict]:
+    """直排的標籤（一個字一行，例如窄格裡的「地／址」）：x 對齊、上下緊鄰的單字行接成一行。
+
+    標籤比對的單位是 PDF 裡的「一行」，直排標籤每個字自成一行，「地」「址」永遠湊不成「地址」
+    （合成樣本 `syn_vertical_text_label` 實測四個直排欄位一個都認不到）。接起來的行只是**多一個候選**，
+    接下來照原本的流程比對與找值格；直排的分區標題（「基本資料」）對不到欄位名稱，不受影響。
+    回 PyMuPDF `dict` 格式的 line（`bbox` 與一個 span）。
+    """
+    singles = []
+    for block in text_dict.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            t = "".join(s.get("text", "") for s in line.get("spans", [])).strip()
+            if len(t) != 1 or not ("\u3400" <= t <= "\u9fff"):
+                continue
+            size = max((s.get("size", 0) for s in line.get("spans", [])), default=10.0) or 10.0
+            singles.append((t, tuple(line.get("bbox") or (0, 0, 0, 0)), size))
+    singles.sort(key=lambda c: ((c[1][0] + c[1][2]) / 2, c[1][1]))
+    stacks: list[list] = []
+    for ch in sorted(singles, key=lambda c: c[1][1]):
+        cx = (ch[1][0] + ch[1][2]) / 2
+        for st in stacks:
+            last = st[-1]
+            lcx = (last[1][0] + last[1][2]) / 2
+            size = max(last[2], ch[2])
+            gap = ch[1][1] - last[1][3]
+            if abs(cx - lcx) <= 0.35 * size and -0.2 * size <= gap <= 0.8 * size and abs(ch[2] - last[2]) <= 0.2 * size:
+                st.append(ch)
+                break
+        else:
+            stacks.append([ch])
+    out = []
+    for st in stacks:
+        if len(st) < 2:
+            continue
+        x0 = min(c[1][0] for c in st); y0 = min(c[1][1] for c in st)
+        x1 = max(c[1][2] for c in st); y1 = max(c[1][3] for c in st)
+        text = "".join(c[0] for c in st)
+        size = max(c[2] for c in st)
+        out.append({"bbox": (x0, y0, x1, y1),
+                    "spans": [{"text": text, "bbox": (x0, y0, x1, y1), "size": size, "color": 0}]})
+    return out
+
+
 def detect_fields(
     pdf_path: Path,
     label_map: Optional[dict[str, list[str]]] = None,
@@ -623,6 +668,9 @@ def detect_fields(
             spans = page_spans[pno]
             h_lines, v_lines = page_lines[pno]
             text_dict = doc[pno].get_text("dict")
+            _vert = _vertical_label_lines(text_dict)
+            if _vert:                                  # 直排標籤接成的行：多一個候選，照同一套流程比對
+                text_dict.setdefault("blocks", []).append({"type": 0, "lines": _vert})
             for block in text_dict.get("blocks", []):
                 if block.get("type") != 0:
                     continue

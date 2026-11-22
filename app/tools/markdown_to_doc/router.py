@@ -454,6 +454,8 @@ async def convert(
                                  meta={"upload_id": uid, "stem": stem,
                                        "formats": sorted(want)},
                                  request=request)
+    # 「我的作業」的「開啟」：頁面讀 `?job=`（追進度）與 `uid`（讀完整結果）—— 頁面早就會接，原本這裡沒寫，按鈕不會出現
+    job.meta["view_url"] = f"/tools/markdown-to-doc/?job={job.id}&uid={uid}"
     return {"job_id": job.id, "upload_id": uid}
 
 

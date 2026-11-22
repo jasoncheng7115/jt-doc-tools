@@ -555,6 +555,7 @@ async def submit(request: Request):
         }
 
     job = job_manager.submit("pdf-compress", run, meta={"filename": orig_name})
+    job.meta["view_url"] = f"/tools/pdf-compress/?job={job.id}"   # 「我的作業」的「開啟」回到這一頁、接回結果
     return {"job_id": job.id}
 
 

@@ -539,12 +539,25 @@ $('btnCancel').addEventListener('click', async () => {
   $('resultPanel').hidden = true;
 });
 
+// 資料庫裡的作業結果超過上限時巢狀欄位會被截掉（`_truncated`）：從「我的作業」按「開啟」回來時，
+// 摘要與診斷報告改讀另外存的完整結果檔
+async function _withFullResult(j) {
+  const m = (j && j.meta) || {};
+  if ((m.summary && !m._truncated) || !j || !/^[a-f0-9]{32}$/.test(String(j.id || ''))) return j;
+  try {
+    const r = await fetch('/tools/pdf-to-office/result/' + encodeURIComponent(j.id));
+    if (r.ok) return Object.assign({}, j, { meta: Object.assign({}, m, await r.json()) });
+  } catch (_) { /* 讀不到就用資料庫裡的那份 */ }
+  return j;
+}
+
 const jp = new JobProgress($('p2oJob'), {
   onCancel: () => {
     $('btnCancel').hidden = true;
     setBtnBusy($('btnConvert'), false);
   },
-  onDone: (jobData) => {
+  onDone: async (jobData) => {
+    jobData = await _withFullResult(jobData);
     $('btnCancel').hidden = true;
     setBtnBusy($('btnConvert'), false);
     const meta = jobData.meta || {};
@@ -712,5 +725,6 @@ const jp = new JobProgress($('p2oJob'), {
     $('resultPanel').hidden = true;
   },
 });
+jp.resumeFromUrl();   // 從「我的作業」按「開啟」回來：接回那件作業的結果
 </script>
 {% endblock %}

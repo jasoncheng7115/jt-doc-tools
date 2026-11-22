@@ -274,6 +274,8 @@ const jp = new JobProgress($('cmpJob'), {
   },
 });
 
+jp.resumeFromUrl({ reveal: document.getElementById('panel-options') });   // 從「我的作業」按「開啟」回來：接回那件作業的結果
+
 $('btnCompress').addEventListener('click', async () => {
   if (!uploadId) return alert(tr('請先上傳 PDF'));
   const btn = $('btnCompress');

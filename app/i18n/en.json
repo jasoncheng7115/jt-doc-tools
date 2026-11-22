@@ -8796,5 +8796,7 @@
   "這台的 OCR 沒有這個語言的辨識資料：請管理員到「設定 → OCR 引擎」安裝，或改用 EasyOCR": "This server's OCR has no recognition data for this language: ask an administrator to install it under Settings → OCR engine, or switch to EasyOCR",
   "lang 只能是 zh 或 ja": "lang must be zh or ja",
   "Email 的網域少了點，已依常見的日本網域（.co.jp 等）補上，請對照原圖": "The email domain was missing its dots; they were restored using common Japanese domains (.co.jp and so on). Please check against the card.",
-  "網址的「//」或點看起來沒認出來，已補上，請對照原圖": "The \"//\" or the dots in this web address looked unreadable and were put back; please check against the card."
+  "網址的「//」或點看起來沒認出來，已補上，請對照原圖": "The \"//\" or the dots in this web address looked unreadable and were put back; please check against the card.",
+  "找不到這件作業（可能已過保留期限）": "This job could not be found (it may have passed the retention period)",
+  "找不到這次辨識的結果（可能已過保留期限）": "The result of this recognition could not be found (it may have passed the retention period)"
 }

@@ -224,6 +224,7 @@
     },
     onError: () => { $('bmSubmit').disabled = false; },
   });
+  progress.resumeFromUrl({ reveal: document.getElementById('bmPvPanel'), keep: [document.getElementById('bmResult')] });   // 從「我的作業」按「開啟」回來：接回那件作業的結果
   let uploadId = null;
   let pageCount = 0;
   // 原始檔名 —— 產出要沿用它（「年度報告.pdf」→「年度報告_bookmarked.pdf」），

@@ -193,6 +193,7 @@ async def submit(request: Request):
     job = job_manager.submit("pdf-to-slides", run,
                              meta={"filename": orig_name,
                                    "output_format": output_format})
+    job.meta["view_url"] = f"/tools/pdf-to-slides/?job={job.id}"   # 「我的作業」的「開啟」回到這一頁、接回結果
     return {"job_id": job.id}
 
 
@@ -229,4 +230,5 @@ async def api_convert(request: Request,
     job = job_manager.submit("pdf-to-slides", run,
                              meta={"filename": file.filename,
                                    "output_format": fmt})
+    job.meta["view_url"] = f"/tools/pdf-to-slides/?job={job.id}"   # 「我的作業」的「開啟」回到這一頁、接回結果
     return {"job_id": job.id, "download_url": f"/api/jobs/{job.id}/download"}

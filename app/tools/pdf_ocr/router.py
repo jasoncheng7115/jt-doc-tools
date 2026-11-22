@@ -24,6 +24,22 @@ def _work_dir() -> Path:
     return p
 
 
+def _result_path(upload_id: str) -> Path:
+    return _work_dir() / f"po_{upload_id}_result.json"
+
+
+def _finish_meta(job, upload_id: str, data: dict) -> None:
+    """作業完成：結果寫進 `job.meta`（**更新**，不可以整個換掉 —— 送出時記的檔名與「開啟」的網址會跟著不見），
+    另外整份存一個結果檔。統計裡有逐頁全文，存回資料庫時超過上限會被截掉；從「我的作業」按「開啟」回來時讀這份。"""
+    import json as _json
+    job.meta.update({"upload_id": upload_id, **data})
+    try:
+        _result_path(upload_id).write_text(_json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except (OSError, TypeError, ValueError):
+        import logging as _lg
+        _lg.getLogger(__name__).warning("pdf-ocr 結果檔寫不進去（「開啟」回來會只剩資料庫裡的摘要）", exc_info=True)
+
+
 def _ocr_engine_note(stats: dict) -> str:
     """完成訊息裡「用了哪個 OCR 引擎、有沒有退回」那一段。
 
@@ -624,14 +640,14 @@ async def run_ocr(upload_id: str, request: Request,
                 extra += f"，LLM 文字校正 ({llm_model_used})"
             job.message = (f"完成 — 處理 {stats['pages_ocrd']}/{stats['pages_total']} 頁，"
                            f"插入 {stats['words_inserted']} 字" + extra)
-            job.meta = {"upload_id": upload_id, "stats": stats,
-                        "langs": active_langs,
-                        "llm_model": llm_model_used,
-                        "llm_vision_model": llm_vision_model_used,
-                        "llm_direct_model": llm_direct_model_used,
-                        "llm_align_model": llm_align_model_used,
-                        "llm_full_model": llm_full_model_used,
-                        "download_url": f"/tools/pdf-ocr/download/{upload_id}"}
+            _finish_meta(job, upload_id, {
+                "stats": stats, "langs": active_langs,
+                "llm_model": llm_model_used,
+                "llm_vision_model": llm_vision_model_used,
+                "llm_direct_model": llm_direct_model_used,
+                "llm_align_model": llm_align_model_used,
+                "llm_full_model": llm_full_model_used,
+                "download_url": f"/tools/pdf-ocr/download/{upload_id}"})
             job.result_path = out
             job.result_filename = (Path(src).stem.replace("_src", "") + "_searchable.pdf")
         except Exception as e:
@@ -640,7 +656,20 @@ async def run_ocr(upload_id: str, request: Request,
 
     job = _jm.job_manager.submit("pdf-ocr", _run, meta={"upload_id": upload_id,
                                      "filename": _orig_name(upload_id)})
+    job.meta["view_url"] = f"/tools/pdf-ocr/?job={job.id}"   # 「我的作業」的「開啟」回到這一頁、接回結果
     return {"job_id": job.id, "upload_id": upload_id}
+
+
+@router.get("/result/{upload_id}")
+async def result(upload_id: str, request: Request):
+    """辨識完成後的完整結果（統計、逐頁文字）。從「我的作業」按「開啟」回來時用；擁有者才讀得到。"""
+    import json as _json
+    require_uuid_hex(upload_id, "upload_id")
+    _uo.require(upload_id, request)
+    p = _result_path(upload_id)
+    if not p.is_file():
+        raise HTTPException(404, "找不到這次辨識的結果（可能已過保留期限）")
+    return _json.loads(p.read_text(encoding="utf-8"))
 
 
 @router.get("/download/{upload_id}")
@@ -723,9 +752,8 @@ async def api_pdf_ocr(
             )
             job.message = (f"完成 — 處理 {stats['pages_ocrd']}/{stats['pages_total']} 頁，"
                            f"插入 {stats['words_inserted']} 字" + _ocr_engine_note(stats))
-            job.meta = {"upload_id": upload_id, "stats": stats,
-                        "langs": active_langs,
-                        "download_url": f"/api/jobs/{job.id}/download"}
+            _finish_meta(job, upload_id, {"stats": stats, "langs": active_langs,
+                                          "download_url": f"/api/jobs/{job.id}/download"})
             job.result_path = out
             job.result_filename = Path(src).stem.replace("_src", "") + "_searchable.pdf"
         except Exception as e:
@@ -734,5 +762,6 @@ async def api_pdf_ocr(
 
     job = _jm.job_manager.submit("pdf-ocr", _run, meta={"upload_id": upload_id,
                                      "filename": _orig_name(upload_id)})
+    job.meta["view_url"] = f"/tools/pdf-ocr/?job={job.id}"   # 「我的作業」的「開啟」回到這一頁、接回結果
     return {"job_id": job.id, "upload_id": upload_id,
             "download_url": f"/api/jobs/{job.id}/download"}

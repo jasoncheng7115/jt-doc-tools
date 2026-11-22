@@ -28,7 +28,7 @@ from .core.job_manager import job_manager
 from .logging_setup import get_logger, setup_logging
 from .tool_registry import discover_tools, mount_tools
 
-VERSION = "1.17.50"
+VERSION = "1.17.51"
 
 setup_logging("DEBUG" if settings.debug else "INFO")
 logger = get_logger(__name__)
@@ -1542,8 +1542,8 @@ async def _capture_upload_filename(request: Request, call_next):
     can record what file was uploaded — without each tool having to add
     `request.state.upload_filename = file.filename` manually.
 
-    Trade-off: we read the full body into memory (then replay it via
-    `_receive` for FastAPI's normal parsing). The handler was going to do
+    Trade-off: we read the full body into memory (BaseHTTPMiddleware caches it
+    and hands it to FastAPI's normal parsing). The handler was going to do
     `await file.read()` anyway so net memory cost is just the raw bytes
     held twice for ~one tick. Skip if content-length > 500 MB to avoid
     surprising RAM growth on absurd uploads."""
@@ -1573,11 +1573,10 @@ async def _capture_upload_filename(request: Request, call_next):
                 except Exception:
                     pass
 
-            async def receive():
-                return {"type": "http.request", "body": body, "more_body": False}
-
-            # Replay the body for the rest of the middleware chain + handler.
-            request._receive = receive
+            # 不要自己換掉 `request._receive` 來重播內容：`BaseHTTPMiddleware` 已經把 `body()` 讀到的快取起來
+            # 交給後面（`_CachedRequest.wrapped_receive`），讀完之後回的是「斷線」。原本換成一個永遠回同一份內容
+            # 的函式 —— 回應送出時等斷線的那一段（Starlette 1.8 起的 FileResponse、串流回應）一直收到 `http.request`，
+            # 1.8 以後丟「Unexpected message received: http.request」，舊版則是空轉到回應結束。
     return await call_next(request)
 
 

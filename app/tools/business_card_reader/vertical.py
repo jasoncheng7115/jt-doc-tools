@@ -76,8 +76,14 @@ def find_columns(img: Image.Image, m: np.ndarray | None = None) -> list[tuple[in
         else:
             merged.append(list(b))
     cand = []
+    # 最小的字也有卡片短邊的 1.5% 寬（名片上 6pt 的字約 2.5%）；更細的是底紋、線條、照片裡的紋路
+    # （台灣真實樣本實測：8～13 px 寬、卡面 1400 px 的細條被讀成「一一團呈轉圖點一」）
+    min_w = max(8.0, 0.015 * min(W, H))
     for x, y, w, h in merged:
-        if h < MIN_ASPECT * w or w > 0.25 * W or w < 8:
+        if h < MIN_ASPECT * w or w > 0.25 * W or w < min_w:
+            continue
+        # 貼著卡片邊緣的是邊框、照片或裁切時帶到的背景：真的字一定離邊緣有留白（台灣真實樣本實測誤觸）
+        if x <= 0.02 * W or x + w >= 0.98 * W or y <= 0.005 * H or y + h >= 0.995 * H:
             continue
         if h < MIN_CHARS * w * 0.9:
             continue
@@ -264,7 +270,11 @@ def clean_text(text: str) -> str:
         out.append(n if n.isascii() and n.strip() else ch)
     text = "".join(out)
     # 直書的破折號轉成橫的之後，OCR 常讀成「一」「ー」「|」；格子之間的空隙讀成空白（「0 8 0」）
-    text = re.sub(r"(?<=\d)\s*[-一ー|丨—–]+\s*(?=\d)", "-", text)
+    text = re.sub(r"(?<=\d)\s*[-一ー|丨—–_~～]+\s*(?=\d)", "-", text)
+    text = re.sub(r"(^|\s)[_~～]+(?=\d)", r"\1", text)              # 「電話 ~03-…」：號碼前面多出來的那一槓
+    # 地址的門牌：0 讀成 o / O、數字與「號 / 樓」之間多了空白（「10 o 號 8 樓」）
+    text = re.sub(r"(?<=\d)\s*[oO〇]\s*(?=[\d號樓段巷弄之]|$)", "0", text)
+    text = re.sub(r"(?<=\d)\s+(?=[號樓段巷弄])|(?<=[號樓段巷弄])\s+(?=\d)", "", text)
     text = re.sub(r"(?<=\d)\s+(?=\d)", "", text)
     # 直書的「ＦＡＸ」一個字一格，F 常被讀成「上」「ド」；直書的括號（︵︶）讀成「一」「ヘ」
     text = re.sub(r"^\s*[上ドトF]\s*[AＡ]\s*[XxＸ×]", "FAX", text)

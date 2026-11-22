@@ -966,6 +966,112 @@ const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
     }
   });
 
+  // 作業完成：畫出結果（統計、全文、各階段、內嵌預覽）。輪詢跑完與從「我的作業」按「開啟」回來共用這一支。
+  function renderOcrDone(jj) {
+    progressInner.style.width = '100%';
+    btnStop.style.display = 'none';
+    currentJobId = null;
+    const stats = (jj.meta || {}).stats || {};
+    const url = (jj.meta || {}).download_url || ('download/' + uploadId);
+    const producer = stats.producer || 'jt-doc-tools pdf-ocr';
+    const tessV = stats.tesseract_version || '';
+    const marker = stats.marker || 'jtdt-pdf-ocr';
+    // 聚合每頁最終文字 — 依優先序取最後處理過的階段
+    // (完整 > 對位 > 直接 > 文字校正 > 視覺校對 > raw)
+    function _pageText(s) {
+      if (!s) return '';
+      if (s.llm_full && s.llm_full.text) return s.llm_full.text;
+      if (s.llm_align && s.llm_align.text) return s.llm_align.text;
+      if (s.llm_direct && s.llm_direct.text) return s.llm_direct.text;
+      if (s.llm_text && s.llm_text.text) return s.llm_text.text;
+      if (s.llm_vision && s.llm_vision.text) return s.llm_vision.text;
+      if (s.ocr_raw && s.ocr_raw.text) return s.ocr_raw.text;
+      return '';
+    }
+    const stages = stats.stage_results || [];
+    const fullTextParts = stages.map((s, i) => {
+      const t = _pageText(s);
+      if (!t) return '';
+      return (stages.length > 1 ? `--- 第 ${s.page || i+1} 頁 ---\n` : '') + t;
+    }).filter(Boolean);
+    const fullText = fullTextParts.join('\n\n');
+    const fullCharCount = fullText.length;
+    // 模式 label + LLM 用時
+    let modeLabel = '';
+    if (stats.llm_full_used) {
+      const t = stats.llm_full_total_s || 0;
+      modeLabel = `（LLM 完整辨識，LLM 用時 ${t}s）`;
+    } else if (stats.llm_align_used) {
+      const t = stats.llm_align_total_s || 0;
+      modeLabel = `（LLM 對位辨識，LLM 用時 ${t}s）`;
+    } else if (stats.llm_direct_used) {
+      const t = stats.llm_direct_total_s || 0;
+      modeLabel = `（LLM 直接辨識，LLM 用時 ${t}s）`;
+    } else if (stats.llm_vision_used || stats.llm_used) {
+      modeLabel = tr('（含 ') + [stats.llm_vision_used ? 'LLM 視覺校對' : null,
+                            stats.llm_used ? 'LLM 文字校正' : null].filter(Boolean).join(' + ') + '）';
+    }
+    resultBox.innerHTML =
+      '<div class="po-result">'
+      + '<b>' + tr('完成！') + '</b><br>'
+      + tr('處理 ') + (stats.pages_ocrd || 0) + ' / ' + (stats.pages_total || 0) + tr(' 頁')
+      + tr('（略過 ') + (stats.pages_skipped || 0) + tr(' 頁已有文字層）<br>')
+      + tr('插入文字 ') + (stats.words_inserted || 0) + tr(' 字') + modeLabel
+      + '<br><br>'
+      + '<a class="btn btn-primary" href="' + url + '" download>' + tr('下載文字辨識後 PDF') + '</a>'
+      + (window.attachWorkspaceSave ? '<button id="ocrWsSave" class="btn" type="button" data-s="sc3f83707"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-s="sb4a65f0b"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>' + tr('存至工作區') + '</button>' : '')
+      + (stats.llm_direct_used
+         ? '<div data-s="sf2fd7057">' + tr('⚠ LLM 直接辨識無逐字座標，拖選反白位置不對應圖上文字位置（要精準對位請改用「LLM 對位辨識」）；要拿完整內容請展開下方「識別結果全文」一次複製。中文易腦補，務必對照原檔複核。') + '</div>'
+         : '')
+      + (stats.llm_full_used
+         ? '<div data-s="sf2fd7057">' + tr('⚠ LLM 完整辨識的座標由 vision 模型預測，typical 誤差 ±10-30px（grounded 模型本質限制，非引擎 bug）。如需 pixel-accurate 拖選位置，請改勾「LLM 對位辨識」(EasyOCR 拿像素級座標 + LLM 拿文字)。') + '</div>'
+         : '')
+      + '</div>'
+      // 識別結果全文 — 預設摺疊，方便檢視 / 複製
+      + (fullText
+         ? '<details class="po-fulltext"><summary>' + PO_ICON_WRAP(PO_ICON_FILE) + '識別結果全文（' + fullCharCount + ' 字' + (stages.length > 1 ? '，' + stages.length + ' 頁' : '') + '，點開檢視 / 複製）</summary>'
+           + '<div class="po-fulltext-body">'
+           + '<div data-s="sd51702bf"><button type="button" class="btn btn-small" id="poCopyFullText">' + tr('📋 複製全文') + '</button></div>'
+           + '<pre id="poFullTextPre" class="po-fulltext-pre">' + fullText.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + '</pre>'
+           + '</div></details>'
+         : '')
+      + renderStageDetails(stages)
+      + '<details class="po-stages">'
+      + '<summary>' + PO_ICON_WRAP(PO_ICON_INFO) + tr('怎麼確認是這個工具 OCR 的（不是 macOS 預覽程式自動 OCR）？</summary>')
+      + '<div class="po-stages-body">'
+      + '<div data-s="s1382a0b4">'
+      + tr('下載後用 Adobe Acrobat / Apple 預覽程式開啟，三個方法擇一：<br>')
+      + '①「<b>' + tr('檔案 → 簡介') + '</b>' + tr('」（Preview）或「') + '<b>' + tr('檔案 → 內容') + '</b>' + tr('」（Acrobat）— Producer 欄位顯示「') + '<code>' + producer + '</code>' + tr('」+ tesseract 版本「') + '<code>' + tessV + '</code>」<br>'
+      + tr('② Cmd+F 搜尋「<code>') + marker + '</code>' + tr('」— 每頁右下角有此透明標記，能搜到代表是本工具產生的文字層') + '<br>'
+      + tr('③ 比對檔名：本工具輸出檔名以「<code>_searchable.pdf</code>」結尾')
+      + '</div>'
+      + '</div>'
+      + '</details>'
+      + renderViewer(uploadId);
+    setBtnBusy(false);
+    mountViewerEmbedCss();
+    if (window.attachWorkspaceSave) window.attachWorkspaceSave(
+      document.getElementById('ocrWsSave'),
+      () => ({ url: url, name: (url.split('/').pop() || 'ocr.pdf').split('?')[0], tool: 'pdf-ocr' }));
+    // 複製全文按鈕 — 從 pre 元素拿文字（任何模式只要有結果都會出現）
+    const copyBtn = document.getElementById('poCopyFullText');
+    if (copyBtn && fullText) {
+      copyBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(fullText);
+          copyBtn.textContent = tr('✓ 已複製 ') + fullText.length + tr(' 字');
+          setTimeout(() => { copyBtn.textContent = ('<span data-s="se1b879c5">' + PO_ICON_COPY + '</span>複製全文'); }, 2000);
+        } catch (e) {
+          const ta = document.createElement('textarea');
+          ta.value = fullText; document.body.appendChild(ta);
+          ta.select(); document.execCommand('copy'); ta.remove();
+          copyBtn.textContent = tr('✓ 已複製');
+          setTimeout(() => { copyBtn.textContent = ('<span data-s="se1b879c5">' + PO_ICON_COPY + '</span>複製全文'); }, 2000);
+        }
+      });
+    }
+  }
+
   btnRun.addEventListener('click', async () => {
     if (!uploadId) return;
     const langsSel = getSelectedLangs();
@@ -1028,108 +1134,7 @@ const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
           statusEl.textContent = elapsed >= 3 ? tr('排隊中… 已等 {0}s').replace('{0}', elapsed) : tr('排隊中…');
         }
         if (jj.status === 'done') {
-          progressInner.style.width = '100%';
-          btnStop.style.display = 'none';
-          currentJobId = null;
-          const stats = (jj.meta || {}).stats || {};
-          const url = (jj.meta || {}).download_url || ('download/' + uploadId);
-          const producer = stats.producer || 'jt-doc-tools pdf-ocr';
-          const tessV = stats.tesseract_version || '';
-          const marker = stats.marker || 'jtdt-pdf-ocr';
-          // 聚合每頁最終文字 — 依優先序取最後處理過的階段
-          // (完整 > 對位 > 直接 > 文字校正 > 視覺校對 > raw)
-          function _pageText(s) {
-            if (!s) return '';
-            if (s.llm_full && s.llm_full.text) return s.llm_full.text;
-            if (s.llm_align && s.llm_align.text) return s.llm_align.text;
-            if (s.llm_direct && s.llm_direct.text) return s.llm_direct.text;
-            if (s.llm_text && s.llm_text.text) return s.llm_text.text;
-            if (s.llm_vision && s.llm_vision.text) return s.llm_vision.text;
-            if (s.ocr_raw && s.ocr_raw.text) return s.ocr_raw.text;
-            return '';
-          }
-          const stages = stats.stage_results || [];
-          const fullTextParts = stages.map((s, i) => {
-            const t = _pageText(s);
-            if (!t) return '';
-            return (stages.length > 1 ? `--- 第 ${s.page || i+1} 頁 ---\n` : '') + t;
-          }).filter(Boolean);
-          const fullText = fullTextParts.join('\n\n');
-          const fullCharCount = fullText.length;
-          // 模式 label + LLM 用時
-          let modeLabel = '';
-          if (stats.llm_full_used) {
-            const t = stats.llm_full_total_s || 0;
-            modeLabel = `（LLM 完整辨識，LLM 用時 ${t}s）`;
-          } else if (stats.llm_align_used) {
-            const t = stats.llm_align_total_s || 0;
-            modeLabel = `（LLM 對位辨識，LLM 用時 ${t}s）`;
-          } else if (stats.llm_direct_used) {
-            const t = stats.llm_direct_total_s || 0;
-            modeLabel = `（LLM 直接辨識，LLM 用時 ${t}s）`;
-          } else if (stats.llm_vision_used || stats.llm_used) {
-            modeLabel = tr('（含 ') + [stats.llm_vision_used ? 'LLM 視覺校對' : null,
-                                  stats.llm_used ? 'LLM 文字校正' : null].filter(Boolean).join(' + ') + '）';
-          }
-          resultBox.innerHTML =
-            '<div class="po-result">'
-            + '<b>' + tr('完成！') + '</b><br>'
-            + tr('處理 ') + (stats.pages_ocrd || 0) + ' / ' + (stats.pages_total || 0) + tr(' 頁')
-            + tr('（略過 ') + (stats.pages_skipped || 0) + tr(' 頁已有文字層）<br>')
-            + tr('插入文字 ') + (stats.words_inserted || 0) + tr(' 字') + modeLabel
-            + '<br><br>'
-            + '<a class="btn btn-primary" href="' + url + '" download>' + tr('下載文字辨識後 PDF') + '</a>'
-            + (window.attachWorkspaceSave ? '<button id="ocrWsSave" class="btn" type="button" data-s="sc3f83707"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-s="sb4a65f0b"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>' + tr('存至工作區') + '</button>' : '')
-            + (stats.llm_direct_used
-               ? '<div data-s="sf2fd7057">' + tr('⚠ LLM 直接辨識無逐字座標，拖選反白位置不對應圖上文字位置（要精準對位請改用「LLM 對位辨識」）；要拿完整內容請展開下方「識別結果全文」一次複製。中文易腦補，務必對照原檔複核。') + '</div>'
-               : '')
-            + (stats.llm_full_used
-               ? '<div data-s="sf2fd7057">' + tr('⚠ LLM 完整辨識的座標由 vision 模型預測，typical 誤差 ±10-30px（grounded 模型本質限制，非引擎 bug）。如需 pixel-accurate 拖選位置，請改勾「LLM 對位辨識」(EasyOCR 拿像素級座標 + LLM 拿文字)。') + '</div>'
-               : '')
-            + '</div>'
-            // 識別結果全文 — 預設摺疊，方便檢視 / 複製
-            + (fullText
-               ? '<details class="po-fulltext"><summary>' + PO_ICON_WRAP(PO_ICON_FILE) + '識別結果全文（' + fullCharCount + ' 字' + (stages.length > 1 ? '，' + stages.length + ' 頁' : '') + '，點開檢視 / 複製）</summary>'
-                 + '<div class="po-fulltext-body">'
-                 + '<div data-s="sd51702bf"><button type="button" class="btn btn-small" id="poCopyFullText">' + tr('📋 複製全文') + '</button></div>'
-                 + '<pre id="poFullTextPre" class="po-fulltext-pre">' + fullText.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + '</pre>'
-                 + '</div></details>'
-               : '')
-            + renderStageDetails(stages)
-            + '<details class="po-stages">'
-            + '<summary>' + PO_ICON_WRAP(PO_ICON_INFO) + tr('怎麼確認是這個工具 OCR 的（不是 macOS 預覽程式自動 OCR）？</summary>')
-            + '<div class="po-stages-body">'
-            + '<div data-s="s1382a0b4">'
-            + tr('下載後用 Adobe Acrobat / Apple 預覽程式開啟，三個方法擇一：<br>')
-            + '①「<b>' + tr('檔案 → 簡介') + '</b>' + tr('」（Preview）或「') + '<b>' + tr('檔案 → 內容') + '</b>' + tr('」（Acrobat）— Producer 欄位顯示「') + '<code>' + producer + '</code>' + tr('」+ tesseract 版本「') + '<code>' + tessV + '</code>」<br>'
-            + tr('② Cmd+F 搜尋「<code>') + marker + '</code>' + tr('」— 每頁右下角有此透明標記，能搜到代表是本工具產生的文字層') + '<br>'
-            + tr('③ 比對檔名：本工具輸出檔名以「<code>_searchable.pdf</code>」結尾')
-            + '</div>'
-            + '</div>'
-            + '</details>'
-            + renderViewer(uploadId);
-          setBtnBusy(false);
-          mountViewerEmbedCss();
-          if (window.attachWorkspaceSave) window.attachWorkspaceSave(
-            document.getElementById('ocrWsSave'),
-            () => ({ url: url, name: (url.split('/').pop() || 'ocr.pdf').split('?')[0], tool: 'pdf-ocr' }));
-          // 複製全文按鈕 — 從 pre 元素拿文字（任何模式只要有結果都會出現）
-          const copyBtn = document.getElementById('poCopyFullText');
-          if (copyBtn && fullText) {
-            copyBtn.addEventListener('click', async () => {
-              try {
-                await navigator.clipboard.writeText(fullText);
-                copyBtn.textContent = tr('✓ 已複製 ') + fullText.length + tr(' 字');
-                setTimeout(() => { copyBtn.textContent = ('<span data-s="se1b879c5">' + PO_ICON_COPY + '</span>複製全文'); }, 2000);
-              } catch (e) {
-                const ta = document.createElement('textarea');
-                ta.value = fullText; document.body.appendChild(ta);
-                ta.select(); document.execCommand('copy'); ta.remove();
-                copyBtn.textContent = tr('✓ 已複製');
-                setTimeout(() => { copyBtn.textContent = ('<span data-s="se1b879c5">' + PO_ICON_COPY + '</span>複製全文'); }, 2000);
-              }
-            });
-          }
+          renderOcrDone(jj);
           return;
         }
         if (jj.status === 'error') {
@@ -1162,6 +1167,43 @@ const PO_ICON_WARN = {{ icon('warn', size=12) | tojson }};
       setBtnBusy(false);
     }
   });
+
+  // 從「我的作業」按「開啟」回來（網址帶 `?job=<作業編號>`）：接回那件辨識的結果。
+  // 統計裡有逐頁全文，資料庫存的那份可能被截掉 → 完成的話另外讀完整的結果檔。
+  // 網址是使用者改得到的：兩個編號都先驗格式才接進 API 路徑。
+  (async function resumeFromMyJobs() {
+    let jid = null;
+    try { jid = new URLSearchParams(location.search).get('job'); } catch (_) { jid = null; }
+    if (!jid || !/^[a-f0-9]{32}$/.test(jid)) return;
+    const read = async () => {
+      const r = await fetch('/api/jobs/' + encodeURIComponent(jid));
+      return r.ok ? r.json() : null;
+    };
+    let jj = await read();
+    if (!jj) { statusEl.textContent = tr('找不到這件作業（可能已過保留期限）'); return; }
+    const uid = (jj.meta || {}).upload_id;
+    if (!uid || !/^[a-f0-9]{32}$/.test(uid)) return;
+    uploadId = uid;
+    progressBar.style.display = '';
+    while (jj && (jj.status === 'pending' || jj.status === 'running')) {
+      progressInner.style.width = ((jj.progress || 0) * 100).toFixed(1) + '%';
+      statusEl.textContent = jj.message ? tr(jj.message) : tr('處理中…');
+      await new Promise(r => setTimeout(r, 1500));
+      jj = await read();
+    }
+    if (!jj) return;
+    if (jj.status !== 'done') {
+      progressBar.style.display = 'none';
+      statusEl.textContent = jj.status === 'error' ? tr('失敗：') + (jj.error ? tr(jj.error) : tr('未知錯誤')) : tr(jj.message || '');
+      return;
+    }
+    try {
+      const rr = await fetch('/tools/pdf-ocr/result/' + encodeURIComponent(uid));
+      if (rr.ok) jj.meta = Object.assign({}, jj.meta || {}, await rr.json());
+    } catch (_) { /* 讀不到完整結果就用資料庫裡的摘要 */ }
+    statusEl.textContent = jj.message ? tr(jj.message) : tr('完成');
+    renderOcrDone(jj);
+  })();
 })();
 </script>
 {% endblock %}

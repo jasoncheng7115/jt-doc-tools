@@ -1,6 +1,6 @@
 [project]
 name = "jt-doc-tools"
-version = "1.17.50"
+version = "1.17.51"
 description = "Jason Tools 文件工具箱 — 整合式 PDF / Office 文件處理平台"
 authors = [{ name = "Jason Cheng (Jason Tools)", email = "jason@jason.tools" }]
 requires-python = ">=3.11"
@@ -21,8 +21,9 @@ dependencies = [
     # - jinja2>=3.1.6：3 個 sandbox breakout (filename / format / attr filter)
     # - Pillow>=12.2.0：FITS GZIP bomb / PSD OOB / PSD Tile Integer Overflow /
     #   PDF Trailer InfLoop / Font Integer Overflow / Nested coords heap overflow
-    # <1.8：1.8.0 的測試工具跟我們的中介層組合會讓上傳端點的測試失敗（實際服務正常），追完再放寬
-    "starlette>=1.3.1,<1.8",
+    # <2（v1.17.51 由 <1.8 放寬）：原本 1.8 起上傳後回檔案的端點會丟「Unexpected message received: http.request」，
+    # 原因是記上傳檔名的中介層自己重播請求內容、永遠不回「斷線」—— 已改用框架內建的快取，1.8 / 1.10 實測過
+    "starlette>=1.3.1,<2",
     # python-multipart>=0.0.32：querystring quadratic DoS (High) + semicolon
     # 分隔符 / Content-Disposition RFC2231 走私 / 負 Content-Length buffer 修補
     "python-multipart>=0.0.32,<0.1",

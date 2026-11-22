@@ -245,11 +245,79 @@ def test_short_horizontal_lines_keep_their_reading_when_the_strips_read_worse(mo
     assert [ln.text for ln in res["lines"]] == rows
 
 
-def test_chinese_mode_does_not_run_the_vertical_pass(monkeypatch):
-    """直書處理只在選日文辨識時跑（台灣名片的結果完全不受影響）。"""
+def test_english_only_does_not_run_the_vertical_pass(monkeypatch):
+    """直書處理只在會有直書名片的語言跑（日文、繁中）；只有英文時不跑。"""
     from app.core import ocr_engine
     im, _xs = vertical_card()
     calls = []
     monkeypatch.setattr(ocr_engine, "recognize_image", _fake_engine(im.size, calls))
-    card_ocr.ocr_card(im, langs="chi_tra+eng")
+    card_ocr.ocr_card(im, langs="eng")
     assert calls == []
+
+
+def test_taiwan_vertical_card_in_chinese_mode(monkeypatch):
+    """台灣的直式名片（2026-11-22 起繁中模式也跑直書處理）：直欄換成排好的讀法、擷取出欄位。"""
+    from app.core import ocr_engine
+    im, _xs = vertical_card()
+    calls = []
+    reads = ["範例科技股份有限公司", "業務部", "經理", "王 小明", "丁100一0005", "臺北市中正區範例路一段1號5樓",
+             "電話 ~02_2345一6789", "傳真 02-2345-6790"]
+    monkeypatch.setattr(ocr_engine, "recognize_image", _fake_engine(im.size, calls, strip_reads=reads))
+    res = card_ocr.ocr_card(im, langs="chi_tra+eng")
+    assert calls, "繁中模式也要跑直書處理"
+    fs = E.extract_fields([dict(ln.to_dict(), index=i) for i, ln in enumerate(res["lines"])], lang="zh")
+    got = {}
+    for f in fs:
+        got.setdefault(f["key"], []).append(f["value"])
+    assert got["company"] == ["範例科技股份有限公司"] and got["title"] == ["經理"]
+    assert got["phone"] == ["02-2345-6789"] and got["fax"] == ["02-2345-6790"], got
+    assert "臺北市中正區範例路一段1號5樓" in got["address"][0]
+
+
+def test_thin_texture_strips_are_not_columns():
+    """底紋、照片裡的細線也是細長的一條：比卡片短邊 1.5% 還細的不算一欄（台灣真實樣本實測誤觸兩張）。"""
+    im = Image.new("RGB", (1400, 900), "white")
+    d = ImageDraw.Draw(im)
+    for x in range(100, 1300, 60):                       # 一排 9 px 寬、200 px 高的細條
+        d.rectangle([x, 300, x + 9, 500], fill="black")
+    assert V.find_columns(im) == []
+
+
+def test_a_well_read_horizontal_line_is_never_replaced(monkeypatch):
+    """跟直欄重疊的原本的行會被換掉（那些是直排被切成的碎片）—— 但讀得好的橫排行（信心 60 以上、三個字以上）
+    一律留著。台灣真實樣本實測：一張英文名片的「Dr. …」「Grafen」被底紋誤判的細條蓋掉。"""
+    from app.core import ocr_engine
+    im, _xs = vertical_card()
+    good = {"text": "Grafen", "left": 545, "top": 200, "width": 70, "height": 22, "conf": 90}
+    base = _fake_engine(im.size, [])
+
+    def fake(png, langs, **kw):
+        words, used = base(png, langs, **kw)
+        if Image.open(io.BytesIO(png)).size == im.size:
+            words = words + [good]
+        return words, used
+    monkeypatch.setattr(ocr_engine, "recognize_image", fake)
+    texts = [ln.text for ln in card_ocr.ocr_card(im, langs="jpn+eng")["lines"]]
+    assert "Grafen" in texts, texts
+    assert "株式会社サンプル" in texts, "直欄照樣換上排好的讀法"
+
+
+def test_texture_read_as_text_is_not_taken():
+    """底紋、照片被讀成一串「圖」（台灣真實樣本每一次誤觸都有）：不採用；真的文字照常。"""
+    for t in ("回圖圖", "主者主圖圖圖", "圖圖啞", "一嘿圖圖一"):
+        assert card_ocr._looks_like_texture(t), t
+    for t in ("株式会社サンプル", "設計圖書館", "電話 03-1234-5678", "ABC"):
+        assert not card_ocr._looks_like_texture(t), t
+
+
+def test_strips_touching_the_card_edge_are_not_columns():
+    """貼著卡片邊緣（2% 以內）的細長區塊是邊框、照片或裁切帶到的背景；真的字有留白。"""
+    im = Image.new("RGB", (655, 1400), "white")
+    d = ImageDraw.Draw(im)
+    f = _font(30)
+    for i, ch in enumerate("株式会社"):                    # 貼著右邊緣的一欄
+        d.text((633, 300 + 34 * i), ch, font=f, fill="black")
+    for i, ch in enumerate("株式会社"):                    # 離邊緣有留白的一欄
+        d.text((400, 300 + 34 * i), ch, font=f, fill="black")
+    xs = [c[0] for c in V.find_columns(im)]
+    assert len(xs) == 1 and 380 <= xs[0] <= 420, xs

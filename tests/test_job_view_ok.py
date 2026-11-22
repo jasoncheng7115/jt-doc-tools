@@ -354,7 +354,63 @@ def _doc_translate(jid, uid):
     return {"upload_id": uid}, [r._meta_path(uid), r._out_path(uid, ".docx")]
 
 
+# 2026-11-22 補上的八支：這幾支沒有在 meta 記上傳編號，「資料還在」靠的是結果檔本身（`result_path`），
+# maker 回第三個值＝結果檔。檔案用工具自己的路徑函式或寫在程式裡的命名規則產生。
+def _tmp():
+    from app.config import settings
+    return settings.temp_dir
+
+
+def _pdf_compress(jid, uid):
+    out = _tmp() / f"cmp_{uid}_out" / "doc_compressed.pdf"
+    return {}, [out], out
+
+
+def _pdf_bookmark(jid, uid):
+    out = _mod("app.tools.pdf_bookmark.router")._out_path(uid)
+    return {}, [out], out
+
+
+def _pdf_page_size(jid, uid):
+    out = _mod("app.tools.pdf_page_size.router")._out(uid)
+    return {}, [out], out
+
+
+def _pdf_seam_stamp(jid, uid):
+    out = _mod("app.tools.pdf_seam_stamp.router")._out(uid)
+    return {}, [out], out
+
+
+def _pdf_to_slides(jid, uid):
+    out = _tmp() / f"p2s_{uid}_work" / "doc.pptx"
+    return {}, [out], out
+
+
+def _pdf_to_office(jid, uid):
+    out = _tmp() / f"p2o_{uid}_work" / "doc.docx"
+    return {}, [out, out.parent / "result.json"], out
+
+
+def _markdown_to_doc(jid, uid):
+    out = _mod("app.tools.markdown_to_doc.router")._work_dir(uid) / "doc.pdf"
+    return {"upload_id": uid}, [out], out
+
+
+def _pdf_ocr(jid, uid):
+    r = _mod("app.tools.pdf_ocr.router")
+    out = r._work_dir() / f"po_{uid}_out.pdf"
+    return {"upload_id": uid}, [out, r._result_path(uid)], out
+
+
 TABLE = {
+    "app/tools/pdf_compress/router.py": ("job", "/tools/pdf-compress/?job={jid}", _pdf_compress),
+    "app/tools/pdf_bookmark/router.py": ("job", "/tools/pdf-bookmark/?job={jid}", _pdf_bookmark),
+    "app/tools/pdf_page_size/router.py": ("job", "/tools/pdf-page-size/?job={jid}", _pdf_page_size),
+    "app/tools/pdf_seam_stamp/router.py": ("job", "/tools/pdf-seam-stamp/?job={jid}", _pdf_seam_stamp),
+    "app/tools/pdf_to_slides/router.py": ("job", "/tools/pdf-to-slides/?job={jid}", _pdf_to_slides),
+    "app/tools/pdf_to_office/router.py": ("job", "/tools/pdf-to-office/?job={jid}", _pdf_to_office),
+    "app/tools/markdown_to_doc/router.py": ("job", "/tools/markdown-to-doc/?job={jid}&uid={uid}", _markdown_to_doc),
+    "app/tools/pdf_ocr/router.py": ("job", "/tools/pdf-ocr/?job={jid}", _pdf_ocr),
     "app/tools/translate_doc/router.py": ("job", "/tools/translate-doc/?job={jid}", _translate_doc),
     "app/tools/meeting_summary/router.py": ("job", "/tools/meeting-summary/?job={jid}", _meeting_summary),
     "app/tools/meeting_transcribe/router.py": ("job", "/tools/meeting-transcribe/?job={jid}", _meeting_transcribe),
@@ -407,14 +463,20 @@ def test_every_view_url_tool_opens_while_its_data_exists(data_dir, module):
         row = _row(jid=jid, view_url=url)
         assert _ok(row), f"{module}：自己保存資料的頁面，「開啟」不該跟著暫存區消失"
         return
-    meta, files = make(jid, uid)
+    made = make(jid, uid)
+    meta, files = made[0], made[1]
+    result_path = made[2] if len(made) > 2 else None
     for f in files:
-        assert pathlib.Path(f).parent == data_dir / "temp", f
+        assert data_dir / "temp" in pathlib.Path(f).parents, f
+        pathlib.Path(f).parent.mkdir(parents=True, exist_ok=True)
         _touch(pathlib.Path(f))
-    row = _row(jid=jid, view_url=url, extra=meta)
+    row = _row(jid=jid, view_url=url, extra=meta, result_path=result_path)
     assert _ok(row), f"{module}：資料還在，「開啟」卻不見了"
     for f in files:
         pathlib.Path(f).unlink()
+        par = pathlib.Path(f).parent                 # 暫存清理會連工作資料夾一起刪（資料夾名稱也帶著編號）
+        if par != data_dir / "temp" and not any(par.iterdir()):
+            par.rmdir()
     assert not _ok(row), f"{module}：資料已經清掉，「開啟」按下去會是 410"
 
 

@@ -5,7 +5,7 @@
   橫的框兩個方向都讀不太出來時再試 90° / 270°（直式名片橫放掃描）。
   直式卡片本來就可能是直的（直書名片），所以直式不強制轉成橫式。
 * 字（word）依垂直重疊併成行；行的框位是卡面座標（拉正後的裁圖），校對畫面用來框出原文。
-* 日文名片的直書（縦書き）：直排的欄另外切字、排成橫的一行再讀（`vertical.py`、`_vertical_pass`）。
+* 直書（日文的縦書き、台灣的直式名片）：直排的欄另外切字、排成橫的一行再讀（`vertical.py`、`_vertical_pass`）。
 """
 from __future__ import annotations
 
@@ -23,6 +23,8 @@ DEFAULT_LANGS = "chi_tra+eng"
 #: 名片的辨識語言（使用者 2026-11-20：加入日文）。EasyOCR 的日文模型同時認得漢字與假名；
 #: 非拉丁語系的模型一次只能載一個，所以是「選一種」而不是全部一起認。
 LANGS = {"zh": "chi_tra+eng", "ja": "jpn+eng"}
+#: 會有直書（直排）名片的語言：日文的縦書き、台灣的直式名片（2026-11-22 加繁中）
+VERTICAL_LANGS = {"jpn", "chi_tra"}
 
 
 def langs_for(lang: str) -> str:
@@ -195,7 +197,7 @@ def ocr_card(img: Image.Image, *, langs: str = DEFAULT_LANGS, engine: str | None
             rots = rots + [90, 270]
     q, rot, words, used, im = best
     lines = group_lines(words)
-    if used != "none" and "jpn" in langs.split("+"):
+    if used != "none" and VERTICAL_LANGS & set(langs.split("+")):
         try:
             lines = _vertical_pass(lines, im, langs, engine)
         except Exception:                                  # noqa: BLE001 —— 直書那一輪失敗就用一般讀法
@@ -211,6 +213,14 @@ def ocr_card(img: Image.Image, *, langs: str = DEFAULT_LANGS, engine: str | None
         except Exception:                                  # noqa: BLE001 —— 補讀失敗就用第一次的結果
             log.exception("名片 OCR 補讀失敗")
     return {"lines": lines, "rotation": rot, "engine": used, "image": im, "quality": q}
+
+
+def _looks_like_texture(text: str) -> bool:
+    """底紋、照片、密集線條被讀成的字：EasyOCR 常讀成一串「圖」（「回圖圖」「主者主圖圖圖」「圖圖啞」，
+    台灣真實樣本實測）。一欄裡「圖」佔中日文字三分之一以上就當作不是字；比例沒那麼高的（「國國圖中」）
+    靠的是「貼著卡片邊緣」那一道。"""
+    cjk = [ch for ch in text if _is_cjk(ch)]
+    return bool(cjk) and cjk.count("圖") * 3 >= len(cjk)
 
 
 def _vertical_pass(lines: list[Line], im: Image.Image, langs: str, engine) -> list[Line]:
@@ -232,13 +242,18 @@ def _vertical_pass(lines: list[Line], im: Image.Image, langs: str, engine) -> li
     if len(cols) < 2:
         return lines
     read = _read_strips(im, cols, langs, engine)
-    keep = [(c, t, cf) for c, t, cf in read
-            if sum(1 for ch in t if _is_cjk(ch)) >= 2 or len(re.sub(r"\W", "", t)) >= 4]
+    # 讀出來信心極低的欄不採用（底紋讀成的亂碼常在 10 以下）。門檻不可以拉高：「携帯」常被讀錯，
+    # 整欄平均會掉到 20～40，拉到 40 時合成直式卡的手機欄有五張整欄不見（貼著邊緣的誤觸另外擋）
+    keep = [(c, t, cf) for c, t, cf in read if cf >= 20 and not _looks_like_texture(t)
+            and (sum(1 for ch in t if _is_cjk(ch)) >= 2 or len(re.sub(r"\W", "", t)) >= 4)]
     if sum(1 for _c, t, _cf in keep if sum(1 for ch in t if _is_cjk(ch)) >= 2) < 2:
         return lines
     def covered(ln: Line) -> bool:
-        # 碰到任何一欄就換掉：直排被切成的碎片常常橫跨好幾欄（「童馨」是職稱與讀音兩欄的字拼起來的）
+        # 碰到任何一欄就換掉：直排被切成的碎片常常橫跨好幾欄（「童馨」是職稱與讀音兩欄的字拼起來的）。
+        # 但讀得好的橫排行一律留著（直書名片上原本的讀法只有一兩個字的碎片，到不了這個門檻）
         x, y, w, h = ln.box
+        if w >= h and ln.conf >= 60 and len(re.sub(r"\s", "", ln.text)) >= 3:
+            return False
         for c, _t, _cf in keep:
             cx, cy, cw, ch = c.box
             m = c.size * 0.5

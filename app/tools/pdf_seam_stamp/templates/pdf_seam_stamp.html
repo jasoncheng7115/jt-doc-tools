@@ -307,6 +307,8 @@
     onError: () => { $('smSubmit').disabled = false; },
   });
 
+  progress.resumeFromUrl({ reveal: document.getElementById('smPvPanel'), keep: [document.getElementById('smResult')] });   // 從「我的作業」按「開啟」回來：接回那件作業的結果
+
   function form() {
     const fd = new FormData();
     fd.append('upload_id', uploadId || '');

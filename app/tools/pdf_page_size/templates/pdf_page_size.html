@@ -179,6 +179,8 @@
     onError: () => { $('psSubmit').disabled = false; },
   });
 
+  progress.resumeFromUrl({ reveal: document.getElementById('psPvPanel'), keep: [document.getElementById('psResult')] });   // 從「我的作業」按「開啟」回來：接回那件作業的結果
+
   function form() {
     const fd = new FormData();
     fd.append('upload_id', uploadId || '');

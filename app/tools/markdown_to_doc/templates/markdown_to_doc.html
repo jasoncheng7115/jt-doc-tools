@@ -444,7 +444,7 @@ def hello():
       _md2Idle();
       $('md2Status').textContent = '';
       try {
-        const rr = await fetch('/tools/markdown-to-doc/result/' + md2Uid);
+        const rr = await fetch('/tools/markdown-to-doc/result/' + encodeURIComponent(md2Uid));
         if (!rr.ok) throw new Error(await window.friendlyServerError(rr, tr('讀取結果失敗')));
         const data = await rr.json();
         lastResult = data;
@@ -463,7 +463,8 @@ def hello():
     const q = new URLSearchParams(location.search);
     const jid = q.get('job');
     const uid = q.get('uid');
-    if (jid) {
+    // 網址是使用者改得到的：兩個編號都先驗格式才接進 API 路徑
+    if (jid && /^[a-f0-9]{32}$/.test(jid) && uid && /^[a-f0-9]{32}$/.test(uid)) {
       md2Uid = uid;
       md2Btn = { el: $('md2Convert'), html: $('md2Convert').innerHTML };
       jp.show();

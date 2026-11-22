@@ -188,6 +188,24 @@ async def preview_png(request: Request, job_id: str, kind: str,
     return FileResponse(str(png), media_type="image/png")
 
 
+@router.get("/result/{job_id}")
+async def job_result(request: Request, job_id: str):
+    """轉換完成後的完整結果（預覽頁碼、引擎與診斷報告）。從「我的作業」按「開啟」回來時用。
+    與預覽圖同一套歸屬判斷（非擁有者一律 404，不確認 id 存在）。"""
+    import json as _json
+    require_uuid_hex(job_id, "job_id")
+    job = job_manager.get(job_id)
+    from app.main import _job_access
+    if job and not _job_access(job, request):
+        job = None
+    if not job or not job.result_path:
+        raise HTTPException(404, "job 不存在")
+    p = Path(job.result_path).parent / "result.json"
+    if not p.is_file():
+        raise HTTPException(404, "結果未就緒")
+    return _json.loads(p.read_text(encoding="utf-8"))
+
+
 @router.get("/report/{job_id}")
 async def download_report(request: Request, job_id: str):
     """下載某 job 的 Markdown 改善報告。"""
@@ -373,9 +391,19 @@ async def submit(request: Request):
             "postprocess_done": result.postprocess_done,
             "report": report,
         }
+        # 診斷報告可能很大：存回資料庫時超過上限會被截掉（巢狀的欄位整個不見）→ 另外整份存一個結果檔，
+        # 從「我的作業」按「開啟」回來時讀這份（`/result/{job_id}`）
+        try:
+            import json as _json
+            (work_dir / "result.json").write_text(
+                _json.dumps({"preview": preview_info, "summary": job.meta["summary"]}, ensure_ascii=False, default=str),
+                encoding="utf-8")
+        except (OSError, TypeError, ValueError):
+            logger.warning("pdf-to-office 結果檔寫不進去（「開啟」回來會只剩資料庫裡的摘要）", exc_info=True)
 
     job = job_manager.submit("pdf-to-office", run,
                               meta={"filename": orig_name, "output_format": output_format})
+    job.meta["view_url"] = f"/tools/pdf-to-office/?job={job.id}"   # 「我的作業」的「開啟」回到這一頁、接回結果
     return {"job_id": job.id}
 
 

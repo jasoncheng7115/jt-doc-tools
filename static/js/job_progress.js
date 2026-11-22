@@ -159,6 +159,34 @@
         }
       };
     }
+    // 從「我的作業」按「開啟」回來（網址帶 `?job=<作業編號>`）：接著追蹤那件作業，
+    // 跑完照樣呼叫 `onDone` 把結果畫面畫出來（結果都在作業的 `meta` 裡）。
+    // 編號格式不對就當作沒有 —— 網址是使用者改得到的。回作業編號或 null。
+    //
+    // `reveal`：進度列與結果放在「上傳之後才打開」的面板裡時，傳那個面板 —— 接回時打開它，
+    // 面板裡跟這次結果無關的東西（預覽、選項、送出按鈕，都要先有上傳的檔案才有意義）先收起來，
+    // `keep` 是要留著的結果區。使用者接著選了新檔案或按「重新開始」，收起來的東西放回去。
+    resumeFromUrl({ reveal = null, keep = [] } = {}) {
+      let jid = null;
+      try { jid = new URLSearchParams(location.search).get('job'); } catch (_) { jid = null; }
+      if (!jid || !/^[a-f0-9]{32}$/.test(jid)) return null;
+      if (reveal) {
+        const tucked = [];
+        reveal.hidden = false;
+        Array.from(reveal.children).forEach((ch) => {
+          if (ch.contains(this.root) || keep.some((k) => k && (ch === k || ch.contains(k)))) return;
+          if (!ch.hidden) { ch.hidden = true; tucked.push(ch); }
+        });
+        const restore = () => { tucked.splice(0).forEach((ch) => { ch.hidden = false; }); };
+        document.addEventListener('change', (e) => {
+          if (e.target && e.target.type === 'file') restore();
+        }, true);
+        this.resetBtn.addEventListener('click', restore);
+      }
+      this.track(jid);
+      try { this.root.scrollIntoView({ block: 'nearest' }); } catch (_) {}
+      return jid;
+    }
     track(jobId) {
       // 作業編號一律**當成不可信的值**：它從網址 / 伺服器回應進來，直接拼進
       // 路徑的話可以塞進 `../` 或 `//` 改寫成別的端點（CodeQL 的

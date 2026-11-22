@@ -5,11 +5,34 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (979 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (980 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.51] - 2026-11-22
+
+### Added (business card reader: vertically written Taiwanese cards)
+
+- Traditional Chinese recognition now handles vertically written cards too: vertical columns are cut into characters and laid out as one horizontal line before recognition, so company, title, name, address and phone each become their own field. Measured with real recognition on 16 made-up vertical Taiwanese cards, field accuracy rose from 6.6% to 86.1%.
+- Safeguards keep photos, logos, background patterns and borders from being taken for vertical text: strips that are too thin, touch the card edge, read with very low confidence or read as a run of `圖` are ignored; places where horizontal text was read well are not treated as columns, and well-read horizontal lines are never replaced. On 183 real Taiwanese sample cards only one card changed, a genuinely vertical card whose company and name are now correct; the other 182 are unchanged, as are 4 real Japanese cards.
+- With the tighter safeguards, made-up vertical Japanese cards score 94.9% (95.5% in v1.17.50); horizontal Japanese cards stay at 95.2%.
+
+### Added (form auto-fill: vertically written labels)
+
+- Forms whose labels are written vertically in a narrow cell (one character per line) are now recognised, and the value goes into the cell on the right. Full form regression: the new synthetic sample went from 3 to 7 filled fields; the other 31 forms are unchanged and overprinting did not increase.
+
+### Improved ("Open" on My jobs)
+
+- Tools whose result is a screen can now be reopened from My jobs: PDF compression (sizes before and after), PDF bookmarks, page size, seam stamp (including the random seed), PDF to slides, Markdown to document, PDF OCR (full text and embedded preview) and PDF to Office (engine and before/after preview). Previously these offered only a download on My jobs, and the result was gone once the tab was closed. Markdown to document already supported reopening, but the Open button never appeared; that is fixed too.
+- Tools whose result is a single file (merge, encrypt, convert and so on) keep download only. A new check requires every background job type to either reopen its result or state why it only offers a download.
+- PDF OCR no longer drops the file name recorded at submission; the full results of PDF OCR and PDF to Office are also saved separately, so Open still works after the service restarts.
+
+### Fixed
+
+- The layer that records uploaded file names for the audit log replayed the request body itself after reading it. With Starlette 1.8 and later, tools that return a file straight after an upload failed (older versions spun until the response finished). It now uses the framework's own cache, and the Starlette upper bound is relaxed from `<1.8` to `<2` (installations still lock 1.3.1).
+- The check for the service hardening settings moved to `tests/test_service_unit_hardening.py`, the file named in the install script, and now also compares the values in both copies.
 
 ## [1.17.50] - 2026-11-20
 
