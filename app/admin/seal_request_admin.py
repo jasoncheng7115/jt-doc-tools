@@ -24,6 +24,16 @@ def _audit(request: Request, event: str, target: str, details: dict) -> None:
                        ip=client_ip.real_client_ip(request), target=target, details=details)
 
 
+def _known_ous() -> list[dict]:
+    from ..core import permissions
+    try:
+        return permissions.known_ous()
+    except Exception:                                  # noqa: BLE001 —— 算不出來就只少一段選單，手打 DN 照樣可以
+        import logging
+        logging.getLogger(__name__).warning("組織單位清單算不出來", exc_info=True)
+        return []
+
+
 def _subject_names() -> tuple[dict, dict]:
     from ..core import group_manager, user_manager
     return ({str(u["id"]): u for u in user_manager.list_users()},
@@ -90,6 +100,8 @@ def register(router, templates) -> None:
                        "source": u.get("source")} for k, u in users.items()],
             "groups": [{"key": k, "name": g.get("name"), "source": g.get("source"),
                         "members": int(g.get("member_count") or 0)} for k, g in groups.items()],
+            # 組織單位用選的（從目錄帳號的 DN 推出來）；共用名片簿也讀這一支
+            "ous": _known_ous(),
         }, headers={"Cache-Control": "no-store"})
 
     @router.put("/seal-request/api/enabled")

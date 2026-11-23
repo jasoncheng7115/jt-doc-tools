@@ -200,7 +200,8 @@ def _asset_policy(uid: int, subjects: set, asset, tool_id: str) -> Optional[dict
     ai = pol.get("ai") or {}
     if not ai.get("enabled"):
         return None
-    want = {(s["type"], str(s["key"])) for s in ai.get("subjects") or []}
+    from .permissions import canon_subject_key          # 組織單位的鍵跟登入算出來的一樣正規化
+    want = {(s["type"], canon_subject_key(s["type"], str(s["key"]))) for s in ai.get("subjects") or []}
     if not want or not (subjects & want):
         return None
     return ai

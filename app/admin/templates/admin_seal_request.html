@@ -142,6 +142,11 @@
       <input class="field" type="search" id="srGroupSearch" placeholder="{{ tr('搜尋') }}">
       <div class="sr-pick-list" id="srGroups"></div>
     </div>
+    <div>
+      <h3>{{ tr('組織單位') }} <span id="srOuCount"></span></h3>
+      <input class="field" type="search" id="srOuSearch" placeholder="{{ tr('搜尋') }}">
+      <div class="sr-pick-list" id="srOus"></div>
+    </div>
   </div>
   <p>
     <button class="btn btn-primary" type="button" id="srPickerSave">{{ icon('save', size=14) }} <span>{{ tr('儲存') }}</span></button>
@@ -435,6 +440,7 @@
   function count() {
     $('srUserCount').textContent = '(' + document.querySelectorAll('#srUsers input:checked').length + ')';
     $('srGroupCount').textContent = '(' + document.querySelectorAll('#srGroups input:checked').length + ')';
+    $('srOuCount').textContent = '(' + document.querySelectorAll('#srOus input:checked').length + ')';
   }
   // 共用的選人視窗：印章的保管人 / 可申請對象、流程的申請對象與各關審核者、改派都用這一個
   async function ensureSubjects() {
@@ -455,7 +461,12 @@
       u.display_name && u.display_name !== u.username ? u.display_name : '', chosen.has('user:' + u.key))));
     $('srGroups').replaceChildren(...subjects.groups.map(g => row('group', g.key, g.name || '',
       tr('本站 {0} 人').replace('{0}', String(g.members || 0)), chosen.has('group:' + g.key))));
-    $('srUserSearch').value = ''; $('srGroupSearch').value = '';
+    // 組織單位：從目錄帳號的 DN 推出來的清單，加上已經設定、但清單裡沒有的（照樣列出來，儲存時才不會被拿掉）
+    const ous = (subjects.ous || []).map(o => [o.key, o.name, tr('組織單位・{0} 人').replace('{0}', String(o.users || 0))]);
+    (opts.selected || []).forEach(x => { if (x.type === 'ou' && !ous.some(o => o[0] === x.key)) ous.push([x.key, x.name || x.key, '']); });
+    $('srOus').replaceChildren(...ous.map(o => row('ou', o[0], o[1], o[2], chosen.has('ou:' + o[0]))));
+    if (!ous.length) $('srOus').append(el('p', 'muted', tr('沒有組織單位（要先接 LDAP / AD，帳號同步或登入過才會出現）')));
+    $('srUserSearch').value = ''; $('srGroupSearch').value = ''; $('srOuSearch').value = '';
     count();
     $('srPicker').hidden = false;
     $('srPicker').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -482,6 +493,7 @@
   $('srPicker').addEventListener('change', count);
   $('srUserSearch').addEventListener('input', e => filter('srUsers', e.target.value));
   $('srGroupSearch').addEventListener('input', e => filter('srGroups', e.target.value));
+  $('srOuSearch').addEventListener('input', e => filter('srOus', e.target.value));
   $('srPickerClose').addEventListener('click', () => { $('srPicker').hidden = true; });
   $('srPickerSave').addEventListener('click', async () => {
     if (!picking) return;
@@ -609,6 +621,7 @@
   function labelOf(s) {
     if (!subjects) return s.key;
     if (s.type === 'user') { const u = subjects.users.find(x => x.key === s.key); return u ? (u.username + '@' + (u.source || 'local')) : s.key; }
+    if (s.type === 'ou') { const o = (subjects.ous || []).find(x => x.key === s.key); return o ? o.name : s.key; }
     const g = subjects.groups.find(x => x.key === s.key); return g ? g.name : s.key;
   }
   $('srFlowNew').addEventListener('click', () => openFlow(null));

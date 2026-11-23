@@ -144,7 +144,23 @@ def _m4_prefs(conn: sqlite3.Connection) -> None:
     """)
 
 
-_MIGRATIONS = [_m1_initial, _m2_shared_and_scans, _m3_job_kind_and_items, _m4_prefs]
+def _m5_canon_ou_members(conn: sqlite3.Connection) -> None:
+    """共用事務機的組織單位成員鍵改成正規化的寫法（v1.17.51 以前原樣存，手打 `OU=…` 的那幾台 OU 裡的人看不到）。"""
+    from .permissions import canon_subject_key
+    for conn_id, key in conn.execute(
+            "SELECT conn_id, subject_key FROM mfp_members WHERE subject_type='ou'").fetchall():
+        k = canon_subject_key("ou", key)
+        if k == key:
+            continue
+        if conn.execute("SELECT 1 FROM mfp_members WHERE conn_id=? AND subject_type='ou' AND subject_key=?",
+                        (conn_id, k)).fetchone():
+            conn.execute("DELETE FROM mfp_members WHERE conn_id=? AND subject_type='ou' AND subject_key=?", (conn_id, key))
+        else:
+            conn.execute("UPDATE mfp_members SET subject_key=? WHERE conn_id=? AND subject_type='ou' AND subject_key=?",
+                         (k, conn_id, key))
+
+
+_MIGRATIONS = [_m1_initial, _m2_shared_and_scans, _m3_job_kind_and_items, _m4_prefs, _m5_canon_ou_members]
 _INITED: set[str] = set()
 _INIT_LOCK = threading.Lock()
 
@@ -430,6 +446,8 @@ def set_members(conn_id: int, members: list[tuple[str, str]]) -> list[dict]:
             raise ValueError("invalid member")
         if st in ("user", "group") and not sk.isdigit():
             raise ValueError("invalid member")
+        from .permissions import canon_subject_key      # OU 的 DN 走權限系統同一道正規化（`OU=` 與 `ou=` 是同一個）
+        sk = canon_subject_key(st, sk)
         if (st, sk) not in clean:
             clean.append((st, sk))
     if len(clean) > MAX_MEMBERS:

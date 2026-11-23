@@ -262,6 +262,43 @@ def _user_external_subjects(conn, user_id: int) -> list[tuple[str, str]]:
         return []
 
 
+def known_ous(limit: int = 1000) -> list[dict]:
+    """本站帳號與群組所在的組織單位（OU），給「指派給組織單位」的畫面用選的，不用手打 DN。
+
+    從目錄帳號與群組的 DN（`external_dn`）推出每一層 OU（同 `auth_ldap.get_ou_subjects_for_dn`），
+    鍵走 `canon_subject_key` —— 跟登入時算出來的 OU 對得上。`users` 是 DN 在這個 OU 底下（含下層）的帳號數。
+    SAML / OIDC 與本機帳號沒有 DN，不會出現在這裡。回 `[{key, dn, name, users}]`，帳號多的在前。"""
+    from . import auth_ldap
+    conn = auth_db.conn()
+    counts: dict[str, int] = {}
+    shown: dict[str, str] = {}
+
+    def add(dn: str, n: int) -> None:
+        for _st, ou in auth_ldap.get_ou_subjects_for_dn(dn or ""):
+            k = canon_subject_key("ou", ou)
+            counts[k] = counts.get(k, 0) + n
+            shown.setdefault(k, ou)
+
+    for r in conn.execute("SELECT external_dn FROM users WHERE COALESCE(external_dn,'')<>''").fetchall():
+        add(r["external_dn"], 1)
+    for r in conn.execute("SELECT external_dn FROM groups WHERE COALESCE(external_dn,'')<>''").fetchall():
+        add(r["external_dn"], 0)
+
+    def label(dn: str) -> str:
+        ous, dcs = [], []
+        for rdn in dn.split(","):
+            a, _, v = rdn.strip().partition("=")
+            if a.strip().upper() == "OU":
+                ous.append(v.strip())
+            elif a.strip().upper() == "DC":
+                dcs.append(v.strip())
+        return " / ".join(ous) + (f"（{'.'.join(dcs)}）" if dcs else "")
+
+    out = [{"key": k, "dn": shown[k], "name": label(shown[k]), "users": n} for k, n in counts.items()]
+    out.sort(key=lambda o: (-o["users"], o["name"].lower()))
+    return out[:limit]
+
+
 def subjects_for_user(user_id: int) -> list[tuple[str, str]]:
     """這位使用者「是」哪些主體：使用者本身、所屬群組（含巢狀的上層）、組織單位。
 

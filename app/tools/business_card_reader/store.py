@@ -218,7 +218,29 @@ def _m3_card_langs(conn: sqlite3.Connection) -> None:
     conn.executescript("ALTER TABLE bc_cards ADD COLUMN langs TEXT NOT NULL DEFAULT '';")
 
 
-_MIGRATIONS = [_m1_initial, _m2_books, _m3_card_langs]
+def _m4_canon_ou_members(conn: sqlite3.Connection) -> None:
+    """共用名片簿的組織單位成員鍵改成正規化的寫法（v1.17.51 以前原樣存：手打 `OU=Sales,DC=…` 的那一本，
+    OU 裡的人登入算出來的是 `ou=Sales,dc=…`，精確比對永遠對不上、無聲地看不到）。只改 OU 那幾列。"""
+    from ...core.permissions import canon_subject_key
+    for book_id, key, role in conn.execute(
+            "SELECT book_id, subject_key, role FROM bc_book_members WHERE subject_type='ou'").fetchall():
+        k = canon_subject_key("ou", key)
+        if k == key:
+            continue
+        hit = conn.execute("SELECT role FROM bc_book_members WHERE book_id=? AND subject_type='ou' AND subject_key=?",
+                           (book_id, k)).fetchone()
+        if hit:                                            # 正規化之後撞在一起：留權限高的那個
+            if role == "edit":
+                conn.execute("UPDATE bc_book_members SET role='edit' WHERE book_id=? AND subject_type='ou' AND subject_key=?",
+                             (book_id, k))
+            conn.execute("DELETE FROM bc_book_members WHERE book_id=? AND subject_type='ou' AND subject_key=?",
+                         (book_id, key))
+        else:
+            conn.execute("UPDATE bc_book_members SET subject_key=? WHERE book_id=? AND subject_type='ou' AND subject_key=?",
+                         (k, book_id, key))
+
+
+_MIGRATIONS = [_m1_initial, _m2_books, _m3_card_langs, _m4_canon_ou_members]
 _INITED: set[str] = set()
 _INIT_LOCK = threading.Lock()
 

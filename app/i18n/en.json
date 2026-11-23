@@ -8798,5 +8798,19 @@
   "Email 的網域少了點，已依常見的日本網域（.co.jp 等）補上，請對照原圖": "The email domain was missing its dots; they were restored using common Japanese domains (.co.jp and so on). Please check against the card.",
   "網址的「//」或點看起來沒認出來，已補上，請對照原圖": "The \"//\" or the dots in this web address looked unreadable and were put back; please check against the card.",
   "找不到這件作業（可能已過保留期限）": "This job could not be found (it may have passed the retention period)",
-  "找不到這次辨識的結果（可能已過保留期限）": "The result of this recognition could not be found (it may have passed the retention period)"
+  "找不到這次辨識的結果（可能已過保留期限）": "The result of this recognition could not be found (it may have passed the retention period)",
+  "加入時的權限": "Permission when added",
+  "在下面的清單點一下使用者、群組或組織單位（OU）就會加入。清單裡的使用者是本站已有帳號的人（目錄同步進來的，或登入過一次的）；還沒有帳號的人，請把對方所在的群組或組織單位加進來，對方第一次登入後就看得到這本名片簿。": "Click a user, group or organizational unit (OU) in the list below to add it. The users listed already have an account on this site (synced from the directory, or signed in at least once). For people without an account yet, add their group or organizational unit; they will see this card book after their first sign-in.",
+  "已加入的成員": "Members added",
+  "搜尋使用者、群組或組織單位（按 Enter 加入第一筆）": "Search users, groups or organizational units (press Enter to add the first match)",
+  "清單裡找不到的組織單位：手動輸入 DN": "Organizational unit not in the list: enter the DN manually",
+  "還沒有加入任何成員，在上面的清單點一下就會加到這裡。": "No members yet. Click an entry in the list above to add it here.",
+  "加入 {0}": "Add {0}",
+  "組織單位・{0} 人": "Organizational unit · {0} people",
+  "已經有同名的共用名片簿，請換一個名稱": "A shared card book with this name already exists. Please choose another name.",
+  "在這裡建立的事務機，加進來的成員（使用者、群組或組織單位）不用自己新增，就會出現在對方的「事務機掃描取件」頁。成員可以重新測試、看詳細、掃描，不能改名或移除。": "MFPs created here appear on the MFP Scan & Fetch page of every member (user, group or organizational unit) without them adding it themselves. Members can test again, view details and scan, but cannot rename or remove them.",
+  "勾選可以使用這台事務機的使用者、群組或組織單位（OU）；群組的成員（含子群組）、組織單位裡的人（含下層）都看得到。": "Tick the users, groups or organizational units (OU) that can use this MFP. Group members (including subgroups) and people in an organizational unit (including the units below it) can all see it.",
+  "搜尋組織單位": "Search organizational units",
+  "搜尋組織單位…": "Search organizational units…",
+  "沒有組織單位（要先接 LDAP / AD，帳號同步或登入過才會出現）": "No organizational units (connect LDAP / AD first; they appear once accounts are synced or have signed in)"
 }

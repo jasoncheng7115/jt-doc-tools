@@ -126,7 +126,9 @@ def _clean_policy(raw: Any) -> dict[str, Any]:
         out = []
         for s in v if isinstance(v, list) else []:
             if isinstance(s, dict) and s.get("type") in SUBJECT_TYPES and str(s.get("key") or "").strip():
-                out.append({"type": s["type"], "key": str(s["key"]).strip()})
+                # 舊設定可能存著原樣的 `OU=…`：讀進來就正規化（跟登入算出來的鍵一致）
+                from .permissions import canon_subject_key
+                out.append({"type": s["type"], "key": canon_subject_key(s["type"], str(s["key"]).strip())})
         return out
 
     ai_raw = raw.get("ai") if isinstance(raw.get("ai"), dict) else {}
@@ -205,7 +207,8 @@ def _check_subjects(v: Any) -> list[dict]:
             raise PolicyError("BAD_SUBJECT")
         if st in ("user", "group") and not sk.isdigit():
             raise PolicyError("BAD_SUBJECT")
-        item = {"type": st, "key": sk}
+        from .permissions import canon_subject_key      # OU 的 DN 走權限系統同一道正規化
+        item = {"type": st, "key": canon_subject_key(st, sk)}
         if item not in out:
             out.append(item)
     if len(out) > MAX_SUBJECTS:

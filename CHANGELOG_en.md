@@ -5,11 +5,28 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (980 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (981 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.52] - 2026-11-24
+
+### Fixed (Settings → Card books: creating a shared card book)
+
+- In the new shared card book dialog, clicking a user or group in the list did nothing and the book could not be created: the page script looked up an icon with a query that cannot reach inside a `<template>`, so adding a member failed. Once any shared card book existed, the book list itself failed to load for the same reason. Fixed, with a new check that no page queries into a `<template>` with `querySelector`.
+- Each row in the list now shows a visible "Add" button. Added members appear under "Members added" (with a count) and are scrolled into view; pressing Enter in the search box adds the first match.
+- Shared card book names must be unique (case-insensitive, ignoring leading and trailing spaces) when creating or renaming.
+
+### Added (pick organizational units from a list)
+
+- Shared card book members, shared MFP members, and seal-request custodians, requesters and approvers can now pick organizational units (OU) from a list instead of typing a DN. The list is derived from the DNs of directory accounts and groups (connect LDAP / AD first; units appear once accounts are synced or have signed in). SAML / OIDC accounts have no DN and do not appear there. Card books still allow typing a DN manually.
+- The shared MFP and seal-request pickers only had user and group columns and rebuilt the whole list from the ticked boxes on save, so an organizational unit set through the API was dropped when the dialog was saved. Existing organizational units are now listed and stay ticked.
+
+### Fixed (organizational unit members not matching)
+
+- Organizational units typed as `OU=…,DC=…` (as in the on-screen example) for shared card books, shared MFPs and seal requests (including AI stamping) were stored as typed and never matched the form computed at sign-in (lower-case attribute names), so people in the unit could not see or use them (no extra access was granted). Keys are now normalised on save, and existing data is converted on upgrade.
 
 ## [1.17.51] - 2026-11-22
 

@@ -117,7 +117,8 @@ def test_subjects_are_stored_and_deduplicated(admin_session, assets):
         "custodians": [{"type": "user", "key": "7"}, {"type": "user", "key": "7"},
                        {"type": "ou", "key": "OU=Admin,DC=example,DC=com"}],
         "requesters": [{"type": "group", "key": "3"}]})
-    assert p["custodians"] == [{"type": "user", "key": "7"}, {"type": "ou", "key": "OU=Admin,DC=example,DC=com"}]
+    # OU 存成登入時算出來的寫法（屬性名稱小寫），比對才對得上（v1.17.52）
+    assert p["custodians"] == [{"type": "user", "key": "7"}, {"type": "ou", "key": "ou=Admin,dc=example,dc=com"}]
     assert p["requesters"] == [{"type": "group", "key": "3"}]
     assert seal_policy.is_controlled(assets["ctl"].id, "stamp") is False, "只設名單不會自動變成管制"
 

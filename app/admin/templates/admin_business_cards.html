@@ -63,20 +63,25 @@
     </div>
     <div id="bcaMembersBox">
       <h4>{{ tr('成員') }}</h4>
-      <p class="muted bca-hint">{{ tr('可以加入個別使用者、群組或組織單位（OU）。清單裡的使用者是本站已有帳號的人（目錄同步進來的，或登入過一次的）；還沒有帳號的人，請把他所在的群組或組織單位加進來，他第一次登入後就看得到這本名片簿。') }}</p>
+      <p class="muted bca-hint">{{ tr('在下面的清單點一下使用者、群組或組織單位（OU）就會加入。清單裡的使用者是本站已有帳號的人（目錄同步進來的，或登入過一次的）；還沒有帳號的人，請把對方所在的群組或組織單位加進來，對方第一次登入後就看得到這本名片簿。') }}</p>
       <div class="bca-add">
-        <input class="field" id="bcaSearch" placeholder="{{ tr('搜尋使用者或群組') }}">
-        <select class="field jt-select" id="bcaRole">
+        <input class="field" id="bcaSearch" placeholder="{{ tr('搜尋使用者、群組或組織單位（按 Enter 加入第一筆）') }}">
+        <select class="field jt-select" id="bcaRole" aria-label="{{ tr('加入時的權限') }}">
           <option value="view">{{ tr('可查詢') }}</option>
           <option value="edit">{{ tr('可編修') }}</option>
         </select>
       </div>
       <div class="bca-pick" id="bcaPick"></div>
-      <div class="bca-add">
-        <input class="field" id="bcaOu" placeholder="{{ tr('組織單位（OU）的 DN，例：OU=Sales,DC=example,DC=com') }}">
-        <button type="button" class="btn btn-small" id="bcaOuAdd">{{ icon('plus', size=13) }}<span>{{ tr('加入組織單位') }}</span></button>
-      </div>
+      <h5 class="bca-mem-h">{{ tr('已加入的成員') }}（<span id="bcaMemCount">0</span>）</h5>
+      <p class="muted bca-mem-empty" id="bcaMemEmpty">{{ tr('還沒有加入任何成員，在上面的清單點一下就會加到這裡。') }}</p>
       <ul class="bca-members" id="bcaMembers"></ul>
+      <details class="bca-ou-manual">
+        <summary>{{ tr('清單裡找不到的組織單位：手動輸入 DN') }}</summary>
+        <div class="bca-add">
+          <input class="field" id="bcaOu" placeholder="{{ tr('組織單位（OU）的 DN，例：OU=Sales,DC=example,DC=com') }}">
+          <button type="button" class="btn btn-small" id="bcaOuAdd">{{ icon('plus', size=13) }}<span>{{ tr('加入組織單位') }}</span></button>
+        </div>
+      </details>
     </div>
     <div class="bca-acts">
       <button type="button" class="btn" id="bcaCancel">{{ icon('close', size=15) }}<span>{{ tr('取消') }}</span></button>
@@ -89,6 +94,7 @@
   <span data-icon="edit">{{ icon('edit', size=13) }}</span>
   <span data-icon="trash">{{ icon('trash', size=13) }}</span>
   <span data-icon="x">{{ icon('close', size=13) }}</span>
+  <span data-icon="plus">{{ icon('plus', size=12) }}</span>
 </template>
 
 <style nonce="{{ request.state.csp_nonce }}">
@@ -131,8 +137,16 @@
 .bca-pick { max-height: 260px; overflow-y: auto; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; margin-bottom: 10px; }
 .bca-pick button { display: flex; width: 100%; justify-content: space-between; gap: 8px; text-align: left; border: none;
   background: none; padding: 7px 10px; cursor: pointer; font: inherit; color: inherit; }
-.bca-pick button:hover { background: var(--primary-soft, #eff6ff); }
+.bca-pick button:hover, .bca-pick button:focus-visible { background: var(--primary-soft, #eff6ff); }
 .bca-pick .muted { font-size: 12px; }
+.bca-pick .bca-pk-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bca-pick .bca-pk-add { flex: none; display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 600;
+  color: var(--primary, #2563eb); border: 1px solid currentColor; border-radius: 999px; padding: 1px 8px; }
+.bca-mem-h { margin: 6px 0; font-size: 13px; }
+.bca-mem-empty { font-size: 12.5px; margin: 0 0 6px; }
+.bca-members li.just-added { background: var(--primary-soft, #eff6ff); border-color: var(--primary, #2563eb); transition: background .6s; }
+.bca-ou-manual { margin-top: 10px; font-size: 13px; }
+.bca-ou-manual summary { cursor: pointer; color: var(--text-muted, #64748b); margin-bottom: 6px; }
 .bca-hint { font-size: 12.5px; margin: 0 0 6px; }
 .bca-pick-h { position: sticky; top: 0; background: var(--bg-subtle, #f1f5f9); font-size: 12px; font-weight: 600; padding: 4px 10px; }
 .bca-pick-more { font-size: 12px; color: var(--text-muted, #64748b); padding: 4px 10px; }
@@ -153,7 +167,9 @@
   const API = '/admin/business-cards/api';
   const $ = id => document.getElementById(id);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-  const iconOf = n => document.querySelector('#bcaIcons [data-icon="' + n + '"]').firstElementChild.cloneNode(true);
+  // 圖示放在 <template> 裡：要從 `.content` 找（document.querySelector 進不去 template —— 原本這樣寫，
+  // 一畫成員清單或名片簿清單就丟例外，點了人「沒反應」、名片簿建不起來，客戶回報 2026-11-23）
+  const iconOf = n => document.getElementById('bcaIcons').content.querySelector('[data-icon="' + n + '"]').firstElementChild.cloneNode(true);
   let state = null, subjects = null, editing = null, members = [];
 
   async function api(method, path, body) {
@@ -208,19 +224,25 @@
 
   async function ensureSubjects() {
     if (subjects) return;
-    try { const r = await fetch('/admin/seal-request/api/subjects'); subjects = await r.json(); } catch (_e) { subjects = { users: [], groups: [] }; }
+    try { const r = await fetch('/admin/seal-request/api/subjects'); subjects = await r.json(); } catch (_e) { subjects = { users: [], groups: [], ous: [] }; }
+    subjects.ous = subjects.ous || [];
   }
   function nameOf(m) {
     if (m.name) return m.name;
     if (!subjects) return m.key;
     if (m.type === 'user') { const u = subjects.users.find(x => x.key === m.key); return u ? u.username + '@' + (u.source || 'local') : m.key; }
     if (m.type === 'group') { const g = subjects.groups.find(x => x.key === m.key); return g ? g.name : m.key; }
+    if (m.type === 'ou') { const o = subjects.ous.find(x => x.key === m.key); return o ? o.name : m.key; }
     return m.key;
   }
   const typeText = t => t === 'user' ? tr('使用者') : t === 'group' ? tr('群組') : tr('組織單位');
-  function renderMembers() {
+  function renderMembers(justAdded) {
+    $('bcaMemCount').textContent = String(members.length);
+    $('bcaMemEmpty').hidden = members.length > 0;
     $('bcaMembers').replaceChildren(...members.map((m, i) => {
       const li = el('li');
+      if (justAdded && m === justAdded) li.className = 'just-added';
+      li.title = m.type === 'ou' ? m.key : '';
       li.append(el('span', 'muted', typeText(m.type)), el('span', 'nm', nameOf(m)));
       const sel = el('select', 'field jt-select');
       [['view', tr('可查詢')], ['edit', tr('可編修')]].forEach(([v, l]) => { const o = el('option', null, l); o.value = v; sel.append(o); });
@@ -231,6 +253,18 @@
       return li;
     }));
     if (window.enhanceJtSelects) window.enhanceJtSelects($('bcaMembers'));
+    // 加進來的那一列捲到看得見的地方並亮一下 —— 原本加到清單最下面、在對話框外面，點了像沒反應（客戶回報）
+    const hit = justAdded && $('bcaMembers').querySelector('li.just-added');
+    if (hit) {
+      try { hit.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) {}
+      setTimeout(() => hit.classList.remove('just-added'), 1400);
+    }
+  }
+  function addMember(t, k, n) {
+    if (members.some(m => m.type === t && m.key === k)) return;
+    const m = { type: t, key: k, role: $('bcaRole').value, name: n };
+    members.push(m);
+    renderMembers(m); renderPick();
   }
   // 使用者與群組分兩段、各自有上限：原本合在一起只列前 80 筆、群組排前面 ——
   // 群組一多（AD 常見上百個），使用者一個都列不出來，看起來就像「不能把個人加進來」（客戶回報）
@@ -238,30 +272,43 @@
   function renderPick() {
     const q = $('bcaSearch').value.trim().toLowerCase();
     const has = (t, k) => members.some(m => m.type === t && m.key === k);
-    const users = [], groups = [];
+    const users = [], groups = [], ous = [];
     (subjects ? subjects.users : []).forEach(u => {
       const label = (u.username || '') + '@' + (u.source || 'local');
       if (!has('user', u.key) && (!q || label.toLowerCase().includes(q) || (u.display_name || '').toLowerCase().includes(q))) users.push(['user', u.key, label, u.display_name || tr('使用者')]);
     });
     (subjects ? subjects.groups : []).forEach(g => { if (!has('group', g.key) && (!q || (g.name || '').toLowerCase().includes(q))) groups.push(['group', g.key, g.name, tr('群組・{0} 人').replace('{0}', g.members)]); });
+    // 組織單位用選的（從目錄帳號的 DN 推出來；SAML 與本機帳號沒有 DN，不會出現在這裡）
+    (subjects ? subjects.ous : []).forEach(o => { if (!has('ou', o.key) && (!q || (o.name || '').toLowerCase().includes(q) || (o.dn || '').toLowerCase().includes(q))) ous.push(['ou', o.key, o.name, tr('組織單位・{0} 人').replace('{0}', o.users)]); });
+    firstMatch = [users, groups, ous].map(r => r[0]).find(Boolean) || null;
     const out = [];
-    [[tr('使用者'), users], [tr('群組'), groups]].forEach(([title, rows]) => {
+    [[tr('使用者'), users], [tr('群組'), groups], [tr('組織單位'), ous]].forEach(([title, rows]) => {
+      if (title === tr('組織單位') && !rows.length && !(subjects && subjects.ous.length)) return;   // 沒有目錄同步：這一段不列
       out.push(el('div', 'bca-pick-h', title + '（' + rows.length + '）'));
       if (!rows.length) out.push(el('div', 'bca-pick-more', q ? tr('沒有符合的') : tr('沒有可以加入的')));
       rows.slice(0, PICK_MAX).forEach(([t, k, n, d]) => {
-        const b = el('button'); b.type = 'button'; b.dataset.type = t; b.append(el('span', null, n), el('span', 'muted', d));
-        b.addEventListener('click', () => { members.push({ type: t, key: k, role: $('bcaRole').value, name: n }); renderMembers(); renderPick(); });
+        const b = el('button'); b.type = 'button'; b.dataset.type = t;
+        const add = el('span', 'bca-pk-add'); add.append(iconOf('plus'), el('span', null, tr('加入')));
+        b.append(el('span', 'bca-pk-n', n), el('span', 'muted', d), add);
+        b.setAttribute('aria-label', tr('加入 {0}').replace('{0}', n));
+        b.addEventListener('click', () => addMember(t, k, n));
         out.push(b);
       });
       if (rows.length > PICK_MAX) out.push(el('div', 'bca-pick-more', tr('還有 {0} 筆，請輸入關鍵字搜尋').replace('{0}', rows.length - PICK_MAX)));
     });
     $('bcaPick').replaceChildren(...out);
   }
+  let firstMatch = null;
   $('bcaSearch').addEventListener('input', renderPick);
+  $('bcaSearch').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.isComposing) return;            // 注音 / 日文輸入法選字時的 Enter 不算
+    e.preventDefault();
+    if (firstMatch && $('bcaSearch').value.trim()) addMember(firstMatch[0], firstMatch[1], firstMatch[2]);
+  });
   $('bcaOuAdd').addEventListener('click', () => {
     const dn = $('bcaOu').value.trim(); if (!dn) return;
-    if (!members.some(m => m.type === 'ou' && m.key === dn)) members.push({ type: 'ou', key: dn, role: $('bcaRole').value });
-    $('bcaOu').value = ''; renderMembers();
+    $('bcaOu').value = '';
+    addMember('ou', dn, dn);
   });
 
   async function openDlg(b) {

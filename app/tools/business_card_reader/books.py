@@ -196,9 +196,18 @@ def admin_list() -> list[dict]:
     return out
 
 
+def _check_unique_name(name: str, exclude_id: str = "") -> None:
+    """共用名片簿的名稱不可以重複（不分大小寫、去掉頭尾空白）：存進名片簿時的選單只列名稱，同名就分不出來。"""
+    want = name.strip().casefold()
+    for r in conn().execute("SELECT id, name FROM bc_books WHERE kind='shared'").fetchall():
+        if r["id"] != exclude_id and str(r["name"] or "").strip().casefold() == want:
+            raise BookError("已經有同名的共用名片簿，請換一個名稱")
+
+
 def create_shared(name: str, keep_days, by: str) -> dict:
     name = _name(name)
     days = _days(keep_days)
+    _check_unique_name(name)
     bid, now = new_id(), time.time()
     c = conn()
     with db.tx(c):
@@ -227,6 +236,7 @@ def update_shared(book_id: str, name=None, keep_days=None) -> dict:
     cols = {}
     if name is not None:
         cols["name"] = _name(name)
+        _check_unique_name(cols["name"], exclude_id=book_id)
     if keep_days is not None:
         cols["keep_days"] = _days(keep_days)
     if cols:
@@ -268,6 +278,10 @@ def set_members(book_id: str, members: Iterable) -> list[dict]:
             raise BookError("成員格式不正確")
         if st in ("user", "group") and not sk.isdigit():
             raise BookError("成員格式不正確")
+        # 組織單位的 DN 走跟權限系統同一道正規化（`OU=` 與 `ou=` 是同一個）：比對時拿登入算出來的鍵精確比對，
+        # 原樣存的話照畫面範例手打 `OU=Sales,DC=…` 的人會無聲地看不到這本
+        from ...core import permissions
+        sk = permissions.canon_subject_key(st, sk)
         if clean.get((st, sk)) != "edit":
             clean[(st, sk)] = role
     if len(clean) > MAX_MEMBERS:

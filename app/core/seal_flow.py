@@ -114,7 +114,9 @@ def _subjects(uid: int) -> set[tuple[str, str]]:
 
 
 def _norm(subjects: list[dict]) -> set[tuple[str, str]]:
-    return {(s["type"], str(s["key"])) for s in subjects or []}
+    # 組織單位的鍵跟登入算出來的一樣正規化：設定與案件裡可能存著 v1.17.51 以前原樣存的 `OU=…`
+    from .permissions import canon_subject_key
+    return {(s["type"], canon_subject_key(s["type"], str(s["key"]))) for s in subjects or []}
 
 
 def matches(uid: int, subjects: list[dict]) -> bool:

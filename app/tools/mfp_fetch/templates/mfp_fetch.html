@@ -321,7 +321,7 @@
 {% block content %}
 {% if mode == 'shared' %}
 <h1>{{ icon('printer', size=22) }} {{ tr('共用事務機') }}</h1>
-<p class="muted">{{ tr('在這裡建立的事務機，加進來的成員（使用者或群組）不用自己新增，就會出現在他的「事務機掃描取件」頁。成員可以重新測試、看詳細、掃描，不能改名或移除。') }}</p>
+<p class="muted">{{ tr('在這裡建立的事務機，加進來的成員（使用者、群組或組織單位）不用自己新增，就會出現在對方的「事務機掃描取件」頁。成員可以重新測試、看詳細、掃描，不能改名或移除。') }}</p>
 <div class="mf-beta-note">{{ icon('info', size=16) }}<span>{{ tr('成員還是要有「事務機掃描取件」的工具權限才看得到這支工具（角色照舊）。同一台事務機一次只服務一個人，其他人自動排隊。') }}
   <button type="button" class="mf-verified-link" id="mfVerifiedBtn">{{ icon('check', size=13) }} <span>{{ tr('已驗證支援清單') }}</span></button></span></div>
 <div class="panel" id="mfSettingsPanel">
@@ -428,7 +428,7 @@
       <h3 id="mfMembersTitle"></h3>
       <button type="button" class="btn btn-secondary btn-small" id="mfMembersClose">{{ icon('close', size=14) }} <span>{{ tr('收合') }}</span></button>
     </div>
-    <p class="mf-hint">{{ tr('勾選可以使用這台事務機的使用者與群組；群組的成員（含子群組）都看得到。') }}</p>
+    <p class="mf-hint">{{ tr('勾選可以使用這台事務機的使用者、群組或組織單位（OU）；群組的成員（含子群組）、組織單位裡的人（含下層）都看得到。') }}</p>
     <p class="mf-hint">{{ tr('群組後面的「本站 N 人」是登入過、已經算進這個群組的帳號數；AD 的人要登入過一次才會算進來。很多人的群組顯示 0 人，代表登入時沒有掛上這個群組。') }}</p>
     <div class="mf-members">
       <div class="mf-mlist">
@@ -440,6 +440,11 @@
         <div class="mf-mlist-head"><span>{{ tr('群組') }} <span id="mfMGroupCount"></span></span>
           <input type="search" id="mfMGroupSearch" placeholder="{{ tr('搜尋群組…') }}" aria-label="{{ tr('搜尋群組') }}"></div>
         <div class="mf-mlist-body" id="mfMGroups"></div>
+      </div>
+      <div class="mf-mlist">
+        <div class="mf-mlist-head"><span>{{ tr('組織單位') }} <span id="mfMOuCount"></span></span>
+          <input type="search" id="mfMOuSearch" placeholder="{{ tr('搜尋組織單位…') }}" aria-label="{{ tr('搜尋組織單位') }}"></div>
+        <div class="mf-mlist-body" id="mfMOus"></div>
       </div>
     </div>
     <div class="mf-actions">
@@ -2297,8 +2302,10 @@
   function countChecked() {
     const u = document.querySelectorAll('#mfMUsers input:checked').length;
     const g = document.querySelectorAll('#mfMGroups input:checked').length;
+    const o = document.querySelectorAll('#mfMOus input:checked').length;
     document.getElementById('mfMUserCount').textContent = P.lp + u + P.rp;
     document.getElementById('mfMGroupCount').textContent = P.lp + g + P.rp;
+    document.getElementById('mfMOuCount').textContent = P.lp + o + P.rp;
   }
   function showMemberWarnings(members) {
     const warn = document.getElementById('mfMembersWarn');
@@ -2343,8 +2350,15 @@
       chosen.has('group:' + g.key))));
     if (!subjectsCache.users.length) ub.append(el('p', 'mf-empty', tr('沒有使用者')));
     if (!subjectsCache.groups.length) gb.append(el('p', 'mf-empty', tr('沒有群組')));
+    // 組織單位：從目錄帳號的 DN 推出來的清單，加上已經設定、但清單裡沒有的（照樣列出來，儲存時才不會被拿掉）
+    const ob = document.getElementById('mfMOus');
+    const ous = (subjectsCache.ous || []).map(o => [o.key, o.name, tr('組織單位・{0} 人').replace('{0}', String(o.users || 0))]);
+    (m.members || []).forEach(x => { if (x.type === 'ou' && !ous.some(o => o[0] === x.key)) ous.push([x.key, x.key, '']); });
+    ob.replaceChildren(...ous.map(o => memberRow('ou', o[0], o[1], o[2], chosen.has('ou:' + o[0]))));
+    if (!ous.length) ob.append(el('p', 'mf-empty', tr('沒有組織單位（要先接 LDAP / AD，帳號同步或登入過才會出現）')));
     document.getElementById('mfMUserSearch').value = '';
     document.getElementById('mfMGroupSearch').value = '';
+    document.getElementById('mfMOuSearch').value = '';
     countChecked();
     showMemberWarnings(m.members);
     panel.hidden = false;
@@ -2355,6 +2369,7 @@
     membersPanel.addEventListener('change', countChecked);
     document.getElementById('mfMUserSearch').addEventListener('input', e => filterList('mfMUsers', e.target.value));
     document.getElementById('mfMGroupSearch').addEventListener('input', e => filterList('mfMGroups', e.target.value));
+    document.getElementById('mfMOuSearch').addEventListener('input', e => filterList('mfMOus', e.target.value));
     document.getElementById('mfMembersClose').addEventListener('click', () => { membersPanel.hidden = true; });
     document.getElementById('mfMembersSave').addEventListener('click', async () => {
       if (!membersConn) return;

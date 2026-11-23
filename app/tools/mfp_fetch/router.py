@@ -1323,4 +1323,15 @@ async def api_shared_subjects(request: Request):
             # 就是登入時沒有掛上（AD 主要群組查不到之類），管理員不用請使用者測就看得出來
             "groups": [{"key": k, "name": g.get("name"), "source": g.get("source"),
                         "members": int(g.get("member_count") or 0)}
-                       for k, g in groups.items()]}
+                       for k, g in groups.items()],
+            # 組織單位用選的（從目錄帳號的 DN 推出來），不用自己輸入 DN（客戶 2026-11-23）
+            "ous": _known_ous()}
+
+
+def _known_ous() -> list[dict]:
+    from ...core import permissions
+    try:
+        return permissions.known_ous()
+    except Exception:                                  # noqa: BLE001 —— 算不出來就只少一段清單
+        logger.warning("組織單位清單算不出來", exc_info=True)
+        return []

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -46,6 +47,9 @@ def _batch(c, n=1):
     raise AssertionError("辨識沒有完成")
 
 
+_BOOK: dict = {}
+
+
 @pytest.fixture
 def people(admin_session, fake_ocr):
     """管理員＋三個使用者：alice（共用簿可編修）、bob（經由群組可查詢）、carol（不是成員）。"""
@@ -61,7 +65,9 @@ def people(admin_session, fake_ocr):
         cl = TestClient(app_main.app)
         cl.cookies.set(sessions.COOKIE_NAME, tok)
         clients[n] = cl
-    r = admin.post(f"{ADMIN}/books", json={"name": "業務部共用", "keep_days": 0})
+    # 名稱不可重複（v1.17.52）：同一個資料目錄裡別的測試也可能建過，每次用不同的名字
+    _BOOK["name"] = "業務部共用-" + uuid.uuid4().hex[:8]
+    r = admin.post(f"{ADMIN}/books", json={"name": _BOOK["name"], "keep_days": 0})
     assert r.status_code == 200, r.text
     bid = r.json()["created"]
     r = admin.put(f"{ADMIN}/books/{bid}/members", json={"members": [
@@ -157,7 +163,8 @@ def test_admin_page_and_member_validation(people):
     admin, alice = clients["admin"], clients["alice"]
     assert admin.get("/admin/business-cards").status_code == 200
     st = admin.get(f"{ADMIN}/state").json()
-    assert st["shared"][0]["name"] == "業務部共用" and len(st["shared"][0]["members"]) == 2
+    mine = next(b for b in st["shared"] if b["id"] == bid)
+    assert mine["name"] == _BOOK["name"] and len(mine["members"]) == 2
     assert "fields" not in str(st), "管理頁不可以帶出名片內容"
     assert admin.put(f"{ADMIN}/books/{bid}/members", json={"members": [{"type": "user", "key": "x"}]}).status_code == 400
     assert admin.put(f"{ADMIN}/books/{bid}/members", json={"members": [{"type": "role", "key": "1"}]}).status_code == 400
@@ -165,7 +172,7 @@ def test_admin_page_and_member_validation(people):
     assert admin.post(f"{ADMIN}/books", json={"name": "x", "keep_days": -1}).status_code == 400
     assert alice.get(f"{ADMIN}/state").status_code in (302, 303, 401, 403), "一般使用者進不了管理頁"
     assert admin.request("DELETE", f"{ADMIN}/books/{bid}", json={"confirm": "不對"}).status_code == 400
-    assert admin.request("DELETE", f"{ADMIN}/books/{bid}", json={"confirm": "業務部共用"}).status_code == 200
+    assert admin.request("DELETE", f"{ADMIN}/books/{bid}", json={"confirm": _BOOK["name"]}).status_code == 200
     assert alice.get(f"{API}/books/{bid}/people").status_code == 404
 
 

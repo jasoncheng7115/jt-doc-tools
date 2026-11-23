@@ -692,7 +692,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - **`app/core/audit_db.py`**：`_m1_initial`
 - **`app/core/job_store.py`**：`_m1_initial`、`_m2_metrics`、`_m3_started_at`
 - **`app/core/seal_store.py`**：`_m1_initial`（v1.17.29：用印申請的流程、案件、版本、票、事件，全新建立）、`_m2_stamping`（v1.17.30：`seal_cases` 加用印相關欄位（ADD COLUMN），第 2 版的案件都還在、新欄位是預設值：`tests/test_seal_stamp.py::test_migration_from_v1_keeps_cases`）、`_m3_watermark`（v1.17.32：`seal_flows` 與 `seal_case_versions` 各加 `watermark`（ADD COLUMN），第 3 版的流程與版本都還在、浮水印預設 `{}`：`tests/test_seal_simulate_watermark.py::test_migration_v2_to_v3_keeps_flows_and_versions`）、`_m4_documents`（v1.17.35：`seal_case_versions` 加 `documents`（ADD COLUMN），第 3 版的版本都還在、`documents` 預設 `[]`，舊案件的單一文件當成一份：`tests/test_seal_multi_documents.py::test_migration_v3_to_v4_keeps_versions`）
-- **`app/core/mfp_store.py`**：`_m1_initial`、`_m2_shared_and_scans`（v1.16.87：只新增 `mfp_members`、`mfp_scans` 兩張表，不動 `mfp_connections`；v1 的事務機升上來都還在：`tests/test_mfp_shared_and_scan.py::test_migration_from_v1_keeps_existing_connections`）、`_m3_job_kind_and_items`（v1.16.89：`mfp_scans` 加 `kind`、`items` 兩欄（ADD COLUMN），舊紀錄都還在、一律是掃描：`tests/test_mfp_shared_and_scan.py::test_migration_from_v2_keeps_existing_scans`）、`_m4_prefs`（v1.17.5：只新增 `mfp_prefs`（記住的設定，FK cascade），v3 的事務機都還在、刪事務機時設定一起刪：`tests/test_mfp_prefs_and_ownership.py::test_migration_from_v3_keeps_connections_and_adds_prefs`）
+- **`app/core/mfp_store.py`**：`_m1_initial`、`_m2_shared_and_scans`（v1.16.87：只新增 `mfp_members`、`mfp_scans` 兩張表，不動 `mfp_connections`；v1 的事務機升上來都還在：`tests/test_mfp_shared_and_scan.py::test_migration_from_v1_keeps_existing_connections`）、`_m3_job_kind_and_items`（v1.16.89：`mfp_scans` 加 `kind`、`items` 兩欄（ADD COLUMN），舊紀錄都還在、一律是掃描：`tests/test_mfp_shared_and_scan.py::test_migration_from_v2_keeps_existing_scans`）、`_m4_prefs`（v1.17.5：只新增 `mfp_prefs`（記住的設定，FK cascade），v3 的事務機都還在、刪事務機時設定一起刪：`tests/test_mfp_prefs_and_ownership.py::test_migration_from_v3_keeps_connections_and_adds_prefs`）、`_m5_canon_ou_members`（v1.17.52：`mfp_members` 的組織單位鍵改成登入時算出來的寫法（`OU=` → `ou=`），使用者與群組列不動：`tests/test_ou_member_keys_canonical.py::test_mfp_migration_canonicalises_existing_ou_members`）
 - **`app/core/kb/store.py`**（知識庫；在子資料夾裡，上面那條自動比對不會掃到，這裡手動列）：
   - [ ] **`_m2_gov_imports`**：只新增 `kb_gov_items`、`kb_gov_versions` 兩張表，不重建既有的表；
         既有的 v1 知識庫升上來資料集與文件都還在（`tests/test_kb_gov_import.py::test_migration_from_v1_keeps_existing_data`）
@@ -700,6 +700,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
   - [ ] **`_m2_books`**（v1.17.41）：新增名片簿、成員、人、名片紀錄、互動五張表，`bc_contacts` 加 `merged`（ADD COLUMN）；
         第 1 版的批次與聯絡人升上來都還在（`tests/test_business_card_books.py::test_upgrade_from_v1_keeps_batches`）
   - [ ] **`_m3_card_langs`**（v1.17.50）：`bc_cards` 加 `langs`（ADD COLUMN，空白＝跟著批次）；第 2 版的卡升上來狀態不變（`tests/test_business_card_japanese.py::test_migration_adds_card_langs_without_touching_existing_rows`）
+  - [ ] **`_m4_canon_ou_members`**（v1.17.52）：`bc_book_members` 的組織單位鍵改成登入時算出來的寫法；同一本裡正規化後撞在一起的兩列留權限高的那一列，其他成員不動（`tests/test_ou_member_keys_canonical.py::test_book_migration_canonicalises_existing_ou_members`）
 
 ### 1.99 全部自動化測試一覽 🆕 v1.14.95
 
@@ -714,7 +715,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **582 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **586 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -778,6 +779,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_boxed_digits_and_sublabel.py` | 兩種讓欄位「有偵測到卻填不進去」的版型 |
 | `test_broken_input_no_500.py` | 任何工具端點收到壞輸入都不可以回 500 |
 | `test_browser_profiles_are_cleaned_up.py` | 無頭瀏覽器每次啟動都要給**自己的**設定檔目錄，用完要刪 |
+| `test_business_card_admin_dialog_browser.py` | 設定 → 名片簿：新增共用名片簿的對話框（真瀏覽器；客戶回報 2026-11-23） |
 | `test_business_card_admin_member_picker.py` | 共用名片簿的成員選單：使用者與群組分兩段、各自有上限（客戶回報 2026-11-20：不能把個人加入名片簿） |
 | `test_business_card_api.py` | 名片辨識 API：流程、改框、輸入檢查、匯出範圍、立即清除、存取控制（別人的批次一律 404） |
 | `test_business_card_books.py` | 名片簿：個人 / 共用、查詢與編修權限、存進名片簿與找同一人、合併、互動紀錄、保留期限、刪除帳號、升級 |
@@ -1101,6 +1103,8 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_open_redirect.py` | Open-redirect regression — closes CodeQL alerts #14 / #15 |
 | `test_ops_iis_prereq_order.py` | IIS 反向代理的安裝順序：**URL Rewrite 要先裝，ARR 後裝。** |
 | `test_ou_key_canon.py` | OU 授權的 DN 大小寫 / 空白正規化（v1.14.48） |
+| `test_ou_member_keys_canonical.py` | 組織單位（OU）成員：用選的、而且「手打 `OU=…`」也要對得上（客戶回報 2026-11-23） |
+| `test_ou_picker_browser.py` | 共用事務機與用印申請的選人清單：組織單位（OU）用選的，而且已經設定的 OU 儲存時不會被拿掉（真瀏覽器；客戶回報 2026-11-23） |
 | `test_output_verification_coverage.py` | 去識別化類工具**必須**驗到「產出本身」（使用者要求，2026-09-01） |
 | `test_owasp_top10.py` | OWASP Top 10 (2025) regression suite. |
 | `test_oxoffice_msi_download_and_exit.py` | Windows 安裝 OxOffice：下載要驗完整、msiexec 回 3010 要算成功 |
@@ -1235,6 +1239,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_submission_check_acl.py` | 送件檢核（submission-check）的案件 ACL 測試 |
 | `test_taiwan_terminology.py` | 使用者看得到的文字不可以用中國大陸用詞 |
 | `test_template_block_placement.py` | 兩個「看不到 JS 例外、只有畫面怪怪的」樣板雷的檢查 |
+| `test_template_content_lookup.py` | `<template>` 裡的東西要從 `.content` 找，不可以 `document.querySelector('#模板id …')`（2026-11-23 客戶回報） |
 | `test_template_css_is_effective.py` | 模板用到的 CSS 類別，在**那個情境下**必須真的有樣式 |
 | `test_template_head_block.py` | 工具模板的 `<style>` 一定要放在 base.html 真的有的區塊裡 |
 | `test_template_js_syntax.py` | Inline-JS syntax check for every Jinja2 template (v1.7.14). |
@@ -6555,6 +6560,17 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > **最高原則：加 i18n 不可以改壞現有功能。** 所以每一個階段的第一條驗收都是
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
+
+### 6.155 v1.17.52 — 共用名片簿建立不了、組織單位用選的、OU 成員對不上（**每次發版必過**）
+
+- [ ] 設定 → 名片簿 → 新增共用名片簿（`tests/test_business_card_admin_dialog_browser.py`，真的滑鼠點擊）：清單每一列看得到「加入」；點了之後成員出現在「已加入的成員」、人數跟著變、而且在視窗的可見範圍內；組織單位從清單選；搜尋框按 Enter 加入第一筆；儲存後名片簿建立、成員都在；頁面沒有程式錯誤。
+      原因是圖示從 `<template>` 找不到（`document.querySelector` 進不去 template），加入成員那一步就中斷；已經有共用名片簿時清單本身也載不出來。舊寫法變異驗證紅 3 支。
+- [ ] 全站頁面不可以用 `querySelector('#<template 的 id> …')` 找 template 裡面的東西（`tests/test_template_content_lookup.py`，含反向檢查）。
+- [ ] 共用名片簿名稱不可重複（不分大小寫、去掉頭尾空白）：建立與改名都擋，改成自己原本的名字可以；API 回 400「已經有同名的共用名片簿」；畫面跳出說明、不建立（`tests/test_ou_member_keys_canonical.py`、瀏覽器測試第二支）。
+- [ ] 組織單位清單（`permissions.known_ous()`，`/admin/seal-request/api/subjects` 與 `/tools/mfp-fetch/api/shared-subjects` 的 `ous`）：從目錄帳號與群組的 DN 推出每一層 OU，上層算進下層的人；登入算出來的 OU 鍵跟清單上的一樣；SAML / 本機帳號沒有 DN，不出現。
+- [ ] 共用事務機的成員、用印申請的保管人 / 可申請對象 / 各關審核者多一欄「組織單位」（`tests/test_ou_picker_browser.py`）：清單上的 OU 可以勾；已經設定但清單上沒有的 OU 也列出來、維持勾選，儲存後還在（原本儲存時照勾選重組，會無聲拿掉）。拿掉保留那一行變異驗證紅 2 支。
+- [ ] 手打 `OU=…,DC=…` 的組織單位要對得上（`tests/test_ou_member_keys_canonical.py`）：共用名片簿、共用事務機、用印申請（`seal_flow.matches`、`seal_policy._check_subjects`、讀設定時）、AI 用印的對象都存成正規化的鍵；舊資料遷移兩支（名片簿 `_m4_canon_ou_members`、事務機 `_m5_canon_ou_members`）。五處變異驗證過。
+- [ ] 手動：接 AD 的站台，設定 → 名片簿新增共用名片簿，選一個 AD 使用者與一個 OU，該 OU 裡的另一個人登入後在名片辨識看得到這本名片簿。
 
 ### 6.154 v1.17.51 — 「我的作業」的「開啟」、台灣直式名片、直排的表單標籤、Starlette 放寬（**每次發版必過**）
 
