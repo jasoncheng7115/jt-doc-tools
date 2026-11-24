@@ -1568,7 +1568,8 @@
             : tr('標題列加上自動篩選，打開就能篩選與搜尋'), run: () => download(b, fmt, { table: true }) },
         { label: tr('純資料'), desc: tr('只有標題與資料，沒有篩選；要貼到別的表或匯入其他系統時用'),
           run: () => download(b, fmt, { table: false }) },
-      ]);
+      ].concat(fmt === 'xlsx' ? [{ label: tr('名片總表（中英對照）'), desc: tr('中英文欄位並列、一人一列，同一格的多筆資料換行；黃底是手動輸入的欄（新增日期、性質、取得來源、備註）。存好的檔可以直接匯回'),
+          run: () => download(b, fmt, { layout: 'roster' }) }] : []));
     } else if (fmt === 'csv') {
       const big5 = S.big5 || { count: 0, missing: [] };
       openMenu(b, tr('CSV 編碼'), [
@@ -1841,7 +1842,8 @@
       openMenu(b, fmt.toUpperCase(), [
         { label: tr('打開就能篩選與搜尋'), rec: true, desc: tr('標題列加上篩選與搜尋'), run: () => go({ table: true }) },
         { label: tr('純資料'), desc: tr('只有標題與資料，沒有篩選；要貼到別的表或匯入其他系統時用'), run: () => go({ table: false }) },
-      ]);
+      ].concat(fmt === 'xlsx' ? [{ label: tr('名片總表（中英對照）'), desc: tr('中英文欄位並列、一人一列，同一格的多筆資料換行；黃底是手動輸入的欄（新增日期、性質、取得來源、備註）。存好的檔可以直接匯回'),
+          run: () => go({ layout: 'roster' }) }] : []));
     }
   }));
   async function lmDownload(b, fmt, extra) {
@@ -2247,7 +2249,8 @@
       openMenu(b, fmt.toUpperCase(), [
         { label: tr('打開就能篩選與搜尋'), rec: true, desc: tr('標題列加上篩選與搜尋'), run: () => go({ table: true }) },
         { label: tr('純資料'), desc: tr('只有標題與資料，沒有篩選；要貼到別的表或匯入其他系統時用'), run: () => go({ table: false }) },
-      ]);
+      ].concat(fmt === 'xlsx' ? [{ label: tr('名片總表（中英對照）'), desc: tr('中英文欄位並列、一人一列，同一格的多筆資料換行；黃底是手動輸入的欄（新增日期、性質、取得來源、備註）。存好的檔可以直接匯回'),
+          run: () => go({ layout: 'roster' }) }] : []));
     } else if (fmt === 'csv') {
       openMenu(b, tr('CSV 編碼'), [
         { label: tr('UTF-8（含 BOM）'), rec: true, desc: tr('Excel 點兩下打開中文不會亂碼，OxOffice、Google 試算表、Numbers 也都認得'), run: () => go({ encoding: 'utf-8', bom: true }) },

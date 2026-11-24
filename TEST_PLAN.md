@@ -692,6 +692,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - **`app/core/audit_db.py`**：`_m1_initial`
 - **`app/core/job_store.py`**：`_m1_initial`、`_m2_metrics`、`_m3_started_at`
 - **`app/core/seal_store.py`**：`_m1_initial`（v1.17.29：用印申請的流程、案件、版本、票、事件，全新建立）、`_m2_stamping`（v1.17.30：`seal_cases` 加用印相關欄位（ADD COLUMN），第 2 版的案件都還在、新欄位是預設值：`tests/test_seal_stamp.py::test_migration_from_v1_keeps_cases`）、`_m3_watermark`（v1.17.32：`seal_flows` 與 `seal_case_versions` 各加 `watermark`（ADD COLUMN），第 3 版的流程與版本都還在、浮水印預設 `{}`：`tests/test_seal_simulate_watermark.py::test_migration_v2_to_v3_keeps_flows_and_versions`）、`_m4_documents`（v1.17.35：`seal_case_versions` 加 `documents`（ADD COLUMN），第 3 版的版本都還在、`documents` 預設 `[]`，舊案件的單一文件當成一份：`tests/test_seal_multi_documents.py::test_migration_v3_to_v4_keeps_versions`）
+- **`app/core/ai_stamp.py`**：`_m1_initial`（v1.17.38：AI 用印的紀錄與用量，全新建立）、`_m2_presets`（v1.17.54：只新增常用組合的表，第 1 版的紀錄與用量都還在：`tests/test_ai_stamp_layout.py::test_presets_migration_keeps_existing_records`）
 - **`app/core/mfp_store.py`**：`_m1_initial`、`_m2_shared_and_scans`（v1.16.87：只新增 `mfp_members`、`mfp_scans` 兩張表，不動 `mfp_connections`；v1 的事務機升上來都還在：`tests/test_mfp_shared_and_scan.py::test_migration_from_v1_keeps_existing_connections`）、`_m3_job_kind_and_items`（v1.16.89：`mfp_scans` 加 `kind`、`items` 兩欄（ADD COLUMN），舊紀錄都還在、一律是掃描：`tests/test_mfp_shared_and_scan.py::test_migration_from_v2_keeps_existing_scans`）、`_m4_prefs`（v1.17.5：只新增 `mfp_prefs`（記住的設定，FK cascade），v3 的事務機都還在、刪事務機時設定一起刪：`tests/test_mfp_prefs_and_ownership.py::test_migration_from_v3_keeps_connections_and_adds_prefs`）、`_m5_canon_ou_members`（v1.17.52：`mfp_members` 的組織單位鍵改成登入時算出來的寫法（`OU=` → `ou=`），使用者與群組列不動：`tests/test_ou_member_keys_canonical.py::test_mfp_migration_canonicalises_existing_ou_members`）
 - **`app/core/kb/store.py`**（知識庫；在子資料夾裡，上面那條自動比對不會掃到，這裡手動列）：
   - [ ] **`_m2_gov_imports`**：只新增 `kb_gov_items`、`kb_gov_versions` 兩張表，不重建既有的表；
@@ -715,7 +716,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **586 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **588 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -739,6 +740,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_admin_users_table.py` | 使用者清單的欄位索引與排序型別要對得起來 |
 | `test_ai_stamp.py` | AI 用印（v1.17.38）：AI 經 MCP 蓋資產庫裡經 AI 授權的章 |
 | `test_ai_stamp_hardening.py` | AI 用印與 MCP 的資安盤點（v1.17.38，使用者 2026-11-12「安全 權限 資料不外洩 等等問題 都要完全考慮好」） |
+| `test_ai_stamp_layout.py` | AI 用印（MCP）的定位與便利功能（v1.17.54）：依文字定位、角落、頁碼字串、透明度、預覽、常用組合、批次 |
 | `test_ai_stamp_pages_browser.py` | AI 用印的三個畫面（真瀏覽器）：設定 → 用印申請的「AI 使用」欄、設定 → MCP 的兩個開關、本人的「AI 用印確認」頁 |
 | `test_api_doc_contract.py` | API 文件契約回歸測試 |
 | `test_api_doc_coverage.py` | 每個工具的 API 都要在 `github/API.md` 與 `TEST_PLAN.md` §4 出現 |
@@ -792,6 +794,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_business_card_messages_translated.py` | 名片辨識伺服器端的訊息（API 錯誤、欄位「需確認」的原因）英文、日文介面都要有翻譯 |
 | `test_business_card_page_browser.py` | 名片辨識畫面（真瀏覽器）：之前的批次、確認範圍（框、新增範圍）、校對（點欄位框出原文＋放大、儲存並確認）、 |
 | `test_business_card_phase2.py` | 名片辨識第 2 版：同一批合併（正反面 / 同一人）與解除、辨識走「我的作業」、跟手上的名片清單整合、AI 協助（選用） |
+| `test_business_card_roster.py` | 名片辨識：「名片總表」版面的匯出與匯入（客戶 2026-11-24 給了範例檔，要能照這個格式匯出、也能匯入） |
 | `test_business_card_site_features.py` | 名片辨識跟站內其他工具一樣該有的東西：保留期限（管理員設定）、刪除帳號一併清、存到工作區、 |
 | `test_business_card_url_ids.py` | 名片辨識頁：網址列 `#batch=` 帶進來的批次編號，先驗格式、再編碼，才接進 API 路徑 |
 | `test_business_card_vertical.py` | 名片辨識：直書（縦書き）的日文名片（2026-11-21） |
@@ -3496,6 +3499,11 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `POST /ai-stamp/api/{request_id}/reject` — 本人退回：作廢、檔案刪除
 - [ ] `GET /api/ai-stamp/seals` — AI 用印：這張 Token 的使用者經 AI 可以用的章（不回圖檔）；條件不符 403
 - [ ] `GET /api/ai-stamp/requests/{request_id}` — AI 用印某一件的狀態；只有本人；核准後帶 `file.file_id`
+- [ ] `GET /api/ai-stamp/presets` — AI 用印的常用組合（v1.17.54）：只列 Token 綁定的本人的；條件不符 403
+- [ ] `POST /api/ai-stamp/presets` — 新增或覆蓋常用組合：格式照 `placements_json`、每一顆章要是本人現在能用的、名稱 1～40 字、每人最多 50 個；寫稽核 `ai_stamp_preset`
+- [ ] `POST /api/ai-stamp/presets/delete` — 刪除自己的常用組合；不存在 404
+- [ ] `GET /ai-stamp/api/presets` — 網頁「AI 用印確認」頁的常用組合清單（只收網頁登入，帶 API Token 403）
+- [ ] `POST /ai-stamp/api/presets/delete` — 網頁刪除常用組合（只收網頁登入，帶 API Token 403）
 - [ ] `GET /seal-request` — 用印申請頁（v1.17.29）：功能沒啟用時說明「尚未啟用」；啟用後側欄出現「用印申請」與待我審核件數
 - [ ] `GET /setup-admin`
 - [ ] `POST /setup-admin`
@@ -6560,6 +6568,31 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > **最高原則：加 i18n 不可以改壞現有功能。** 所以每一個階段的第一條驗收都是
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
+
+### 6.157 v1.17.54 — AI 用印（MCP）：依文字定位、頁碼範圍、透明度、預覽、常用組合、批次（**每次發版必過**）
+
+- [ ] 位置（`tests/test_ai_stamp_layout.py`）：`page` 整數 0 起算、字串 `all` / `first` / `last` / `2-5` / `1,3` 1 起算、超出頁數 400；`anchor` 九個位置＋`margin_mm`＋偏移；`anchor_text` 右 / 左 / 上 / 下 / 正上方、`gap_mm`、`anchor_match`（first / last / 第幾個）、字中間多打空白也找得到；只給寬度照章的比例；超出頁面夾回來並標 `clamped`；
+      好幾頁時找不到字的頁跳過、每一頁都找不到 400（`ANCHOR_NOT_FOUND`）；展開後超過 200 處 400；寫錯的欄位講出是哪一項（20 種寫法）。
+- [ ] 旋轉 90 度的頁：位置以顯示的頁面算，真的蓋下去章在「負責人」的右邊（`test_rotated_page_stamp_lands_next_to_the_text`）。
+- [ ] 經 MCP：落點（`placements`）回給 AI；`page: "all"` 每一處都算今日上限（剩 1 次時 3 頁全蓋被擋）；`opacity` 讓章的透明度遮罩變淡；文書檔先轉 PDF 再蓋（要有 Office 引擎）。
+- [ ] `dry_run`：不蓋、不扣用量、不建立用印紀錄與待確認；預覽圖只畫框線與章名、不放章圖、不改原檔；沒開放 AI 的章一樣被擋。
+- [ ] 常用組合：存 / 列 / 用 / 刪；別人看不到；不能用的章存不進去；名稱檢查；`preset` 與 `placements_json` 擇一；組合裡的章被收回 AI 授權後用的時候照樣被擋；網頁確認頁看得到、可以刪，帶 Token 的刪除 403；遷移 `_m2_presets` 保留舊紀錄。
+- [ ] 批次：兩份檔各自一件；上限用完時已蓋好的不受影響、失敗的那份標 `error`。
+- [ ] 變異驗證五處：預覽扣用量、旋轉座標、展開後只算一次、批次遇錯整批中止、存組合不檢查章。
+- [ ] 設定 → 名片簿：「人數」改成「聯絡人數」並說明不是成員數、管理員看不到名片內容（客戶回報把聯絡人數看成成員數）。
+- [ ] 手動：正式機開「允許 AI 用印」、一顆章開放 AI、Token 允許用印後，用 Claude Code 經 MCP 對一份有「負責人」字樣的 PDF 先 `dry_run` 再蓋，確認畫面上章在字的右邊。
+
+### 6.156 v1.17.53 — 名片辨識：「名片總表」版面的匯出與匯入（**每次發版必過**）
+
+- [ ] 匯出（`tests/test_business_card_roster.py`）：XLSX 選「名片總表（中英對照）」（API `layout=roster`）→ 第 1 列標題「名片總表」與「更新日期: YYYY.MM.DD」、第 2 列 19 個欄名（中英文欄位並列）、凍結到第 3 列、自動篩選；
+      黃底＝手動輸入的欄（新增日期、性質、取得來源、備註，附說明）、灰底＝名片上的；另有「性質清單」（出現過的性質）與空白的「常用」工作表。
+      欄的對應：性質＝標籤（「、」連接）、地址依文字分中文 / 英文兩欄（郵遞區號接在前面）、取得來源＝活動＋來源、電話分機寫成「ext.」、同一格多筆換行；統編、通訊帳號有人有值才接在最後；新增日期＝辨識或存進名片簿那天。
+- [ ] 每一格都是文字（`=` 開頭不變公式、手機開頭的 0 留著）；只有單一、格式正確的 Email 與 http(s):// / www. 開頭的網址才加超連結（`javascript:`、`data:`、`ftp:`、多筆的都不加）。
+- [ ] `layout=roster` 搭配 CSV / ODS 回 400；不認得的 `layout` 回 400。畫面：XLSX 選單三項（ODS 兩項，`test_business_card_page_browser.py`）。
+- [ ] 匯入：欄名在第 2 列也找得到（前 10 列裡認得最多欄名、明顯比第 1 列多才換）；中英文欄名並列時英文那欄對到外文欄位（公司 / 部門 / 姓名 / 職稱）；「公司全名」→ 公司、「性質」→ 標籤；同一格換行的電話 / Email / 網址拆開。
+      一般清單不受影響：欄名在第 1 列照舊、只有英文欄名（Outlook / Google）照原本對應。匯出再匯回欄位一個都不少。五處變異驗證過（英文欄名配對、欄名列、版面判斷、連結檢查、網址拆開）。
+- [ ] 整合清單：上傳的是名片總表時存成 XLSX 照原本的版面寫回（原本的列不動、清單缺的補上、新增的人填今天的新增日期）；別的清單帶 `layout=roster` 存成名片總表。名片簿「匯入檔案」認得名片總表（英文欄名進外文欄位、性質進標籤）。
+- [ ] 手動：拿客戶的範例檔（不進 git）在名片簿「匯入檔案」實際匯入一次，再匯出「名片總表」用 Excel 打開比對版面。
 
 ### 6.155 v1.17.52 — 共用名片簿建立不了、組織單位用選的、OU 成員對不上（**每次發版必過**）
 

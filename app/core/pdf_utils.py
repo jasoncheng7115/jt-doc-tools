@@ -108,6 +108,21 @@ def _apply_multiply_blend(doc: "fitz.Document", page: "fitz.Page", img_xref: int
         pass
 
 
+def _fade_png(png: bytes, opacity: float) -> bytes:
+    """章圖整體變淡：透明度乘上 `opacity`（0.05～1；NaN 或範圍外的值當成 1，不改）。"""
+    try:
+        op = float(opacity)
+    except (TypeError, ValueError):
+        return png
+    if not (0.05 <= op < 1.0):
+        return png
+    img = Image.open(BytesIO(png)).convert("RGBA")
+    img.putalpha(img.getchannel("A").point(lambda v: int(round(v * op))))
+    buf = BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()
+
+
 def stamp_pdf(
     src_pdf: Path,
     dst_pdf: Path,
@@ -119,6 +134,7 @@ def stamp_pdf(
     pages: list[int] | None = None,
     rotation_deg: float = 0.0,
     blend_multiply: bool = True,
+    opacity: float = 1.0,
 ) -> None:
     """Stamp every (or selected) page of a PDF with a PNG.
 
@@ -130,6 +146,8 @@ def stamp_pdf(
     stamp_bytes, off_x, off_y, draw_w, draw_h = _rotated_stamp(
         stamp_png, rotation_deg, w_mm, h_mm
     )
+    if opacity < 1.0:
+        stamp_bytes = _fade_png(stamp_bytes, opacity)
     with fitz.open(str(src_pdf)) as doc:
         for i, page in enumerate(doc):
             if pages is not None and i not in pages:

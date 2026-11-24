@@ -56,7 +56,7 @@ _LOCK = threading.RLock()
 _CACHE: Optional[dict] = None
 
 #: 會起 soffice 的工具。**新增用到 office_convert 的工具要加進來** ——
-#: `tests/test_job_concurrency.py` 會跟實際掃描結果比對，漏加會紅。
+#: `tests/test_job_queue.py` 會跟實際掃描結果比對，漏加會紅。
 OFFICE_TOOL_IDS: frozenset[str] = frozenset({
     "doc-deident", "doc-diff", "doc-translate", "markdown-to-doc", "office-to-pdf", "doc-straighten",
     "office-convert",
@@ -71,6 +71,8 @@ OFFICE_TOOL_IDS: frozenset[str] = frozenset({
     "meeting-summary",
     # 公文撰擬：匯出 DOCX / PDF 走 soffice（ODT → 轉檔）；「從檔案帶入文字」收 Word / ODF 也會起 soffice
     "official-doc",
+    # 用印與簽名：AI 用印（MCP）收文書檔時先轉 PDF（v1.17.54）
+    "pdf-stamp",
 })
 
 #: 會做 OCR 的工具（本機 EasyOCR / Tesseract）。第一次載入模型要數十秒又吃記憶體，

@@ -187,7 +187,28 @@ def _form(tool: registry.McpTool, params: dict) -> dict:
     return out
 
 
+#: 一次用印最多幾份檔（批次；每一份各自一件，各自過授權、上限與本人確認）
+STAMP_BATCH_MAX = 20
+
+
+async def _stamp_batch(tool: registry.McpTool, params: dict, inputs: list[dict], ctx: Ctx) -> dict:
+    """好幾份檔套同一組位置：一份一份送原本的 API（每一份都是獨立的一件 AI 用印），結果整理在一起。
+    某一份失敗（例如今天的上限用完）不影響已經蓋好的，失敗的那份標 error。"""
+    results = []
+    for f in inputs:
+        try:
+            r = await _execute(tool, params, [f], ctx)
+        except RunError as e:
+            r = {"status": "error", "error": str(e), "code": e.code}
+        results.append({"source": f["name"], **r})
+    return {"batch": True, "results": results,
+            "files": [x for r in results for x in (r.get("files") or [])],
+            "pending": [r.get("request_id") for r in results if r.get("status") == "pending"]}
+
+
 async def _execute(tool: registry.McpTool, params: dict, inputs: list[dict], ctx: Ctx) -> dict:
+    if tool.output == "stamp" and len(inputs) > 1:
+        return await _stamp_batch(tool, params, inputs, ctx)
     async with _client(ctx) as client:
         if tool.method == "GET":
             from urllib.parse import quote
@@ -231,12 +252,37 @@ async def _execute(tool: registry.McpTool, params: dict, inputs: list[dict], ctx
             rid = resp.headers.get("X-JTDT-AI-Stamp") or ""
             if resp.status_code == 202:
                 info = resp.json()
-                return {"status": "pending", "request_id": info.get("request_id"),
-                        "expires_at": info.get("expires_at"),
-                        "note": "The owner of this token has to approve it on the web page (AI stamp confirmation); "
-                                "until then the file is not available. Check later with stamp_request_status."}
+                out = {"status": "pending", "request_id": info.get("request_id"),
+                       "expires_at": info.get("expires_at"),
+                       "note": "The owner of this token has to approve it on the web page (AI stamp confirmation); "
+                               "until then the file is not available. Check later with stamp_request_status."}
+                for k in ("placements", "skipped"):
+                    if info.get(k) is not None:
+                        out[k] = info[k]
+                return out
+            if (resp.headers.get("content-type") or "").startswith("application/json"):
+                # dry_run：只回落點與預覽圖（預覽只畫框線與章名，不放章圖、不扣用量）
+                import base64
+                info = resp.json()
+                prev = info.get("preview") or {}
+                try:
+                    png = base64.b64decode(prev.get("png_base64") or "", validate=True)
+                except ValueError:
+                    png = b""
+                files = []
+                if png.startswith(b"\x89PNG"):
+                    files.append(_save(ctx, png, f"{stem}-stamp-preview-p{prev.get('page_number') or 1}.png", tool))
+                return {"status": "dry_run", "placements": info.get("placements"), "skipped": info.get("skipped"),
+                        "preview_files": files, "note": info.get("note")}
             name = _filename(resp, f"{stem}-{tool.name}.pdf")
-            return {"status": "done", "request_id": rid or None, "files": [_save(ctx, resp.content, name, tool)]}
+            out = {"status": "done", "request_id": rid or None, "files": [_save(ctx, resp.content, name, tool)]}
+            try:
+                land = json.loads(resp.headers.get("X-JTDT-Stamp-Placements") or "null")
+            except ValueError:
+                land = None
+            if isinstance(land, dict):
+                out.update({k: land[k] for k in ("placements", "skipped", "count") if k in land})
+            return out
         if tool.output == "text":
             return _text_result(resp.json(), stem, tool, ctx)
         if tool.output == "image_two_step":

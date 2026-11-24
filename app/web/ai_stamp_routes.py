@@ -2,6 +2,9 @@
 
 * `GET /api/ai-stamp/seals?tool=pdf-stamp|pdf-seam-stamp`：這張 Token 的使用者經 AI 可以用的章（不回圖檔）
 * `GET /api/ai-stamp/requests/{id}`：某一件的狀態；核准後帶工作區的檔案編號
+* `GET /api/ai-stamp/presets`、`POST /api/ai-stamp/presets`（`{name, placements}` 新增或覆蓋）、
+  `POST /api/ai-stamp/presets/delete`（`{name}`）：常用組合（v1.17.54；每個人自己的，只存位置設定、不存章圖）。
+  網頁登入另有 `/ai-stamp/api/presets`（看）與 `/ai-stamp/api/presets/delete`（刪）。
 * `/ai-stamp`：本人確認頁（待確認清單、預覽、核准、退回）。**核准與退回只能用網頁的登入**：
   帶 API Token 的請求一律 403 —— AI 不可以自己核准（設計第 5 節）。
 """
@@ -38,6 +41,12 @@ def _ip(request: Request) -> str:
     return real_client_ip(request)
 
 
+def _audit_preset(request: Request, user: dict, action: str, name: str, count: int) -> None:
+    from ..core import audit_db
+    audit_db.log_event("ai_stamp_preset", username=user.get("label") or "", ip=_ip(request),
+                       target=name[:40], details={"action": action, "placements": count})
+
+
 def build_router(templates) -> APIRouter:
     router = APIRouter()
 
@@ -65,7 +74,92 @@ def build_router(templates) -> APIRouter:
             return _err(e)
         return ai_stamp.public(r)
 
+    # ---- 常用組合（給 AI；v1.17.54）----
+
+    def _clean_preset(user: dict, body: dict) -> list:
+        from ..tools.pdf_stamp import ai_layout
+        try:
+            items = ai_layout.validate(body.get("placements"))
+        except ai_layout.LayoutError as e:
+            raise HTTPException(400, e.message)
+        # 存之前先確認章都能用（不能用的章存了也蓋不了，早點講）
+        ai_stamp.allowed(user["id"], "pdf-stamp", [it["asset_id"] for it in items])
+        return items
+
+    @router.get("/api/ai-stamp/presets")
+    async def presets(request: Request):
+        try:
+            user = ai_stamp.require(request, "pdf-stamp")
+        except ai_stamp.AiStampError as e:
+            return _err(e)
+        return {"presets": await asyncio.to_thread(ai_stamp.list_presets, user["id"])}
+
+    @router.post("/api/ai-stamp/presets")
+    async def preset_save(request: Request):
+        try:
+            user = ai_stamp.require(request, "pdf-stamp")
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise HTTPException(400, "要送 JSON 物件 {name, placements}")
+            items = await asyncio.to_thread(_clean_preset, user, body)
+            res = await asyncio.to_thread(ai_stamp.save_preset, user["id"], body.get("name"), items)
+        except ai_stamp.AiStampError as e:
+            return _err(e)
+        except ValueError:
+            raise HTTPException(400, "不是合法的 JSON")
+        _audit_preset(request, user, "save", res["name"], len(items))
+        return res
+
+    @router.post("/api/ai-stamp/presets/delete")
+    async def preset_delete(request: Request):
+        try:
+            user = ai_stamp.require(request, "pdf-stamp")
+            body = await request.json()
+            ok = await asyncio.to_thread(ai_stamp.delete_preset, user["id"], (body or {}).get("name"))
+        except ai_stamp.AiStampError as e:
+            return _err(e)
+        except (ValueError, AttributeError):
+            raise HTTPException(400, "要送 JSON 物件 {name}")
+        if not ok:
+            return _err(ai_stamp.AiStampError("PRESET_NOT_FOUND", 404))
+        _audit_preset(request, user, "delete", str(body.get("name")).strip(), 0)
+        return {"ok": True}
+
     # ---- 本人確認（網頁）----
+
+    @router.get("/ai-stamp/api/presets")
+    async def web_presets(request: Request):
+        me = _web_user(request)
+
+        def work():
+            from ..core import asset_access
+            from ..core.asset_manager import asset_manager
+            items = ai_stamp.list_presets(me["id"])
+            names = {}
+            for pr in items:
+                for it in pr["placements"]:
+                    aid = it.get("asset_id") if isinstance(it, dict) else None
+                    if isinstance(aid, str) and aid not in names and ai_stamp.REQ_ID_RE.fullmatch(aid):
+                        a = asset_manager.get(aid)
+                        # 只給名稱（不給圖）；用不到的章（受管制、沒權限）不顯示名稱
+                        names[aid] = a.name if a and asset_access.can_use_asset(request, a) else ""
+            return {"presets": items, "names": names}
+        return await asyncio.to_thread(work)
+
+    @router.post("/ai-stamp/api/presets/delete")
+    async def web_preset_delete(request: Request):
+        me = _web_user(request)
+        try:
+            body = await request.json()
+            ok = await asyncio.to_thread(ai_stamp.delete_preset, me["id"], (body or {}).get("name"))
+        except ai_stamp.AiStampError as e:
+            return _err(e)
+        except (ValueError, AttributeError):
+            raise HTTPException(400, "要送 JSON 物件 {name}")
+        if not ok:
+            return _err(ai_stamp.AiStampError("PRESET_NOT_FOUND", 404))
+        _audit_preset(request, me, "delete", str(body.get("name")).strip(), 0)
+        return {"ok": True}
 
     @router.get("/ai-stamp", response_class=HTMLResponse)
     async def page(request: Request):

@@ -781,5 +781,5 @@ def stats() -> dict:
 
 def as_contacts(people: list[dict]) -> list[dict]:
     """給匯出用：名片簿的人 → 跟辨識批次的聯絡人同一種形狀（全部算已確認）。"""
-    return [{"id": p["id"], "fields": p["fields"], "notes": p["notes"] or {}, "status": "confirmed", "card_id": ""}
-            for p in people]
+    return [{"id": p["id"], "fields": p["fields"], "notes": p["notes"] or {}, "status": "confirmed", "card_id": "",
+             "created_at": p.get("created_at")} for p in people]

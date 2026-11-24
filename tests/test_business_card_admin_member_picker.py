@@ -93,3 +93,12 @@ def test_every_row_says_it_adds():
     assert buttons and all(r["add"] for r in buttons)
     assert all(r["label"].startswith("加入 ") for r in buttons)
 
+
+
+def test_count_column_says_contacts_not_members():
+    """「人數」被誤看成成員數（客戶回報 2026-11-24：加了兩位成員卻顯示 3）：欄名改成「聯絡人數」並說明管理員看不到內容。"""
+    from pathlib import Path
+    t = (Path(__file__).resolve().parents[1] / "app/admin/templates/admin_business_cards.html").read_text(encoding="utf-8")
+    assert "<th>{{ tr('聯絡人數') }}</th>" in t and "<th>{{ tr('人數') }}</th>" not in t
+    assert "不是成員數" in t and "看不到名片內容" in t
+    assert "位聯絡人（只有名片簿的擁有者看得到內容" in t

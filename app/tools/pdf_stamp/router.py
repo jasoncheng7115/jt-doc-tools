@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import math
 import time
 import uuid
 import zipfile
@@ -473,6 +472,7 @@ def _apply_placements(src: Path, dst: Path, items: list[dict],
             x_mm=it["x_mm"], y_mm=it["y_mm"],
             width_mm=it["width_mm"], height_mm=it["height_mm"],
             rotation_deg=it["rotation_deg"], pages=[it["page"]],
+            opacity=float(it.get("opacity", 1.0)),
         )
         service.stamp(dst, tmp, it["png_path"], params)
         try:
@@ -1211,117 +1211,126 @@ def ai_stamp_http_error(e) -> HTTPException:
     return HTTPException(e.status, f"{e.message} ({e.code})")
 
 
-#: AI 送來的位置與大小上限（mm）；A0 長邊 1189 mm，再大就不是正常的頁面
-_AI_MAX_SIZE_MM = 2000.0
-#: AI 一件最多幾處（比一般 API 的 500 小得多：一份合約蓋幾十處就很多了）
-_AI_MAX_PLACEMENTS = 50
-
-
-def _ai_placements(raw: str) -> list[dict]:
-    """AI 送來的位置：每一處都要有 `asset_id`；只收 page / 位置 / 大小 / 角度（不收 png_b64、日期章等）。"""
+def _ai_items(placements_json: Optional[str], preset: Optional[str], uid: int) -> tuple[list[dict], str]:
+    """AI 送來的位置（`placements_json`）或常用組合的名稱（`preset`），二擇一。回 (驗過的項目, 組合名稱)。"""
     from ...core import ai_stamp
+    from . import ai_layout
+    if bool((placements_json or "").strip()) == bool((preset or "").strip()):
+        raise HTTPException(400, "placements_json 與 preset 要擇一")
     try:
-        items = json.loads(raw or "")
-    except Exception:
-        raise HTTPException(400, "placements_json 不是合法 JSON")
-    if not isinstance(items, list) or not items:
-        raise HTTPException(400, "placements_json 要是非空的陣列")
-    if len(items) > _AI_MAX_PLACEMENTS:
-        raise HTTPException(400, f"AI 用印一件最多 {_AI_MAX_PLACEMENTS} 處")
-    out = []
-    for i, it in enumerate(items):
-        if not isinstance(it, dict):
-            raise HTTPException(400, f"placements[{i}] 必須是物件")
-        extra = set(it) - {"asset_id", "page", "x_mm", "y_mm", "width_mm", "height_mm", "rotation_deg"}
-        if extra:
-            raise HTTPException(400, f"placements[{i}] 不收這些欄位：{sorted(extra)}")
-        aid = it.get("asset_id")
-        if not isinstance(aid, str) or not ai_stamp.REQ_ID_RE.fullmatch(aid):
-            raise HTTPException(400, ai_stamp.MESSAGES["NO_ASSET"])
+        if preset:
+            raw = ai_stamp.get_preset(uid, preset)
+            name = preset.strip()
+        else:
+            try:
+                raw = json.loads(placements_json or "")
+            except ValueError:
+                raise HTTPException(400, "placements_json 不是合法 JSON")
+            name = ""
+        return ai_layout.validate(raw), name
+    except ai_layout.LayoutError as e:
+        raise HTTPException(400, e.message)
+
+
+async def _ai_source_pdf(file: UploadFile, uid: str) -> tuple[Path, str]:
+    """上傳的 PDF 或文書檔（先轉成 PDF）→ 暫存的 PDF。回 (路徑, 原檔名)。"""
+    from ...core import office_convert
+    from ...core.pdf_guard import ensure_readable_pdf
+    name = file.filename or "document.pdf"
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "請提供檔案")
+    src = settings.temp_dir / f"stamp_ai_{uid}_in.pdf"
+    if data[:5] == b"%PDF-":
+        src.write_bytes(data)
+    elif office_convert.is_office_file(name):
+        raw = settings.temp_dir / f"stamp_ai_{uid}_raw{Path(name).suffix.lower()[:10]}"
+        raw.write_bytes(data)
         try:
-            page = int(it.get("page", 0))
-            nums = {k: float(it[k]) for k in ("x_mm", "y_mm", "width_mm", "height_mm", "rotation_deg") if k in it}
-        except (TypeError, ValueError, OverflowError):
-            raise HTTPException(400, f"placements[{i}] 的頁碼或位置不是數字")
-        if isinstance(it.get("page", 0), bool) or isinstance(it.get("page", 0), float) and not float(it["page"]).is_integer():
-            raise HTTPException(400, f"placements[{i}].page 要是整數")
-        if page < 0:
-            raise HTTPException(400, f"placements[{i}].page 不可為負")
-        # NaN / 無限大會讓位置計算出怪東西（NaN 跟任何數比較都是 False，上下限檢查擋不住）
-        if any(not math.isfinite(v) for v in nums.values()):
-            raise HTTPException(400, f"placements[{i}] 的位置不可以是 NaN 或無限大")
-        for k in ("width_mm", "height_mm"):
-            if k in nums and not (0 < nums[k] <= _AI_MAX_SIZE_MM):
-                raise HTTPException(400, f"placements[{i}].{k} 要在 0 到 {_AI_MAX_SIZE_MM} 之間")
-        for k in ("x_mm", "y_mm"):
-            if k in nums and abs(nums[k]) > _AI_MAX_SIZE_MM:
-                raise HTTPException(400, f"placements[{i}].{k} 超出範圍")
-        if "rotation_deg" in nums and abs(nums["rotation_deg"]) > 360:
-            raise HTTPException(400, f"placements[{i}].rotation_deg 要在 -360 到 360 之間")
-        out.append({"asset_id": aid, "page": page, **nums})
-    return out
+            await office_convert.convert_to_pdf_async(raw, src)
+        finally:
+            raw.unlink(missing_ok=True)
+    else:
+        raise HTTPException(400, "只支援 PDF 與文書檔")
+    ensure_readable_pdf(src)
+    return src, name
 
 
 @router.post("/api/ai-stamp", include_in_schema=True)
-async def api_ai_stamp(request: Request, file: UploadFile = File(...), placements_json: str = Form(...)):
+async def api_ai_stamp(request: Request, file: UploadFile = File(...), placements_json: Optional[str] = Form(None),
+                       preset: Optional[str] = Form(None), dry_run: bool = Form(False)):
     """AI 用印：經 API Token（勾了「允許用印」）呼叫，只能用經 AI 授權的章。
 
-    `placements_json`：`[{"asset_id", "page"(0 起), "x_mm", "y_mm", "width_mm", "height_mm", "rotation_deg"}]`，
-    位置與大小沒給就用那顆章在資產庫設好的。需要確認的章 → 回 202 與 `request_id`（待本人在網頁上確認）；
-    不需要 → 直接回蓋好的 PDF。
+    `placements_json`：`[{"asset_id", "page", …}]`（欄位見 `ai_layout`：`page` 整數 0 起算或 `all` / `first` / `last` /
+    `2-5`（1 起算）、`x_mm` / `y_mm` 或 `anchor`＋`offset_x_mm` / `offset_y_mm` 或 `anchor_text`（找頁面上的文字）、
+    `width_mm`（另一邊照比例）、`rotation_deg`、`opacity`）；或 `preset`＝常用組合的名稱（二擇一）。檔案可以是 PDF 或文書檔。
+    `dry_run=true`：不蓋、不扣用量，回每一處的實際落點與第一處那一頁的預覽圖（章的位置只畫框線，不放章圖）。
+    需要確認的章 → 回 202 與 `request_id`（待本人在網頁上確認）；不需要 → 直接回蓋好的 PDF，
+    落點在 `X-JTDT-Stamp-Placements` 標頭（JSON；太長時只給筆數）。
     """
     from ...core import ai_stamp
     from ...core.client_ip import real_client_ip
+    from . import ai_layout
     try:
         user = ai_stamp.require(request, "pdf-stamp")
-        wanted = _ai_placements(placements_json)
-        uses: dict[str, int] = {}
-        for it in wanted:
-            uses[it["asset_id"]] = uses.get(it["asset_id"], 0) + 1
-        policies = ai_stamp.check(user["id"], "pdf-stamp", uses)
+        wanted, preset_name = _ai_items(placements_json, preset, user["id"])
+        # 先確認每一顆章都能用（不扣用量），順便拿章的預設位置；用量等展開成每一處之後才扣
+        policies = ai_stamp.allowed(user["id"], "pdf-stamp", [it["asset_id"] for it in wanted])
     except ai_stamp.AiStampError as e:
         raise ai_stamp_http_error(e)
-    # 用量在 check() 已經預扣；之後任何一步失敗都要退回。暫存檔不登記上傳者（不給任何預覽端點拿這個編號取檔），
-    # 用完就刪：需要確認的已複製到待確認區，不需要確認的在回應送完之後刪。
+    presets = {aid: {"x_mm": p["asset"].preset.x_mm, "y_mm": p["asset"].preset.y_mm,
+                     "width_mm": p["asset"].preset.width_mm, "height_mm": p["asset"].preset.height_mm,
+                     "rotation_deg": p["asset"].preset.rotation_deg} for aid, p in policies.items()}
+    names = {aid: p["asset"].name for aid, p in policies.items()}
+    # 暫存檔不登記上傳者（不給任何預覽端點拿這個編號取檔），用完就刪：需要確認的已複製到待確認區，
+    # 不需要確認的在回應送完之後刪。
     uid = uuid.uuid4().hex
-    src = settings.temp_dir / f"stamp_ai_{uid}_in.pdf"
     out = settings.temp_dir / f"stamp_ai_{uid}_out.pdf"
+    src = settings.temp_dir / f"stamp_ai_{uid}_in.pdf"
+    request.state.upload_filename = file.filename or ""
+    uses: dict[str, int] = {}
     handed_off = False
     try:
-        if not (file.filename or "").lower().endswith(".pdf"):
-            raise HTTPException(400, "只支援 PDF")
-        request.state.upload_filename = file.filename or ""
-        data = await file.read()
-        if not data or data[:4] != b"%PDF":
-            raise HTTPException(400, "不是有效的 PDF")
-        src.write_bytes(data)
+        src, filename = await _ai_source_pdf(file, uid)
         import fitz as _fitz
 
-        def _pages() -> int:
+        def _layout():
             with _fitz.open(str(src)) as d:
-                return d.page_count
-        n = await asyncio.to_thread(_pages)
-        items_json = []
-        for it in wanted:
-            if it["page"] >= n:
-                raise HTTPException(400, f"第 {it['page'] + 1} 頁不存在（這份只有 {n} 頁）")
-            pr = policies[it["asset_id"]]["asset"].preset
-            items_json.append({"kind": "stamp", "asset_id": it["asset_id"], "page": it["page"],
-                               "x_mm": it.get("x_mm", pr.x_mm), "y_mm": it.get("y_mm", pr.y_mm),
-                               "width_mm": it.get("width_mm", pr.width_mm), "height_mm": it.get("height_mm", pr.height_mm),
-                               "rotation_deg": it.get("rotation_deg", pr.rotation_deg)})
-        items = _parse_placements(json.dumps(items_json), settings.temp_dir, None)
+                return d.page_count, *ai_layout.resolve(d, wanted, presets)
+        try:
+            n, placed, skipped = await asyncio.to_thread(_layout)
+        except ai_layout.LayoutError as e:
+            raise HTTPException(400, e.message)
+        landing = ai_layout.public(placed, names)
+        if dry_run:
+            png, pg = await asyncio.to_thread(ai_layout.preview_png, src, placed, names)
+            import base64
+            return {"dry_run": True, "placements": landing, "skipped": skipped, "preset": preset_name or None,
+                    "preview": {"page": pg, "page_number": pg + 1, "png_base64": base64.b64encode(png).decode()},
+                    "note": "預覽只畫章的位置（框線與名稱），沒有放章圖；沒有扣用量"}
+        for it in placed:
+            uses[it["asset_id"]] = uses.get(it["asset_id"], 0) + 1
+        try:
+            policies = ai_stamp.check(user["id"], "pdf-stamp", uses)       # 扣用量（展開後的處數）
+        except ai_stamp.AiStampError:
+            uses = {}                                   # check() 失敗時沒有扣，不要退
+            raise
+        items = [{"page": it["page"], "png_path": asset_manager.file_path(policies[it["asset_id"]]["asset"]),
+                  "x_mm": it["x_mm"], "y_mm": it["y_mm"], "width_mm": it["width_mm"], "height_mm": it["height_mm"],
+                  "rotation_deg": it["rotation_deg"], "opacity": it["opacity"]} for it in placed]
         await asyncio.to_thread(_apply_placements, src, out, items, settings.temp_dir, n)
         res = await asyncio.to_thread(ai_stamp.finish, user=user, ip=real_client_ip(request), tool_id="pdf-stamp",
-                                      filename=file.filename or "document.pdf", src=src, out=out, policies=policies,
-                                      uses=uses, pages=[it["page"] for it in wanted])
+                                      filename=filename, src=src, out=out, policies=policies,
+                                      uses=uses, pages=[it["page"] for it in placed])
     except ai_stamp.AiStampError as e:
-        ai_stamp.release(user["id"], uses)
+        if uses:
+            ai_stamp.release(user["id"], uses)
         src.unlink(missing_ok=True)
         out.unlink(missing_ok=True)
         raise ai_stamp_http_error(e)
     except BaseException:
-        ai_stamp.release(user["id"], uses)
+        if uses:
+            ai_stamp.release(user["id"], uses)
         src.unlink(missing_ok=True)
         out.unlink(missing_ok=True)
         raise
@@ -1329,15 +1338,17 @@ async def api_ai_stamp(request: Request, file: UploadFile = File(...), placement
         if res["status"] == "pending":
             from fastapi.responses import JSONResponse
             return JSONResponse(status_code=202, content={
-                **res, "message": "已送出，等待本人在網頁上確認（AI 用印確認頁）；確認之前拿不到檔案"})
-        await asyncio.to_thread(ai_stamp.record_history, user, file.filename or "document.pdf", src, out,
-                                res["request_id"], policies)
-        stem = Path(file.filename or "document.pdf").stem
+                **res, "placements": landing, "skipped": skipped,
+                "message": "已送出，等待本人在網頁上確認（AI 用印確認頁）；確認之前拿不到檔案"})
+        await asyncio.to_thread(ai_stamp.record_history, user, filename, src, out, res["request_id"], policies)
+        stem = Path(filename).stem
         from starlette.background import BackgroundTask
+        compact = json.dumps({"placements": landing, "skipped": skipped}, ensure_ascii=True, separators=(",", ":"))
+        hdr = {"X-JTDT-AI-Stamp": res["request_id"],
+               "X-JTDT-Stamp-Placements": compact if len(compact) <= 6000 else json.dumps({"count": len(landing)})}
         handed_off = True
         return _FileResponse(str(out), media_type="application/pdf", filename=f"{stem}_stamped.pdf",
-                             headers={"X-JTDT-AI-Stamp": res["request_id"]},
-                             background=BackgroundTask(_unlink_all, out))
+                             headers=hdr, background=BackgroundTask(_unlink_all, out))
     finally:
         src.unlink(missing_ok=True)
         if not handed_off:

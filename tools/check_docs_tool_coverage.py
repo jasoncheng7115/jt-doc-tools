@@ -55,6 +55,13 @@ def load_tools() -> list:
     return discover_tools()
 
 
+#: 程式裡用得到 office_convert、但**一般使用不需要** Office 引擎的工具（介紹站不標扳手）。每一項都要寫理由；
+#: 「會不會起 soffice」仍以程式為準（`concurrency_settings.OFFICE_TOOL_IDS` 照樣要列）。
+OFFICE_OPTIONAL = {
+    "pdf-stamp": "只有 AI 用印（MCP）收到文書檔時才先轉 PDF；網頁與一般 API 只收 PDF",
+}
+
+
 def office_dependent_tool_ids(pkg_to_id: dict[str, str]) -> set[str]:
     """實際會用到 office_convert 的工具（掃 import 與呼叫，不靠人工清單）。
 
@@ -119,7 +126,7 @@ def main() -> int:
     page_text = " | ".join(n for n, _ in entries)
     marked = [n for n, m in entries if m]
     marked_text = " | ".join(marked)
-    need_office = office_dependent_tool_ids(pkg_to_id) & set(ids)
+    need_office = (office_dependent_tool_ids(pkg_to_id) & set(ids)) - set(OFFICE_OPTIONAL)
     readme = README.read_text(encoding="utf-8")
     problems = []
 

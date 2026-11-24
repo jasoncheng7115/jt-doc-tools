@@ -15,6 +15,7 @@ class StampParams:
     height_mm: float
     rotation_deg: float = 0.0
     pages: Optional[list[int]] = None  # 0-indexed; None = all
+    opacity: float = 1.0
 
 
 def stamp(src_pdf: Path, dst_pdf: Path, stamp_png: Path, params: StampParams) -> None:
@@ -28,4 +29,5 @@ def stamp(src_pdf: Path, dst_pdf: Path, stamp_png: Path, params: StampParams) ->
         h_mm=params.height_mm,
         pages=params.pages,
         rotation_deg=params.rotation_deg,
+        opacity=params.opacity,
     )

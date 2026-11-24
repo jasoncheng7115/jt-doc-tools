@@ -5,11 +5,36 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (981 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (983 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.54] - 2026-11-24
+
+### Added (AI stamping: accurate placement without measuring coordinates)
+
+- Stamping through MCP (`pdf_stamp`) can position seals by text on the page: `anchor_text` (a signature label, for example) places the seal to the right, left, above, below or on top of that text, with adjustable gap, match number and offset; or by a page corner or edge centre (`anchor`) with margin and offset. With several pages, pages without the text are skipped; it fails only when no page has it (scanned PDFs have no text layer, so use coordinates or a corner).
+- `page` accepts `all`, `first`, `last`, `2-5`, `1,3` (1-based; integers stay 0-based); width alone keeps the seal's proportions; opacity can be set; computed positions always stay inside the page. Office documents are converted to PDF first.
+- The actual placement of each seal (page, coordinates, size, how it was positioned) is returned so it can be reused.
+- `dry_run` previews positions without stamping, counting usage or creating a pending request, returning the placements and a preview of the first stamped page; the preview shows outlines and seal names only, never seal images.
+- Presets: AI can save stamping layouts under a name (`stamp_preset_save` / `stamp_preset_list` / `stamp_preset_delete`) and apply them later with one `preset` parameter; presets are per user, store positions only (no seal images), and are visible and deletable on the AI stamp confirmation page.
+- Batch: 1 to 20 files at once, each its own AI stamping request (own usage count and confirmation); a failure on one file does not affect files already stamped.
+- Every new option goes through the existing rules: each seal must be opened to AI, the daily limit counts every expanded placement, seals that need confirmation still need the owner's approval on the web, controlled seals can never be used by AI, and seal images are never given to AI.
+
+### Improved (Settings → Card books)
+
+- The shared card book column formerly labelled "people" is now "Contacts", with a note that it counts contacts in the book, not members; the personal card book summary states that only each owner can see the contents, not administrators.
+
+## [1.17.53] - 2026-11-24
+
+### Added (business card reader: card roster layout for export and import)
+
+- XLSX export has a new "Card roster (Chinese and English columns)" option: row 1 holds the title and update date, row 2 the headings, with Chinese and English columns side by side for company, department, name, title and address, one person per row, and several phone numbers, emails or URLs in one cell on separate lines. The hand-entered columns (date added, category, where obtained, notes) are yellow, and the workbook includes a category list sheet and an empty favourites sheet. Category maps to tags and "where obtained" to event plus source; VAT numbers and messaging IDs are appended at the end when present, so nothing is dropped. Available for batches, card books and merged lists. Column headings stay in Chinese to match the template.
+- Import recognises this layout: headings on row 2 under a title row are found; when Chinese and English headings sit side by side (for example `公司全名` + Company Name, `姓名` + Full Name), the English column goes into the foreign-language field instead of becoming a second company or name; `性質` maps to tags; several values in one cell are split. This applies to importing into a card book and to merging with a previously exported file or contact list.
+- When the uploaded list is a card roster, saving the merged result as XLSX keeps the original layout and fills in today's date for newly added people.
+- Every cell is stored as text (leading zeros in phone numbers stay, values starting with `=` do not become formulas); only well-formed email addresses and URLs get hyperlinks.
 
 ## [1.17.52] - 2026-11-24
 

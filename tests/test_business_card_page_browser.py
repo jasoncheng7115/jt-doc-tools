@@ -229,9 +229,15 @@ def test_review_highlight_confirm_and_export_preview(site):
     assert ev("!document.getElementById('bcWsSaveRow').hidden"), "工作區有開時要有「同時存到工作區」"
     # XLSX / ODS 按下去先選篩選或純資料；CSV 先選編碼（UTF-8 含 BOM 標「建議」）
     ev("document.querySelector('.bc-fmts [data-fmt=xlsx]').click()")
-    assert wait("document.querySelectorAll('#bcMenu .bc-menu-i').length === 2")
+    # XLSX 多一個「名片總表（中英對照）」（v1.17.53）；ODS 沒有
+    assert wait("document.querySelectorAll('#bcMenu .bc-menu-i').length === 3")
+    assert "名片總表" in ev("document.querySelectorAll('#bcMenu .bc-menu-i')[2].textContent")
     assert ev("document.querySelector('#bcMenu .bc-menu-i .bc-rec') !== null")
     shot("bc-export-menu")
+    ev("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))")
+    assert wait("!document.getElementById('bcMenu')")
+    ev("document.querySelector('.bc-fmts [data-fmt=ods]').click()")
+    assert wait("document.querySelectorAll('#bcMenu .bc-menu-i').length === 2"), "ODS 只有篩選 / 純資料兩種"
     ev("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))")
     assert wait("!document.getElementById('bcMenu')")
     ev("document.querySelector('.bc-fmts [data-fmt=csv]').click()")
@@ -243,7 +249,7 @@ def test_review_highlight_confirm_and_export_preview(site):
     ev("(() => { const b = document.querySelector('.bc-fmts [data-fmt=xlsx]'); const r = b.getBoundingClientRect(); "
        "window.scrollBy(0, r.bottom - (window.innerHeight - 30)); })()")
     ev("document.querySelector('.bc-fmts [data-fmt=xlsx]').click()")
-    assert wait("document.querySelectorAll('#bcMenu .bc-menu-i').length === 2")
+    assert wait("document.querySelectorAll('#bcMenu .bc-menu-i').length === 3")
     box = ev("(() => { const r = document.getElementById('bcMenu').getBoundingClientRect(); "
              "const b = document.querySelector('.bc-fmts [data-fmt=xlsx]').getBoundingClientRect(); "
              "return [r.top, r.bottom, window.innerHeight, b.top, b.bottom]; })()")

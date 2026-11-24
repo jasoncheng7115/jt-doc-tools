@@ -135,7 +135,7 @@ def _build_synonyms() -> dict[str, str]:
         "title_en": ["外文職稱", "英文職稱", "英文職位", "職稱英文", "titleen", "englishtitle", "jobtitleen"],
         "department": ["部門", "部門名稱", "單位", "department", "dept", "organizationdepartment", "division"],
         "department_en": ["外文部門", "英文部門", "英文部門名稱", "部門英文", "departmenten", "englishdepartment"],
-        "company": ["公司", "公司名稱", "機關", "機關名稱", "公司機關", "廠商名稱", "客戶名稱", "組織", "服務單位", "單位名稱",
+        "company": ["公司", "公司名稱", "公司全名", "公司全稱", "機關", "機關名稱", "公司機關", "廠商名稱", "客戶名稱", "組織", "服務單位", "單位名稱",
                     "company", "companyname", "organization", "organisation", "organizationname", "org"],
         "company_en": ["外文公司名稱", "英文公司名稱", "公司英文名稱", "companyen", "englishcompanyname",
                        "companyenglishname"],
@@ -165,7 +165,7 @@ def _build_synonyms() -> dict[str, str]:
         "im": ["通訊帳號", "社群帳號", "即時通訊", "line", "lineid", "wechat", "skype", "im", "imaddress"],
         "notes.event": ["活動", "活動名稱", "展覽", "場合", "event"],
         "notes.source": ["來源", "取得來源", "名片來源", "source"],
-        "notes.tags": ["標籤", "分類", "類別", "群組", "tags", "tag", "labels", "categories", "groupmembership"],
+        "notes.tags": ["標籤", "分類", "類別", "群組", "性質", "客戶性質", "產業", "產業別", "行業", "行業別", "tags", "tag", "labels", "categories", "groupmembership"],
         "notes.memo": ["備註", "附註", "註記", "說明", "memo", "notes", "note", "remark", "remarks", "comment",
                        "comments"],
     }
@@ -188,8 +188,9 @@ def auto_map(headers: Iterable[Any]) -> dict[int, str]:
     先比整個欄名，比不到再去掉數字比一次（「電話 2」「E-mail 2 Address」「Phone 1 - Value」）。
     有直接的姓名欄時，「名字 / 姓氏」那幾欄不再對應（舊版 Google 通訊錄三種都有，內容重複）。
     """
+    headers = list(headers or [])
     out: dict[int, str] = {}
-    for i, h in enumerate(headers or []):
+    for i, h in enumerate(headers):
         n = _hnorm(h)
         if not n:
             continue
@@ -209,6 +210,16 @@ def auto_map(headers: Iterable[Any]) -> dict[int, str]:
                 out[i] = "title"
         elif t == "?first":
             out[i] = "name.first" if "name.last" in vals else "name"
+    # 中英對照的清單（「公司全名」＋「Company Name」、「姓名」＋「Full Name」）：同一個欄位有中文欄名也有英文欄名時，
+    # 英文欄名那一欄是外文欄位（不然兩欄都算公司，英文公司名會被當成第二個公司名稱、比對時算衝突）
+    for base in ("name", "title", "department", "company"):
+        cols = sorted(i for i, t in out.items() if t == base)
+        if len(cols) < 2 or (base + "_en") in out.values():
+            continue
+        zh = [i for i in cols if _is_cjk(str(headers[i]))]
+        en = [i for i in cols if not _is_cjk(str(headers[i]))]
+        if zh and en:
+            out[en[0]] = base + "_en"
     if "name" in out.values():
         for i, t in list(out.items()):
             if t in _NAME_PARTS:
@@ -701,7 +712,8 @@ def _read_json(data: bytes) -> list[dict]:
 
 
 def parse_table(data: bytes, filename: str) -> tuple[list[str], list[list[str]]]:
-    """讀清單檔 → （欄名, 資料列）。第一個非空白的列當欄名；全空白的列略過；每一列補齊到同樣欄數。
+    """讀清單檔 → （欄名, 資料列）。第一個非空白的列當欄名（上面有一列標題、欄名在下一列時用欄名那一列，
+    見 `_header_index`）；全空白的列略過；每一列補齊到同樣欄數。
 
     只有欄名、沒有資料列也可以（回空的資料列）。讀不進來丟 `TableError`。
     """
@@ -734,6 +746,7 @@ def parse_table(data: bytes, filename: str) -> tuple[list[str], list[list[str]]]
         rows = _read_ods(data)
     if not rows:
         raise TableError(MSG_EMPTY)
+    rows = rows[_header_index(rows):]
     width = max(len(r) for r in rows)
     if width > MAX_COLS:
         raise TableError(MSG_TOO_MANY_COLS)
@@ -741,6 +754,32 @@ def parse_table(data: bytes, filename: str) -> tuple[list[str], list[list[str]]]
         raise TableError(MSG_TOO_MANY_ROWS)
     rows = [r + [""] * (width - len(r)) for r in rows]
     return rows[0], rows[1:]
+
+
+def _header_index(rows: list[list[str]]) -> int:
+    """欄名在第幾列：清單上面常有一列標題（「名片總表」「更新日期: …」），欄名在下一列。
+    前 10 列裡認得最多欄名的那一列；要明顯比第一列多（至少 3 欄、多 2 欄以上）才換，不然一律用第一列。"""
+    hits = [len(auto_map(r)) for r in rows[:10]]
+    if not hits:
+        return 0
+    best = max(range(len(hits)), key=lambda i: (hits[i], -i))
+    if best and hits[best] >= max(3, hits[0] + 2):
+        return best
+    return 0
+
+
+def fill_added_date(headers: list[str], rows: list[list[str]], start: int, today: Optional[str] = None) -> None:
+    """名片總表整合之後，新增的人（第 `start` 列起）的「新增日期」空白時填上今天（`YYYY.MM.DD`）。"""
+    names = [ex._s(h).strip() for h in headers or []]
+    if "新增日期" not in names:
+        return
+    i = names.index("新增日期")
+    if today is None:
+        import time as _time
+        today = _time.strftime("%Y.%m.%d", _time.localtime())
+    for r in rows[max(0, int(start)):]:
+        if i < len(r) and not ex._s(r[i]).strip():
+            r[i] = today
 
 
 # --------------------------------------------------------------------------- 欄位配置
@@ -912,6 +951,10 @@ def _read_row(cells: list[str], i: int, lay: _Layout) -> dict:
         elif t == "email":
             for j, p in enumerate(_split_emails(v)):
                 fields.append(_field(i, c, t, p, j, norm=p.strip().lower()))
+        elif t == "url":
+            # 網址不會有空白：同一格換行或空白分開的是好幾個（名片總表把多個網址寫在同一格）
+            for j, p in enumerate(x for x in re.split(r"\s+", v) if x):
+                fields.append(_field(i, c, t, p, j))
         elif t == "im":
             m = _IM_RE.match(v)
             label, val = (m.group(1).strip(), m.group(2).strip()) if m else ("", v)

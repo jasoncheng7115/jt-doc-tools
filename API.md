@@ -2456,6 +2456,10 @@ EasyOCR（本機或遠端 GPU）認得的語言都能選（第一次用會下載
 試算表 `table=true` 打開就有篩選與搜尋（XLSX 是 Excel 表格、ODS 是自動篩選），`false` 純資料；`lang`＝`zh`（中文欄名）/ `en`（英文代碼）；
 `columns` 可選欄位與順序；CSV 另有 `encoding`（`utf-8` 預設 / `big5`；Big5 沒有的字回 422，不會無聲變成問號）、`bom`（預設 true，只對 UTF-8）與 `safe`（預設 true：`=`、`+`、`-`、`@`、tab、換行或前置空白開頭的值前面加單引號）；
 JSON 另有 `include_source`。一人一列，第二支以後的電話、Email 等各自一欄，欄數依這次匯出最多的那一位展開。
+XLSX 另有 `layout`＝`standard`（預設，上面這種）/ `roster`（「名片總表」版面：第 1 列標題與更新日期、第 2 列欄名，中英文欄位並列：
+新增日期、性質（＝標籤）、公司全名、Company Name、部門、Department、姓名、Full Name、職稱、Job Title、電話、傳真、手機、Email、公司網址、
+地址（中文）、Address（英文）、取得來源（活動＋來源）、備註；同一格的多筆值換行，名片有統編或通訊帳號時接在最後；
+附「性質清單」與空白的「常用」工作表；`table`、`columns`、`lang` 不適用）。`layout=roster` 搭配其他格式回 400。
 電話、分機、郵遞區號、統編在 XLSX、ODS 都是文字型別。沒有任何一位可以匯出時回 409。`export/preview` 回 `count`、`headers`、前 5 列、`skipped_check`、`excluded`，以及 `big5_missing`（Big5 沒有的字，最多 10 個）與 `big5_missing_count`。
 
 ```bash
@@ -2537,6 +2541,9 @@ POST   /tools/business-card-reader/api/batches/{batch_id}/list-merge/{token}/ai-
 同一條規則有好幾列符合時，挑差異最少、還沒被別張名片配走的那一列（清單裡有重複的人，或同一人的正反面是兩列時，不會兩張都併進同一列）。
 `download` 的 `decisions`＝`{contact_id: add | merge | skip | keep_list | use_card}`：原本的列與欄全部保留、順序不變，新的人接在最後；
 存成 VCF / JSON 時，對應不到欄位的欄不會帶過去。
+清單上面有一列標題、欄名在第二列（例如「名片總表」版面）也認得；中文欄名與英文欄名並列的（「公司全名」＋「Company Name」、
+「姓名」＋「Full Name」）英文那一欄對到外文欄位，「性質」對到標籤。上傳的是「名片總表」時，存成 XLSX 照原本的版面寫回
+（新增的人補上今天的新增日期）；別的清單也可以帶 `layout=roster` 存成名片總表。名片簿的「匯入檔案」同樣認得這個版面。
 上限 20 MB、5,000 列、100 欄；舊版 Excel（.xls）不收。
 
 #### AI 協助（選用，預設關閉）
@@ -3167,20 +3174,41 @@ AI 經 MCP 用資產庫裡**事先開放 AI 使用**的章蓋章。**預設關�
 不收上傳的圖片、不收文字產生的章；章的圖檔不給 AI。「僅限核准案件使用」的章 AI 一律不能用。
 
 MCP 工具（條件齊了才看得到，不在上面「開放的工具」逐支開關）：`stamp_list`（可以用的章）、`pdf_stamp`（用印與簽名）、
-`pdf_seam_stamp`（騎縫章）、`stamp_request_status`（查待確認的那一件）。
+`pdf_seam_stamp`（騎縫章）、`stamp_request_status`（查待確認的那一件），以及 v1.17.54 的常用組合
+`stamp_preset_list`、`stamp_preset_save`、`stamp_preset_delete`。
 
 對應的端點是 **MCP 轉呼叫用的**：只收經 MCP 來的呼叫（拿允許 MCP 的 Token 直接打會被上面那條擋下，回 403），網頁登入也不能用這幾支蓋章。
 AI 一律經 MCP 的 `jtdt_run` 呼叫上面四個 MCP 工具；下面列出來是為了說明參數與回應：
 
 ```text
 GET  /api/ai-stamp/seals?tool=pdf-stamp        # 或 tool=pdf-seam-stamp
-POST /tools/pdf-stamp/api/ai-stamp             # file + placements_json
+POST /tools/pdf-stamp/api/ai-stamp             # file（PDF 或文書檔）+ placements_json 或 preset（擇一）+ dry_run
 POST /tools/pdf-seam-stamp/api/ai-seam-stamp   # file + asset_id + 騎縫章設定
 GET  /api/ai-stamp/requests/{request_id}
+GET  /api/ai-stamp/presets                     # 常用組合（自己的）
+POST /api/ai-stamp/presets                     # {"name", "placements"}：新增或覆蓋
+POST /api/ai-stamp/presets/delete              # {"name"}
 ```
 
-`placements_json` 是陣列，每一處 `{"asset_id", "page"（0 起）, "x_mm", "y_mm", "width_mm", "height_mm", "rotation_deg"}`，
-位置與大小沒給就用那顆章在資產庫設好的；只收這幾個欄位。一件最多 50 處；數值不收 NaN、無限大，寬高要大於 0、不超過 2000 mm，角度在 ±360 之間。騎縫章的設定欄位同 `/api/pdf-seam-stamp`（`mode`、`group`、`edge`、
+`placements_json` 是陣列，每一項 `{"asset_id", "page", 位置, 大小}`（v1.17.54 起）：
+
+* `page`：整數是第幾頁（0 起算）；字串是 `all`、`first`、`last`、`3`、`2-5`、`1,3,5-6`（1 起算）。超出頁數回 400。
+* 位置三選一：`x_mm` / `y_mm`（左上角為原點，顯示的頁面座標）；`anchor`（`top-left`、`top-center`、`top-right`、`center-left`、`center`、`center-right`、`bottom-left`、`bottom-center`、`bottom-right`）加 `margin_mm`（離邊，預設 15）；`anchor_text`（頁面上的字，例如「負責人」「立書人」，1～50 字）加 `anchor_side`（`right` 預設 / `left` / `above` / `below` / `over`）、`gap_mm`（預設 2）、`anchor_match`（`first` 預設 / `last` / 1 起算的第幾個）。`anchor` 與 `anchor_text` 都可以再加 `offset_x_mm` / `offset_y_mm`（往右、往下為正）。都沒給就用那顆章在資產庫設好的位置。
+* 頁數是好幾頁時，`anchor_text` 找不到的頁跳過（回應的 `skipped`）；每一頁都找不到回 400（掃描檔沒有文字層就找不到，請改用座標或 `anchor`）。
+* 大小：只給 `width_mm`（或只給 `height_mm`）時另一邊照章的比例；都沒給用章設好的大小。另有 `rotation_deg`、`opacity`（0.05～1）。
+* 算出來的位置一律夾在頁面裡（回應的 `clamped` 標出有被夾過的）。
+
+一件最多 50 項、展開成每一處之後最多 200 處；每日上限算展開後的處數。數值不收 NaN、無限大，寬高要大於 0、不超過 2000 mm，角度在 ±360 之間；不認得的欄位回 400。`preset` 是常用組合的名稱（跟 `placements_json` 擇一）。檔案可以是 PDF 或文書檔（先轉成 PDF 再蓋）。
+
+`dry_run=true` 時不蓋、不扣用量、不建立待確認，回 `{"dry_run": true, "placements", "skipped", "preview": {"page", "page_number", "png_base64"}}`。預覽圖是第一處那一頁，章的位置只畫框線與章名、不放章圖（還沒確認的章不可以有蓋好的樣子）；章還是要能用（沒開放 AI 的章一樣 403）。經 MCP 時預覽圖存進工作區，回 `preview_files`。
+
+每一處的實際落點（`asset_id`、`name`、`page`、`page_number`、`x_mm`、`y_mm`、`width_mm`、`height_mm`、`rotation_deg`、`opacity`、`how`、`clamped`）在 202 的回應裡、蓋好時在 `X-JTDT-Stamp-Placements` 標頭（JSON；太長時只有 `count`）；經 MCP 一律放在結果的 `placements`，下次可以直接拿來重用。
+
+常用組合是每個人自己的（別人看不到），只存位置設定、不存章圖；存的時候每一顆章都要是你現在能用的，用的時候照樣過授權、上限與本人確認。名稱 1～40 字、不收控制字元與 `<` `>`，每人最多 50 個（超過回 409 `TOO_MANY_PRESETS`）；稽核 `ai_stamp_preset`。本人在網頁「AI 用印確認」頁也看得到、可以刪除（`GET /ai-stamp/api/presets`、`POST /ai-stamp/api/presets/delete`，只收網頁登入）。
+
+批次：MCP 的 `pdf_stamp` 一次可以給 1～20 個檔，每一份各自送一次（各自是一件 AI 用印、各自扣用量與等確認），結果在 `results`（每份的 `source` 與 `status`：`done` / `pending` / `error`）；某一份失敗不影響已經蓋好的。
+
+騎縫章的設定欄位同 `/api/pdf-seam-stamp`（`mode`、`group`、`edge`、
 `size_mm`、`offset_mm`、`pos_mm`、`angle_deg`、`opacity`、`jitter_pos`、`jitter_angle`、`seed`），但只收 `asset_id`，
 不收 `stamp`、`text`、`shape`、`color`。
 
@@ -3188,7 +3216,8 @@ MCP 的 `jtdt_run` 範例（`files` 是先用 `/mcp/files/upload` 傳上去的�
 
 ```json
 {"tool": "pdf_stamp", "files": ["<file_id>"],
- "params": {"placements_json": "[{\"asset_id\": \"<seal id>\", \"page\": 0}]"}}
+ "params": {"placements_json": "[{\"asset_id\": \"<seal id>\", \"page\": \"last\", \"anchor_text\": \"負責人\", \"width_mm\": 20}]",
+            "dry_run": true}}
 ```
 
 回應：不需要確認的章直接回蓋好的 PDF（標頭 `X-JTDT-AI-Stamp` 是這一次的編號）；需要確認的章回 **202**

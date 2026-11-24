@@ -623,18 +623,52 @@ TOOLS: tuple[McpTool, ...] = (
         example={"tool": "stamp_list"}),
     McpTool(
         "pdf_stamp", "pdf-stamp", "stamp", "用印與簽名",
-        "Stamp approved seals or signatures onto a PDF; some need the owner's confirmation on the web first.",
-        "/tools/pdf-stamp/api/ai-stamp", "pdf", 1, 1, stamp=True, default_on=False,
+        "Stamp approved seals onto PDFs / Office files by coordinates, corner or a text label; dry_run preview; presets.",
+        "/tools/pdf-stamp/api/ai-stamp", "pdf_or_office", 1, 20, stamp=True, default_on=False,
         params={"placements_json": {"type": "string", "maxLength": 50000, "json_type": "array",
-                                    "description": "JSON array; each item {\"asset_id\" (from stamp_list), \"page\" "
-                                                   "(0-based), optional \"x_mm\", \"y_mm\", \"width_mm\", "
-                                                   "\"height_mm\", \"rotation_deg\"}; missing position = the "
-                                                   "seal's default. Only seals from stamp_list; no uploaded images"}},
-        required=("placements_json",), json_fields=("placements_json",), output="stamp",
-        output_desc="The stamped PDF saved to the workspace, or status 'pending' with a request_id when the "
-                    "owner must approve it on the web page (then check with stamp_request_status).",
+                                    "description": "JSON array; each item {\"asset_id\" (from stamp_list), \"page\", position, size}. page: integer = 0-based page, or a string (1-based): \"all\", \"first\", \"last\", \"3\", \"2-5\", \"1,3\". Position, pick one: x_mm + y_mm (top-left origin, mm); or \"anchor\" (top-left, top-center, top-right, center-left, center, center-right, bottom-left, bottom-center, bottom-right) with optional margin_mm (default 15), offset_x_mm, offset_y_mm (+ = right / down); or \"anchor_text\" (text printed on the page, e.g. a signature label) with anchor_side (right default, left, above, below, over), gap_mm (default 2), anchor_match (first, last or 1-based number), offset_x_mm, offset_y_mm. Pages without that text are skipped; it fails only if no page has it (scanned PDFs have no text layer). Size: width_mm alone keeps the seal\u2019s proportions; nothing = the seal\u2019s default. Also rotation_deg, opacity (0.05-1). Missing position = the seal\u2019s default. Only seals from stamp_list; no uploaded images. Max 50 items, 200 placements after expanding pages"},
+                "preset": {"type": "string", "maxLength": 40,
+                           "description": "Name of a saved preset (stamp_preset_list) instead of placements_json"},
+                "dry_run": {"type": "boolean", "default": False,
+                            "description": "true = do not stamp; return where each seal would land and a preview "
+                                           "PNG of the first stamped page (seal positions drawn as outlines, no seal "
+                                           "images; nothing counted against the daily limit)"}},
+        json_fields=("placements_json",), output="stamp",
+        output_desc="Per file: the stamped PDF saved to the workspace with the actual placements (page, x_mm, y_mm, "
+                    "width_mm, height_mm, how); or status 'pending' with a request_id when the owner must approve it "
+                    "on the web page (then check with stamp_request_status); dry_run returns placements and a preview "
+                    "image. With several files: results per file.",
         example={"tool": "pdf_stamp", "files": ["<file_id>"],
-                 "params": {"placements_json": '[{"asset_id": "<id from stamp_list>", "page": 0}]'}}),
+                 "params": {"placements_json": '[{"asset_id": "<id from stamp_list>", "page": "last", '
+                                               '"anchor_text": "負責人", "anchor_side": "right", "width_mm": 20}]',
+                            "dry_run": True}}),
+    McpTool(
+        "stamp_preset_list", "pdf-stamp", "stamp", "用印與簽名",
+        "List your saved stamping presets (name and placements).",
+        "/api/ai-stamp/presets", None, 0, 0, method="GET", stamp=True, default_on=False,
+        output="json", output_desc="presets: [{name, placements, updated_at}]; use the name as pdf_stamp preset.",
+        example={"tool": "stamp_preset_list"}),
+    McpTool(
+        "stamp_preset_save", "pdf-stamp", "stamp", "用印與簽名",
+        "Save (or overwrite) a stamping preset: a name plus the same placements as pdf_stamp.",
+        "/api/ai-stamp/presets", None, 0, 0, body="json", stamp=True, default_on=False,
+        params={"name": {"type": "string", "maxLength": 40, "description": "Preset name, 1-40 characters"},
+                "placements": {"type": "string", "maxLength": 50000, "json_type": "array",
+                               "description": "Same JSON array as pdf_stamp placements_json"}},
+        required=("name", "placements"), json_fields=("placements",), output="json",
+        output_desc="The saved preset; each seal must currently be usable by you. Max 50 presets.",
+        example={"tool": "stamp_preset_save",
+                 "params": {"name": "供貨證明",
+                            "placements": '[{"asset_id": "<big seal>", "page": "last", "anchor_text": "立書人", '
+                                          '"width_mm": 40}, {"asset_id": "<small seal>", "page": "last", '
+                                          '"anchor_text": "負責人", "width_mm": 20}]'}}),
+    McpTool(
+        "stamp_preset_delete", "pdf-stamp", "stamp", "用印與簽名",
+        "Delete one of your stamping presets.",
+        "/api/ai-stamp/presets/delete", None, 0, 0, body="json", stamp=True, default_on=False,
+        params={"name": {"type": "string", "maxLength": 40}},
+        required=("name",), output="json", output_desc="{ok: true}",
+        example={"tool": "stamp_preset_delete", "params": {"name": "供貨證明"}}),
     McpTool(
         "pdf_seam_stamp", "pdf-seam-stamp", "stamp", "騎縫章",
         "Add a seam seal across page edges with an approved seal; may need the owner's confirmation first.",

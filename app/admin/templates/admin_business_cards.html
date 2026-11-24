@@ -47,11 +47,12 @@
     <button type="button" class="btn btn-small" id="bcaNew">{{ icon('plus', size=14) }}<span>{{ tr('新增共用名片簿') }}</span></button></h2>
   <div class="bca-table-wrap">
     <table class="bca-table">
-      <thead><tr><th>{{ tr('名稱') }}</th><th>{{ tr('保留期限') }}</th><th>{{ tr('人數') }}</th><th>{{ tr('成員') }}</th><th></th></tr></thead>
+      <thead><tr><th>{{ tr('名稱') }}</th><th>{{ tr('保留期限') }}</th><th>{{ tr('聯絡人數') }}</th><th>{{ tr('成員') }}</th><th></th></tr></thead>
       <tbody id="bcaBooks"></tbody>
     </table>
   </div>
   <p class="muted bca-small" id="bcaEmpty" hidden>{{ tr('還沒有共用名片簿。') }}</p>
+  <p class="muted bca-small">{{ tr('「聯絡人數」是這本名片簿裡存了幾位聯絡人，不是成員數。管理員在這裡只看得到名稱、數量與成員，看不到名片內容；要查詢或編修，請把自己加進成員。') }}</p>
 </div>
 
 <div class="bca-dialog" id="bcaDlg" hidden role="dialog" aria-modal="true" aria-labelledby="bcaDlgT">
@@ -184,7 +185,7 @@
   function render() {
     $('bcaAuth').hidden = state.auth_enabled;
     $('bcaMax').value = state.personal_max_days;
-    $('bcaPersonalStats').textContent = tr('{0} 本個人名片簿，共 {1} 人。').replace('{0}', state.personal.books).replace('{1}', state.personal.people);
+    $('bcaPersonalStats').textContent = tr('{0} 本個人名片簿，共 {1} 位聯絡人（只有名片簿的擁有者看得到內容，管理員看不到）。').replace('{0}', state.personal.books).replace('{1}', state.personal.people);
     $('bcaEmpty').hidden = state.shared.length > 0;
     $('bcaBooks').replaceChildren(...state.shared.map(b => {
       const tr_ = el('tr');

@@ -698,7 +698,12 @@ def _export_opts(body: dict) -> dict:
     enc = body.get("encoding") or "utf-8"
     if enc not in exporter.CSV_ENCODINGS:
         raise HTTPException(400, "encoding 只能是 utf-8 或 big5")
-    return {"fmt": fmt, "args": _export_args(body), "table": bool(body.get("table")), "enc": enc,
+    layout = body.get("layout") or "standard"
+    if layout not in ("standard", "roster"):
+        raise HTTPException(400, "layout 只能是 standard 或 roster")
+    if layout == "roster" and fmt != "xlsx":
+        raise HTTPException(400, "名片總表版面（layout=roster）只有 XLSX")
+    return {"fmt": fmt, "args": _export_args(body), "table": bool(body.get("table")), "enc": enc, "layout": layout,
             "bom": body.get("bom", True) is not False, "safe": body.get("safe", True) is not False,
             "include_source": bool(body.get("include_source"))}
 
@@ -712,6 +717,8 @@ def _render(chosen: list[dict], o: dict) -> bytes:
         except exporter.EncodingError as e:
             raise HTTPException(422, f"有 {e.total} 個字 Big5 沒有（例如：「{'、'.join(e.chars[:5])}」），"
                                      "存成 Big5 會變成問號；請改用 UTF-8")
+    if fmt == "xlsx" and o.get("layout") == "roster":
+        return exporter.export_roster_xlsx(chosen)
     if fmt == "xlsx":
         return exporter.export_xlsx(chosen, table=o["table"], **args)
     if fmt == "ods":
@@ -731,13 +738,15 @@ def _download(data: bytes, o: dict, stem: str) -> Response:
 
 def _fmt_audit(o: dict) -> dict:
     return {"format": o["fmt"], **({"encoding": o["enc"]} if o["fmt"] == "csv" else
+                                   {"layout": "roster"} if o.get("layout") == "roster" else
                                    {"table": o["table"]} if o["fmt"] in ("xlsx", "ods") else {})}
 
 
 @router.post("/api/batches/{bid}/export")
 async def export(request: Request, bid: str):
     """匯出：`format`＝csv / xlsx / ods / vcf / json；`scope`＝confirmed（預設）/ all（含待確認）/ selected（`ids`）；
-    試算表 `table=true` 打開就有篩選與搜尋、`false` 純資料；CSV `encoding`（`utf-8` 預設 / `big5`）、
+    試算表 `table=true` 打開就有篩選與搜尋、`false` 純資料；XLSX `layout=roster` 是「名片總表」版面（中英文欄位並列、
+    多筆值同一格換行，可以原檔匯回）；CSV `encoding`（`utf-8` 預設 / `big5`）、
     `bom`（預設 true，只對 UTF-8）、`safe`（預設 true，中和公式開頭）。Big5 沒有的字回 422（不自動換成問號）。
     沒有任何一筆可以匯出時回 409，不給空檔。"""
     owner, _ = owner_of(request)
@@ -1313,6 +1322,14 @@ async def list_merge_download(request: Request, bid: str, token: str):
             merged = importer.rows_to_contacts(headers, rows, full)
             data = exporter.export_vcf(merged) if o["fmt"] == "vcf" else exporter.export_json(merged)
             return data, len(rows)
+        if o["fmt"] == "xlsx" and exporter.is_roster_headers(d["headers"]):
+            # 上傳的是名片總表：照原本的版面寫回（原本的列與欄不動）；新增的人填上今天的新增日期
+            importer.fill_added_date(headers, rows, len(d["rows"]))
+            return exporter.write_roster_xlsx(headers, rows), len(rows)
+        if o.get("layout") == "roster":
+            # 別的清單指定存成名片總表：整合後的每一列轉回聯絡人再排（對應不到欄位的欄不會帶過去）
+            full = {**importer.auto_map(headers), **mapping}
+            return exporter.export_roster_xlsx(importer.rows_to_contacts(headers, rows, full)), len(rows)
         try:
             data = importer.write_table(headers, rows, o["fmt"], table=o["table"], bom=o["bom"], encoding=o["enc"],
                                         safe=o["safe"])

@@ -61,6 +61,9 @@ MESSAGES = {
     "NOT_VIA_MCP": "AI 用印只能經由 MCP 呼叫",
     "TOO_MANY_PENDING": "待你確認的 AI 用印太多了，請先到「AI 用印確認」頁處理",
     "NO_LONGER_ALLOWED": "送出之後條件已經改變（章的 AI 授權、工具權限或 AI 用印開關），這件已作廢",
+    "PRESET_NOT_FOUND": "找不到這個常用組合",
+    "PRESET_NAME": "常用組合的名稱要是 1～40 字，不可以有控制字元或 < >",
+    "TOO_MANY_PRESETS": "常用組合最多 50 個，請先刪掉用不到的",
 }
 
 
@@ -123,7 +126,22 @@ def _m1_initial(conn: sqlite3.Connection) -> None:
     """)
 
 
-_MIGRATIONS = [_m1_initial]
+def _m2_presets(conn: sqlite3.Connection) -> None:
+    """常用組合（v1.17.54）：每個人自己的，存「蓋哪幾顆章、蓋在哪裡」的設定（不存章圖）；
+    用的時候每一處照樣過 AI 授權、今日上限與本人確認。"""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS ai_stamp_presets (
+            user_id    INTEGER NOT NULL,
+            name       TEXT NOT NULL,
+            placements TEXT NOT NULL DEFAULT '[]',
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            PRIMARY KEY (user_id, name)
+        );
+    """)
+
+
+_MIGRATIONS = [_m1_initial, _m2_presets]
 _INITED: set[str] = set()
 _INIT_LOCK = threading.Lock()
 
@@ -238,6 +256,14 @@ def _policies(uid: int, tool_id: str, asset_ids: Iterable[str]) -> dict[str, dic
             raise AiStampError("ASSET_NOT_ALLOWED", 403, {"asset_id": str(aid)[:64]})
         out[aid] = {"asset": a, "ai": ai}
     return out
+
+
+def allowed(uid: int, tool_id: str, asset_ids: Iterable[str]) -> dict[str, dict]:
+    """這些章這個人經 AI 能不能用（不扣用量；預覽與先查章的預設位置用）。不行丟 `ASSET_NOT_ALLOWED`。"""
+    ids = list(dict.fromkeys(asset_ids))
+    if not ids:
+        raise AiStampError("NO_ASSET", 400)
+    return _policies(uid, tool_id, ids)
 
 
 def check(uid: int, tool_id: str, uses: dict[str, int]) -> dict[str, dict]:
@@ -597,3 +623,64 @@ def list_all(*, user_id: Optional[int] = None, asset_id: str = "", since: float 
     q += " ORDER BY created_at DESC LIMIT ?"
     args.append(max(1, min(5000, int(limit))))
     return [public(dict(r)) | {"user": r["user_label"]} for r in conn().execute(q, args).fetchall()]
+
+
+# --------------------------------------------------------------------------- 常用組合（v1.17.54）
+
+MAX_PRESETS_PER_USER = 50
+_PRESET_NAME_RE = re.compile(r"^[^\x00-\x1f\x7f<>]{1,40}$")
+
+
+def _preset_name(name: Any) -> str:
+    n = name.strip() if isinstance(name, str) else ""
+    if not _PRESET_NAME_RE.fullmatch(n):
+        raise AiStampError("PRESET_NAME", 400)
+    return n
+
+
+def list_presets(uid: int) -> list[dict]:
+    rows = conn().execute("SELECT name, placements, updated_at FROM ai_stamp_presets WHERE user_id=? "
+                          "ORDER BY name", (int(uid),)).fetchall()
+    out = []
+    for r in rows:
+        try:
+            items = json.loads(r["placements"])
+        except ValueError:
+            items = []
+        out.append({"name": r["name"], "placements": items if isinstance(items, list) else [],
+                    "updated_at": r["updated_at"]})
+    return out
+
+
+def get_preset(uid: int, name: Any) -> list:
+    n = _preset_name(name)
+    r = conn().execute("SELECT placements FROM ai_stamp_presets WHERE user_id=? AND name=?",
+                       (int(uid), n)).fetchone()
+    if not r:
+        raise AiStampError("PRESET_NOT_FOUND", 404)
+    items = json.loads(r["placements"])
+    return items if isinstance(items, list) else []
+
+
+def save_preset(uid: int, name: Any, placements: list) -> dict:
+    """新增或覆蓋。`placements` 由呼叫端先驗過格式（`pdf_stamp.ai_layout.validate`）。"""
+    n = _preset_name(name)
+    now = time.time()
+    c = conn()
+    with db.tx(c):
+        exists = c.execute("SELECT 1 FROM ai_stamp_presets WHERE user_id=? AND name=?", (int(uid), n)).fetchone()
+        if not exists and c.execute("SELECT count(*) FROM ai_stamp_presets WHERE user_id=?",
+                                    (int(uid),)).fetchone()[0] >= MAX_PRESETS_PER_USER:
+            raise AiStampError("TOO_MANY_PRESETS", 409, {"limit": MAX_PRESETS_PER_USER})
+        c.execute("INSERT INTO ai_stamp_presets(user_id, name, placements, created_at, updated_at) VALUES (?,?,?,?,?) "
+                  "ON CONFLICT(user_id, name) DO UPDATE SET placements=excluded.placements, updated_at=excluded.updated_at",
+                  (int(uid), n, json.dumps(placements, ensure_ascii=False), now, now))
+    return {"name": n, "placements": placements, "updated_at": now, "created": not exists}
+
+
+def delete_preset(uid: int, name: Any) -> bool:
+    n = _preset_name(name)
+    c = conn()
+    with db.tx(c):
+        cur = c.execute("DELETE FROM ai_stamp_presets WHERE user_id=? AND name=?", (int(uid), n))
+    return cur.rowcount > 0

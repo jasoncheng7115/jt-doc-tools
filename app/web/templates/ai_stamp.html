@@ -12,6 +12,16 @@
   <div id="asList" class="as-list"></div>
 </section>
 
+<section class="panel">
+  <h2>{{ icon('layers', size=18) }} {{ tr('常用組合') }}</h2>
+  <p class="muted">{{ tr('AI 存的用印位置組合（蓋哪幾顆章、蓋在哪裡），之後一個名稱就能套用；只存位置，不存章圖。每次使用都照樣檢查章的 AI 授權、今日上限與本人確認。') }}</p>
+  <p class="muted" id="asPsEmpty" hidden>{{ tr('還沒有常用組合。') }}</p>
+  <div class="as-ps-wrap"><table class="as-ps" id="asPs" hidden>
+    <thead><tr><th>{{ tr('名稱') }}</th><th>{{ tr('內容') }}</th><th>{{ tr('更新時間') }}</th><th></th></tr></thead>
+    <tbody id="asPsBody"></tbody>
+  </table></div>
+</section>
+
 <style nonce="{{ request.state.csp_nonce }}">
   .as-list { display:flex; flex-direction:column; gap:14px; }
   .as-card { border:1px solid var(--border, #e5e7eb); border-radius:10px; padding:14px 16px; background:var(--card, #fff); }
@@ -25,11 +35,16 @@
   .as-pages figure { margin:0; text-align:center; font-size:12px; color:var(--muted, #6b7280); }
   .as-pages img { display:block; max-width:180px; max-height:240px; border:1px solid var(--border, #e5e7eb); border-radius:4px; background:#fff; }
   .as-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .as-ps-wrap { overflow-x:auto; }
+  .as-ps { width:100%; border-collapse:collapse; font-size:13px; }
+  .as-ps th, .as-ps td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border, #e5e7eb); vertical-align:top; }
+  .as-ps td.as-ps-what { color:var(--muted, #6b7280); }
   @media (max-width: 600px) { .as-pages img { max-width:140px; } }
 </style>
 <template id="asIcons">
   <span data-icon="check">{{ icon('check', size=14) }}</span>
   <span data-icon="close">{{ icon('close', size=14) }}</span>
+  <span data-icon="trash">{{ icon('trash', size=14) }}</span>
 </template>
 {% endblock %}
 
@@ -118,6 +133,43 @@
     }
   }
   load();
+
+  // ---- 常用組合
+  function where(it) {
+    const pg = typeof it.page === 'number' ? tr('第 {0} 頁').replace('{0}', it.page + 1)
+             : tr('頁：{0}').replace('{0}', it.page == null ? '1' : String(it.page));
+    const at = it.anchor_text ? tr('「{0}」旁').replace('{0}', it.anchor_text)
+             : it.anchor ? it.anchor : (it.x_mm != null ? 'x ' + it.x_mm + ' / y ' + (it.y_mm ?? '—') + ' mm' : tr('預設位置'));
+    return pg + '・' + at;
+  }
+  async function loadPresets() {
+    try {
+      const r = await fetch('/ai-stamp/api/presets', { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) return;
+      const data = await r.json();
+      const rows = data.presets.map(pr => {
+        const tr_ = el('tr');
+        const what = pr.placements.map(it => (data.names[it.asset_id] || tr('（已刪除的章）')) + '：' + where(it)).join('；');
+        tr_.append(el('td', null, pr.name), el('td', 'as-ps-what', what), el('td', null, jtTime.dt(pr.updated_at)));
+        const td = el('td');
+        const del = iconBtn('btn btn-small', 'trash', tr('刪除'));
+        del.addEventListener('click', async () => {
+          if (!(await showConfirm(tr('刪除常用組合「{0}」？').replace('{0}', pr.name), { kind: 'danger', okText: tr('刪除') }))) return;
+          const x = await fetch('/ai-stamp/api/presets/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                                  body: JSON.stringify({ name: pr.name }) });
+          if (!x.ok) { await showAlert(await friendlyServerError(x, tr('刪除失敗'))); return; }
+          loadPresets();
+        });
+        td.append(del);
+        tr_.append(td);
+        return tr_;
+      });
+      $('asPsBody').replaceChildren(...rows);
+      $('asPs').hidden = !rows.length;
+      $('asPsEmpty').hidden = rows.length > 0;
+    } catch (e) { /* 讀不到常用組合不影響確認 */ }
+  }
+  loadPresets();
 })();
 </script>
 {% endblock %}

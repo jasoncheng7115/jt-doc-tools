@@ -315,6 +315,208 @@ def export_xlsx(contacts, *, columns=None, lang="zh", table=False) -> bytes:
     return out.getvalue()
 
 
+# --------------------------------------------------------------------------- 名片總表（中英對照）
+
+#: 「名片總表」版面：公司常見的手工名片清單格式 —— 中英文欄位並列、一人一列、多筆值寫在同一格（換行）。
+#: 第 1 列是標題與更新日期、第 2 列是欄名，黃底的欄是手動輸入的（新增日期、性質、取得來源、備註），灰底的欄來自名片。
+#: 另外附「性質清單」（性質的值）與空白的「常用」工作表（同樣的欄，給使用者自己挑常用的人）。
+#: 匯入時 `importer` 認得這個版面（找第 2 列的欄名、英文欄名對到外文欄位），匯出再匯回不掉資料。
+ROSTER_TITLE = "名片總表"
+ROSTER_SHEET = "名片總表"
+ROSTER_LIST_SHEET = "性質清單"
+ROSTER_FAV_SHEET = "常用"
+ROSTER_FAV_TITLE = "常用名單"
+#: （欄名, 來源, 欄寬）。來源：欄位 key、`added`（新增日期）、`tags`（性質）、`address_zh` / `address_en`（地址依文字分兩欄）、
+#: `source`（取得來源＝活動＋來源）、`memo`
+ROSTER_COLUMNS = (
+    ("新增日期", "added", 10.5), ("性質", "tags", 11.2), ("公司全名", "company", 22.6), ("Company Name", "company_en", 13.9),
+    ("部門", "department", 16.0), ("Department", "department_en", 13.6), ("姓名", "name", 13.9),
+    ("Full Name", "name_en", 12.8), ("職稱", "title", 14.8), ("Job Title", "title_en", 14.1), ("電話", "phone", 16.0),
+    ("傳真", "fax", 17.4), ("手機", "mobile", 17.0), ("Email", "email", 31.4), ("公司網址", "url", 17.0),
+    ("地址", "address_zh", 26.1), ("Address", "address_en", 18.6), ("取得來源", "source", 20.2), ("備註", "memo", 24.8),
+)
+#: 名片上有、但版面沒有的欄位：有人有值才接在最後（不然資料會不見）
+ROSTER_EXTRA = (("統一編號", "vat"), ("通訊帳號", "im"))
+#: 手動輸入的欄（黃底）
+ROSTER_MANUAL = ("新增日期", "性質", "取得來源", "備註")
+ROSTER_MANUAL_NOTE = "黃底可手動輸入"
+_ROSTER_WIDTH = {h: w for h, _k, w in ROSTER_COLUMNS}
+_EMAIL_LINK = re.compile(r"^[^\s@<>\"'()]+@[^\s@<>\"'()]+\.[A-Za-z]{2,24}$")
+_URL_LINK = re.compile(r"^(?:https?://|www\.)[^\s<>\"']+$", re.I)
+
+
+def _roster_date(ts: Any) -> str:
+    try:
+        t = float(ts)
+    except (TypeError, ValueError):
+        return ""
+    if not (t > 0) or t > 4102444800:          # NaN、負數、2100 年以後都不算
+        return ""
+    import time as _time
+    return _time.strftime("%Y.%m.%d", _time.localtime(t))
+
+
+def _roster_cell(contact: dict, key: str) -> str:
+    if key == "added":
+        return _roster_date(contact.get("created_at"))
+    if key == "tags":
+        return "、".join(_tags(contact))
+    if key == "source":
+        n = _notes(contact)
+        out: list[str] = []
+        for k in ("event", "source"):
+            v = _s(n.get(k)).strip()
+            if v and v not in out:
+                out.append(v)
+        return "、".join(out)
+    if key == "memo":
+        return _s(_notes(contact).get("memo"))
+    if key in ("address_zh", "address_en"):
+        out = []
+        for f in _values(contact, "address"):
+            v, z = _s(f.get("value")).strip(), _s(f.get("zip")).strip()
+            if z and not v.startswith(z):
+                v = f"{z} {v}"
+            cjk = any(ord(ch) >= 0x2E80 for ch in v)
+            if cjk == (key == "address_zh"):
+                out.append(v)
+        return "\n".join(out)
+    if key == "phone":
+        out = []
+        for f in _values(contact, "phone"):
+            v, e = _s(f.get("value")), _s(f.get("ext")).strip()
+            out.append(f"{v} ext. {e}" if e else v)
+        return "\n".join(out)
+    if key in _MULTI:
+        return "\n".join(_multi_cell(f, key) for f in _values(contact, key))
+    return _single(contact, key)
+
+
+def roster_rows(contacts) -> tuple[list[str], list[list[str]]]:
+    """「名片總表」版面的（欄名, 資料列）。名片有、版面沒有的欄位（統編、通訊帳號）有值才接在最後。"""
+    contacts = list(contacts or [])
+    cols = [(h, k) for h, k, _w in ROSTER_COLUMNS]
+    cols += [(h, k) for h, k in ROSTER_EXTRA if any(_values(c, k) for c in contacts)]
+    return [h for h, _k in cols], [[_roster_cell(c, k) for _h, k in cols] for c in contacts]
+
+
+def is_roster_headers(headers) -> bool:
+    """這組欄名是不是「名片總表」版面（大部分的欄名都對得上）。"""
+    have = {_s(h).strip().casefold() for h in headers or []}
+    hit = sum(1 for h, _k, _w in ROSTER_COLUMNS if h.casefold() in have)
+    return hit >= 12 and "公司全名" in have and "company name" in have
+
+
+def write_roster_xlsx(headers: list[str], rows: list[list[str]], *, today: Optional[str] = None) -> bytes:
+    """照「名片總表」版面寫 XLSX（欄名、資料列可以是 `roster_rows` 的結果，也可以是匯入的名片總表整合後的表格）。
+
+    每一格都存成文字（`=` 開頭不會變公式、電話開頭的 0 不會不見）；多筆值換行；只有單一、格式正確的 Email /
+    以 http(s):// 或 www. 開頭的網址才加超連結（其他值不加，避免 `javascript:` 之類的連結）。"""
+    try:
+        import openpyxl
+        from openpyxl.comments import Comment
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+        from openpyxl.utils import get_column_letter
+    except ImportError:                                    # pragma: no cover
+        raise RuntimeError("openpyxl 未安裝，無法匯出 xlsx")
+    import time as _time
+    headers = [_xml_clean(_s(h)) for h in headers or []]
+    width = max([len(headers)] + [len(r) for r in rows or []])
+    headers += [""] * (width - len(headers))
+    rows = [[_xml_clean(_s(v)) for v in r] + [""] * (width - len(r)) for r in rows or []]
+    today = today or _time.strftime("%Y.%m.%d", _time.localtime())
+    font = "新細明體"
+    thin = Side(style="thin")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    yellow, gray = PatternFill("solid", fgColor="FFFFFF00"), PatternFill("solid", fgColor="FFCCCCCC")
+    f_title, f_date = Font(name=font, size=16, bold=True), Font(name=font, size=11, bold=True)
+    f_head, f_body = Font(name=font, size=12, bold=True), Font(name=font, size=12)
+    f_link = Font(name=font, size=12, color="FF0000FF", underline="single")
+    a_head = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    a_body = Alignment(vertical="center", wrap_text=True)
+    a_center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    def text(cell, v: str):
+        cell.number_format = "@"
+        if v != "":
+            cell.value = v
+            cell.data_type = "s"            # 先給值、再強制文字
+        return cell
+
+    def head_row(ws, r: int):
+        for ci, h in enumerate(headers, start=1):
+            c = text(ws.cell(row=r, column=ci), h)
+            c.font, c.alignment, c.border = f_head, a_head, border
+            c.fill = yellow if h in ROSTER_MANUAL else gray
+            if h in ROSTER_MANUAL:
+                c.comment = Comment(ROSTER_MANUAL_NOTE, "jt-doc-tools")
+        ws.row_dimensions[r].height = 36
+
+    widths = _col_widths(headers, rows)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = ROSTER_SHEET
+    text(ws["A1"], ROSTER_TITLE).font = f_title
+    text(ws["C1"], f"更新日期: {today}").font = f_date
+    ws.row_dimensions[1].height = 35.25
+    head_row(ws, 2)
+    link_cols = {ci: h for ci, h in enumerate(headers, start=1) if h in ("Email", "公司網址")}
+    for ri, r in enumerate(rows, start=3):
+        for ci, v in enumerate(r, start=1):
+            c = text(ws.cell(row=ri, column=ci), v)
+            c.font, c.border = f_body, border
+            c.alignment = a_center if headers[ci - 1] == "新增日期" else a_body
+            if ci in link_cols and v and "\n" not in v:
+                if link_cols[ci] == "Email" and _EMAIL_LINK.match(v):
+                    c.hyperlink, c.font = "mailto:" + v, f_link
+                elif link_cols[ci] == "公司網址" and _URL_LINK.match(v):
+                    c.hyperlink, c.font = (v if v.lower().startswith("http") else "https://" + v), f_link
+    for ci, h in enumerate(headers, start=1):
+        ws.column_dimensions[get_column_letter(ci)].width = _ROSTER_WIDTH.get(h) or widths[ci - 1]
+    ws.freeze_panes = "A3"
+    last = get_column_letter(max(1, width))
+    ws.auto_filter.ref = f"A2:{last}{max(2, len(rows) + 2)}"
+
+    # 性質清單：表裡出現過的性質（一格可以有好幾個，用「、」分開）
+    tags: list[str] = []
+    if "性質" in headers:
+        ti = headers.index("性質")
+        for r in rows:
+            for t in re.split(r"\s*[、,，;；\n]\s*", r[ti]):
+                if t and t not in tags:
+                    tags.append(t)
+    wl = wb.create_sheet(ROSTER_LIST_SHEET)
+    c = text(wl["A2"], "性質")
+    c.font, c.alignment, c.border, c.fill = f_head, a_head, border, yellow
+    c.comment = Comment(ROSTER_MANUAL_NOTE, "jt-doc-tools")
+    for i, t in enumerate(tags, start=3):
+        c = text(wl.cell(row=i, column=1), t)
+        c.font, c.border = f_body, border
+    wl.column_dimensions["A"].width = max([11.25] + [_disp_width(t) + 2 for t in tags])
+    wl.freeze_panes = "A3"
+
+    # 常用：同樣的欄、空白（使用者自己挑常用的人貼進來）
+    wf = wb.create_sheet(ROSTER_FAV_SHEET)
+    text(wf["A1"], ROSTER_FAV_TITLE).font = f_title
+    wf["C1"] = f"={ROSTER_SHEET}!C1"           # 跟著名片總表的更新日期（這一格是我們寫的公式，不是使用者資料）
+    wf["C1"].font = f_date
+    wf.row_dimensions[1].height = 35.25
+    head_row(wf, 2)
+    for ci, h in enumerate(headers, start=1):
+        wf.column_dimensions[get_column_letter(ci)].width = _ROSTER_WIDTH.get(h) or widths[ci - 1]
+    wf.freeze_panes = "A3"
+    wf.auto_filter.ref = f"A2:{last}2"
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
+def export_roster_xlsx(contacts, *, today: Optional[str] = None) -> bytes:
+    """「名片總表」版面的 XLSX。"""
+    headers, rows = roster_rows(contacts)
+    return write_roster_xlsx(headers, rows, today=today)
+
+
 # --------------------------------------------------------------------------- ODS
 
 def _ods_range(sheet: str, ncols: int, nrows: int) -> str:
