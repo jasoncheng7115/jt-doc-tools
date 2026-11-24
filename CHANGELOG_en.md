@@ -5,11 +5,17 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (983 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (984 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.55] - 2026-11-24
+
+### Fixed
+
+- AI stamping (MCP) now strips whitespace before parsing page strings (`2-5`, `1,3`), so a specially crafted long string can no longer make matching slow (flagged by code scanning).
 
 ## [1.17.54] - 2026-11-24
 

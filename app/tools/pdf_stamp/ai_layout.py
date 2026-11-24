@@ -35,7 +35,8 @@ KEYS = {"asset_id", "page", "x_mm", "y_mm", "width_mm", "height_mm", "rotation_d
         "anchor", "margin_mm", "offset_x_mm", "offset_y_mm", "anchor_text", "anchor_match", "anchor_side", "gap_mm"}
 _PT_PER_MM = 72.0 / 25.4
 _ID_RE = re.compile(r"^[0-9a-f]{32}$")
-_RANGE_RE = re.compile(r"^\s*(\d{1,5})\s*(?:-\s*(\d{1,5}))?\s*$")
+#: 頁碼範圍（空白先全部拿掉再比，正規式裡不留可以互相重疊的 `\s*`，避免回溯爆量）
+_RANGE_RE = re.compile(r"^(\d{1,5})(?:-(\d{1,5}))?$")
 
 
 class LayoutError(ValueError):
@@ -147,7 +148,7 @@ def parse_pages(spec: Any, n: int, i: int = 0) -> list[int]:
         if spec >= n:
             raise LayoutError(f"第 {spec + 1} 頁不存在（這份只有 {n} 頁）", "NO_PAGE")
         return [spec]
-    s = str(spec).strip().lower()
+    s = "".join(str(spec).split()).lower()[:100]
     if s == "all":
         return list(range(n))
     if s == "first":
@@ -162,7 +163,7 @@ def parse_pages(spec: Any, n: int, i: int = 0) -> list[int]:
         a = int(m.group(1))
         b = int(m.group(2)) if m.group(2) else a
         if a < 1 or b < a:
-            raise LayoutError(f"placements[{i}].page 的範圍不對：{part.strip()}")
+            raise LayoutError(f"placements[{i}].page 的範圍不對：{part}")
         if b > n:
             raise LayoutError(f"第 {b} 頁不存在（這份只有 {n} 頁）", "NO_PAGE")
         for p in range(a - 1, b):

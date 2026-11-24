@@ -405,3 +405,14 @@ def test_presets_migration_keeps_existing_records(tmp_path, monkeypatch):
     assert conn.execute("PRAGMA user_version").fetchone()[0] == len(ai_stamp._MIGRATIONS)
     ai_stamp.save_preset(7, "回簽", [{"asset_id": "c" * 32, "page": 0}])
     assert [x["name"] for x in ai_stamp.list_presets(7)] == ["回簽"]
+
+
+def test_page_spec_parsing_is_linear():
+    """CodeQL #237（py/polynomial-redos）：頁碼字串的正規式不可以有互相重疊的空白比對 —— 一長串空白也要立刻回錯。"""
+    import time as _t
+    t0 = _t.monotonic()
+    for bad in ("1" + " " * 5000 + "x", " " * 5000 + "-", "1-" + " " * 5000 + "2x"):
+        with pytest.raises(L.LayoutError):
+            L.parse_pages(bad, 10)
+    assert _t.monotonic() - t0 < 0.5
+    assert L.parse_pages(" 2 - 4 , 6 ", 10) == [1, 2, 3, 5], "空白照樣容許"
