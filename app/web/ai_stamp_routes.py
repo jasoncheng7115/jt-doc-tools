@@ -5,7 +5,7 @@
 * `GET /api/ai-stamp/presets`、`POST /api/ai-stamp/presets`（`{name, placements}` 新增或覆蓋）、
   `POST /api/ai-stamp/presets/delete`（`{name}`）：常用組合（v1.17.54；每個人自己的，只存位置設定、不存章圖）。
   網頁登入另有 `/ai-stamp/api/presets`（看）與 `/ai-stamp/api/presets/delete`（刪）。
-* `/ai-stamp`：本人確認頁（待確認清單、預覽、核准、退回）。**核准與退回只能用網頁的登入**：
+* 本人確認：v1.17.56 起併進「用印申請」的「AI 用印」分頁（`/seal-request#ai`；舊網址 `/ai-stamp` 轉過去）。**核准與退回只能用網頁的登入**：
   帶 API Token 的請求一律 403 —— AI 不可以自己核准（設計第 5 節）。
 """
 from __future__ import annotations
@@ -14,7 +14,7 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from ..core import ai_stamp
 
@@ -161,10 +161,12 @@ def build_router(templates) -> APIRouter:
         _audit_preset(request, me, "delete", str(body.get("name")).strip(), 0)
         return {"ok": True}
 
-    @router.get("/ai-stamp", response_class=HTMLResponse)
+    @router.get("/ai-stamp")
     async def page(request: Request):
-        return templates.TemplateResponse(request, "ai_stamp.html", {"request": request,
-                                                                     "confirm_hours": ai_stamp.CONFIRM_HOURS})
+        """舊網址（v1.17.38～54 的側欄與通知連結）：確認頁已併進「用印申請」的「AI 用印」分頁（v1.17.56）。
+        網址後面的 `#req=…` 由瀏覽器自己帶過去（轉址不帶片段時瀏覽器保留原本的）。"""
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse("/seal-request", status_code=307)
 
     @router.get("/ai-stamp/api/pending")
     async def pending(request: Request):
@@ -172,7 +174,7 @@ def build_router(templates) -> APIRouter:
         return {"items": await asyncio.to_thread(ai_stamp.list_pending, me["id"])}
 
     @router.get("/ai-stamp/api/{request_id}/preview/{page}")
-    async def preview(request: Request, request_id: str, page: int):
+    async def preview(request: Request, request_id: str, page: int, size: str = "small"):
         me = _web_user(request)
         try:
             r = ai_stamp.get_for_user(request_id, me["id"])
@@ -183,11 +185,12 @@ def build_router(templates) -> APIRouter:
         src = ai_stamp.out_path(r)
         if page < 0 or not src.exists():
             raise HTTPException(404, "找不到這一頁")
-        out = src.with_name(f"p{int(page)}.png")
+        large = size == "large"                                  # 放大檢視用（點預覽圖時才載）
+        out = src.with_name(f"p{int(page)}{'_l' if large else ''}.png")
         if not out.exists():
             from ..core import pdf_preview
             try:
-                await pdf_preview.render_page_png_async(src, out, int(page), dpi=80)
+                await pdf_preview.render_page_png_async(src, out, int(page), dpi=150 if large else 80)
             except ValueError:
                 raise HTTPException(404, "找不到這一頁")
         return FileResponse(str(out), media_type="image/png", headers={"Cache-Control": "no-store"})

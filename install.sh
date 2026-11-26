@@ -879,7 +879,8 @@ setup_python() {
     # （v1.1.66 之前的 uv.lock 漏 ldap3 就是這樣），uv 會「成功」回傳但實際
     # 少裝套件，最後使用者啟認證後 ldap3 import 失敗無法登入。
     # 一律走完整 reconcile，與 pyproject.toml 比對後實際補裝。
-    "$INSTALL_DIR/bin/uv" sync $UV_EXTRA_ARGS || die "uv sync 失敗"
+    # --no-dev：開發用的套件群組（pytest、bandit…）只有跑測試才要，客戶機不裝
+    "$INSTALL_DIR/bin/uv" sync --no-dev $UV_EXTRA_ARGS || die "uv sync 失敗"
     [ -x "$INSTALL_DIR/.venv/bin/python" ] || die "Python venv 建立失敗"
     log "驗證關鍵依賴可正常 import ..."
     "$INSTALL_DIR/.venv/bin/python" -c \
@@ -889,7 +890,7 @@ setup_python() {
     # 失敗不致命（會自動 fallback tesseract）— warn 不 die
     if ! "$INSTALL_DIR/.venv/bin/python" -c "import easyocr" 2>/dev/null; then
         warn "EasyOCR 未裝成（OCR 會自動 fallback tesseract，識別率較弱）"
-        warn "  可手動補裝: $INSTALL_DIR/bin/uv sync  或  $INSTALL_DIR/.venv/bin/pip install easyocr"
+        warn "  可手動補裝: $INSTALL_DIR/bin/uv sync --no-dev  或  $INSTALL_DIR/.venv/bin/pip install easyocr"
     fi
     # pyzbar import 需要 zbar shared lib（已在 install_zbar 階段裝）
     # 失敗 = einvoice-scan QR 掃描在 _probe 階段拒絕；不致命

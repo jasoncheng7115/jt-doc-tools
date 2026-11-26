@@ -40,6 +40,30 @@ def _limits() -> dict:
             "download_uses": tickets.DOWNLOAD_MAX_USES}
 
 
+def _stamp_setup(tokens: list[dict]) -> dict:
+    """AI 用印設定教學的現況（只有數字，不帶章圖）：每一道開關做到哪裡。"""
+    out = {"seals": 0, "seals_ai": 0, "seals_ai_with_subjects": 0, "controlled": 0,
+           "tokens_stamp": sum(1 for t in tokens if t.get("stamp") and t.get("mcp") and t.get("owner_user_id"))}
+    try:
+        from ..core import seal_policy
+        from ..core.asset_manager import asset_manager
+        for t in seal_policy.CONTROLLABLE_TYPES:
+            for a in asset_manager.list(type=t):
+                pol = seal_policy.get_policy(a.id)
+                out["seals"] += 1
+                if pol.get("mode") != "direct":
+                    out["controlled"] += 1
+                    continue
+                ai = pol.get("ai") or {}
+                if ai.get("enabled"):
+                    out["seals_ai"] += 1
+                    if ai.get("subjects"):
+                        out["seals_ai_with_subjects"] += 1
+    except Exception:  # noqa: BLE001 —— 算不出來只是教學裡少了數字
+        pass
+    return out
+
+
 def build_mcp_router(templates) -> APIRouter:
     router = APIRouter()
 
@@ -88,6 +112,7 @@ def build_mcp_router(templates) -> APIRouter:
             "tool_docs": tool_docs,
             "mcp_tokens": sum(1 for t in tokens if t.get("mcp")),
             "limits": _limits(),
+            "stamp_setup": _stamp_setup(tokens),
         })
 
     @router.post("/mcp/save")

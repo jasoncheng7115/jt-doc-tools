@@ -1,7 +1,7 @@
-"""AI 用印的三個畫面（真瀏覽器）：設定 → 用印申請的「AI 使用」欄、設定 → MCP 的兩個開關、本人的「AI 用印確認」頁。
+"""AI 用印的三個畫面（真瀏覽器）：設定 → 用印申請的「AI 使用」欄、設定 → MCP 的開關與設定教學、本人在「用印申請」的「AI 用印」分頁確認（v1.17.56 前是獨立的「AI 用印確認」頁）。
 
 API 與條件在 `test_ai_stamp.py`；這裡驗畫面接線：設定值有畫出來、確認頁真的載出待確認的那一件與預覽、
-按核准（經過確認視窗）之後真的核准、手機寬度不會橫向捲動、側欄有「AI 用印確認」與件數。
+按核准（經過確認視窗）之後真的核准、手機寬度不會橫向捲動、側欄「用印申請」有件數。
 設 `JTDT_SHOT_DIR` 時另存截圖（發版前目視用）。
 """
 from __future__ import annotations
@@ -192,6 +192,13 @@ def test_admin_pages_show_the_ai_settings(site):
               ".querySelector('.mcp-token-stamp').disabled") is True
     assert ev("!!document.querySelector('a[href=\"/admin/mcp/ai-stamp\"]')")
     shot("admin-mcp")
+    # 設定教學：按下去展開，逐項標完成 / 未完成（v1.17.56）
+    assert ev("document.getElementById('mcp-stamp-guide').hidden") is True
+    ev("document.getElementById('mcp-stamp-guide-btn').click()")
+    assert wait("!document.getElementById('mcp-stamp-guide').hidden")
+    assert ev("document.querySelectorAll('#mcp-stamp-guide li').length") == 7
+    ev("document.getElementById('mcp-stamp-guide').scrollIntoView({block: 'center'})")
+    shot("admin-mcp-guide")
     send("Page.navigate", {"url": f"http://127.0.0.1:{port}/admin/mcp/ai-stamp"})
     assert wait("document.querySelectorAll('#ailRows tr').length === 1"), "紀錄頁沒有那一件"
     assert ev("document.querySelector('#ailRows .ail-st').classList.contains('s-pending')")
@@ -202,12 +209,22 @@ def test_owner_confirms_on_the_web(site):
     port, send, info = site
     ev, wait, shot = _tools(send)
     _login(send, info, "user")
+    # 舊網址轉到「用印申請」的「AI 用印」分頁（v1.17.56 併進去，側欄只剩一項）
     send("Page.navigate", {"url": f"http://127.0.0.1:{port}/ai-stamp"})
-    assert wait("document.querySelectorAll('.as-card').length === 1"), "確認頁沒有那一件"
-    assert ev("document.querySelector('.sb-ai-stamp-link .sb-count').textContent.trim()") == "1", "側欄要有件數"
-    assert wait("[...document.querySelectorAll('.as-pages img')].every(i => i.complete && i.naturalWidth > 0)"), \
-        "預覽圖沒有載出來"
+    assert wait("location.pathname === '/seal-request' && document.querySelectorAll('.as-card').length === 1"), \
+        "確認頁沒有那一件"
+    assert ev("document.querySelectorAll('.sb-item[href^=\"/ai-stamp\"]').length") == 0, "側欄不再有獨立的「AI 用印確認」"
+    assert ev("document.querySelector('.sb-seal-link .sb-count').textContent.trim()") == "1", "側欄「用印申請」要有件數"
+    assert ev("!document.querySelector('.sr-tabs')"), "只開 AI 用印時只有一塊，不顯示分頁列"
+    assert wait("[...document.querySelectorAll('.as-prev img, .as-seal img')].every(i => i.complete && i.naturalWidth > 0)"), \
+        "預覽圖或章的縮圖沒有載出來"
     assert ev("document.querySelector('.as-card').textContent.includes('公司大小章')")
+    assert ev("!!document.querySelector('.as-card .as-left')"), "要標剩餘時間"
+    # 點預覽放大
+    ev("document.querySelector('.as-prev img').click()")
+    assert wait("(() => { const b = document.querySelector('.jt-lightbox'); const i = document.querySelector('.jt-lb-img');"
+                " return b && !b.hidden && i && i.complete && i.naturalWidth > 0; })()"), "點預覽要能放大（大圖載得出來）"
+    ev("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))")
     shot("ai-stamp")
     shot("ai-stamp", 390)
     send("Emulation.setDeviceMetricsOverride", {"width": 390, "height": 800, "deviceScaleFactor": 1, "mobile": True})

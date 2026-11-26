@@ -29,7 +29,7 @@
 1. 停服務
 2. 備份 `data/` (最近 3 份保留)
 3. `git pull` 從 GitHub
-4. `uv sync` 同步依賴
+4. `uv sync --no-dev` 同步依賴（不裝開發用的套件群組；之前裝進來的 pytest、bandit 會在這一步移除）
 5. 重啟
 6. 健康檢查
 

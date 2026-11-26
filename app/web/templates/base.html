@@ -622,29 +622,20 @@
           </span>
         </a>
       </div>
-      {% if seal_request_enabled(request) %}
+      {# 用印申請與 AI 用印的本人確認在同一頁（v1.17.56 起；原本另有一項「AI 用印確認」）：
+         兩個功能開了任何一個就出現，數字是「待我審核＋待我用印＋AI 待確認」 #}
+      {% set _seal_on = seal_request_enabled(request) %}
+      {% set _ai_on = ai_stamp_enabled(request) %}
+      {% if _seal_on or _ai_on %}
       <div class="sb-solo">
-        <a class="sb-item sb-seal-link" href="/seal-request" data-name="用印申請 seal request stamp approval 用印 印章 審核 核准 簽核 公司章">
+        <a class="sb-item sb-seal-link" href="/seal-request{{ '' if _seal_on else '#ai' }}" data-name="用印申請 seal request stamp approval 用印 印章 審核 核准 簽核 公司章 AI 用印確認 ai stamp confirm mcp">
           <span class="sb-item-icon">{{ icon('seal-request', size=18) }}</span>
           <span class="sb-item-text">
             <span class="sb-item-name">{{ tr('用印申請') }}<span class="tool-beta">Beta</span></span>
-            <span class="sb-item-desc">{{ tr('送出申請，核准後用印') }}</span>
+            <span class="sb-item-desc">{{ tr('送出申請，核准後用印') if _seal_on else tr('AI 送出的用印，看過再核准') }}</span>
           </span>
-          {% set _sc = seal_review_count(request) %}
-          {% if _sc %}<span class="sb-count" title="{{ tr('待我審核') }}">{{ _sc }}</span>{% endif %}
-        </a>
-      </div>
-      {% endif %}
-      {% if ai_stamp_enabled(request) %}
-      <div class="sb-solo">
-        <a class="sb-item sb-ai-stamp-link" href="/ai-stamp" data-name="AI 用印確認 ai stamp confirm mcp 用印 印章 確認 核准">
-          <span class="sb-item-icon">{{ icon('ai-stamp', size=18) }}</span>
-          <span class="sb-item-text">
-            <span class="sb-item-name">{{ tr('AI 用印確認') }}</span>
-            <span class="sb-item-desc">{{ tr('AI 送出的用印，看過再核准') }}</span>
-          </span>
-          {% set _ac = ai_stamp_count(request) %}
-          {% if _ac %}<span class="sb-count" title="{{ tr('待我確認') }}">{{ _ac }}</span>{% endif %}
+          {% set _sc = (seal_review_count(request) if _seal_on else 0) + (ai_stamp_count(request) if _ai_on else 0) %}
+          {% if _sc %}<span class="sb-count" title="{{ tr('待我處理') }}">{{ _sc }}</span>{% endif %}
         </a>
       </div>
       {% endif %}

@@ -409,7 +409,7 @@ def _link(req_id: str) -> str:
         base = (notify_settings.get().get("site_url") or "").strip()
     except Exception:  # noqa: BLE001
         base = ""
-    return (base.rstrip("/") + f"/ai-stamp#req={req_id}") if base else ""
+    return (base.rstrip("/") + f"/seal-request#req={req_id}") if base else ""
 
 
 def _notify(uid: int, row: dict) -> None:
@@ -421,7 +421,7 @@ def _notify(uid: int, row: dict) -> None:
     text = "\n".join([subject, f"章：{names}", f"Token：{row['token_label']}",
                       f"送出時間：{time.strftime('%Y/%m/%d %H:%M', time.localtime(row['created_at']))}",
                       f"{CONFIRM_HOURS} 小時內沒有確認會自動作廢。",
-                      f"確認：{link}" if link else "請登入本站，開啟「AI 用印確認」頁。"])
+                      f"確認：{link}" if link else "請登入本站，開啟側欄的「用印申請」→「AI 用印」分頁。"])
     from .seal_notify import _send
     threading.Thread(target=_send, args=([int(uid)], subject, text), daemon=True, name="ai-stamp-notify").start()
 

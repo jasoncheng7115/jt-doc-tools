@@ -144,7 +144,7 @@ def test_update_actually_uses_it():
     src = (ROOT / "app/cli.py").read_text(encoding="utf-8")
     body = src[src.index("def svc_update"):]
     assert re.search(r"uv_env, py_args = _python_for_sync\(root, uv_env\)", body)
-    assert re.search(r'subprocess\.call\(\[uv, "sync", \*py_args\]', body)
+    assert re.search(r'subprocess\.call\(\[uv, "sync", (?:"--no-dev", )?\*py_args\]', body)
 
 
 # ------------------------------------------------------------------ install.sh

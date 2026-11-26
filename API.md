@@ -3221,12 +3221,12 @@ MCP 的 `jtdt_run` 範例（`files` 是先用 `/mcp/files/upload` 傳上去的�
 ```
 
 回應：不需要確認的章直接回蓋好的 PDF（標頭 `X-JTDT-AI-Stamp` 是這一次的編號）；需要確認的章回 **202**
-`{"status": "pending", "request_id", "expires_at"}`，Token 綁定的本人在網頁「AI 用印確認」頁（`/ai-stamp`）按核准後，
+`{"status": "pending", "request_id", "expires_at"}`，Token 綁定的本人在網頁「用印申請」的「AI 用印」分頁（`/seal-request#ai`；v1.17.56 以前是獨立的 `/ai-stamp`，舊網址會轉過去）按核准後，
 `GET /api/ai-stamp/requests/{request_id}` 的 `status` 變成 `approved` 並帶 `file.file_id`（存在本人的工作區）。
 核准與退回只能用網頁登入（`POST /ai-stamp/api/{request_id}/approve`、`POST /ai-stamp/api/{request_id}/reject`），帶 API Token 的請求一律 403；
 24 小時沒處理變成 `expired`、檔案刪除。按核准時再檢查一次條件（章的 AI 授權與對象、工具權限、AI 用印與 MCP 開關、帳號啟用），
 有任何一項已經不成立就回 409 `NO_LONGER_ALLOWED`，這件變成 `void`、檔案刪除。每人同時待確認最多 20 件、待確認區最多 500 MB（超過回 429 `TOO_MANY_PENDING`）。
-通知只寫章名、Token 名稱與時間，不寫 AI 送來的檔名。確認頁另外用 `GET /ai-stamp/api/pending`、`GET /ai-stamp/api/{request_id}/preview/{page}`。
+通知只寫章名、Token 名稱與時間，不寫 AI 送來的檔名。確認頁另外用 `GET /ai-stamp/api/pending`、`GET /ai-stamp/api/{request_id}/preview/{page}`（加 `?size=large` 是放大檢視用的大圖）。
 
 錯誤：條件不符 403（訊息帶代碼，例如 `MCP_OFF`、`STAMP_OFF`、`TOKEN_NOT_MCP`、`TOKEN_NOT_ALLOWED`、`NOT_VIA_MCP`、`ASSET_NOT_ALLOWED`）、超過每日上限 429。
 原本的 `/api/pdf-stamp`、`/api/pdf-seam-stamp` 不收經 MCP 來的呼叫（403）。

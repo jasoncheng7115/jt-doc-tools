@@ -716,7 +716,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 
 <!-- BEGIN test-index (由 tools/build_test_plan_index.py 產生，不要手改) -->
 
-共 **588 支測試檔**。說明取自每支檔案自己的開頭說明，
+共 **590 支測試檔**。說明取自每支檔案自己的開頭說明，
 跑 `python tools/build_test_plan_index.py` 重建。
 
 > 這裡**刻意不列函式數** —— 那個數字每加一條測試就會變，
@@ -741,7 +741,8 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_ai_stamp.py` | AI 用印（v1.17.38）：AI 經 MCP 蓋資產庫裡經 AI 授權的章 |
 | `test_ai_stamp_hardening.py` | AI 用印與 MCP 的資安盤點（v1.17.38，使用者 2026-11-12「安全 權限 資料不外洩 等等問題 都要完全考慮好」） |
 | `test_ai_stamp_layout.py` | AI 用印（MCP）的定位與便利功能（v1.17.54）：依文字定位、角落、頁碼字串、透明度、預覽、常用組合、批次 |
-| `test_ai_stamp_pages_browser.py` | AI 用印的三個畫面（真瀏覽器）：設定 → 用印申請的「AI 使用」欄、設定 → MCP 的兩個開關、本人的「AI 用印確認」頁 |
+| `test_ai_stamp_merged_ui.py` | AI 用印確認併進「用印申請」、MCP 設定教學、通知主旨不重複（v1.17.56，使用者 2026-11-24 要求） |
+| `test_ai_stamp_pages_browser.py` | AI 用印的三個畫面（真瀏覽器）：設定 → 用印申請的「AI 使用」欄、設定 → MCP 的開關與設定教學、本人在「用印申請」的「AI 用印」分頁確認（v1.17.56 前是獨立的「AI 用印確認」頁） |
 | `test_api_doc_contract.py` | API 文件契約回歸測試 |
 | `test_api_doc_coverage.py` | 每個工具的 API 都要在 `github/API.md` 與 `TEST_PLAN.md` §4 出現 |
 | `test_api_doc_examples_run.py` | 照 `github/API.md` 的 curl 範例實際呼叫 —— 抓「照文件呼叫卻壞」 |
@@ -898,6 +899,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 | `test_i18n_dynamic_labels.py` | 程式端產生的顯示字串（`tr(變數)`）也必須有英文 |
 | `test_id_from_body_acl.py` | 「id 由使用者傳入」的端點一律要有 ACL —— 靜態全面掃描 |
 | `test_impacts_pass_is_separate.py` | 「事件與影響」必須自己走一輪 —— **零退步是由構造保證的，不是調出來的** |
+| `test_install_no_dev_deps.py` | 客戶機不裝開發用的套件群組（v1.17.56，使用者 2026-11-25「做」） |
 | `test_install_sh_apple_silicon.py` | install.sh 在 Apple Silicon 的 Mac 上要從頭裝到服務起來（issue #57） |
 | `test_install_sh_without_tty.py` | install.sh 在沒有控制終端時不可以中止 |
 | `test_installer_languages.py` | Windows 安裝程式在英文 Windows 上要顯示英文（v1.15.27） |
@@ -3492,7 +3494,7 @@ v1.12.0 的 `_m8` 就是這樣過關的：它重建 `users` 表時沒關外鍵�
 - [ ] `POST /me/2fa/verify`
 - [ ] `POST /me/email`
 - [ ] `GET /my-jobs`
-- [ ] `GET /ai-stamp` — AI 用印確認頁（v1.17.38）：只在「允許 AI 用印」打開且啟用登入時出現在側欄（帶待確認件數）；列出本人待確認的 AI 用印、預覽、核准 / 退回
+- [ ] `GET /ai-stamp` — 舊網址（v1.17.38～55 的 AI 用印確認頁）：v1.17.56 起 307 轉到 `/seal-request`（通知的 `#req=…` 由瀏覽器帶過去），確認改在「用印申請」的「AI 用印」分頁
 - [ ] `GET /ai-stamp/api/pending` — 本人的待確認清單（別人看不到）；帶 API Token 的請求 403
 - [ ] `GET /ai-stamp/api/{request_id}/preview/{page}` — 待確認那一件的頁面預覽（只有本人；處理過的 410）
 - [ ] `POST /ai-stamp/api/{request_id}/approve` — 本人核准：存進本人工作區、待確認區的檔案刪掉；帶 API Token 403；別人 404；處理過的 409；工作區存不下 409 而且維持待確認
@@ -6569,6 +6571,19 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 > 「**繁體中文底下完全沒有變化**」，而不是「英文看起來對不對」。
 > 本專案以繁體中文為主，英文是附加。
 
+### 6.158 v1.17.56 — AI 用印確認併進「用印申請」、MCP 設定教學、對齊與通知（**每次發版必過**）
+
+- [ ] 側欄只有「用印申請」一項，件數是待我審核＋待我用印＋AI 待確認；只開 AI 用印時連結到 `#ai`、說明改成「AI 送出的用印，看過再核准」；兩個都沒開不出現（`tests/test_ai_stamp_merged_ui.py`）。
+- [ ] 用印申請頁三種情況：都沒開只說尚未啟用；只開 AI 用印只有「AI 用印」分頁（`data-only`）；都開多一個「AI 用印」分頁（附件數），原本的分頁照舊；`#ai` 與通知的 `#req=…` 直接打開那個分頁。
+- [ ] 舊網址 `/ai-stamp` 307 轉到 `/seal-request`；通知連結改成 `/seal-request#req=…`，沒填站台網址時提示「側欄的「用印申請」→「AI 用印」分頁」。
+- [ ] 確認卡片（真瀏覽器 `test_ai_stamp_pages_browser.py`）：左邊預覽點一下放大（大圖 `?size=large` 載得出來）、多頁可以切換；右邊檔名、工具、剩餘時間（3 小時內轉橘）、章名附章的縮圖、一行灰色資訊；核准 / 退回在右下；兩件以上有「全部核准」（再確認一次，失敗的列出來）；手機寬度不橫向捲動。
+- [ ] MCP 設定頁「設定教學」：七項逐項標完成 / 未完成 / 建議，「每顆章開放 AI 並設定對象」與「Token 允許用印」附目前數字；開了 AI 但沒設對象不算完成。
+- [ ] 設定 → 用印申請：AI 那組對象有「AI 可以用的對象」標題；勾了「允許 AI 使用」但沒設對象時紅字提醒；標籤與「設定」按鈕同一列垂直置中（保管人、可申請對象、AI 對象、流程的申請對象）。
+- [ ] 設定 → MCP 的 Token 清單：「MCP」與「用印」兩個開關高度一致（兩欄頂端對齊、標籤固定行高）。
+- [ ] 聊天類通知（Telegram、LINE、Nextcloud、Slack、Teams、Zulip、Discord）內文第一行跟主旨相同時不重複；不同時照舊。
+- [ ] 客戶機不裝開發用的套件：`install.sh`、`setup-python.cmd`、`jtdt update`（更新與失敗還原）的 `uv sync` 都帶 `--no-dev`（`tests/test_install_no_dev_deps.py`，兩處變異驗證）；實機：上課機與 Windows 測試機跑 `uv sync --no-dev` 移除 pytest、bandit、pluggy、rich、stevedore，numpy 保留、服務正常。Mac 測試機待開機後跑一次全新安裝。
+- [ ] 手動：正式機上 AI 送一件需要確認的用印，Telegram 通知只出現一次主旨、連結打開「用印申請」的「AI 用印」分頁；卡片在桌面與手機寬度目視。
+
 ### 6.157 v1.17.54 — AI 用印（MCP）：依文字定位、頁碼範圍、透明度、預覽、常用組合、批次（**每次發版必過**）
 
 - [ ] 位置（`tests/test_ai_stamp_layout.py`）：`page` 整數 0 起算、字串 `all` / `first` / `last` / `2-5` / `1,3` 1 起算、超出頁數 400；`anchor` 九個位置＋`margin_mm`＋偏移；`anchor_text` 右 / 左 / 上 / 下 / 正上方、`gap_mm`、`anchor_match`（first / last / 第幾個）、字中間多打空白也找得到；只給寬度照章的比例；超出頁面夾回來並標 `clamped`；
@@ -6690,12 +6705,12 @@ grep -rnE "192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|親測|OSSII 內部" \
 
 - [ ] 條件逐一拿掉都被拒（403）而且 AI 的工具清單看不到：未啟用登入、「允許 AI 用印」關、Token 沒勾「用印」、沒有工具權限、那顆章沒開 AI 使用、使用者不在對象裡、章是「僅限核准案件使用」（就算設定檔裡 AI 旗標殘留也不行）。
 - [ ] 只收資產庫裡開放 AI 使用的章：沒有 `asset_id`、不存在的章、`png_b64`、`kind`、其他欄位都拒絕；用到一顆不行的整件拒絕、紀錄裡沒有；騎縫章只收經 AI 授權的印章（簽名不行）。
-- [ ] 需要確認：回 202 與編號，AI 拿不到檔案；帶 Token 的核准 403、別的帳號 404；本人在「AI 用印確認」頁看預覽並核准後才存進工作區、AI 用 `stamp_request_status` 拿到檔案；不能核准兩次；退回作廢刪檔；24 小時沒處理作廢刪檔。
+- [ ] 需要確認：回 202 與編號，AI 拿不到檔案；帶 Token 的核准 403、別的帳號 404；本人在「用印申請 → AI 用印」分頁看預覽並核准後才存進工作區、AI 用 `stamp_request_status` 拿到檔案；不能核准兩次；退回作廢刪檔；24 小時沒處理作廢刪檔。
 - [ ] 每日上限：超過回 429。
 - [ ] 稽核 `ai_stamp` 有 Token 名稱、章、頁、原檔與成品的 SHA-256，不含章的圖；產出的 PDF 有 `JTDTAIStamp` 註記。
 - [ ] 原本的 `/api/pdf-stamp`、`/api/pdf-seam-stamp` 經 MCP 呼叫 403；Token 改綁給別人時「用印」收回。
 - [ ] 設定 → 用印申請：直接使用的章有「AI 使用」一欄（允許、對象、需要本人確認、每人每日上限）；受管制的章寫「受管制的章 AI 不能用」；改成受管制時先問並一併關閉 AI 使用。設定 → MCP：「允許 AI 用印」開關（未啟用登入時停用並說明）、每張 Token 的「用印」開關（沒綁使用者或沒允許 MCP 時停用）、連到 AI 用印紀錄。
-- [ ] 側欄「AI 用印確認」只在打開 AI 用印且啟用登入時出現，帶待確認件數；圖示跟「用印與簽名」「用印申請」不同。
+- [ ] 側欄只有「用印申請」一項（v1.17.56 起不再有獨立的「AI 用印確認」）：用印申請或 AI 用印開了任何一個就出現，件數是待我審核＋待我用印＋AI 待確認。
 - 自動化：`tests/test_ai_stamp.py`（MCP 總開關、Token 不能核准、受管制的章、原本 API 擋 MCP 四處變異驗證過）
 - [ ] **資安盤點（同版）**：允許 MCP 的 Token 直接呼叫任何一般 API 都 403 `MCP_TOKEN_REST_DENIED`（含偽造的經 MCP 標頭），沒勾 MCP 的 Token 照常；AI 用印另外要 MCP 總開關、Token 的 MCP 旗標與經 MCP 轉呼叫（`ai_stamp.require` 自己也擋）。
 - [ ] 核准時再檢查：送出後收回章的 AI 使用、改掉對象、拿掉工具權限、關掉 AI 用印 → 核准回 409 `NO_LONGER_ALLOWED`、狀態 `void`、檔案刪除；紀錄頁顯示「條件改變作廢」。

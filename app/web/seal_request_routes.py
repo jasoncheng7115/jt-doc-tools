@@ -149,9 +149,13 @@ def build_router(templates) -> APIRouter:
 
     @router.get("/seal-request", response_class=HTMLResponse)
     async def page(request: Request):
-        from ..core import auth_settings, seal_policy
+        from ..core import ai_stamp, auth_settings, seal_policy
+        from ..mcp import settings as mcp_settings
         ready = seal_policy.is_enabled() and auth_settings.is_enabled()
-        return templates.TemplateResponse(request, "seal_request.html", {"request": request, "ready": ready})
+        # AI 用印（MCP）的本人確認也在這一頁（v1.17.56 起）：用印申請沒啟用、只開 AI 用印時，只顯示那個分頁
+        ai_ready = bool(mcp_settings.get().get("allow_stamp")) and auth_settings.is_enabled()
+        return templates.TemplateResponse(request, "seal_request.html", {
+            "request": request, "ready": ready, "ai_ready": ai_ready, "confirm_hours": ai_stamp.CONFIRM_HOURS})
 
     @router.get("/seal-request/api/home")
     async def home(request: Request):

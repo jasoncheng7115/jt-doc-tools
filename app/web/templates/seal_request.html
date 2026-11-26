@@ -3,10 +3,14 @@
 {% block title %}{{ tr('用印申請') }} · {{ app_name }}{% endblock %}
 {% block content %}
 <h1>{{ icon('seal-request', size=22) }} {{ tr('用印申請') }}<span class="tool-beta" title="{{ tr('試用中：功能還可能調整') }}">Beta</span></h1>
-{% if not ready %}
+{% if not ready and not ai_ready %}
 <div class="panel">
   <p>{{ tr('用印申請尚未啟用。管理員可以在「設定 → 用印申請」啟用（需要先啟用帳號登入）。') }}</p>
 </div>
+{% elif not ready %}
+{# 用印申請沒啟用、只開 AI 用印：只有「AI 用印」這一塊（只有一個分頁就不顯示分頁列；件數在側欄） #}
+{% set ai_only = true %}
+{% include "components/ai_stamp_panel.html" %}
 {% else %}
 <p class="muted">{{ tr('要用公司章這類受管制的章時，在這裡送出申請：經各關審核通過後，由印章保管人確認用印。審核通過不等於已經蓋章。') }}</p>
 
@@ -15,6 +19,7 @@
   <button type="button" class="sr-tab" data-box="mine">{{ icon('list', size=14) }} <span>{{ tr('我的申請') }}</span></button>
   <button type="button" class="sr-tab" data-box="review">{{ icon('check', size=14) }} <span>{{ tr('待我審核') }}</span> <span class="sr-badge" id="srReviewCount" hidden></span></button>
   <button type="button" class="sr-tab" data-box="stamp">{{ icon('stamp', size=14) }} <span>{{ tr('待我用印') }}</span> <span class="sr-badge" id="srStampCount" hidden></span></button>
+  {% if ai_ready %}<button type="button" class="sr-tab" data-box="ai">{{ icon('ai-stamp', size=14) }} <span>{{ tr('AI 用印') }}</span> <span class="sr-badge" id="srAiCount" hidden></span></button>{% endif %}
   <button type="button" class="sr-tab" data-box="handled">{{ icon('clock', size=14) }} <span>{{ tr('我已處理') }}</span></button>
   <button type="button" class="sr-tab" data-box="all" id="srTabAll" hidden>{{ icon('archive', size=14) }} <span>{{ tr('全部案件') }}</span></button>
 </nav>
@@ -25,6 +30,7 @@
   <div class="sr-flow-list" id="srFlows"></div>
 </section>
 
+{% if ai_ready %}{% include "components/ai_stamp_panel.html" %}{% endif %}
 <section class="panel" id="srList" hidden>
   <div class="sr-filters">
     <input type="search" class="field" id="srFq" placeholder="{{ tr('搜尋編號、主旨、流程、申請人') }}" aria-label="{{ tr('搜尋') }}">
@@ -267,6 +273,7 @@
 {% endblock %}
 
 {% block scripts %}
+{% if ai_ready %}{% include "components/ai_stamp_panel_js.html" %}{% endif %}
 {% if ready %}
 <script src="/static/js/custom_select.js"></script>
 <script src="/static/js/file_upload.js"></script>
@@ -330,9 +337,11 @@
     box = which;
     document.querySelectorAll('.sr-tab').forEach(b => b.classList.toggle('active', b.dataset.box === which));
     $('srNew').hidden = which !== 'new';
-    $('srList').hidden = which === 'new' || which === 'case';
+    $('srList').hidden = which === 'new' || which === 'case' || which === 'ai';
     $('srCase').hidden = which !== 'case';
+    if ($('srAi')) $('srAi').hidden = which !== 'ai';
     if (which === 'new') renderFlows();
+    else if (which === 'ai') { if (window.jtAiStamp) window.jtAiStamp.load(); }
     else if (which !== 'case') loadList();
   }
   document.querySelectorAll('.sr-tab').forEach(b => b.addEventListener('click', () => { history.replaceState(null, '', '#' + b.dataset.box); show(b.dataset.box); }));
@@ -970,11 +979,16 @@
     sc.hidden = !res.stamp_count; sc.textContent = String(res.stamp_count || '');
   }
 
-  refreshHome().then(() => {
+  const aiCount = window.jtAiStamp ? window.jtAiStamp.count() : Promise.resolve(0);
+  Promise.all([refreshHome(), aiCount]).then(([, ai]) => {
     const h = location.hash.slice(1);
+    const hasAi = !!$('srAi');
     if (h.startsWith('case=') && /^[A-Za-z0-9_-]{1,64}$/.test(h.slice(5))) openCase(h.slice(5));
+    // `#req=…` 是 AI 用印的通知連結（舊網址 /ai-stamp#req=… 轉過來也一樣）
+    else if (hasAi && (h === 'ai' || /^req=[0-9a-f]{32}$/.test(h))) show('ai');
     else show(['new', 'mine', 'review', 'stamp', 'handled', 'all'].includes(h) ? h
-              : ((home && home.stamp_count) ? 'stamp' : (home && home.review_count) ? 'review' : 'mine'));
+              : ((home && home.stamp_count) ? 'stamp' : (home && home.review_count) ? 'review'
+                 : (hasAi && ai) ? 'ai' : 'mine'));
   });
 })();
 </script>

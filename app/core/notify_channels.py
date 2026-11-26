@@ -82,8 +82,17 @@ CHANNEL_INFO: dict[str, dict] = {
 _TIMEOUT = 12.0
 
 
+def _rest(subject: str, text: str | None) -> str:
+    """內文第一行就是主旨時拿掉那一行（很多通知的內文本來就以主旨開頭；聊天類通道又會把主旨接在前面，
+    在 Telegram 等就看到同一行出現兩次）。"""
+    t = text or ""
+    first, _, rest = t.partition("\n")
+    return rest.lstrip("\n") if first.strip() == (subject or "").strip() else t
+
+
 def _msg(subject: str, text: str | None) -> str:
-    return f"{subject}\n{text}" if text else subject
+    body = _rest(subject, text)
+    return f"{subject}\n{body}" if body else subject
 
 
 def _post(url: str, *, json: dict | None = None, data: dict | None = None,
@@ -111,14 +120,16 @@ def send_slack(cfg: dict[str, Any], subject: str, text: str | None) -> None:
     url = cfg.get("slack_webhook")
     if not url:
         raise RuntimeError("尚未設定 Slack webhook URL")
-    _post(url, json={"text": f"*{subject}*\n{text}" if text else f"*{subject}*"})
+    body = _rest(subject, text)
+    _post(url, json={"text": f"*{subject}*\n{body}" if body else f"*{subject}*"})
 
 
 def send_teams(cfg: dict[str, Any], subject: str, text: str | None) -> None:
     url = cfg.get("teams_webhook")
     if not url:
         raise RuntimeError("尚未設定 Teams webhook URL")
-    body = f"**{subject}**\n\n{text}" if text else f"**{subject}**"
+    rest = _rest(subject, text)
+    body = f"**{subject}**\n\n{rest}" if rest else f"**{subject}**"
     try:
         # 舊版 Office 365 連接器：純 text
         _post(url, json={"text": body})
@@ -144,7 +155,7 @@ def send_discord(cfg: dict[str, Any], subject: str, text: str | None) -> None:
         raise RuntimeError("尚未設定 Discord webhook URL")
     _post(url, json={"embeds": [{
         "title": subject[:256],
-        "description": (text or "")[:4000],
+        "description": _rest(subject, text)[:4000],
         "color": 0x2563EB,
     }]})
 
@@ -175,7 +186,8 @@ def send_zulip(cfg: dict[str, Any], subject: str, text: str | None) -> int:
     email, api_key = cfg.get("zulip_bot_email"), cfg.get("zulip_api_key")
     if not (site and email and api_key):
         raise RuntimeError("尚未設定 Zulip 站台、Bot Email 或 API Key")
-    body = f"**{subject}**\n{text}" if text else f"**{subject}**"
+    rest = _rest(subject, text)
+    body = f"**{subject}**\n{rest}" if rest else f"**{subject}**"
     to_me = zulip_recipient(cfg)
     if to_me:
         target = int(to_me) if to_me.isdigit() else to_me

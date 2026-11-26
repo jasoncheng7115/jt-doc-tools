@@ -1,0 +1,194 @@
+{# 「AI 用印」分頁的程式（v1.17.56）。對外：window.jtAiStamp = {load, count}。
+   用印申請沒啟用、只開 AI 用印時，這一頁只有這個分頁，由這裡自己打開。 #}
+<script src="/static/js/lightbox.js" nonce="{{ request.state.csp_nonce }}"></script>
+<script nonce="{{ request.state.csp_nonce }}">
+(function () {
+  const $ = id => document.getElementById(id);
+  if (!$('srAi')) return;
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const ICONS = $('asIcons').content;
+  const TOOLS = { 'pdf-stamp': tr('用印與簽名'), 'pdf-seam-stamp': tr('騎縫章') };
+  const ID_RE = /^[0-9a-f]{32}$/;
+  let items = [];
+
+  function iconBtn(cls, name, label) {
+    const b = el('button', cls); b.type = 'button';
+    const svg = ICONS.querySelector('[data-icon="' + name + '"] svg');
+    if (svg) b.append(svg.cloneNode(true));
+    if (label) b.append(el('span', null, label));
+    return b;
+  }
+  const previewUrl = (it, p, large) => '/ai-stamp/api/' + it.request_id + '/preview/' + p + (large ? '?size=large' : '');
+
+  function leftText(it) {
+    const left = (it.expires_at || 0) - Date.now() / 1000;
+    if (left <= 0) return [tr('即將作廢'), true];
+    const h = Math.floor(left / 3600);
+    return [h >= 1 ? tr('剩 {0} 小時').replace('{0}', h) : tr('剩 {0} 分鐘').replace('{0}', Math.max(1, Math.floor(left / 60))), h < 3];
+  }
+
+  function card(it) {
+    const c = el('article', 'as-card'); c.id = 'req-' + it.request_id;
+    // 左：預覽（點一下放大；多頁時可以切換）
+    const pv = el('div', 'as-prev');
+    const pages = it.tool === 'pdf-seam-stamp' ? [0] : (it.pages.length ? it.pages : [0]);
+    let at = 0;
+    const img = el('img'); img.loading = 'lazy';
+    const pager = el('div', 'as-pager');
+    const prev = iconBtn('btn btn-small', 'left', ''); prev.setAttribute('aria-label', tr('上一頁'));
+    const next = iconBtn('btn btn-small', 'right', ''); next.setAttribute('aria-label', tr('下一頁'));
+    const label = el('span');
+    function go(i) {
+      at = (i + pages.length) % pages.length;
+      img.src = previewUrl(it, pages[at]);
+      img.alt = tr('第 {0} 頁').replace('{0}', pages[at] + 1);
+      label.textContent = pages.length > 1 ? (at + 1) + ' / ' + pages.length + '・' + img.alt : img.alt;
+    }
+    prev.addEventListener('click', () => go(at - 1));
+    next.addEventListener('click', () => go(at + 1));
+    img.addEventListener('click', () => window.jtLightbox && window.jtLightbox.open(
+      pages.map(p => ({ src: previewUrl(it, p), caption: tr('第 {0} 頁').replace('{0}', p + 1),
+                        load: async () => previewUrl(it, p, true) })), at));
+    if (pages.length > 1) pager.append(prev, label, next); else pager.append(label);
+    pv.append(img, pager);
+    go(0);
+    // 右：檔名、工具、剩餘時間、章、資訊、按鈕
+    const body = el('div', 'as-body');
+    const h = el('div', 'as-head');
+    const t = el('span', 'as-title', it.filename || tr('（沒有檔名）')); t.dataset.i18n = 'skip';
+    const [lt, soon] = leftText(it);
+    h.append(t, el('span', 'as-tag', TOOLS[it.tool] || it.tool), el('span', 'as-left' + (soon ? ' soon' : ''), lt));
+    const seals = el('div', 'as-seals');
+    it.assets.forEach(a => {
+      const s = el('span', 'as-seal');
+      if (a.id && ID_RE.test(a.id)) { const th = el('img'); th.alt = ''; th.loading = 'lazy'; th.src = '/assets/' + a.id + '/thumb'; s.append(th); }
+      const n = el('b', null, a.name); n.dataset.i18n = 'skip';
+      s.append(n);
+      if (a.count > 1) s.append(el('span', null, '× ' + a.count));
+      seals.append(s);
+    });
+    const meta = el('div', 'as-meta');
+    const pg = it.tool === 'pdf-seam-stamp' ? tr('騎縫（全部頁面）')
+             : tr('第 {0} 頁').replace('{0}', it.pages.map(p => p + 1).join('、'));
+    [pg, 'Token：' + (it.token || '—'), tr('來源 IP') + '：' + (it.ip || '—'),
+     tr('送出時間') + '：' + jtTime.dt(it.created_at)].forEach(x => { const m = el('span', null, x); m.dataset.i18n = 'skip'; meta.append(m); });
+    const act = el('div', 'as-actions');
+    const no = iconBtn('btn', 'close', tr('退回'));
+    const ok = iconBtn('btn btn-primary', 'check', tr('核准'));
+    ok.addEventListener('click', () => decide(it, 'approve', ok, no));
+    no.addEventListener('click', () => decide(it, 'reject', ok, no));
+    act.append(no, ok);
+    body.append(h, seals, meta, act);
+    c.append(pv, body);
+    return c;
+  }
+
+  async function post(it, what) {
+    const r = await fetch('/ai-stamp/api/' + it.request_id + '/' + what, { method: 'POST' });
+    if (!r.ok) throw new Error(await friendlyServerError(r, tr('處理失敗')));
+  }
+
+  async function decide(it, what, ok, no) {
+    const msg = what === 'approve'
+      ? tr('核准後，蓋好章的「{0}」會存進你的工作區，AI 也拿得到這份檔案。確定核准？').replace('{0}', it.filename)
+      : tr('退回後這件作廢、檔案刪除，AI 拿不到。確定退回？');
+    if (!(await showConfirm(msg, { title: what === 'approve' ? tr('核准 AI 用印') : tr('退回 AI 用印'),
+                                   kind: what === 'approve' ? '' : 'danger',
+                                   okText: what === 'approve' ? tr('核准') : tr('退回') }))) return;
+    ok.disabled = no.disabled = true;
+    try { await post(it, what); await load(); }
+    catch (e) { ok.disabled = no.disabled = false; await showAlert(e.message || tr('處理失敗')); }
+  }
+
+  $('asApproveAll').addEventListener('click', async () => {
+    const list = items.slice();
+    if (!list.length) return;
+    if (!(await showConfirm(tr('核准全部 {0} 件？蓋好章的檔案都會存進你的工作區，AI 也拿得到。').replace('{0}', list.length),
+                            { title: tr('全部核准'), okText: tr('全部核准') }))) return;
+    $('asApproveAll').disabled = true;
+    const bad = [];
+    for (const it of list) {
+      try { await post(it, 'approve'); } catch (e) { bad.push((it.filename || it.request_id) + '：' + (e.message || '')); }
+    }
+    $('asApproveAll').disabled = false;
+    await load();
+    if (bad.length) await showAlert(tr('有 {0} 件沒有核准成功：').replace('{0}', bad.length) + '\n' + bad.join('\n'));
+  });
+
+  function setBadge(n) {
+    const b = $('srAiCount');
+    if (b) { b.hidden = !n; b.textContent = String(n || ''); }
+  }
+
+  async function load() {
+    $('asError').hidden = true;
+    try {
+      const r = await fetch('/ai-stamp/api/pending', { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) throw new Error(await friendlyServerError(r, tr('讀取失敗')));
+      items = (await r.json()).items;
+      $('asList').replaceChildren(...items.map(card));
+      $('asEmpty').hidden = items.length > 0;
+      $('asApproveAll').hidden = items.length < 2;
+      setBadge(items.length);
+      const want = (location.hash.match(/req=([0-9a-f]{32})/) || [])[1];
+      if (want && $('req-' + want)) $('req-' + want).scrollIntoView({ block: 'start' });
+    } catch (e) {
+      $('asError').textContent = e.message || tr('讀取失敗');
+      $('asError').hidden = false;
+    }
+    loadPresets();
+  }
+
+  // ---- 常用組合
+  function where(it) {
+    const pg = typeof it.page === 'number' ? tr('第 {0} 頁').replace('{0}', it.page + 1)
+             : tr('頁：{0}').replace('{0}', it.page == null ? '1' : String(it.page));
+    const at = it.anchor_text ? tr('「{0}」旁').replace('{0}', it.anchor_text)
+             : it.anchor ? it.anchor : (it.x_mm != null ? 'x ' + it.x_mm + ' / y ' + (it.y_mm ?? '—') + ' mm' : tr('預設位置'));
+    return pg + '・' + at;
+  }
+  async function loadPresets() {
+    try {
+      const r = await fetch('/ai-stamp/api/presets', { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) return;
+      const data = await r.json();
+      const rows = data.presets.map(pr => {
+        const row = el('tr');
+        const what = pr.placements.map(it => (data.names[it.asset_id] || tr('（已刪除的章）')) + '：' + where(it)).join('；');
+        const n = el('td', null, pr.name); n.dataset.i18n = 'skip';
+        const w = el('td', 'as-ps-what', what); w.dataset.i18n = 'skip';
+        row.append(n, w, el('td', null, jtTime.dt(pr.updated_at)));
+        const td = el('td');
+        const del = iconBtn('btn btn-small', 'trash', tr('刪除'));
+        del.addEventListener('click', async () => {
+          if (!(await showConfirm(tr('刪除常用組合「{0}」？').replace('{0}', pr.name), { kind: 'danger', okText: tr('刪除') }))) return;
+          const x = await fetch('/ai-stamp/api/presets/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                                  body: JSON.stringify({ name: pr.name }) });
+          if (!x.ok) { await showAlert(await friendlyServerError(x, tr('刪除失敗'))); return; }
+          loadPresets();
+        });
+        td.append(del);
+        row.append(td);
+        return row;
+      });
+      $('asPsBody').replaceChildren(...rows);
+      $('asPs').hidden = !rows.length;
+      $('asPsEmpty').hidden = rows.length > 0;
+    } catch (e) { /* 讀不到常用組合不影響確認 */ }
+  }
+
+  async function count() {
+    try {
+      const r = await fetch('/ai-stamp/api/pending', { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) return 0;
+      const n = (await r.json()).items.length;
+      setBadge(n);
+      return n;
+    } catch (e) { return 0; }
+  }
+
+  window.jtAiStamp = { load, count };
+  // 用印申請沒啟用（只有這個分頁）：直接打開
+  if ($('srAi').dataset.only === '1') { $('srAi').hidden = false; load(); }
+})();
+</script>

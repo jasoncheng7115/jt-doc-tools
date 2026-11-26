@@ -5,11 +5,30 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
 > **Scope.** Traditional Chinese is this project's primary language, and
-> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (984 releases).
+> **[CHANGELOG.md](CHANGELOG.md) is the complete history** (985 releases).
 > This English file summarises **recent releases** — enough to see what changed
 > and decide whether to upgrade. For anything older, read the Chinese file.
 
 ---
+
+## [1.17.56] - 2026-11-25
+
+### Improved (AI stamping confirmation moved into Seal requests)
+
+- The separate "AI stamp confirmation" sidebar item is gone; confirmation is now the "AI stamping" tab on the Seal requests page, and the Seal requests count in the sidebar combines requests waiting for review, for stamping and AI requests waiting for confirmation. When only AI stamping is on and seal requests are not enabled, the page shows just the AI stamping tab. The old address and links in earlier notifications redirect there.
+- Confirmation cards are redesigned: a larger page preview on the left (click to enlarge, switch pages), and on the right the file name, tool, time left (orange when close to expiry), seal names with thumbnails and one line of details, with approve and reject at the bottom right; "Approve all" appears with two or more requests.
+- Presets saved by AI are now listed under this tab as well.
+
+### Added (MCP setup guide)
+
+- "Allow AI stamping" under Settings → MCP has a "Setup guide" listing each switch to turn on (sign-in, MCP, allow AI stamping, opening each seal to AI with people set, allowing stamping on the token, the site URL), whether each is done, and current numbers such as how many seals are open to AI and how many of them have people set.
+
+### Improved
+
+- Settings → Seal requests: the "AI use" column now labels its people list "Who may use it through AI" (separate from custodians and requesters) and warns in red when AI use is on but nobody is set; labels and "Set" buttons are aligned in each column.
+- Settings → MCP token list: the "MCP" and "Stamping" switches are now level.
+- Chat notifications (Telegram, LINE, Nextcloud, Slack, Teams, Zulip, Discord) no longer repeat the subject when the message starts with it.
+- Installation and `jtdt update` no longer install the development package group (pytest, bandit and so on, only needed to run tests); they now use `uv sync --no-dev`, as Docker already did. Existing installations drop those packages on the next `jtdt update` after upgrading to this version (the updater has to be the new one first).
 
 ## [1.17.55] - 2026-11-24
 

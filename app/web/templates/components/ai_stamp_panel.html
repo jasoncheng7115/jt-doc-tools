@@ -1,0 +1,65 @@
+{# 「用印申請」頁的「AI 用印」分頁（v1.17.56 起；原本是獨立的「AI 用印確認」頁）：
+   AI 經 MCP 送出、要本人確認的用印，以及 AI 存的常用組合。程式在 components/ai_stamp_panel_js.html。 #}
+<section class="panel" id="srAi" hidden{% if ai_only %} data-only="1"{% endif %}>
+  <div class="as-top">
+    <p class="muted as-intro">{{ tr('AI 經 MCP 送出、需要你確認的用印。看過預覽再核准，蓋好的檔案才會存進你的工作區；{0} 小時內沒有處理會自動作廢、檔案刪除。').replace('{0}', confirm_hours|string) }}</p>
+    <button type="button" class="btn btn-small" id="asApproveAll" hidden>{{ icon('check', size=14) }} <span>{{ tr('全部核准') }}</span></button>
+  </div>
+  <p class="as-empty" id="asEmpty" hidden>{{ icon('check', size=16) }} <span>{{ tr('目前沒有待確認的 AI 用印。') }}</span></p>
+  <p class="as-error" id="asError" hidden></p>
+  <div id="asList" class="as-list"></div>
+
+  <h3 class="as-h3">{{ icon('layers', size=16) }} {{ tr('常用組合') }}</h3>
+  <p class="muted as-small">{{ tr('AI 存的用印位置組合（蓋哪幾顆章、蓋在哪裡），之後一個名稱就能套用；只存位置，不存章圖。每次使用都照樣檢查章的 AI 授權、今日上限與本人確認。') }}</p>
+  <p class="muted as-small" id="asPsEmpty" hidden>{{ tr('還沒有常用組合。') }}</p>
+  <div class="as-ps-wrap"><table class="as-ps" id="asPs" hidden>
+    <thead><tr><th>{{ tr('名稱') }}</th><th>{{ tr('內容') }}</th><th>{{ tr('更新時間') }}</th><th></th></tr></thead>
+    <tbody id="asPsBody"></tbody>
+  </table></div>
+</section>
+<template id="asIcons">
+  <span data-icon="check">{{ icon('check', size=14) }}</span>
+  <span data-icon="close">{{ icon('close', size=14) }}</span>
+  <span data-icon="trash">{{ icon('trash', size=14) }}</span>
+  <span data-icon="left">{{ icon('back', size=14) }}</span>
+  <span data-icon="right">{{ icon('next', size=14) }}</span>
+</template>
+<style nonce="{{ request.state.csp_nonce }}">
+  .as-top { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .as-intro { margin:0 0 12px; flex:1 1 360px; }
+  .as-empty { display:flex; align-items:center; gap:6px; color:#047857; margin:4px 0 16px; }
+  .as-error { color:#b91c1c; }
+  .as-list { display:flex; flex-direction:column; gap:14px; }
+  .as-card { display:grid; grid-template-columns:220px 1fr; gap:18px; border:1px solid var(--border, #e5e7eb);
+    border-radius:12px; padding:16px; background:var(--card, #fff); box-shadow:0 1px 2px rgba(15,23,42,.04); }
+  .as-prev { display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .as-prev img { display:block; width:220px; height:auto; max-height:300px; object-fit:contain; cursor:zoom-in;
+    border:1px solid var(--border, #e5e7eb); border-radius:6px; background:#fff; }
+  .as-pager { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted, #6b7280); }
+  .as-pager .btn { padding:2px 6px; }
+  .as-body { display:flex; flex-direction:column; gap:10px; min-width:0; }
+  .as-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .as-title { font-size:16px; font-weight:600; word-break:break-all; }
+  .as-tag { font-size:12px; padding:1px 8px; border-radius:999px; background:#eef2ff; color:#3730a3; }
+  .as-left { font-size:12px; padding:1px 8px; border-radius:999px; background:#ecfdf5; color:#047857; }
+  .as-left.soon { background:#fff7ed; color:#9a3412; }
+  .as-seals { display:flex; flex-wrap:wrap; gap:8px; }
+  .as-seal { display:inline-flex; align-items:center; gap:6px; padding:3px 10px 3px 4px; border-radius:999px;
+    background:#fef2f2; color:#991b1b; font-size:13px; }
+  .as-seal img { width:22px; height:22px; object-fit:contain; border-radius:50%; background:#fff; }
+  .as-seal b { font-weight:600; }
+  .as-meta { font-size:12.5px; color:var(--muted, #6b7280); display:flex; flex-wrap:wrap; gap:4px 14px; }
+  .as-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:auto; }
+  .as-h3 { display:flex; align-items:center; gap:6px; margin:26px 0 4px; font-size:15px; }
+  .as-small { font-size:13px; margin:0 0 8px; }
+  .as-ps-wrap { overflow-x:auto; }
+  .as-ps { width:100%; border-collapse:collapse; font-size:13px; }
+  .as-ps th, .as-ps td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border, #e5e7eb); vertical-align:top; }
+  .as-ps td.as-ps-what { color:var(--muted, #6b7280); }
+  @media (max-width: 640px) {
+    .as-card { grid-template-columns:1fr; }
+    .as-prev img { width:100%; max-width:320px; }
+    .as-actions { justify-content:stretch; }
+    .as-actions .btn { flex:1; justify-content:center; }
+  }
+</style>

@@ -99,11 +99,39 @@
     <div class="mcp-tile mcp-tile-wide">
       <div class="mcp-tile-top">
         <div class="mcp-tile-l"><b>{{ icon('ai-stamp', size=15) }} {{ tr('允許 AI 用印') }}</b>
-          <span>{{ tr('AI 只能用「設定 → 用印申請」裡開放 AI 使用的章，而且 Token 要另外勾「允許用印」。需要確認的章，由 Token 綁定的本人在「AI 用印確認」頁核准後才生效。「僅限核准案件使用」的章 AI 一律不能用。') }}</span>
+          <span>{{ tr('AI 只能用「設定 → 用印申請」裡開放 AI 使用的章，而且 Token 要另外勾「允許用印」。需要確認的章，由 Token 綁定的本人在「用印申請 → AI 用印」核准後才生效。「僅限核准案件使用」的章 AI 一律不能用。') }}</span>
           {% if not auth_enabled %}<span class="mcp-warn">{{ tr('要先啟用帳號登入才能使用（要分得出是誰用印）。') }}</span>{% endif %}
-          <a class="mcp-limits-link" href="/admin/seal-request">{{ tr('前往「用印申請」設定每顆章') }}</a>
-          <a class="mcp-limits-link" href="/admin/mcp/ai-stamp">{{ tr('查看 AI 用印紀錄') }}</a></div>
+          <span class="mcp-guide-links">
+            <button type="button" class="btn btn-small" id="mcp-stamp-guide-btn" aria-expanded="false" aria-controls="mcp-stamp-guide">{{ icon('info', size=14) }} <span>{{ tr('設定教學') }}</span></button>
+            <a class="mcp-limits-link" href="/admin/seal-request">{{ tr('前往「用印申請」設定每顆章') }}</a>
+            <a class="mcp-limits-link" href="/admin/mcp/ai-stamp">{{ tr('查看 AI 用印紀錄') }}</a></span></div>
         <label class="mcp-switch"><input type="checkbox" id="mcp-stamp" {% if cfg.allow_stamp %}checked{% endif %} {% if not auth_enabled %}disabled{% endif %} aria-label="{{ tr('允許 AI 用印') }}"><span></span></label>
+      </div>
+      {% set ss = stamp_setup %}
+      <div class="mcp-guide" id="mcp-stamp-guide" hidden>
+        <p class="mcp-guide-intro">{{ tr('AI 用印要以下幾道都設好才會出現在 AI 的工具清單裡；左邊是目前的狀態（重新整理頁面會更新）。') }}</p>
+        <ol class="mcp-guide-steps">
+          <li class="{{ 'ok' if auth_enabled else 'todo' }}"><span class="mcp-guide-st">{{ tr('完成') if auth_enabled else tr('未完成') }}</span>
+            <b>{{ tr('啟用帳號登入') }}</b><span>{{ tr('要分得出是誰用印。在「設定 → 認證設定」啟用。') }}</span></li>
+          <li class="{{ 'ok' if cfg.enabled else 'todo' }}"><span class="mcp-guide-st">{{ tr('完成') if cfg.enabled else tr('未完成') }}</span>
+            <b>{{ tr('開啟 MCP') }}</b><span>{{ tr('本頁最上面的 MCP 開關。') }}</span></li>
+          <li class="{{ 'ok' if cfg.allow_stamp else 'todo' }}"><span class="mcp-guide-st">{{ tr('完成') if cfg.allow_stamp else tr('未完成') }}</span>
+            <b>{{ tr('打開「允許 AI 用印」') }}</b><span>{{ tr('就是上面這個開關。') }}</span></li>
+          <li class="{{ 'ok' if ss.seals_ai_with_subjects else 'todo' }}"><span class="mcp-guide-st">{{ tr('完成') if ss.seals_ai_with_subjects else tr('未完成') }}</span>
+            <b>{{ tr('每顆章開放 AI 並設定可以用的對象') }}</b>
+            <span>{{ tr('「設定 → 用印申請」：每顆要給 AI 用的章勾「允許 AI 使用」，並在「AI 可以用的對象」按「設定」加人（這組對象跟保管人、可申請對象是分開的）。') }}
+              <em>{{ tr('目前：開放 AI {0} 顆，其中有設定對象的 {1} 顆。').replace('{0}', ss.seals_ai|string).replace('{1}', ss.seals_ai_with_subjects|string) }}</em>
+              <a href="/admin/seal-request">{{ tr('前往設定') }}</a></span></li>
+          <li class="{{ 'ok' if ss.tokens_stamp else 'todo' }}"><span class="mcp-guide-st">{{ tr('完成') if ss.tokens_stamp else tr('未完成') }}</span>
+            <b>{{ tr('Token 允許用印') }}</b>
+            <span>{{ tr('本頁下方「可以連 MCP 的 Token」：那張 Token 要綁定使用者、允許 MCP，再打開「用印」。') }}
+              <em>{{ tr('目前：允許用印的 Token {0} 張。').replace('{0}', ss.tokens_stamp|string) }}</em></span></li>
+          <li class="{{ 'ok' if site_url else 'opt' }}"><span class="mcp-guide-st">{{ tr('完成') if site_url else tr('建議') }}</span>
+            <b>{{ tr('填好站台網址') }}</b><span>{{ tr('本頁「站台網址」填好，AI 用印的通知才會附上直接打開那一件的連結。') }}</span></li>
+          <li class="info"><span class="mcp-guide-st">{{ tr('之後') }}</span>
+            <b>{{ tr('核准 AI 送出的用印') }}</b><span>{{ tr('需要本人確認的章，AI 送出後到側欄「用印申請」的「AI 用印」分頁看過預覽再核准。') }}
+              <a href="/seal-request#ai">{{ tr('打開 AI 用印分頁') }}</a></span></li>
+        </ol>
       </div>
     </div>
   </div>
@@ -288,10 +316,25 @@
   .mcp-input-wide { width: 100%; max-width: 560px; box-sizing: border-box; }
   .mcp-num { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #475569; }
   .mcp-num input { width: 110px; }
-  .mcp-token-sws { display: flex; gap: 12px; align-items: center; flex: none; }
+  /* 兩欄頂端對齊、標籤固定行高：「MCP」與「用印」的字高不同，置中對齊時開關會差一兩個像素 */
+  .mcp-token-sws { display: flex; gap: 12px; align-items: flex-start; flex: none; }
   .mcp-token-sw { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-  .mcp-token-sw small { font-size: 11px; color: #64748b; }
+  .mcp-token-sw small { font-size: 11px; line-height: 16px; height: 16px; color: #64748b; }
   .mcp-pill.is-stamp { background: #fff7ed; color: #9a3412; }
+  .mcp-guide-links { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+  .mcp-guide { margin-top: 12px; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+  .mcp-guide-intro { margin: 0 0 8px; font-size: 13px; color: #475569; }
+  .mcp-guide-steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; counter-reset: mcpg; }
+  .mcp-guide-steps li { display: grid; grid-template-columns: 64px 1fr; gap: 2px 10px; font-size: 13px; counter-increment: mcpg; }
+  .mcp-guide-steps li b { grid-column: 2; color: #0f172a; }
+  .mcp-guide-steps li b::before { content: counter(mcpg) ". "; color: #64748b; }
+  .mcp-guide-steps li > span:not(.mcp-guide-st) { grid-column: 2; color: #475569; line-height: 1.5; }
+  .mcp-guide-steps li em { display: block; font-style: normal; color: #0f172a; margin-top: 2px; }
+  .mcp-guide-st { grid-row: 1 / span 2; align-self: start; text-align: center; font-size: 12px; padding: 1px 6px; border-radius: 999px; }
+  .mcp-guide-steps li.ok .mcp-guide-st { background: #dcfce7; color: #166534; }
+  .mcp-guide-steps li.todo .mcp-guide-st { background: #fee2e2; color: #b91c1c; }
+  .mcp-guide-steps li.opt .mcp-guide-st { background: #fef3c7; color: #92400e; }
+  .mcp-guide-steps li.info .mcp-guide-st { background: #e0e7ff; color: #3730a3; }
   .mcp-warn { color: #b91c1c; font-size: 12px; }
   .mcp-switch input:disabled + span { opacity: .45; cursor: not-allowed; }
   .mcp-switch { position: relative; width: 42px; height: 24px; flex: none; cursor: pointer; }
@@ -576,6 +619,15 @@
       setTimeout(function () { label.textContent = tr('複製'); }, 1500);
     });
   });
+})();
+</script>
+<script nonce="{{ request.state.csp_nonce }}">
+(function () {
+  // AI 用印的設定教學：展開 / 收合（狀態是頁面載入時算的）
+  const b = document.getElementById('mcp-stamp-guide-btn'), g = document.getElementById('mcp-stamp-guide');
+  if (!b || !g) return;
+  b.addEventListener('click', () => { g.hidden = !g.hidden; b.setAttribute('aria-expanded', String(!g.hidden)); });
+  if (location.hash === '#stamp-guide') { g.hidden = false; b.setAttribute('aria-expanded', 'true'); g.scrollIntoView({ block: 'center' }); }
 })();
 </script>
 {% endblock %}

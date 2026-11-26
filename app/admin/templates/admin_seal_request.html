@@ -70,7 +70,7 @@
   <div class="form-row"><label for="srFlowDesc">{{ tr('說明') }}</label><input class="field" id="srFlowDesc" maxlength="500"></div>
   <div class="form-row"><label>{{ tr('啟用') }}</label><label class="switch-label"><input type="checkbox" id="srFlowEnabled" checked> {{ tr('可以用這個流程申請') }}</label></div>
   <div class="form-row"><label>{{ tr('申請對象') }}</label>
-    <span><span class="sr-chips" id="srFlowApplicants"></span> <button type="button" class="btn btn-small" id="srFlowApplicantsBtn">{{ icon('user', size=14) }} <span>{{ tr('設定') }}</span></button>
+    <span class="sr-who"><span class="sr-chips" id="srFlowApplicants"></span> <button type="button" class="btn btn-small" id="srFlowApplicantsBtn">{{ icon('user', size=14) }} <span>{{ tr('設定') }}</span></button>
     <span class="muted">{{ tr('沒有設定＝不限（仍要是那顆章的可申請對象）') }}</span></span></div>
   <div class="form-row"><label>{{ tr('適用的章') }}</label><span id="srFlowAssets"></span></div>
   <div class="form-row"><label>{{ tr('浮水印') }}</label><label class="switch-label"><input type="checkbox" id="srWmOn"> {{ tr('用印時附加浮水印') }}</label></div>
@@ -245,7 +245,10 @@
   .sr-chip-group { background:transparent; border:1px solid var(--primary); }
   .sr-chip-gone { color:var(--danger, #b91c1c); background:transparent; border:1px solid var(--danger, #b91c1c); }
   .sr-chip-none { background:transparent; border:1px dashed var(--border, #d1d5db); color:var(--muted, #6b7280); }
-  .sr-cell-chips { margin:2px 8px 2px 0; }
+  .sr-cell-chips { margin:2px 0; }
+  .sr-who { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .sr-ai-sub { font-size:12px; color:var(--muted, #6b7280); margin:6px 0 2px; }
+  .sr-ai-warn { font-size:12px; color:#b91c1c; margin:4px 0; }
   .sr-chip-empty { background:transparent; border:1px dashed var(--warning, #b45309); color:var(--warning, #b45309); }
   .sr-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
   .sr-stuck { color:var(--danger, #b91c1c); font-weight:600; }
@@ -358,7 +361,9 @@
         }
         const b = iconBtn('user', tr('設定'));
         b.addEventListener('click', () => openPicker(a, kind));
-        td.append(box, b);
+        // 標籤與「設定」放同一列、垂直置中（原本各自排，按鈕比標籤高幾個像素）
+        const row = el('div', 'sr-who'); row.append(box, b);
+        td.append(row);
         return td;
       };
       // AI 使用（v1.17.38）：受管制的章一律不能經 AI 用；直接使用的章逐顆開放、指定對象、要不要本人確認、每日上限
@@ -401,7 +406,13 @@
             return null;
           },
         }));
-        td.append(box, who);
+        // AI 這組對象跟左邊的保管人 / 可申請對象是分開的：加標題，免得以為設過了
+        td.append(el('div', 'sr-ai-sub', tr('AI 可以用的對象')));
+        const row = el('div', 'sr-who'); row.append(box, who);
+        td.append(row);
+        if (ai.enabled && !subs.length) {
+          td.append(el('div', 'sr-ai-warn', tr('還沒有設定對象，目前沒有人能經 AI 使用這顆章')));
+        }
         const cf = el('input'); cf.type = 'checkbox'; cf.checked = ai.confirm !== false;
         cf.addEventListener('change', async () => {
           // 不需要確認＝AI 蓋完當下就拿到檔案，也就拿到了章的圖（跟寄出去的用印文件一樣，可以被擷取再利用）

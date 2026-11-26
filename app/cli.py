@@ -830,7 +830,7 @@ def _rollback_code(root, git_exe, git_env, pre_sha: str,
     # 樹回到舊 commit 之後，`uv.lock` 也是舊的 → 再同步一次就會把相依帶回舊版。
     print("Re-syncing deps back to the previous lockfile ...")
     try:
-        rc2 = subprocess.call([uv, "sync"], cwd=str(root),
+        rc2 = subprocess.call([uv, "sync", "--no-dev"], cwd=str(root),
                               env=uv_env or os.environ.copy())
     except OSError:
         rc2 = 1        # uv 檔案不見 / 不能執行 → 當成同步失敗（不可以往外丟）
@@ -1257,7 +1257,8 @@ def svc_update() -> int:
                           "pypi.org files.pythonhosted.org github.com "
                           "objects.githubusercontent.com astral.sh")
     uv_env, py_args = _python_for_sync(root, uv_env)
-    rc = subprocess.call([uv, "sync", *py_args], cwd=str(root), env=uv_env)
+    # `--no-dev`：不裝開發用的套件群組（pytest、bandit…，只有跑測試才要；v1.17.56 之前的安裝會被這次移除）
+    rc = subprocess.call([uv, "sync", "--no-dev", *py_args], cwd=str(root), env=uv_env)
     if rc != 0:
         print("uv sync failed.", file=sys.stderr)
         _print_help_url()

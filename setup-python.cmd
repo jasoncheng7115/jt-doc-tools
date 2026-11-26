@@ -97,7 +97,7 @@ REM Time only: %DATE% carries the weekday in the user's language (e.g. Chinese),
 REM and cmd writes the file in the OEM code page -- on a machine whose
 REM non-Unicode locale is English that weekday became "??" in the log.
 echo [%TIME%] uv sync start > "%SYNC_LOG%" 2>nul
-"%UV_EXE%" sync --reinstall >> "%SYNC_LOG%" 2>&1
+"%UV_EXE%" sync --no-dev --reinstall >> "%SYNC_LOG%" 2>&1
 set SYNC_RC=!ERRORLEVEL!
 echo [%TIME%] uv sync exit=!SYNC_RC! >> "%SYNC_LOG%" 2>nul
 type "%SYNC_LOG%" 2>nul
@@ -120,7 +120,7 @@ if !ERRORLEVEL! equ 0 (
     echo [OK] EasyOCR available
 ) else (
     echo [WARN] EasyOCR not installed - OCR will fall back to tesseract ^(lower CJK accuracy^)
-    echo [WARN]   Manual install: "%UV_EXE%" sync   or  "%VENV_PY%" -m pip install easyocr
+    echo [WARN]   Manual install: "%UV_EXE%" sync --no-dev   or  "%VENV_PY%" -m pip install easyocr
 )
 
 echo [OK] Python environment ready: %INSTALL_DIR%\.venv
